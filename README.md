@@ -221,4 +221,5 @@ Building and submitting native apps requires tools (Android Studio, Xcode) that 
 Palette pulled from the ACONSU crest: deep purple (`#5B2C82`) and rich plum (`#3A1B54`) as primary, a light lilac background, with the crest's flame rendered as a gold-to-red gradient accent on key call-to-action buttons and the homepage hero. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
 #   A C O N S U - K N U S T A P P  
  #   A C O N S U - K N U S T _ A P P  
+ #   A C O N S U - K N U S T _ A P P  
  
