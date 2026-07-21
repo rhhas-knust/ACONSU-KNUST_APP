@@ -1,0 +1,17 @@
+{
+  "appId": "com.aconsu.app",
+  "appName": "ACONSU",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "https",
+    "url": "https://YOUR-DEPLOYED-DOMAIN-HERE",
+    "cleartext": false
+  },
+  "backgroundColor": "#FDFBFF",
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "android": {
+    "backgroundColor": "#FDFBFF"
+  }
+}

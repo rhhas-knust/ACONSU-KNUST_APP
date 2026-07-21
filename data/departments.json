@@ -1,0 +1,90 @@
+[
+  {
+    "id": "choir",
+    "name": "Choir & Music",
+    "tagline": "Ministering in songs and leading the congregation into worship.",
+    "description": "The Choir & Music department leads ACONSU in praise and worship during services, rehearses new songs, and ministers at outreaches and special programs. Open to anyone who can sing or play an instrument.",
+    "meetingDay": "Wednesdays",
+    "meetingTime": "5:00 PM",
+    "meetingLocation": "Fellowship Auditorium, 2nd Floor",
+    "leader": "Sis. Grace Adeyemi",
+    "image": ""
+  },
+  {
+    "id": "ushering",
+    "name": "Ushering",
+    "tagline": "Serving with excellence at the doors of the house of God.",
+    "description": "Ushers welcome members and guests, manage seating and order during services, and help every first-timer feel at home.",
+    "meetingDay": "Fridays",
+    "meetingTime": "4:00 PM",
+    "meetingLocation": "Fellowship Auditorium, Main Entrance",
+    "leader": "Bro. David Okon",
+    "image": ""
+  },
+  {
+    "id": "media",
+    "name": "Media & Technical",
+    "tagline": "Sound, visuals and livestream — the unseen hands behind every service.",
+    "description": "This unit handles sound engineering, projection, livestreaming and photography/videography for services, events and social media.",
+    "meetingDay": "Thursdays",
+    "meetingTime": "6:00 PM",
+    "meetingLocation": "Media Room, Fellowship Auditorium",
+    "leader": "Bro. Emmanuel Okafor",
+    "image": ""
+  },
+  {
+    "id": "protocol",
+    "name": "Protocol",
+    "tagline": "Coordinating order and hospitality for guests and ministers.",
+    "description": "Protocol handles the reception and coordination of guest ministers, dignitaries and special guests, and helps keep events running smoothly.",
+    "meetingDay": "Fridays",
+    "meetingTime": "5:00 PM",
+    "meetingLocation": "Fellowship Auditorium, Foyer",
+    "leader": "Sis. Faith Nwosu",
+    "image": ""
+  },
+  {
+    "id": "welfare",
+    "name": "Welfare",
+    "tagline": "Caring for the practical needs of every student in the union.",
+    "description": "Welfare looks out for the wellbeing of members — visiting the sick, supporting students in need, and organizing care initiatives on campus.",
+    "meetingDay": "Saturdays",
+    "meetingTime": "3:00 PM",
+    "meetingLocation": "Fellowship Secretariat",
+    "leader": "Sis. Blessing Etim",
+    "image": ""
+  },
+  {
+    "id": "prayer",
+    "name": "Prayer Band",
+    "tagline": "Standing in the gap through intercession.",
+    "description": "The Prayer Band leads intercessory prayer sessions, prays over member requests, and covers ACONSU's programs in prayer.",
+    "meetingDay": "Tuesdays",
+    "meetingTime": "6:00 AM",
+    "meetingLocation": "Prayer Chapel",
+    "leader": "Bro. Samuel Danladi",
+    "image": ""
+  },
+  {
+    "id": "evangelism",
+    "name": "Evangelism & Drama",
+    "tagline": "Taking the gospel to campus through outreach and the arts.",
+    "description": "This unit organizes campus outreaches, hostel-to-hostel evangelism, and uses drama and creative arts to communicate the gospel.",
+    "meetingDay": "Saturdays",
+    "meetingTime": "10:00 AM",
+    "meetingLocation": "Fellowship Auditorium",
+    "leader": "Sis. Joy Umeh",
+    "image": ""
+  },
+  {
+    "id": "publicity",
+    "name": "Publicity & Social Media",
+    "tagline": "Telling ACONSU's story online and across campus.",
+    "description": "Publicity manages ACONSU's social media pages, designs flyers and announcements, and publicizes upcoming events on and off campus.",
+    "meetingDay": "Thursdays",
+    "meetingTime": "5:00 PM",
+    "meetingLocation": "Media Room, Fellowship Auditorium",
+    "leader": "Bro. Michael Ibe",
+    "image": ""
+  }
+]

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACONSU — The Apostles' Continuation Students Union</title>
+<meta name="description" content="ACONSU: a campus fellowship carrying the fire of the Holy Spirit and continuing the pattern of the apostles.">
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" id="homeHero">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Welcome to ACONSU</p>
+    <h1>Carrying the fire.<br>Continuing the pattern.</h1>
+    <p class="lede">A campus family devoted to the Word, to fellowship, to prayer — continuing steadfastly in the pattern the apostles left us. Come as you are.</p>
+    <div class="hero-actions">
+      <a href="/events.html" class="btn btn-primary">See What's Coming Up</a>
+      <a href="/departments.html" class="btn btn-outline">Join a Department</a>
+    </div>
+    <div id="countdownWrap"></div>
+  </div>
+</section>
+
+<div class="verse-strip" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship..." — Acts 2:42</div>
+
+<section>
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Get Involved</p>
+      <h2>Find your place in the union</h2>
+      <p style="color:#5a4468;">Every department is a door into deeper fellowship and service. Explore where you fit.</p>
+    </div>
+    <div class="grid" id="deptPreview"></div>
+    <div style="text-align:center; margin-top:32px;">
+      <a href="/departments.html" class="btn btn-outline">View All Departments</a>
+    </div>
+  </div>
+</section>
+
+<section class="alt-bg">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">What's Next</p>
+      <h2>Upcoming Gatherings</h2>
+    </div>
+    <div class="grid" id="eventPreview"></div>
+    <div style="text-align:center; margin-top:32px;">
+      <a href="/events.html" class="btn btn-outline">View Full Calendar</a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container" style="text-align:center;">
+    <p class="eyebrow">We're Here for You</p>
+    <h2>Need Prayer?</h2>
+    <p style="max-width:520px; margin:0 auto 28px; color:#5a4468;">Whatever you're carrying — an exam, a decision, a burden — bring it to the family. We would love to stand with you in prayer.</p>
+    <a href="/prayer.html" class="btn btn-flame">Submit a Prayer Request</a>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  const settings = await initLayout('/index.html');
+
+  try {
+    const [departments, events] = await Promise.all([
+      fetchJSON('/api/departments'),
+      fetchJSON('/api/events')
+    ]);
+
+    // department preview (first 4)
+    const deptWrap = document.getElementById('deptPreview');
+    deptWrap.innerHTML = departments.slice(0, 4).map(d => `
+      <a href="/department.html?id=${d.id}" class="card dept-card">
+        <div class="card-icon"></div>
+        <h3>${escapeHtml(d.name)}</h3>
+        <p style="color:#5a4468; font-size:0.92rem;">${escapeHtml(d.tagline)}</p>
+        <div class="dept-meta">${escapeHtml(d.meetingDay)} · ${escapeHtml(d.meetingTime)}</div>
+      </a>
+    `).join('') || '<p class="empty-state">Departments coming soon.</p>';
+
+    // event preview (next 3 upcoming)
+    const now = new Date();
+    const upcoming = events
+      .filter(e => new Date(`${e.date}T${e.time || '00:00'}:00`) >= now)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .slice(0, 3);
+    const eventWrap = document.getElementById('eventPreview');
+    eventWrap.innerHTML = upcoming.map(e => {
+      const d = new Date(`${e.date}T00:00:00`);
+      return `
+      <div class="card event-card">
+        <div class="event-date-badge">
+          <div class="day">${d.getDate()}</div>
+          <div class="mon">${d.toLocaleDateString('en-US', { month: 'short' })}</div>
+        </div>
+        <div>
+          <h3 style="margin-bottom:4px;">${escapeHtml(e.title)}</h3>
+          <p style="font-size:0.88rem; color:#5a4468; margin-bottom:4px;">${escapeHtml(e.location)}</p>
+          <span class="badge">${e.time}</span>
+        </div>
+      </div>`;
+    }).join('') || '<p class="empty-state">No upcoming events yet — check back soon.</p>';
+
+    // countdown to next service
+    const next = nextUpcomingEvent(events);
+    const wrap = document.getElementById('countdownWrap');
+    if (next) {
+      wrap.innerHTML = `
+        <div class="countdown" id="countdown">
+          <div class="countdown-unit"><div class="countdown-num" data-d>00</div><div class="countdown-label">Days</div></div>
+          <div class="countdown-unit"><div class="countdown-num" data-h>00</div><div class="countdown-label">Hrs</div></div>
+          <div class="countdown-unit"><div class="countdown-num" data-m>00</div><div class="countdown-label">Min</div></div>
+          <div class="countdown-unit"><div class="countdown-num" data-s>00</div><div class="countdown-label">Sec</div></div>
+        </div>
+        <div class="countdown-caption">Until ${escapeHtml(next.title)}</div>
+      `;
+      startCountdown(next.date, next.time, 'countdown');
+    }
+  } catch (e) {
+    console.error(e);
+  }
+
+  initScrollReveal('.card');
+
+  // floating decorative photos, pulled from whatever the admin has uploaded as general photos
+  try {
+    const photos = await fetchJSON('/api/files?category=photo');
+    const general = photos.filter(p => !p.pageSlug).slice(0, 4);
+    if (general.length) {
+      document.getElementById('homeHero').style.overflow = 'visible';
+      renderFloatingImages('homeHero', general.map(p => p.id));
+    }
+  } catch (e) { /* decorative only — safe to skip if it fails */ }
+})();
+</script>
+</body>
+</html>

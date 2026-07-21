@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:48px; position:relative;" id="aboutHero">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Who We Are</p>
+    <h1>About ACONSU</h1>
+    <p class="lede">The Apostles' Continuation Students Union — a family of students, on campus for a purpose bigger than a degree.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:760px;">
+    <h2>Our Story</h2>
+    <p style="color:#5a4468;">ACONSU exists to see students encounter God and continue steadfastly in the pattern the apostles left the early church: the Word, fellowship, prayer, and one another. We believe campus life is fertile ground for a generation to be raised — not just academically, but spiritually.</p>
+    <h2 style="margin-top:2em;">What We Believe</h2>
+    <p style="color:#5a4468;">We hold to the Scriptures as the final authority for faith and living, and we exist to help every student grow in Christ, discover their gifts, and carry that fire into every hostel, lecture hall and city they go on to.</p>
+  </div>
+</section>
+
+<section class="alt-bg">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Leadership</p>
+      <h2>Meet the Executives</h2>
+      <p style="color:#5a4468;">The team serving and leading ACONSU this session.</p>
+    </div>
+    <div class="grid" id="execGrid">
+      <div class="skeleton-grid">
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/about.html');
+
+  try {
+    const execs = await fetchJSON('/api/executives');
+    const wrap = document.getElementById('execGrid');
+    if (!execs.length) {
+      wrap.innerHTML = '<p class="empty-state">Executive profiles coming soon.</p>';
+    } else {
+      wrap.innerHTML = execs.map(e => `
+        <div class="card exec-card">
+          <div class="exec-photo">
+            ${e.imageFileId ? `<img src="/api/files/${e.imageFileId}" alt="${escapeHtml(e.name)}">` : `<span class="initial">${escapeHtml((e.name || '?').charAt(0))}</span>`}
+          </div>
+          <h3 style="margin-bottom:2px;">${escapeHtml(e.name)}</h3>
+          <div class="exec-role">${escapeHtml(e.role || '')}</div>
+          ${e.bio ? `<p class="exec-bio">${escapeHtml(e.bio)}</p>` : ''}
+        </div>
+      `).join('');
+    }
+    initScrollReveal('#execGrid .card');
+
+    // sprinkle a few executive photos as floating accents in the hero, if available
+    const withPhotos = execs.filter(e => e.imageFileId).map(e => e.imageFileId);
+    if (withPhotos.length) {
+      document.getElementById('aboutHero').style.overflow = 'visible';
+      renderFloatingImages('aboutHero', withPhotos.slice(0, 2));
+    }
+  } catch (e) {
+    document.getElementById('execGrid').innerHTML = '<p class="empty-state">Could not load executives right now.</p>';
+  }
+})();
+</script>
+</body>
+</html>

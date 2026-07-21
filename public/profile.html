@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Profile — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .profile-photo { width: 96px; height: 96px; border-radius: 50%; overflow: hidden; border: 3px solid var(--lilac-mid); background: var(--lilac-light); display:flex; align-items:center; justify-content:center; margin: 0 auto 12px; }
+  .profile-photo img { width:100%; height:100%; object-fit:cover; }
+  .profile-photo .initial { font-family: var(--font-display); font-size: 1.8rem; color: var(--purple-deep); }
+  .profile-tabs { display:flex; gap:10px; justify-content:center; margin-bottom:24px; flex-wrap:wrap; }
+  .profile-tabs button { background:none; border:2px solid var(--line); border-radius:999px; padding:8px 18px; font-weight:700; font-size:0.85rem; cursor:pointer; color:var(--purple-ink); }
+  .profile-tabs button.active { border-color: var(--purple-deep); background: var(--purple-deep); color: #fff; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section style="padding-top:56px; padding-bottom:64px;">
+  <div class="container" style="max-width:560px;">
+    <div id="profileHead" style="text-align:center; margin-bottom:24px;">
+      <p class="empty-state">Loading your profile...</p>
+    </div>
+
+    <div class="profile-tabs">
+      <button data-tab="details" class="active">My Details</button>
+      <button data-tab="password">Change Password</button>
+    </div>
+
+    <form class="form-card" id="detailsForm">
+      <div class="field">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" required>
+      </div>
+      <div class="field">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" disabled style="opacity:0.6;">
+      </div>
+      <div class="field">
+        <label for="phone">Phone Number</label>
+        <input type="tel" id="phone">
+      </div>
+      <div class="field">
+        <label for="level">Level / Year of Study</label>
+        <input type="text" id="level">
+      </div>
+      <div class="field">
+        <label for="profileImage">Profile Photo</label>
+        <input type="file" id="profileImage" accept="image/*">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="detailsSubmitBtn">Save Changes</button>
+      <div class="form-msg" id="detailsMsg"></div>
+    </form>
+
+    <form class="form-card" id="passwordForm" style="display:none;">
+      <div class="field">
+        <label for="currentPassword">Current Password</label>
+        <input type="password" id="currentPassword" required>
+      </div>
+      <div class="field">
+        <label for="newPassword">New Password</label>
+        <input type="password" id="newPassword" minlength="6" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="passwordSubmitBtn">Update Password</button>
+      <div class="form-msg" id="passwordMsg"></div>
+    </form>
+
+    <div style="text-align:center; margin-top:24px;">
+      <button class="btn btn-outline btn-sm" id="logoutBtn">Log Out</button>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+let CURRENT_MEMBER = null;
+
+(async function () {
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  if (!authRes.member) { window.location.href = '/login.html'; return; }
+  CURRENT_MEMBER = authRes.member;
+  await initLayout('/profile.html');
+  renderProfileHead();
+  fillDetailsForm();
+})();
+
+function renderProfileHead() {
+  const el = document.getElementById('profileHead');
+  const m = CURRENT_MEMBER;
+  el.innerHTML = `
+    <div class="profile-photo">
+      ${m.profileImageFileId ? `<img src="/api/files/${m.profileImageFileId}" alt="${escapeHtml(m.name)}">` : `<span class="initial">${escapeHtml((m.name || '?').charAt(0))}</span>`}
+    </div>
+    <h1 style="margin-bottom:2px;">${escapeHtml(m.name)}</h1>
+    <p style="color:#5a4468;">${escapeHtml(m.email)}</p>
+  `;
+}
+
+function fillDetailsForm() {
+  document.getElementById('name').value = CURRENT_MEMBER.name || '';
+  document.getElementById('email').value = CURRENT_MEMBER.email || '';
+  document.getElementById('phone').value = CURRENT_MEMBER.phone || '';
+  document.getElementById('level').value = CURRENT_MEMBER.level || '';
+}
+
+document.querySelectorAll('.profile-tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.profile-tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('detailsForm').style.display = btn.dataset.tab === 'details' ? 'block' : 'none';
+    document.getElementById('passwordForm').style.display = btn.dataset.tab === 'password' ? 'block' : 'none';
+  });
+});
+
+document.getElementById('detailsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('detailsSubmitBtn');
+  const msg = document.getElementById('detailsMsg');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  const formData = new FormData();
+  formData.append('name', document.getElementById('name').value);
+  formData.append('phone', document.getElementById('phone').value);
+  formData.append('level', document.getElementById('level').value);
+  const fileInput = document.getElementById('profileImage');
+  if (fileInput.files.length) formData.append('profileImage', fileInput.files[0]);
+  try {
+    const res = await fetch('/api/member/profile', { method: 'PUT', body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not save');
+    CURRENT_MEMBER = data.member;
+    renderProfileHead();
+    msg.textContent = 'Profile updated.';
+    msg.className = 'form-msg success';
+    showToast('Profile updated.', 'success');
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = 'form-msg error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Save Changes';
+  }
+});
+
+document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('passwordSubmitBtn');
+  const msg = document.getElementById('passwordMsg');
+  btn.disabled = true; btn.textContent = 'Updating...';
+  try {
+    await fetchJSON('/api/member/password', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentPassword: document.getElementById('currentPassword').value,
+        newPassword: document.getElementById('newPassword').value
+      })
+    });
+    msg.textContent = 'Password updated.';
+    msg.className = 'form-msg success';
+    showToast('Password updated.', 'success');
+    document.getElementById('passwordForm').reset();
+  } catch (err) {
+    msg.textContent = err.message;
+    msg.className = 'form-msg error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Update Password';
+  }
+});
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetchJSON('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/index.html';
+});
+</script>
+</body>
+</html>

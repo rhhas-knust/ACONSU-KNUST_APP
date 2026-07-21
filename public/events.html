@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Events — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:48px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Mark Your Calendar</p>
+    <h1>Events</h1>
+    <p class="lede">Services, retreats and gatherings — everything happening in the union.</p>
+    <div id="countdownWrap"></div>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:760px;">
+    <div id="eventList" class="grid" style="grid-template-columns:1fr;"></div>
+  </div>
+</section>
+
+<div class="pub-modal-backdrop" id="regModalBackdrop">
+  <div class="pub-modal">
+    <h3 id="regModalTitle">Register</h3>
+    <form id="regForm">
+      <div class="field">
+        <label for="regName">Full Name</label>
+        <input type="text" id="regName" required>
+      </div>
+      <div class="field">
+        <label for="regEmail">Email Address</label>
+        <input type="email" id="regEmail" required>
+      </div>
+      <div class="field">
+        <label for="regPhone">Phone Number</label>
+        <input type="tel" id="regPhone">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary" id="regSubmitBtn">Confirm Registration</button>
+        <button type="button" class="btn btn-outline" id="regCancelBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="regMsg"></div>
+    </form>
+  </div>
+</div>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+let CURRENT_EVENTS = [];
+let ACTIVE_EVENT_ID = null;
+
+function spotsBadge(e) {
+  if (!e.registrationEnabled) return '';
+  if (e.deadlinePassed) return '<span class="spots-badge closed">Registration closed</span>';
+  if (e.spotsLeft === null) return '<span class="spots-badge plenty">Registration open</span>';
+  if (e.spotsLeft <= 0) return '<span class="spots-badge full">Fully booked</span>';
+  if (e.spotsLeft <= 10) return `<span class="spots-badge low">Only ${e.spotsLeft} spots left</span>`;
+  return `<span class="spots-badge plenty">${e.spotsLeft} spots left</span>`;
+}
+
+function canRegister(e) {
+  return e.registrationEnabled && !e.deadlinePassed && (e.spotsLeft === null || e.spotsLeft > 0);
+}
+
+(async function () {
+  await initLayout('/events.html');
+  try {
+    const events = await fetchJSON('/api/events');
+    CURRENT_EVENTS = events;
+    const sorted = [...events].sort((a, b) => new Date(`${a.date}T${a.time || '00:00'}`) - new Date(`${b.date}T${b.time || '00:00'}`));
+
+    const wrap = document.getElementById('eventList');
+    wrap.innerHTML = sorted.map(e => {
+      const d = new Date(`${e.date}T00:00:00`);
+      return `
+      <div class="card event-card">
+        <div class="event-date-badge">
+          <div class="day">${d.getDate()}</div>
+          <div class="mon">${d.toLocaleDateString('en-US', { month: 'short' })}</div>
+        </div>
+        <div style="flex:1;">
+          <h3 style="margin-bottom:6px;">${escapeHtml(e.title)}</h3>
+          <p style="font-size:0.9rem; color:#5a4468; margin-bottom:6px;">${formatDate(e.date)} · ${e.time} — ${escapeHtml(e.location)}</p>
+          <p style="font-size:0.92rem; color:#5a4468; margin-bottom:8px;">${escapeHtml(e.description || '')}</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            ${e.recurring ? `<span class="badge">${escapeHtml(e.recurring)}</span>` : ''}
+            ${spotsBadge(e)}
+          </div>
+          ${e.registrationEnabled ? `
+            <div style="margin-top:12px;">
+              <button class="btn btn-flame btn-sm" data-register="${e.id}" ${canRegister(e) ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>
+                ${canRegister(e) ? 'Register Now' : (e.deadlinePassed ? 'Registration Closed' : 'Fully Booked')}
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      </div>`;
+    }).join('') || '<p class="empty-state">No events scheduled yet.</p>';
+
+    wrap.querySelectorAll('[data-register]').forEach(btn => {
+      btn.addEventListener('click', () => openRegModal(btn.dataset.register));
+    });
+
+    const next = nextUpcomingEvent(events);
+    const countWrap = document.getElementById('countdownWrap');
+    if (next) {
+      countWrap.innerHTML = `
+        <div class="countdown" id="countdown">
+          <div class="countdown-unit"><div class="countdown-num" data-d>00</div><div class="countdown-label">Days</div></div>
+          <div class="countdown-unit"><div class="countdown-num" data-h>00</div><div class="countdown-label">Hrs</div></div>
+          <div class="countdown-unit"><div class="countdown-num" data-m>00</div><div class="countdown-label">Min</div></div>
+          <div class="countdown-unit"><div class="countdown-num" data-s>00</div><div class="countdown-label">Sec</div></div>
+        </div>
+        <div class="countdown-caption">Until ${escapeHtml(next.title)}</div>
+      `;
+      startCountdown(next.date, next.time, 'countdown');
+    }
+  } catch (e) {
+    document.getElementById('eventList').innerHTML = '<p class="empty-state">Could not load events right now.</p>';
+  }
+})();
+
+function openRegModal(eventId) {
+  const event = CURRENT_EVENTS.find(e => e.id === eventId);
+  if (!event) return;
+  ACTIVE_EVENT_ID = eventId;
+  document.getElementById('regModalTitle').textContent = `Register — ${event.title}`;
+  document.getElementById('regMsg').textContent = '';
+  document.getElementById('regMsg').className = 'form-msg';
+  document.getElementById('regForm').reset();
+  document.getElementById('regModalBackdrop').classList.add('open');
+}
+document.getElementById('regCancelBtn').addEventListener('click', () => {
+  document.getElementById('regModalBackdrop').classList.remove('open');
+});
+document.getElementById('regModalBackdrop').addEventListener('click', (e) => {
+  if (e.target.id === 'regModalBackdrop') document.getElementById('regModalBackdrop').classList.remove('open');
+});
+document.getElementById('regForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('regSubmitBtn');
+  const msg = document.getElementById('regMsg');
+  btn.disabled = true; btn.textContent = 'Registering...';
+  try {
+    await fetchJSON(`/api/events/${ACTIVE_EVENT_ID}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('regName').value,
+        email: document.getElementById('regEmail').value,
+        phone: document.getElementById('regPhone').value
+      })
+    });
+    msg.textContent = "You're registered! We'll see you there.";
+    msg.className = 'form-msg success';
+    showToast("You're registered! See you there.", 'success');
+    setTimeout(() => { document.getElementById('regModalBackdrop').classList.remove('open'); location.reload(); }, 1400);
+  } catch (err) {
+    msg.textContent = err.message || 'Could not complete registration.';
+    msg.className = 'form-msg error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Confirm Registration';
+  }
+});
+</script>
+</body>
+</html>

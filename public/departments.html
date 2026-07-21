@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Departments — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:48px;" id="deptsHero">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Serve &amp; Belong</p>
+    <h1>Departments</h1>
+    <p class="lede">Every department is a family within the family — a place to serve, grow and be known. Tap one to see meeting details and join.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container">
+    <div class="grid" id="deptGrid"></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/departments.html');
+  try {
+    const departments = await fetchJSON('/api/departments');
+    const wrap = document.getElementById('deptGrid');
+    wrap.innerHTML = departments.map(d => `
+      <a href="/department.html?id=${d.id}" class="card dept-card">
+        <div class="card-icon"></div>
+        <h3>${escapeHtml(d.name)}</h3>
+        <p style="color:#5a4468; font-size:0.92rem;">${escapeHtml(d.tagline)}</p>
+        <div class="dept-meta">${escapeHtml(d.meetingDay)} · ${escapeHtml(d.meetingTime)}</div>
+      </a>
+    `).join('') || '<p class="empty-state">Departments coming soon.</p>';
+  } catch (e) {
+    document.getElementById('deptGrid').innerHTML = '<p class="empty-state">Could not load departments right now.</p>';
+  }
+  initScrollReveal('#deptGrid .card');
+  try {
+    const photos = await fetchJSON('/api/files?category=photo');
+    const general = photos.filter(p => !p.pageSlug).slice(0, 4);
+    if (general.length) {
+      document.getElementById('deptsHero').style.overflow = 'visible';
+      renderFloatingImages('deptsHero', general.map(p => p.id));
+    }
+  } catch (e) { /* decorative only */ }
+})();
+</script>
+</body>
+</html>

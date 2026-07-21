@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log In — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section style="padding-top:64px; padding-bottom:64px;">
+  <div class="container">
+    <form class="form-card" id="loginForm">
+      <img src="/images/logo.jpg" alt="ACONSU" style="width:56px; height:56px; border-radius:50%; margin:0 auto 14px; display:block;">
+      <h2 style="text-align:center;">Welcome Back</h2>
+      <p style="text-align:center; color:#5a4468; margin-bottom:24px;">Log in to your ACONSU account.</p>
+      <div class="field">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log In</button>
+      <div class="form-msg" id="loginMsg"></div>
+      <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:#5a4468;">
+        Don't have an account? <a href="/register.html" style="color:var(--purple-deep); font-weight:700;">Sign up</a>
+      </p>
+    </form>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  if (authRes.member) { window.location.href = '/profile.html'; return; }
+  await initLayout('/login.html');
+})();
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const msg = document.getElementById('loginMsg');
+  btn.disabled = true; btn.textContent = 'Logging in...';
+  try {
+    await fetchJSON('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value
+      })
+    });
+    showToast('Welcome back!', 'success');
+    window.location.href = '/profile.html';
+  } catch (err) {
+    msg.textContent = err.message || 'Could not log in.';
+    msg.className = 'form-msg error';
+    btn.disabled = false; btn.textContent = 'Log In';
+  }
+});
+</script>
+</body>
+</html>

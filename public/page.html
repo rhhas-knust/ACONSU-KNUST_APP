@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:48px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow" id="pageEyebrow">Page</p>
+    <h1 id="pageTitle">Loading...</h1>
+    <p class="lede" id="pageDescription"></p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" id="pageBody">
+    <p class="empty-state">Loading...</p>
+  </div>
+</section>
+
+<div class="lightbox-backdrop" id="lightbox">
+  <button class="lightbox-close" id="lightboxClose">&times;</button>
+  <img id="lightboxImg" src="" alt="">
+</div>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  const params = new URLSearchParams(window.location.search);
+  const slug = params.get('slug');
+  await initLayout(`/page.html?slug=${slug}`);
+
+  const bodyEl = document.getElementById('pageBody');
+
+  if (!slug) {
+    document.getElementById('pageTitle').textContent = 'Page not found';
+    bodyEl.innerHTML = '<p class="empty-state">No page specified.</p>';
+    return;
+  }
+
+  try {
+    const page = await fetchJSON(`/api/pages/${encodeURIComponent(slug)}`);
+    document.title = `${page.title} — ACONSU`;
+    document.getElementById('pageEyebrow').textContent =
+      page.type === 'gallery' ? 'Photo Gallery' : page.type === 'bookshelf' ? 'E-Library' : 'Page';
+    document.getElementById('pageTitle').textContent = page.title;
+    document.getElementById('pageDescription').textContent = page.description || '';
+
+    if (page.type === 'gallery') {
+      await renderGallery(slug, bodyEl);
+    } else if (page.type === 'bookshelf') {
+      await renderBookshelf(slug, bodyEl);
+    } else {
+      bodyEl.innerHTML = `<div style="max-width:760px; margin:0 auto; color:#5a4468;">${
+        (page.content || '').split('\n\n').map(p => `<p>${escapeHtml(p)}</p>`).join('')
+      }</div>`;
+    }
+  } catch (e) {
+    document.getElementById('pageTitle').textContent = 'Page not found';
+    bodyEl.innerHTML = '<p class="empty-state">This page doesn\'t exist or was removed.</p>';
+  }
+})();
+
+async function renderGallery(slug, bodyEl) {
+  try {
+    const files = await fetchJSON(`/api/files?category=photo&pageSlug=${encodeURIComponent(slug)}`);
+    if (!files.length) {
+      bodyEl.innerHTML = '<p class="empty-state">No photos uploaded yet — check back soon.</p>';
+      return;
+    }
+    bodyEl.innerHTML = `<div class="gallery-grid">${files.map(f => `
+      <div class="gallery-item" data-src="/api/files/${f.id}" data-title="${escapeHtml(f.title)}">
+        <img src="/api/files/${f.id}" alt="${escapeHtml(f.title)}" loading="lazy">
+      </div>
+    `).join('')}</div>`;
+
+    const lightbox = document.getElementById('lightbox');
+    const lightboxImg = document.getElementById('lightboxImg');
+    bodyEl.querySelectorAll('.gallery-item').forEach(item => {
+      item.addEventListener('click', () => {
+        lightboxImg.src = item.dataset.src;
+        lightboxImg.alt = item.dataset.title;
+        lightbox.classList.add('open');
+      });
+    });
+    document.getElementById('lightboxClose').addEventListener('click', () => lightbox.classList.remove('open'));
+    lightbox.addEventListener('click', (e) => { if (e.target === lightbox) lightbox.classList.remove('open'); });
+  } catch (e) {
+    bodyEl.innerHTML = '<p class="empty-state">Could not load photos right now.</p>';
+  }
+}
+
+async function renderBookshelf(slug, bodyEl) {
+  try {
+    const files = await fetchJSON(`/api/files?category=book&pageSlug=${encodeURIComponent(slug)}`);
+    if (!files.length) {
+      bodyEl.innerHTML = '<p class="empty-state">No resources uploaded yet — check back soon.</p>';
+      return;
+    }
+    bodyEl.innerHTML = `<div class="grid">${files.map(f => `
+      <div class="card book-card">
+        <div class="book-icon">${(f.contentType || '').includes('pdf') ? 'PDF' : 'FILE'}</div>
+        <h3 style="margin-bottom:2px;">${escapeHtml(f.title)}</h3>
+        <p style="color:#5a4468; font-size:0.9rem;">${escapeHtml(f.description || '')}</p>
+        <div class="book-meta">${formatFileSize(f.length)}</div>
+        <a href="/api/files/${f.id}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Open / Download</a>
+      </div>
+    `).join('')}</div>`;
+  } catch (e) {
+    bodyEl.innerHTML = '<p class="empty-state">Could not load resources right now.</p>';
+  }
+}
+</script>
+</body>
+</html>

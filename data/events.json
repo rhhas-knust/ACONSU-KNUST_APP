@@ -1,0 +1,32 @@
+[
+  {
+    "id": "evt1",
+    "title": "Sunday Worship Service",
+    "date": "2026-07-19",
+    "time": "08:00",
+    "location": "ACONSU Fellowship Auditorium",
+    "description": "Join us for a Spirit-filled time of worship, the Word, and fellowship.",
+    "recurring": "Weekly on Sundays",
+    "image": ""
+  },
+  {
+    "id": "evt2",
+    "title": "Midweek Bible Study",
+    "date": "2026-07-22",
+    "time": "18:00",
+    "location": "ACONSU Fellowship Auditorium",
+    "description": "A deep dive into the Word to build and strengthen every student.",
+    "recurring": "Weekly on Wednesdays",
+    "image": ""
+  },
+  {
+    "id": "evt3",
+    "title": "ACONSU Retreat",
+    "date": "2026-08-15",
+    "time": "09:00",
+    "location": "TBA",
+    "description": "Our annual retreat — a weekend set apart to encounter God away from the noise of campus life.",
+    "recurring": "",
+    "image": ""
+  }
+]

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Department — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section style="padding-top:56px; position:relative;" id="deptDetailHero">
+  <div class="container" style="max-width:760px;">
+    <a href="/departments.html" class="back-link">&larr; All Departments</a>
+    <div id="deptDetail">
+      <p class="empty-state">Loading department...</p>
+    </div>
+  </div>
+</section>
+
+<section class="alt-bg" id="joinSection" style="display:none;">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Join Us</p>
+      <h2 id="joinHeading">Join this Department</h2>
+      <p style="color:#5a4468;">Fill this in and a department leader will reach out to you before the next meeting.</p>
+    </div>
+    <form class="form-card" id="joinForm">
+      <div class="field">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" required>
+      </div>
+      <div class="field">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" required>
+      </div>
+      <div class="field">
+        <label for="phone">Phone Number</label>
+        <input type="tel" id="phone">
+      </div>
+      <div class="field">
+        <label for="level">Level / Year of Study</label>
+        <input type="text" id="level" placeholder="e.g. 200 Level">
+      </div>
+      <div class="field">
+        <label for="message">Anything you'd like the leader to know?</label>
+        <textarea id="message" placeholder="Optional"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="joinSubmitBtn">Join Department</button>
+      <div class="form-msg" id="joinMsg"></div>
+    </form>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/departments.html');
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+  const detailEl = document.getElementById('deptDetail');
+
+  if (!id) {
+    detailEl.innerHTML = '<p class="empty-state">No department selected.</p>';
+    return;
+  }
+
+  try {
+    const dept = await fetchJSON(`/api/departments/${id}`);
+    document.title = `${dept.name} — ACONSU`;
+    detailEl.innerHTML = `
+      <p class="eyebrow">Department</p>
+      <h1>${escapeHtml(dept.name)}</h1>
+      <p style="color:#5a4468; font-size:1.05rem;">${escapeHtml(dept.tagline)}</p>
+      <div class="card" style="margin:28px 0;">
+        <h3 style="margin-bottom:16px;">Meeting Information</h3>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
+          <div><div class="eyebrow">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
+          <div><div class="eyebrow">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
+          <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
+          ${dept.leader ? `<div><div class="eyebrow">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leader)}</p></div>` : ''}
+        </div>
+      </div>
+      <p style="color:#5a4468;">${escapeHtml(dept.description)}</p>
+    `;
+
+    document.getElementById('joinHeading').textContent = `Join ${dept.name}`;
+    document.getElementById('joinSection').style.display = 'block';
+
+    document.getElementById('joinForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('joinSubmitBtn');
+      const msg = document.getElementById('joinMsg');
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      try {
+        await fetchJSON('/api/join-requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            departmentId: id,
+            name: document.getElementById('name').value,
+            email: document.getElementById('email').value,
+            phone: document.getElementById('phone').value,
+            level: document.getElementById('level').value,
+            message: document.getElementById('message').value
+          })
+        });
+        msg.textContent = "You're in! A department leader will reach out to you soon.";
+        msg.className = 'form-msg success';
+        showToast(`Welcome to ${dept.name}! We'll be in touch soon.`, 'success');
+        document.getElementById('joinForm').reset();
+      } catch (err) {
+        msg.textContent = err.message || 'Something went wrong. Please try again.';
+        msg.className = 'form-msg error';
+        showToast(err.message || 'Something went wrong. Please try again.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Join Department';
+      }
+    });
+
+    initScrollReveal('.card, .form-card');
+    try {
+      const photos = await fetchJSON('/api/files?category=photo');
+      const general = photos.filter(p => !p.pageSlug).slice(0, 3);
+      if (general.length) {
+        document.getElementById('deptDetailHero').style.overflow = 'visible';
+        renderFloatingImages('deptDetailHero', general.map(p => p.id), [
+          { top: '0%', right: '2%', width: '120px', height: '90px', rotate: '4deg', delay: '0s' },
+          { top: '30%', right: '-2%', width: '100px', height: '130px', rotate: '-3deg', delay: '0.15s' },
+          { bottom: '0%', right: '10%', width: '110px', height: '80px', rotate: '5deg', delay: '0.3s' }
+        ]);
+      }
+    } catch (e) { /* decorative only */ }
+  } catch (e) {
+    detailEl.innerHTML = '<p class="empty-state">Department not found.</p>';
+  }
+})();
+</script>
+</body>
+</html>

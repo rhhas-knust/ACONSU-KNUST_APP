@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sermons & Media — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:48px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">The Word</p>
+    <h1>Sermons &amp; Media</h1>
+    <p class="lede">Catch up on past messages, or press play on something to build your faith today.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:760px;">
+    <div id="sermonList" class="grid" style="grid-template-columns:1fr; gap:18px;"></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/media.html');
+  try {
+    const sermons = await fetchJSON('/api/sermons');
+    const sorted = [...sermons].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const wrap = document.getElementById('sermonList');
+    wrap.innerHTML = sorted.map(s => `
+      <div class="card">
+        <span class="badge">${s.type === 'video' ? 'Video' : 'Audio'}</span>
+        <h3 style="margin:12px 0 4px;">${escapeHtml(s.title)}</h3>
+        <p style="font-size:0.88rem; color:#5a4468; margin-bottom:8px;">${escapeHtml(s.speaker || '')} ${s.date ? '· ' + formatDate(s.date) : ''}</p>
+        <p style="color:#5a4468; margin-bottom:12px;">${escapeHtml(s.description || '')}</p>
+        ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:#a08eb0;">Link coming soon</span>'}
+      </div>
+    `).join('') || '<p class="empty-state">No sermons uploaded yet — check back soon.</p>';
+  } catch (e) {
+    document.getElementById('sermonList').innerHTML = '<p class="empty-state">Could not load sermons right now.</p>';
+  }
+})();
+</script>
+</body>
+</html>
