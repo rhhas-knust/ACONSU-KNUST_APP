@@ -118,13 +118,16 @@ aconsu-app/
     models.js              Mongoose schemas
     repo.js                Generic CRUD used by server.js
     gridfs.js              File storage (photos, ebooks, profile/exec photos)
+    bibleBooks.js          Static book/chapter list for the Bible reader
+    push.js                Web push notification sending + cleanup
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
   capacitor.config.json    Native app (iOS/Android) wrapper config
   data/                    Old local JSON files — kept only as the migration source
   public/
     index.html, about.html, departments.html, department.html,
-    events.html, media.html, prayer.html, contact.html,
-    login.html, register.html, profile.html, page.html, admin.html
+    events.html, media.html, bible.html, prayer.html, contact.html,
+    login.html, register.html, profile.html, notifications.html,
+    page.html, admin.html
     manifest.json           PWA app manifest
     sw.js                   Service worker (offline support)
     icons/                  Generated app icons, all sizes
@@ -156,15 +159,28 @@ Each page gets a slug (its URL, e.g. `ebook-store` → `yoursite.com/page.html?s
 ## 9. UI/UX pass
 
 A few things were added purely for feel:
+- **Bottom tab bar on mobile** — Home, Events, Bible, Prayer, and a "More" tab that slides up a sheet with everything else (About, Departments, Sermons, custom pages, Contact, and Log In/Profile). This shows up automatically on any screen under 861px wide and gives the site a native-app feel instead of a mobile website feel; the desktop top nav stays as-is on wider screens. It's wired into every public page automatically — no per-page setup needed, and it'll pick up any new Custom Pages you add without further changes.
 - **Toast notifications** confirm actions (join a department, submit a prayer request, register for an event) with a small notification in the corner, in addition to the inline message.
 - **Scroll-reveal animations** — cards fade/slide into view as you scroll instead of popping in all at once.
 - **Skeleton loading placeholders** on the About page while executive data loads, instead of a blank gap.
 - **Visible focus outlines** on buttons/links/inputs for keyboard navigation and accessibility.
 - Floating images and card hover/lift effects add some life without slowing the site down — they're disabled on mobile screens to keep things fast and uncluttered there.
 
-## 11. Member accounts
+## 10. Birthday celebrations
 
-Regular members (students, not admins) can now create their own accounts, separate from the admin login:
+Members can optionally add their birthday — **month and day only, never a year** — when they sign up or later from their profile. This is a deliberate privacy choice: the database has no field for birth year anywhere, so a member's age can never be calculated or exposed, even by an admin looking directly at the database.
+
+On the day itself, the homepage shows a celebratory banner — first name + last initial only (e.g. "Grace A.") with their profile photo if they have one. No email, phone, or any other detail is shown publicly. Admin can see the full list of members' birthdays (month/day) in the **Members** tab of the dashboard, for planning shout-outs or cards.
+
+## 11. Bible reader
+
+The new **Bible** tab (`/bible.html`) lets anyone read scripture directly in the app — pick a book, chapter, and translation (KJV, WEB, WEBBE, Open English Bible, and the Clementine Vulgate), and read right there, with Previous/Next chapter navigation. Each chapter can also be downloaded as a plain text file for offline reading.
+
+This is powered by the free [bible-api.com](https://bible-api.com) service, called from the server (not the browser) so requests are cached for an hour and don't expose any third-party API directly to visitors.
+
+**For full downloadable Bible versions** (entire PDFs or e-books per translation): use the **Custom Pages** feature you already have — create a Bookshelf-type page (e.g. titled "Bible Downloads"), then upload full versions as files via the Media Library, tagged to that page. The Bible reader page automatically detects a page like this (if its title or slug mentions "bible" or "scripture") and shows a "Browse Downloadable Versions" link pointing straight to it — no extra code needed on your end, just create the page and upload the files.
+
+## 12. Member accounts
 
 - **Sign up**: `/register.html` — name, email, password, optional phone and level.
 - **Log in**: `/login.html`.
@@ -174,7 +190,7 @@ Logged-in members see their first name in the header (instead of "Log In"), link
 
 This is intentionally kept separate from admin auth — a member account can never access `/admin.html`, and an admin login can't be used to log into a member profile.
 
-## 12. Installable App (PWA)
+## 13. Installable App (PWA)
 
 The site is now a full Progressive Web App — visitors on phones will see an "Install ACONSU App" prompt (or can use "Add to Home Screen" from their browser menu), after which it opens full-screen with its own icon, no browser bar, and works offline for pages already visited.
 
@@ -185,7 +201,7 @@ What's included:
 
 No setup needed — this works automatically once deployed over HTTPS (required for service workers; Render/Railway provide this by default).
 
-## 13. Native App (iOS / Android) via Capacitor
+## 14. Native App (iOS / Android) via Capacitor
 
 For an actual installable app in the App Store / Play Store, this project is pre-wired for **Capacitor**, which wraps the live website in a native app shell. This is the practical path since the app needs its live database connection — it doesn't work as a fully offline bundled app.
 
@@ -216,11 +232,44 @@ From there, each IDE handles building, signing, and submitting to the Play Store
 
 Building and submitting native apps requires tools (Android Studio, Xcode) that only run on your own computer, not in this chat — but the project is fully set up for it, so it's just running the commands above when you're ready.
 
-## 14. Design
+## 15. Home dashboard and notifications
+
+**Tile dashboard**: the homepage now leads with a grid of quick-access tiles (Bible, Events, Departments, Sermons, Prayer Wall, Notifications), with any Custom Pages you've created appended automatically. This sits above the existing department/event previews — the tiles are for fast navigation, the sections below are for browsing.
+
+**Notifications** — two layers working together:
+- **In-app feed** (`/notifications.html`, also reachable via the bell icon or the "More" menu): every announcement and automatic update shows up here, newest first, with a small unread-count badge on the bell and the mobile "More" tab.
+- **Real push notifications**: visitors can tap "Enable" on the notifications page to get phone alerts even when the app isn't open — this uses the standard Web Push API (no third-party notification service, no per-message cost).
+
+**What triggers a notification automatically:**
+- A new **event** is created by admin → "New Event: [title]"
+- A new **sermon** is added by admin → "New Sermon: [title]"
+- Once a day, if it's someone's **birthday** → "🎉 Happy Birthday!" naming whoever's celebrating (first names only, consistent with the privacy approach used elsewhere)
+
+**Admin can also send manual announcements** any time from the new **Notifications** tab in the dashboard — title, message, and where tapping it should take people.
+
+### Push notifications setup (required for phone alerts to work)
+
+Push notifications need a one-time key pair (VAPID keys) so browsers trust that notifications are really coming from your server:
+
+1. In the project folder, run:
+   ```bash
+   npx web-push generate-vapid-keys
+   ```
+2. Copy the two keys it prints into `.env`:
+   ```
+   VAPID_PUBLIC_KEY=...
+   VAPID_PRIVATE_KEY=...
+   VAPID_SUBJECT=mailto:youradminemail@example.com
+   ```
+3. Restart the server. That's it — no account, no third-party service, no per-notification cost.
+
+If these aren't set, the app still works completely normally — the in-app notification feed keeps working, it just won't send real phone push alerts until the keys are added.
+
+**A few real-world notes:**
+- Push notifications need HTTPS, so this only works once deployed (Render/Railway provide HTTPS automatically) — it won't send real pushes on plain `localhost`.
+- iPhones only support push notifications for sites that have been **added to the home screen** (installed as the PWA) — this is an Apple platform restriction, not something in this app's control. Android and desktop browsers support it directly, no install required.
+- The automatic birthday and daily checks require the server process to keep running continuously — true by default on Render/Railway's standard web service plans, just flagging it in case you ever move to a "serverless"-style host where this wouldn't apply.
+
+## 16. Design
 
 Palette pulled from the ACONSU crest: deep purple (`#5B2C82`) and rich plum (`#3A1B54`) as primary, a light lilac background, with the crest's flame rendered as a gold-to-red gradient accent on key call-to-action buttons and the homepage hero. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
-#   A C O N S U - K N U S T A P P  
- #   A C O N S U - K N U S T _ A P P  
- #   A C O N S U - K N U S T _ A P P  
- #   A C O N S U - K N U S T _ A P P  
- 
