@@ -16,6 +16,8 @@ const push = require('./lib/push');
 const sms = require('./lib/sms');
 const mailer = require('./lib/mailer');
 const { compressIfImage } = require('./lib/imageProcess');
+const { renderTableReport } = require('./lib/pdf');
+const QRCode = require('qrcode');
 const crypto = require('crypto');
 
 const upload = multer({
@@ -672,6 +674,67 @@ app.get('/api/member/badges', requireMember, async (req, res) => {
   }
 });
 
+// ---------- Sermon Notes (section 17) ----------
+// Personal and private — a member only ever sees their own; there is
+// deliberately no admin/shepherding view of these, unlike everything else
+// in the app that's chapter-visible to some staff role.
+app.get('/api/member/sermon-notes', requireMember, async (req, res) => {
+  try {
+    const notes = await repo.getAll('sermonNotes', { memberId: req.session.memberId });
+    res.json(notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your sermon notes' });
+  }
+});
+
+app.post('/api/member/sermon-notes', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    const { sermonTitle, preacher, date, scripture, notes, summary, keyLessons, reflections } = req.body;
+    const note = await repo.create('sermonNotes', {
+      memberId: req.session.memberId, chapterId: member ? member.chapterId : '',
+      sermonTitle: sermonTitle || '', preacher: preacher || '', date: date || '',
+      scripture: scripture || '', notes: notes || '', summary: summary || '',
+      keyLessons: keyLessons || '', reflections: reflections || ''
+    }, 'note');
+    res.json({ success: true, item: note });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save this sermon note' });
+  }
+});
+
+app.put('/api/member/sermon-notes/:id', requireMember, async (req, res) => {
+  try {
+    const filter = { memberId: req.session.memberId };
+    const existing = await repo.getById('sermonNotes', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const { sermonTitle, preacher, date, scripture, notes, summary, keyLessons, reflections } = req.body;
+    const note = await repo.updateById('sermonNotes', req.params.id, {
+      ...existing,
+      sermonTitle: sermonTitle !== undefined ? sermonTitle : existing.sermonTitle,
+      preacher: preacher !== undefined ? preacher : existing.preacher,
+      date: date !== undefined ? date : existing.date,
+      scripture: scripture !== undefined ? scripture : existing.scripture,
+      notes: notes !== undefined ? notes : existing.notes,
+      summary: summary !== undefined ? summary : existing.summary,
+      keyLessons: keyLessons !== undefined ? keyLessons : existing.keyLessons,
+      reflections: reflections !== undefined ? reflections : existing.reflections
+    }, filter);
+    res.json({ success: true, item: note });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this sermon note' });
+  }
+});
+
+app.delete('/api/member/sermon-notes/:id', requireMember, async (req, res) => {
+  try {
+    await repo.removeById('sermonNotes', req.params.id, { memberId: req.session.memberId });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not delete this sermon note' });
+  }
+});
+
 app.get('/api/birthdays/today', async (req, res) => {
   try {
     const now = new Date();
@@ -804,6 +867,228 @@ app.get('/api/bible/passage', async (req, res) => {
 });
 
 
+// ---------- Bible Study (section 16) ----------
+// Always tied to a real passage — studyReference is meant to be handed
+// straight to /api/bible/passage above, so a study never repeats scripture
+// text that's already available in the reader.
+app.get('/api/bible-studies', async (req, res) => {
+  try {
+    const studies = await repo.getAll('bibleStudies', contentChapterFilter(req));
+    res.json(studies.sort((a, b) => (a.date < b.date ? 1 : -1)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load Bible studies' });
+  }
+});
+
+app.get('/api/bible-studies/:id', async (req, res) => {
+  try {
+    const study = await repo.getById('bibleStudies', req.params.id, contentChapterFilter(req));
+    if (!study) return res.status(404).json({ error: 'Bible study not found' });
+    res.json(study);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load this Bible study' });
+  }
+});
+
+app.post('/api/admin/bible-studies', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'A chapter is required.' });
+    const { topic, date, scriptureReference, studyMaterial, questions, notes, resources } = req.body;
+    if (!topic) return res.status(400).json({ error: 'A topic is required' });
+    const study = await repo.create('bibleStudies', {
+      chapterId, topic, date: date || '', scriptureReference: scriptureReference || '',
+      studyMaterial: studyMaterial || '',
+      questions: Array.isArray(questions) ? questions.filter(Boolean) : [],
+      notes: notes || '',
+      resources: Array.isArray(resources) ? resources.filter(Boolean) : [],
+      createdBy: actorName(req)
+    }, 'stud');
+    res.json({ success: true, item: study });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save this Bible study' });
+  }
+});
+
+app.put('/api/admin/bible-studies/:id', requireChapterAdmin, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('bibleStudies', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const { chapterId, ...body } = req.body;
+    const study = await repo.updateById('bibleStudies', req.params.id, {
+      ...existing, ...body,
+      questions: Array.isArray(body.questions) ? body.questions.filter(Boolean) : existing.questions,
+      resources: Array.isArray(body.resources) ? body.resources.filter(Boolean) : existing.resources
+    }, filter);
+    res.json({ success: true, item: study });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this Bible study' });
+  }
+});
+
+app.delete('/api/admin/bible-studies/:id', requireChapterAdmin, async (req, res) => {
+  try {
+    await repo.removeById('bibleStudies', req.params.id, rolesLib.chapterFilter(req, { required: false }));
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not delete this Bible study' });
+  }
+});
+
+// ---------- Form Builder (section 11) ----------
+// One generic engine (fields + submissions) reused for event registration,
+// travelling-event sign-ups, executive info, department activities and
+// welfare — a new "kind" of form never needs a new schema or a new route.
+const FORM_FIELD_TYPES = ['short_text', 'long_text', 'multiple_choice', 'checkboxes', 'dropdown', 'date', 'time', 'phone', 'email', 'file'];
+
+function cleanFormFields(fields) {
+  return (Array.isArray(fields) ? fields : [])
+    .filter((f) => f && f.label && FORM_FIELD_TYPES.includes(f.type))
+    .map((f, i) => ({
+      id: f.id || repo.genId('fld'),
+      label: String(f.label).trim(),
+      type: f.type,
+      required: !!f.required,
+      options: Array.isArray(f.options) ? f.options.filter(Boolean) : [],
+      order: f.order !== undefined ? Number(f.order) : i
+    }));
+}
+
+// Chapter Admin/Coordinator or Publicity — the set of roles that already
+// manage chapter content (forms, uploads, flyers) elsewhere in the app.
+function requireContentManager(req, res, next) {
+  if (isChapterAdminOrAbove(req) || hasRole(req, 'publicity')) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
+app.get('/api/forms', async (req, res) => {
+  try {
+    const forms = await repo.getAll('forms', { ...contentChapterFilter(req), isOpen: true });
+    res.json(forms.map(({ fields, ...f }) => ({ ...f, fieldCount: fields.length })));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load forms' });
+  }
+});
+
+app.get('/api/forms/:id', async (req, res) => {
+  try {
+    const form = await repo.getById('forms', req.params.id, contentChapterFilter(req));
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+    res.json(form);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load this form' });
+  }
+});
+
+app.post('/api/forms/:id/submit', formLimiter, async (req, res) => {
+  try {
+    const form = await repo.getById('forms', req.params.id);
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+    if (!form.isOpen) return res.status(400).json({ error: 'This form is closed and no longer accepting responses.' });
+    if (form.closesAt && new Date(form.closesAt) < new Date()) {
+      return res.status(400).json({ error: 'This form is closed and no longer accepting responses.' });
+    }
+    const answers = req.body.answers && typeof req.body.answers === 'object' ? req.body.answers : {};
+    const missing = form.fields.filter((f) => f.required && !String(answers[f.id] ?? '').trim());
+    if (missing.length) {
+      return res.status(400).json({ error: `Please fill in: ${missing.map((f) => f.label).join(', ')}` });
+    }
+    const memberId = (req.session && req.session.memberId) || '';
+    const member = memberId ? await repo.getById('members', memberId) : null;
+    const submission = await repo.create('formSubmissions', {
+      chapterId: form.chapterId,
+      formId: form.id,
+      memberId,
+      submitterName: req.body.submitterName || (member ? member.name : ''),
+      submitterEmail: req.body.submitterEmail || (member ? member.email : ''),
+      answers
+    }, 'sub');
+    res.json({ success: true, item: submission });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not submit this form. Please try again.' });
+  }
+});
+
+app.get('/api/admin/forms', requireContentManager, async (req, res) => {
+  try {
+    const forms = await repo.getAll('forms', rolesLib.chapterFilter(req, { required: false }));
+    res.json(forms.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load forms' });
+  }
+});
+
+app.post('/api/admin/forms', requireContentManager, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'A chapter is required.' });
+    const { title, description, category, linkedEventId, fields, closesAt } = req.body;
+    if (!title) return res.status(400).json({ error: 'A title is required' });
+    const form = await repo.create('forms', {
+      chapterId, title, description: description || '',
+      category: ['event_registration', 'travelling_event', 'executive', 'department', 'welfare', 'custom'].includes(category) ? category : 'custom',
+      linkedEventId: linkedEventId || '',
+      fields: cleanFormFields(fields),
+      isOpen: true, closesAt: closesAt || '',
+      createdBy: actorName(req)
+    }, 'form');
+    res.json({ success: true, item: form });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not create this form' });
+  }
+});
+
+app.put('/api/admin/forms/:id', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('forms', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const { chapterId, fields, ...body } = req.body;
+    const form = await repo.updateById('forms', req.params.id, {
+      ...existing, ...body,
+      fields: fields !== undefined ? cleanFormFields(fields) : existing.fields
+    }, filter);
+    res.json({ success: true, item: form });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this form' });
+  }
+});
+
+app.patch('/api/admin/forms/:id/toggle', requireContentManager, async (req, res) => {
+  try {
+    const form = await repo.patchById('forms', req.params.id, { isOpen: !!req.body.isOpen }, rolesLib.chapterFilter(req, { required: false }));
+    if (!form) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, item: form });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this form' });
+  }
+});
+
+app.delete('/api/admin/forms/:id', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    await repo.removeById('forms', req.params.id, filter);
+    await models.FormSubmission.deleteMany({ formId: req.params.id, ...filter });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not delete this form' });
+  }
+});
+
+app.get('/api/admin/forms/:id/submissions', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const form = await repo.getById('forms', req.params.id, filter);
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+    const submissions = await repo.getAll('formSubmissions', { formId: req.params.id, ...filter });
+    submissions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json({ form, submissions });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load submissions' });
+  }
+});
+
 ['departments', 'sermons', 'testimonies'].forEach((resource) => {
   app.get(`/api/${resource}`, async (req, res) => {
     try {
@@ -824,7 +1109,12 @@ app.get('/api/bible/passage', async (req, res) => {
 app.get('/api/events', async (req, res) => {
   try {
     const base = contentChapterFilter(req);
-    const filter = base.chapterId ? { $or: [{ chapterId: base.chapterId }, { isNational: true }] } : base;
+    const chapterPart = base.chapterId ? { $or: [{ chapterId: base.chapterId }, { isNational: true }] } : base;
+    // Anonymous visitors only ever see published events — a submitted or
+    // rejected event isn't public yet (section 9). Signed-in staff browsing
+    // their own chapter's dashboard see everything, drafts included.
+    const scope = rolesLib.getActingScope(req);
+    const filter = scope.kind === 'anonymous' ? { ...chapterPart, status: 'published' } : chapterPart;
     const events = await repo.getAll('events', filter);
     const withCounts = await Promise.all(events.map(async (e) => {
       const registrationCount = e.registrationEnabled
@@ -985,15 +1275,26 @@ app.post('/api/join-requests', formLimiter, async (req, res) => {
   }
 });
 
+const PRAYER_VISIBILITIES = ['public', 'private', 'shepherd_only', 'anonymous'];
+
 app.post('/api/prayer-requests', formLimiter, async (req, res) => {
-  const { name, email, request, isPrivate } = req.body;
+  const { name, email, request, isPrivate, visibility } = req.body;
   if (!request) return res.status(400).json({ error: 'Request details are required' });
   try {
     const chapterId = await resolvePublicChapterId(req);
     if (!chapterId) return res.status(400).json({ error: 'Please select your chapter and try again.' });
+    // visibility is the source of truth going forward; isPrivate (older
+    // clients) still maps onto it so nothing that submits the old shape breaks.
+    const resolvedVisibility = PRAYER_VISIBILITIES.includes(visibility) ? visibility : (isPrivate ? 'private' : 'public');
+    const memberId = (req.session && req.session.memberId) || '';
     await repo.create('prayerRequests', {
       chapterId,
-      name: name || 'Anonymous', email: email || '', request, isPrivate: !!isPrivate, status: 'new'
+      name: resolvedVisibility === 'anonymous' ? 'Anonymous' : (name || 'Anonymous'),
+      email: email || '', request,
+      isPrivate: resolvedVisibility !== 'public' && resolvedVisibility !== 'anonymous',
+      visibility: resolvedVisibility,
+      memberId,
+      status: 'new'
     }, 'prayer');
     res.json({ success: true });
     notifyAdminByEmail(
@@ -1002,6 +1303,73 @@ app.post('/api/prayer-requests', formLimiter, async (req, res) => {
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not save your request. Please try again.' });
+  }
+});
+
+// ---------- Prayer Wall (section 18) ----------
+// The public feed — only requests marked public/anonymous ever appear here;
+// private and shepherd_only stay in the shepherding/admin inbox only. Names
+// are stripped for anonymous requests server-side, never just hidden by the
+// frontend, and the id list of who's praying is never exposed — only a count.
+app.get('/api/prayer-wall', async (req, res) => {
+  try {
+    const filter = { ...contentChapterFilter(req), visibility: { $in: ['public', 'anonymous'] } };
+    const items = await repo.getAll('prayerRequests', filter);
+    res.json(items
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((p) => ({
+        id: p.id,
+        name: p.visibility === 'anonymous' ? 'Anonymous' : p.name,
+        request: p.request,
+        answered: !!p.answered,
+        testimony: p.testimony || '',
+        prayingCount: (p.prayingMemberIds || []).length,
+        isMine: !!(req.session && req.session.memberId && p.memberId === req.session.memberId),
+        createdAt: p.createdAt
+      })));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the prayer wall' });
+  }
+});
+
+app.post('/api/prayer-requests/:id/pray', requireMember, async (req, res) => {
+  try {
+    const request = await models.PrayerRequest.findOne({ id: req.params.id });
+    if (!request || !['public', 'anonymous'].includes(request.visibility)) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    await models.PrayerRequest.updateOne(
+      { id: req.params.id },
+      { $addToSet: { prayingMemberIds: req.session.memberId } }
+    );
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not record this' });
+  }
+});
+
+// A member can mark their own request answered (and share a testimony);
+// chapter staff can also do it on behalf of someone who submitted signed out.
+// Deliberately not gated by requireMember alone — Shepherding/Chapter Admin
+// may also close this out on behalf of someone who submitted signed out, so
+// the "who's allowed" check has to happen inside, not in the route guard.
+app.patch('/api/prayer-requests/:id/answered', async (req, res) => {
+  try {
+    const request = await repo.getById('prayerRequests', req.params.id);
+    if (!request) return res.status(404).json({ error: 'Not found' });
+    const isOwner = !!(req.session && req.session.memberId && request.memberId === req.session.memberId);
+    if (!isOwner && !isChapterAdminOrAbove(req) && !hasRole(req, 'shepherding')) {
+      return res.status(403).json({ error: 'Only the person who submitted this request (or Shepherding) can mark it answered.' });
+    }
+    const updated = await repo.updateById('prayerRequests', req.params.id, {
+      ...request,
+      answered: true,
+      answeredAt: new Date(),
+      testimony: req.body.testimony ? String(req.body.testimony).slice(0, 2000) : request.testimony
+    });
+    res.json({ success: true, item: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this request' });
   }
 });
 
@@ -1316,6 +1684,217 @@ app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherdi
     });
   } catch (e) {
     res.status(500).json({ error: 'Could not load attendance history' });
+  }
+});
+
+// ---------- Digital Membership Card (section 14) ----------
+// The QR encodes the member's qrToken, never their raw id/email — the
+// scanning side (below) resolves it back to a member server-side and checks
+// chapter membership before recording anything, so the code itself carries
+// no directly identifying information if seen out of context.
+app.get('/api/member/card', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Account not found' });
+    if (member.membershipStage !== 'active') {
+      return res.json({
+        ready: false,
+        membershipStage: member.membershipStage,
+        message: 'Your digital membership card will be available once Shepherding completes your membership review.'
+      });
+    }
+    const chapter = member.chapterId ? await repo.getById('chapters', member.chapterId) : null;
+    const qrDataUrl = await QRCode.toDataURL(member.qrToken, { margin: 1, width: 320 });
+    res.json({
+      ready: true,
+      name: member.name,
+      profileImageFileId: member.profileImageFileId || '',
+      chapterName: chapter ? chapter.name : '',
+      membershipStatus: member.membershipStage,
+      membershipNumber: member.membershipNumber,
+      qrDataUrl
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your membership card' });
+  }
+});
+
+// ---------- QR / manual attendance recording (section 13) ----------
+// Ushers/Shepherding/Publicity can take attendance at the door — same set of
+// roles allowed to manage chapter content, since "who's on the door" isn't
+// its own role in the hierarchy yet.
+function requireAttendanceTaker(req, res, next) {
+  if (isChapterAdminOrAbove(req) || hasRole(req, 'shepherding') || hasRole(req, 'publicity')) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
+function todayISODate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// Shared by both the scan and the manual-search fallback — SCAN QR ->
+// IDENTIFY MEMBER -> VERIFY CHAPTER -> RECORD ATTENDANCE (section 13). The
+// chapter check happens by construction: `member` is only ever found within
+// the scanner's own chapterFilter, so a mismatch surfaces as "not found"
+// rather than ever crossing into another chapter's register.
+async function markMemberPresent(req, member, date, serviceType) {
+  const chapterId = rolesLib.chapterIdForWrite(req) || member.chapterId;
+  const day = date || todayISODate();
+  const service = ['sunday', 'midweek', 'special'].includes(serviceType) ? serviceType : 'sunday';
+  const existing = (await repo.getAll('attendanceRecords', { date: day, serviceType: service, chapterId }))[0] || null;
+  const marks = existing ? [...existing.marks] : [];
+  const idx = marks.findIndex((m) => m.memberId === member.id);
+  const already = idx >= 0 && marks[idx].status === 'present';
+  if (idx >= 0) marks[idx] = { ...marks[idx], status: 'present' };
+  else marks.push({ memberId: member.id, recordId: '', name: member.name, status: 'present' });
+
+  const record = existing
+    ? await repo.updateById('attendanceRecords', existing.id, { ...existing, marks })
+    : await repo.create('attendanceRecords', {
+        chapterId, date: day, serviceType: service, marks,
+        visitorCount: 0, notes: '', recordedBy: actorName(req)
+      }, 'att');
+  return { already, recordId: record.id };
+}
+
+app.post('/api/attendance/scan', requireAttendanceTaker, async (req, res) => {
+  try {
+    const { qrToken, date, serviceType } = req.body;
+    if (!qrToken) return res.status(400).json({ error: 'A QR code is required' });
+    const filter = rolesLib.chapterFilter(req);
+    const member = await models.Member.findOne({ qrToken, ...filter }).lean();
+    if (!member) return res.status(404).json({ error: 'That code does not match anyone in this chapter.' });
+    const result = await markMemberPresent(req, member, date, serviceType);
+    res.json({
+      success: true, alreadyMarked: result.already,
+      member: { id: member.id, name: member.name, profileImageFileId: member.profileImageFileId, membershipStage: member.membershipStage }
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not record attendance' });
+  }
+});
+
+// Manual search fallback (section 13) — when scanning isn't available.
+// Reuses the same member list Shepherding already sees; this just adds the
+// one-tap "mark present" action on top of it.
+app.post('/api/attendance/mark', requireAttendanceTaker, async (req, res) => {
+  try {
+    const { memberId, date, serviceType } = req.body;
+    if (!memberId) return res.status(400).json({ error: 'A member is required' });
+    const filter = rolesLib.chapterFilter(req);
+    const member = await models.Member.findOne({ id: memberId, ...filter }).lean();
+    if (!member) return res.status(404).json({ error: 'Member not found in this chapter.' });
+    const result = await markMemberPresent(req, member, date, serviceType);
+    res.json({ success: true, alreadyMarked: result.already, member: { id: member.id, name: member.name } });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not record attendance' });
+  }
+});
+
+// ---------- Attendance / membership reports (section 13, 37) ----------
+// Generate -> Preview (the existing register screens) -> Download PDF.
+app.get('/api/shepherd/attendance/:date/report.pdf', requireViewRole('shepherding'), async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const serviceType = req.query.serviceType || 'sunday';
+    const records = await repo.getAll('attendanceRecords', filter);
+    const record = records.find(r => r.date === req.params.date && r.serviceType === serviceType);
+    if (!record) return res.status(404).json({ error: 'No register found for that date' });
+    const chapter = filter.chapterId ? await repo.getById('chapters', filter.chapterId) : null;
+    const present = record.marks.filter(m => m.status === 'present').length;
+    renderTableReport(res, {
+      title: 'Attendance Report',
+      subtitle: `${chapter ? chapter.name + ' — ' : ''}${record.title || record.serviceType} — ${record.date}`,
+      generatedBy: actorName(req),
+      filename: `aconsu-attendance-${record.date}.pdf`,
+      columns: [
+        { key: 'name', label: 'Member', width: 2.2 },
+        { key: 'status', label: 'Status', width: 1 }
+      ],
+      rows: [...record.marks].sort((a, b) => a.name.localeCompare(b.name)),
+      summary: [
+        { label: 'Present', value: present },
+        { label: 'Absent', value: record.marks.filter(m => m.status === 'absent').length },
+        { label: 'Excused', value: record.marks.filter(m => m.status === 'excused').length },
+        { label: 'Walk-in visitors', value: record.visitorCount || 0 },
+        { label: 'Total in the room', value: present + (record.visitorCount || 0) }
+      ]
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not build the PDF report' });
+  }
+});
+
+// Attendance PERCENTAGE per member across a date range — the figure a
+// shepherd actually needs when deciding who to follow up with.
+app.get('/api/shepherd/attendance-summary.pdf', requireViewRole('shepherding'), async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    let [records, members] = await Promise.all([repo.getAll('attendanceRecords', filter), repo.getAll('members', filter)]);
+    if (req.query.from) records = records.filter(r => r.date >= req.query.from);
+    if (req.query.to) records = records.filter(r => r.date <= req.query.to);
+    const chapter = filter.chapterId ? await repo.getById('chapters', filter.chapterId) : null;
+
+    const rows = members
+      .filter(m => m.membershipStage === 'active')
+      .map((m) => {
+        const marked = records.filter(r => r.marks.some(mk => mk.memberId === m.id));
+        const present = records.filter(r => r.marks.some(mk => mk.memberId === m.id && mk.status === 'present')).length;
+        return {
+          name: m.name, department: m.department || '—',
+          servicesRecorded: marked.length, present,
+          rate: marked.length ? `${Math.round((present / marked.length) * 100)}%` : '—'
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    renderTableReport(res, {
+      title: 'Attendance Percentage Report',
+      subtitle: `${chapter ? chapter.name + ' — ' : ''}${req.query.from || 'all time'} to ${req.query.to || 'present'} — ${records.length} service(s)`,
+      generatedBy: actorName(req),
+      filename: `aconsu-attendance-summary-${new Date().toISOString().slice(0, 10)}.pdf`,
+      columns: [
+        { key: 'name', label: 'Member', width: 2 },
+        { key: 'department', label: 'Department', width: 1.3 },
+        { key: 'servicesRecorded', label: 'Services', width: 0.8, align: 'right' },
+        { key: 'present', label: 'Present', width: 0.8, align: 'right' },
+        { key: 'rate', label: 'Rate', width: 0.8, align: 'right' }
+      ],
+      rows
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not build the PDF report' });
+  }
+});
+
+app.get('/api/shepherd/members/report.pdf', requireViewRole('shepherding'), async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const [members, chapter] = await Promise.all([
+      repo.getAll('members', filter),
+      filter.chapterId ? repo.getById('chapters', filter.chapterId) : null
+    ]);
+    renderTableReport(res, {
+      title: 'Membership Report',
+      subtitle: chapter ? chapter.name : 'ACONSU',
+      generatedBy: actorName(req),
+      filename: `aconsu-membership-${new Date().toISOString().slice(0, 10)}.pdf`,
+      columns: [
+        { key: 'name', label: 'Name', width: 1.8 },
+        { key: 'phone', label: 'Phone', width: 1.1 },
+        { key: 'level', label: 'Level', width: 0.7 },
+        { key: 'department', label: 'Department', width: 1.1 },
+        { key: 'membershipStage', label: 'Status', width: 1 }
+      ],
+      rows: [...members].sort((a, b) => a.name.localeCompare(b.name)),
+      summary: [
+        { label: 'Total', value: members.length },
+        { label: 'Active members', value: members.filter(m => m.membershipStage === 'active').length },
+        { label: 'Visitors / in review', value: members.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length }
+      ]
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not build the PDF report' });
   }
 });
 
@@ -1740,6 +2319,43 @@ app.get('/api/finance/export.csv', requireViewRole('finance'), async (req, res) 
   }
 });
 
+// PDF sibling to the CSV export — same filtering, laid out to be read at a
+// meeting rather than opened in a spreadsheet (section 37: Generate -> Preview
+// (the existing on-screen ledger) -> Download PDF).
+app.get('/api/finance/export.pdf', requireViewRole('finance'), async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const [entries, chapter] = await Promise.all([
+      filterEntries(await repo.getAll('financeEntries', filter), req.query),
+      filter.chapterId ? repo.getById('chapters', filter.chapterId) : null
+    ]);
+    entries.sort((a, b) => (a.date < b.date ? -1 : 1));
+    const { totalIncome, totalExpense, balance } = financeTotals(entries);
+    renderTableReport(res, {
+      title: 'Finance Report',
+      subtitle: chapter ? chapter.name : 'ACONSU',
+      generatedBy: actorName(req),
+      filename: `aconsu-finance-${new Date().toISOString().slice(0, 10)}.pdf`,
+      columns: [
+        { key: 'date', label: 'Date', width: 1 },
+        { key: 'entryType', label: 'Type', width: 1 },
+        { key: 'category', label: 'Category', width: 1.4 },
+        { key: 'amount', label: 'Amount (GHS)', width: 1, align: 'right' },
+        { key: 'method', label: 'Method', width: 1 },
+        { key: 'recordedBy', label: 'Recorded By', width: 1.2 }
+      ],
+      rows: entries.map(e => ({ ...e, amount: e.amount.toFixed(2) })),
+      summary: [
+        { label: 'Total income', value: `GHS ${totalIncome.toFixed(2)}` },
+        { label: 'Total expense', value: `GHS ${totalExpense.toFixed(2)}` },
+        { label: 'Balance', value: `GHS ${balance.toFixed(2)}` }
+      ]
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not build the PDF report' });
+  }
+});
+
 // ---------- Publicity office ----------
 // Publicity owns everything that goes out to people: in-app announcements, push
 // alerts, SMS, event updates, and the testimonies members send in.
@@ -1952,6 +2568,142 @@ app.put('/api/publicity/events/:id', requirePublicity, async (req, res) => {
     }
   } catch (e) {
     res.status(500).json({ error: 'Could not update this event' });
+  }
+});
+
+// ---------- Executive Portal (section 9) ----------
+// Self-service: an executive can only ever read/edit the one Executive
+// record tied to their own StaffUser id (staffId) — never anyone else's,
+// and never by guessing another executive's record id.
+async function findOwnExecutiveRecord(req) {
+  const staff = currentStaff(req);
+  if (!staff) return null;
+  return models.Executive.findOne({ staffId: staff.id, chapterId: staff.chapterId }).lean();
+}
+
+app.get('/api/executive/me', requireRole('executive'), async (req, res) => {
+  try {
+    const record = await findOwnExecutiveRecord(req);
+    res.json({ item: record });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your executive profile' });
+  }
+});
+
+app.put('/api/executive/me', requireRole('executive'), upload.single('image'), async (req, res) => {
+  try {
+    const staff = currentStaff(req);
+    let existing = await findOwnExecutiveRecord(req);
+    let imageFileId = existing ? existing.imageFileId : '';
+    if (req.file) {
+      const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+      imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+        category: 'executive', contentType: compressed.contentType, title: req.body.name || staff.name, chapterId: staff.chapterId
+      }));
+      if (existing && existing.imageFileId) gridfs.deleteFile(existing.imageFileId).catch(() => {});
+    }
+    const { name, role, department, bio, phone, email } = req.body;
+    // A real position/department change gets snapshotted into history first
+    // (section 9: "updated every academic year"), same pattern as a
+    // member's academicHistory.
+    let history = existing ? existing.history || [] : [];
+    if (existing && ((role && role !== existing.role) || (department && department !== existing.department))) {
+      history = [...history, { year: currentAcademicYearLabel(), role: existing.role || '', department: existing.department || '', updatedAt: new Date() }];
+    }
+    const fields = {
+      chapterId: staff.chapterId,
+      staffId: staff.id,
+      name: name || (existing ? existing.name : staff.name),
+      role: role !== undefined ? role : (existing ? existing.role : ''),
+      department: department !== undefined ? department : (existing ? existing.department : ''),
+      bio: bio !== undefined ? bio : (existing ? existing.bio : ''),
+      contact: {
+        phone: phone !== undefined ? phone : (existing ? existing.contact.phone : ''),
+        email: email !== undefined ? email : (existing ? existing.contact.email : '')
+      },
+      imageFileId,
+      history
+    };
+    const record = existing
+      ? await repo.updateById('executives', existing.id, { ...existing, ...fields })
+      : await repo.create('executives', fields, 'exec');
+    res.json({ success: true, item: record });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save your executive profile' });
+  }
+});
+
+// Event submission (section 9): EXECUTIVE -> SUBMITTED -> PUBLICITY REVIEW ->
+// APPROVED -> PUBLISHED. Never published directly — that's the whole point
+// of the workflow, and it's enforced here (status is always 'submitted'),
+// not left to whatever the client sends.
+app.post('/api/executive/events', requireRole('executive'), async (req, res) => {
+  try {
+    const staff = currentStaff(req);
+    const { title, date, time, location, description, category, videoUrl } = req.body;
+    if (!title || !date) return res.status(400).json({ error: 'Title and date are required' });
+    const item = await repo.create('events', {
+      chapterId: staff.chapterId,
+      title, date, time: time || '', location: location || '', description: description || '',
+      category: category || '', videoUrl: videoUrl || '',
+      status: 'submitted', submittedBy: staff.name, submittedByStaffId: staff.id
+    }, 'even');
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not submit this event' });
+  }
+});
+
+app.get('/api/executive/events', requireRole('executive'), async (req, res) => {
+  try {
+    const staff = currentStaff(req);
+    const items = await repo.getAll('events', { submittedByStaffId: staff.id });
+    res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your submitted events' });
+  }
+});
+
+// ---------- Publicity: event review queue (section 9, continued) ----------
+app.get('/api/publicity/events/queue', requireViewRole('publicity'), async (req, res) => {
+  try {
+    const items = await repo.getAll('events', { ...rolesLib.chapterFilter(req), status: 'submitted' });
+    res.json(items.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the review queue' });
+  }
+});
+
+app.patch('/api/publicity/events/:id/review', requirePublicity, async (req, res) => {
+  try {
+    const decision = req.body.decision === 'approved' ? 'approved' : (req.body.decision === 'rejected' ? 'rejected' : null);
+    if (!decision) return res.status(400).json({ error: 'decision must be "approved" or "rejected"' });
+    const filter = rolesLib.chapterFilter(req);
+    const item = await repo.patchById('events', req.params.id, {
+      status: decision, reviewedBy: actorName(req), reviewNotes: req.body.notes || ''
+    }, filter);
+    if (!item) return res.status(404).json({ error: 'Event not found' });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not review this event' });
+  }
+});
+
+app.patch('/api/publicity/events/:id/publish', requirePublicity, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('events', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Event not found' });
+    if (existing.status !== 'approved') return res.status(400).json({ error: 'Only an approved event can be published.' });
+    const item = await repo.patchById('events', req.params.id, { status: 'published' }, filter);
+    res.json({ success: true, item });
+    createNotification(
+      'New Event: ' + (item.title || 'Untitled'),
+      `${item.title || 'A new event'} — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
+      '/events.html', 'system', item.isNational ? '' : item.chapterId
+    ).catch(() => {});
+  } catch (e) {
+    res.status(500).json({ error: 'Could not publish this event' });
   }
 });
 
@@ -2465,6 +3217,11 @@ const IMAGE_PLACEMENTS = {
     needsTarget: '',
     describe: () => 'Kept in the library for use as an executive portrait. Assign it from the Executives panel.'
   },
+  'event-flyer': {
+    label: 'Event flyer',
+    needsTarget: 'event',
+    describe: (name) => `Shown on the ${name || 'selected'} event's page, and on the homepage once the event is published.`
+  },
   'library': {
     label: 'Library only (not shown anywhere yet)',
     needsTarget: '',
@@ -2474,23 +3231,24 @@ const IMAGE_PLACEMENTS = {
 
 // The front-end asks for this so the placement picker and its explanations are
 // defined in exactly one place.
-app.get('/api/admin/image-placements', requireChapterAdmin, async (req, res) => {
+app.get('/api/admin/image-placements', requireContentManager, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req, { required: false });
-    const [departments, pages] = await Promise.all([repo.getAll('departments', filter), repo.getAll('pages', filter)]);
+    const [departments, pages, events] = await Promise.all([repo.getAll('departments', filter), repo.getAll('pages', filter), repo.getAll('events', filter)]);
     res.json({
       placements: Object.entries(IMAGE_PLACEMENTS).map(([value, p]) => ({
         value, label: p.label, needsTarget: p.needsTarget, description: p.describe('')
       })),
       departments: departments.map(d => ({ id: d.id, name: d.name, hasHeader: !!d.headerImageFileId })),
-      pages: pages.filter(p => p.type === 'gallery' || p.type === 'bookshelf').map(p => ({ id: p.slug, name: p.title }))
+      pages: pages.filter(p => p.type === 'gallery' || p.type === 'bookshelf').map(p => ({ id: p.slug, name: p.title })),
+      events: events.map(e => ({ id: e.id, name: e.title, hasFlyer: !!e.flyerFileId }))
     });
   } catch (e) {
     res.status(500).json({ error: 'Could not load placement options' });
   }
 });
 
-app.post('/api/admin/uploads', requireChapterAdmin, upload.single('file'), async (req, res) => {
+app.post('/api/admin/uploads', requireContentManager, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' });
     const { category, pageSlug, title, description, targetId } = req.body;
@@ -2517,8 +3275,9 @@ app.post('/api/admin/uploads', requireChapterAdmin, upload.single('file'), async
       chapterId
     });
 
-    // A department header is only useful once the department points at it, so
-    // do that here rather than making the admin remember a second step.
+    // A department header / event flyer is only useful once the record
+    // points at it, so do that here rather than making the admin remember a
+    // second step.
     let placedOn = '';
     if (placement === 'department-header' && targetId) {
       const dept = await repo.getById('departments', targetId, filter);
@@ -2526,6 +3285,13 @@ app.post('/api/admin/uploads', requireChapterAdmin, upload.single('file'), async
         if (dept.headerImageFileId) gridfs.deleteFile(dept.headerImageFileId).catch(() => {});
         await repo.patchById('departments', targetId, { headerImageFileId: String(fileId) }, filter);
         placedOn = dept.name;
+      }
+    } else if (placement === 'event-flyer' && targetId) {
+      const event = await repo.getById('events', targetId, filter);
+      if (event) {
+        if (event.flyerFileId) gridfs.deleteFile(event.flyerFileId).catch(() => {});
+        await repo.patchById('events', targetId, { flyerFileId: String(fileId) }, filter);
+        placedOn = event.title;
       }
     }
     res.json({ success: true, id: fileId, placement, placedOn, message: spec.describe(placedOn) });

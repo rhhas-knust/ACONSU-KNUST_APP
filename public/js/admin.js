@@ -109,6 +109,7 @@ async function loadPanel(name) {
     notifications: renderNotifications,
     events: () => renderResourcePanel('events', EVENT_FIELDS, 'Event'),
     sermons: () => renderResourcePanel('sermons', SERMON_FIELDS, 'Sermon'),
+    bibleStudies: renderBibleStudies,
     pages: () => renderResourcePanel('pages', PAGE_FIELDS, 'Page'),
     media: renderMediaLibrary,
     staff: renderStaffAccounts,
@@ -818,6 +819,83 @@ async function renderNotifications() {
   });
 }
 
+
+// ---------- Bible Study (section 16) ----------
+async function renderBibleStudies() {
+  const el = document.getElementById('panel-bibleStudies');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  const studies = await fetchJSON('/api/bible-studies');
+
+  el.innerHTML = `
+    <h2 style="margin-bottom:20px;">Bible Study</h2>
+    <div class="upload-form">
+      <h3 style="margin-bottom:14px;">New Bible Study</h3>
+      <form id="studyForm">
+        <div class="field-row">
+          <div class="field"><label>Topic</label><input type="text" id="stTopic" required></div>
+          <div class="field"><label>Date</label><input type="date" id="stDate"></div>
+        </div>
+        <div class="field"><label>Scripture Reference</label><input type="text" id="stScripture" placeholder="e.g. John 3:1-21 — links straight into the Bible reader"></div>
+        <div class="field"><label>Study Material</label><textarea id="stMaterial" placeholder="The main teaching content"></textarea></div>
+        <div class="field"><label>Questions (one per line)</label><textarea id="stQuestions"></textarea></div>
+        <div class="field"><label>Notes</label><textarea id="stNotes"></textarea></div>
+        <div class="field"><label>Additional Resources (one per line)</label><textarea id="stResources"></textarea></div>
+        <button type="submit" class="btn btn-primary" id="studySubmitBtn">Save Bible Study</button>
+        <div class="form-msg" id="studyMsg"></div>
+      </form>
+    </div>
+    <table>
+      <thead><tr><th>Topic</th><th>Date</th><th>Scripture</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${studies.map(s => `
+          <tr>
+            <td>${escapeHtml(s.topic)}</td>
+            <td>${escapeHtml(s.date || '—')}</td>
+            <td>${escapeHtml(s.scriptureReference || '—')}</td>
+            <td class="row-actions"><button class="danger" data-delete-study="${s.id}">Delete</button></td>
+          </tr>
+        `).join('') || '<tr><td colspan="4">No Bible studies posted yet.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('studyForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('studySubmitBtn');
+    const msg = document.getElementById('studyMsg');
+    btn.disabled = true;
+    try {
+      await fetchJSON('/api/admin/bible-studies', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: document.getElementById('stTopic').value,
+          date: document.getElementById('stDate').value,
+          scriptureReference: document.getElementById('stScripture').value,
+          studyMaterial: document.getElementById('stMaterial').value,
+          questions: document.getElementById('stQuestions').value.split('\n').map(s => s.trim()).filter(Boolean),
+          notes: document.getElementById('stNotes').value,
+          resources: document.getElementById('stResources').value.split('\n').map(s => s.trim()).filter(Boolean)
+        })
+      });
+      msg.textContent = 'Bible study saved.';
+      msg.className = 'form-msg success';
+      renderBibleStudies();
+    } catch (err) {
+      msg.textContent = err.message || 'Could not save.';
+      msg.className = 'form-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  el.querySelectorAll('[data-delete-study]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this Bible study?')) return;
+      await fetchJSON(`/api/admin/bible-studies/${btn.dataset.deleteStudy}`, { method: 'DELETE' });
+      renderBibleStudies();
+    });
+  });
+}
 
 let membersPage = 1;
 const MEMBERS_PER_PAGE = 15;

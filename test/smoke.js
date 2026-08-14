@@ -304,6 +304,148 @@ require('./harness.js');
   r = await call('admin', 'GET', '/api/coordinator/overview');
   check('national coordinator must pick a chapter — no implicit "everything" view here', r.status === 400, r.data);
 
+  console.log('\n== form builder (section 11) ==');
+  r = await call('pub', 'POST', '/api/admin/forms', {
+    title: 'Retreat Sign-up', category: 'travelling_event',
+    fields: [
+      { label: 'Full Name', type: 'short_text', required: true },
+      { label: 'T-Shirt Size', type: 'dropdown', options: ['S', 'M', 'L'], required: false }
+    ]
+  });
+  check('publicity creates a form', r.status === 200 && r.data.item.fields.length === 2, r.data);
+  const formId = r.data.item.id;
+  const nameFieldId = r.data.item.fields[0].id;
+
+  r = await call('fin', 'POST', '/api/admin/forms', { title: 'Not allowed', fields: [] });
+  check('finance cannot build forms', r.status === 401, r.data);
+
+  r = await call('anon', 'GET', '/api/forms');
+  check('open forms are publicly listable', r.data.some(f => f.id === formId), r.data);
+
+  r = await call('anon', 'POST', `/api/forms/${formId}/submit`, { answers: {} });
+  check('a required field is enforced on submission', r.status === 400, r.data);
+
+  r = await call('anon', 'POST', `/api/forms/${formId}/submit`, {
+    answers: { [nameFieldId]: 'Ama Retreat' }, submitterName: 'Ama Retreat', submitterEmail: 'ama.retreat@test.com'
+  });
+  check('form submission accepted', r.status === 200, r.data);
+
+  r = await call('pub', 'GET', `/api/admin/forms/${formId}/submissions`);
+  check('publicity sees the submission', r.data.submissions.length === 1 && r.data.submissions[0].submitterName === 'Ama Retreat', r.data);
+  r = await call('fin', 'GET', `/api/admin/forms/${formId}/submissions`);
+  check('finance cannot view form submissions', r.status === 401, r.data);
+
+  console.log('\n== executive portal + event workflow (section 9) ==');
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123' });
+  check('executive account created', r.status === 200, r.data);
+  r = await call('exec', 'POST', '/api/portal/login', { username: 'exec.ama', password: 'password123' });
+  check('executive signs in', r.status === 200, r.data);
+
+  r = await call('exec', 'GET', '/api/executive/me');
+  check('no executive record exists yet', r.data.item === null, r.data);
+
+  const execForm = new FormData();
+  execForm.append('name', 'Ama Executive');
+  execForm.append('role', 'Financial Secretary');
+  execForm.append('department', 'welfare');
+  const execRes = await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: execForm });
+  const execData = await execRes.json();
+  check('executive saves their own profile', execRes.status === 200 && execData.item.role === 'Financial Secretary', execData);
+
+  r = await call('exec', 'POST', '/api/executive/events', { title: 'Campus Outreach', date: '2026-10-10' });
+  check('executive submits an event', r.status === 200 && r.data.item.status === 'submitted', r.data);
+  const execEventId = r.data.item.id;
+
+  r = await call('anon', 'GET', '/api/events');
+  check('a submitted event is not public yet', !r.data.some(e => e.id === execEventId), r.data);
+  r = await call('pub', 'GET', '/api/publicity/events/queue');
+  check('the event appears in publicity\'s review queue', r.data.some(e => e.id === execEventId), r.data);
+
+  r = await call('exec', 'PATCH', `/api/publicity/events/${execEventId}/review`, { decision: 'approved' });
+  check('an executive cannot review events (including their own)', r.status === 401, r.data);
+  r = await call('pub', 'PATCH', `/api/publicity/events/${execEventId}/review`, { decision: 'approved' });
+  check('publicity approves the event', r.status === 200 && r.data.item.status === 'approved', r.data);
+  r = await call('anon', 'GET', '/api/events');
+  check('approved-but-not-published is still not public', !r.data.some(e => e.id === execEventId), r.data);
+  r = await call('pub', 'PATCH', `/api/publicity/events/${execEventId}/publish`, {});
+  check('publicity publishes the event', r.status === 200 && r.data.item.status === 'published', r.data);
+  r = await call('anon', 'GET', '/api/events');
+  check('a published event is now public', r.data.some(e => e.id === execEventId), r.data);
+
+  console.log('\n== digital membership card + QR attendance (sections 13, 14) ==');
+  r = await call('member', 'GET', '/api/member/card');
+  check('an active member gets a real digital card with a QR code', r.status === 200 && r.data.ready === true && !!r.data.qrDataUrl, { ready: r.data.ready });
+
+  const { fakeModels } = require('./harness.js');
+  const memberDoc = (await fakeModels.Member.find({ id: memberId }))[0];
+  const qrToken = memberDoc.qrToken;
+  check('the member has a real qrToken on file', typeof qrToken === 'string' && qrToken.length > 10, { qrToken });
+
+  r = await call('shep', 'POST', '/api/attendance/scan', { qrToken, date: '2026-08-16', serviceType: 'sunday' });
+  check('scanning a valid QR code records attendance', r.status === 200 && r.data.member.id === memberId, r.data);
+  r = await call('shep', 'POST', '/api/attendance/scan', { qrToken, date: '2026-08-16', serviceType: 'sunday' });
+  check('scanning the same code again reports "already marked"', r.status === 200 && r.data.alreadyMarked === true, r.data);
+  r = await call('shep', 'POST', '/api/attendance/scan', { qrToken: 'not-a-real-token', date: '2026-08-16' });
+  check('an unknown QR code is rejected', r.status === 404, r.data);
+  r = await call('pub', 'POST', '/api/attendance/mark', { memberId, date: '2026-08-16', serviceType: 'midweek' });
+  check('the manual search fallback also records attendance', r.status === 200, r.data);
+
+  const membershipPdf = await fetch(BASE + '/api/shepherd/members/report.pdf', { headers: { cookie: jars.shep } });
+  check('membership PDF report generates', membershipPdf.status === 200 && (membershipPdf.headers.get('content-type') || '').includes('application/pdf'), { status: membershipPdf.status });
+  const attendancePdf = await fetch(BASE + '/api/shepherd/attendance-summary.pdf', { headers: { cookie: jars.shep } });
+  check('attendance percentage PDF report generates', attendancePdf.status === 200 && (attendancePdf.headers.get('content-type') || '').includes('application/pdf'), { status: attendancePdf.status });
+  const financePdf = await fetch(BASE + '/api/finance/export.pdf', { headers: { cookie: jars.fin } });
+  check('finance PDF report generates', financePdf.status === 200 && (financePdf.headers.get('content-type') || '').includes('application/pdf'), { status: financePdf.status });
+
+  console.log('\n== Bible Study (section 16) ==');
+  r = await call('admin', 'POST', '/api/admin/bible-studies', {
+    topic: 'The Armor of God', scriptureReference: 'Ephesians 6:10-18', questions: ['What stood out to you?']
+  });
+  check('a Bible study is created', r.status === 200 && r.data.item.questions.length === 1, r.data);
+  const studyId = r.data.item.id;
+  r = await call('anon', 'GET', '/api/bible-studies');
+  check('Bible studies are publicly listed', r.data.some(s => s.id === studyId), r.data);
+  r = await call('admin', 'DELETE', `/api/admin/bible-studies/${studyId}`);
+  check('a Bible study can be deleted', r.status === 200, r.data);
+
+  console.log('\n== Sermon Notes (section 17) — private to the member ==');
+  r = await call('member', 'POST', '/api/member/sermon-notes', { sermonTitle: 'Faith That Moves', preacher: 'Rev. Owusu', notes: 'Great word today' });
+  check('a member saves a sermon note', r.status === 200, r.data);
+  const noteId = r.data.item.id;
+  r = await call('member', 'GET', '/api/member/sermon-notes');
+  check('the member sees their own note', r.data.length === 1 && r.data[0].id === noteId, r.data);
+  r = await call('shep', 'GET', '/api/member/sermon-notes');
+  check('a staff-only session (no member login) cannot read sermon notes', r.status === 401, r.data);
+  r = await call('member', 'PUT', `/api/member/sermon-notes/${noteId}`, { summary: 'Updated summary' });
+  check('the member updates their own note', r.status === 200 && r.data.item.summary === 'Updated summary', r.data);
+  r = await call('member', 'DELETE', `/api/member/sermon-notes/${noteId}`);
+  check('the member deletes their own note', r.status === 200, r.data);
+
+  console.log('\n== Prayer Wall (section 18) ==');
+  r = await call('anon', 'POST', '/api/prayer-requests', { name: 'Kwame', request: 'Pray for my exams', visibility: 'public' });
+  check('a public prayer request is submitted', r.status === 200, r.data);
+  r = await call('anon', 'GET', '/api/prayer-wall');
+  check('it appears on the public wall', r.data.some(p => p.request === 'Pray for my exams'), r.data);
+  const wallItem = r.data.find(p => p.request === 'Pray for my exams');
+
+  r = await call('anon', 'POST', `/api/prayer-requests/${wallItem.id}/pray`, {});
+  check('signed-out visitors cannot say they are praying', r.status === 401, r.data);
+  r = await call('member', 'POST', `/api/prayer-requests/${wallItem.id}/pray`, {});
+  check('a signed-in member can say they are praying', r.status === 200, r.data);
+  r = await call('anon', 'GET', '/api/prayer-wall');
+  check('the praying count increments', r.data.find(p => p.id === wallItem.id).prayingCount === 1, r.data);
+
+  r = await call('anon', 'POST', '/api/prayer-requests', { name: 'Ama', request: 'A private matter', visibility: 'private' });
+  r = await call('anon', 'GET', '/api/prayer-wall');
+  check('private prayer requests never appear on the public wall', !r.data.some(p => p.request === 'A private matter'), r.data);
+
+  r = await call('member', 'PATCH', `/api/prayer-requests/${wallItem.id}/answered`, { testimony: 'God answered!' });
+  check('a member who did not submit a request cannot mark it answered', r.status === 403, r.data);
+  r = await call('shep', 'PATCH', `/api/prayer-requests/${wallItem.id}/answered`, { testimony: 'God answered!' });
+  check('shepherding can mark it answered on behalf of an anonymous submitter', r.status === 200 && r.data.item.answered === true, r.data);
+  r = await call('anon', 'GET', '/api/prayer-wall');
+  check('the answered testimony shows on the public wall', r.data.find(p => p.id === wallItem.id).testimony === 'God answered!', r.data);
+
   console.log('\n== chapter isolation (section 1, 43, 44) — the whole point of this phase ==');
   r = await call('admin', 'POST', '/api/national/chapters', { id: 'test-chapter-2', name: 'ACONSU-Test-2', institution: 'Second University' });
   check('a second chapter is created', r.status === 200, r.data);
@@ -348,6 +490,8 @@ require('./harness.js');
   check('chapter 2 shepherd signs in', r.status === 200, r.data);
   r = await call('shep2', 'GET', '/api/shepherd/members');
   check("chapter 2's member list does not include chapter 1's registered member", r.data.length === 0, r.data);
+  r = await call('shep2', 'POST', '/api/attendance/scan', { qrToken, date: '2026-08-16' });
+  check("chapter 2 cannot check in chapter 1's member by QR code — chapter is verified, not just the code", r.status === 404, r.data);
 
   r = await call('admin', 'POST', `/api/national/chapters/test-chapter-2/assign-coordinator`, { username: 'coord2', name: 'Coord Two', password: 'password123' });
   check('national coordinator assigns chapter 2 its own Chapter Coordinator', r.status === 200, r.data);
@@ -359,7 +503,12 @@ require('./harness.js');
   check("chapter 1's coordinator still reads only chapter 1's finances, unaffected by any of the above", r.data.totalIncome === chapter1IncomeBefore, r.data);
 
   console.log('\n== static pages ==');
-  for (const page of ['/more.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html', '/register.html', '/js/portal.js', '/js/national.js', '/css/portal.css']) {
+  for (const page of [
+    '/more.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',
+    '/register.html', '/executive.html', '/card.html', '/bible-study.html', '/sermon-notes.html', '/prayer.html',
+    '/events.html', '/index.html',
+    '/js/portal.js', '/js/national.js', '/js/executive.js', '/css/portal.css'
+  ]) {
     const res = await fetch(BASE + page);
     check(`${page} served`, res.status === 200);
   }

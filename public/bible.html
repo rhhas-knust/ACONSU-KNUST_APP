@@ -67,15 +67,21 @@ let CURRENT_REFERENCE = '';
     const { books, translations } = await fetchJSON('/api/bible/books');
     BOOKS = books;
 
+    // Deep-linkable (e.g. from a Bible Study's scripture reference):
+    // /bible.html?book=John&chapter=3
+    const params = new URLSearchParams(location.search);
+    const wantedBook = params.get('book');
+    const wantedChapter = params.get('chapter');
+
     const bookSelect = document.getElementById('bookSelect');
     bookSelect.innerHTML = books.map(b => `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)}</option>`).join('');
-    bookSelect.value = 'John';
+    bookSelect.value = (wantedBook && books.some(b => b.name === wantedBook)) ? wantedBook : 'John';
 
     const transSelect = document.getElementById('translationSelect');
     transSelect.innerHTML = translations.map(t => `<option value="${t.code}">${escapeHtml(t.label)}</option>`).join('');
 
     populateChapters();
-    document.getElementById('chapterSelect').value = 3;
+    document.getElementById('chapterSelect').value = wantedChapter || 3;
 
     loadPassage();
 

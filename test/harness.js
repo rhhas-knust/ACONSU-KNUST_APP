@@ -26,6 +26,21 @@ function matches(doc, query) {
 
 function applyUpdate(doc, update) {
   if (update.$set) Object.assign(doc, update.$set);
+  if (update.$inc) {
+    Object.entries(update.$inc).forEach(([k, v]) => { doc[k] = (doc[k] || 0) + v; });
+  }
+  if (update.$addToSet) {
+    Object.entries(update.$addToSet).forEach(([k, v]) => {
+      if (!Array.isArray(doc[k])) doc[k] = [];
+      if (!doc[k].includes(v)) doc[k].push(v);
+    });
+  }
+  if (update.$push) {
+    Object.entries(update.$push).forEach(([k, v]) => {
+      if (!Array.isArray(doc[k])) doc[k] = [];
+      doc[k].push(v);
+    });
+  }
   const direct = Object.fromEntries(Object.entries(update).filter(([k]) => !k.startsWith('$')));
   Object.assign(doc, direct);
   doc.updatedAt = new Date().toISOString();
@@ -76,6 +91,13 @@ function makeModel(defaults) {
       const i = docs.findIndex(x => matches(x, query));
       if (i >= 0) docs.splice(i, 1);
       return Promise.resolve({ deletedCount: i >= 0 ? 1 : 0 });
+    },
+    deleteMany(query) {
+      const before = docs.length;
+      const keep = docs.filter(d => !matches(d, query || {}));
+      docs.length = 0;
+      docs.push(...keep);
+      return Promise.resolve({ deletedCount: before - docs.length });
     }
   };
 }
@@ -87,16 +109,30 @@ const fakeModels = {
   }),
   FeatureFlags: makeModel({ modules: {} }),
   Department: makeModel({ chapterId: '', headerImageFileId: '' }),
-  Event: makeModel({ chapterId: '', isNational: false, registrationEnabled: false, capacity: 0, registrationDeadline: '' }),
+  Event: makeModel({
+    chapterId: '', isNational: false, registrationEnabled: false, capacity: 0, registrationDeadline: '',
+    category: '', videoUrl: '', flyerFileId: '', registrationFormId: '',
+    status: 'published', submittedBy: '', submittedByStaffId: '', reviewedBy: '', reviewNotes: ''
+  }),
   Sermon: makeModel({ chapterId: '' }),
   JoinRequest: makeModel({ chapterId: '', status: 'new' }),
-  PrayerRequest: makeModel({ chapterId: '', status: 'new' }),
+  PrayerRequest: makeModel({
+    chapterId: '', status: 'new', visibility: 'private', memberId: '',
+    prayingMemberIds: [], answered: false, testimony: '', answeredAt: null
+  }),
   Testimony: makeModel({ chapterId: '', published: false }),
   ContactMessage: makeModel({ chapterId: '', status: 'new' }),
   Settings: makeModel({}),
   CustomPage: makeModel({ chapterId: '', showInNav: true, order: 0 }),
   EventRegistration: makeModel({ chapterId: '' }),
-  Executive: makeModel({ chapterId: '', order: 0, imageFileId: '' }),
+  Executive: makeModel({
+    chapterId: '', order: 0, imageFileId: '', department: '', contact: { phone: '', email: '' },
+    history: [], staffId: ''
+  }),
+  Form: makeModel({ chapterId: '', description: '', category: 'custom', linkedEventId: '', fields: [], isOpen: true, closesAt: '', createdBy: '' }),
+  FormSubmission: makeModel({ chapterId: '', memberId: '', submitterName: '', submitterEmail: '', answers: {} }),
+  BibleStudy: makeModel({ chapterId: '', date: '', scriptureReference: '', studyMaterial: '', questions: [], notes: '', resources: [], createdBy: '' }),
+  SermonNote: makeModel({ chapterId: '', sermonTitle: '', preacher: '', date: '', scripture: '', notes: '', summary: '', keyLessons: '', reflections: '' }),
   Member: makeModel({
     chapterId: '', phone: '', level: '', programme: '', hostel: '', academicHistory: [], department: '',
     profileImageFileId: '', membershipStage: 'visitor', membershipNumber: '', qrToken: '',

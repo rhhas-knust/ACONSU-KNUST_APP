@@ -111,6 +111,91 @@ async function renderShepOverview(el) {
 // ---------- attendance ----------
 const registerState = { date: lastSundayISO(), serviceType: 'sunday', marks: {}, loaded: false };
 
+// Quick Check-In: SCAN QR -> IDENTIFY MEMBER -> VERIFY CHAPTER -> RECORD
+// ATTENDANCE (section 13), with a manual search fallback when scanning isn't
+// available — either browser support (BarcodeDetector isn't universal yet)
+// or simply no camera to hand. Both paths call the same server-side
+// check-in, which is what actually verifies chapter membership.
+function wireQuickCheckIn(people) {
+  const feedback = document.getElementById('checkinFeedback');
+  const showFeedback = (text, type) => { feedback.textContent = text; feedback.className = `form-msg ${type || ''}`; };
+
+  async function checkIn(payload, label) {
+    try {
+      const res = await fetchJSON('/api/attendance/scan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, date: registerState.date, serviceType: registerState.serviceType })
+      });
+      showFeedback(res.alreadyMarked ? `${res.member.name} was already marked present.` : `✅ ${res.member.name} marked present.`, 'success');
+      showToast(`${res.member.name} checked in`, 'success');
+    } catch (err) {
+      showFeedback(err.message || `Could not check in ${label}.`, 'error');
+    }
+  }
+
+  // ---- manual search fallback (always available) ----
+  const searchInput = document.getElementById('checkinSearch');
+  const resultsHost = document.getElementById('checkinResults');
+  searchInput.addEventListener('input', () => {
+    const term = searchInput.value.trim().toLowerCase();
+    if (!term) { resultsHost.innerHTML = ''; return; }
+    const matches = people.filter(p => p.source === 'member' && (p.name || '').toLowerCase().includes(term)).slice(0, 6);
+    resultsHost.innerHTML = matches.map(p => `
+      <button type="button" class="mark-btn" data-checkin-member="${p.memberId}" style="display:flex; width:100%; justify-content:flex-start; margin-bottom:6px;">${escapeHtml(p.name)}</button>
+    `).join('') || '<p class="tiny muted">No match.</p>';
+    resultsHost.querySelectorAll('[data-checkin-member]').forEach(btn => btn.addEventListener('click', async () => {
+      await checkIn({ memberId: btn.dataset.checkinMember }, btn.textContent);
+      searchInput.value = ''; resultsHost.innerHTML = '';
+    }));
+  });
+
+  // ---- camera QR scan (feature-detected — not every browser supports it yet) ----
+  const startBtn = document.getElementById('startScanBtn');
+  const stopBtn = document.getElementById('stopScanBtn');
+  const scanArea = document.getElementById('scanArea');
+  const video = document.getElementById('scanVideo');
+  let stream = null;
+  let scanTimer = null;
+
+  if (!('BarcodeDetector' in window)) {
+    startBtn.disabled = true;
+    startBtn.textContent = '📷 Scanning not supported on this browser — use search below';
+    return;
+  }
+
+  async function stopScan() {
+    if (scanTimer) clearInterval(scanTimer);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    scanArea.style.display = 'none';
+  }
+
+  startBtn.addEventListener('click', async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      await video.play();
+      scanArea.style.display = 'block';
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      let busy = false;
+      scanTimer = setInterval(async () => {
+        if (busy) return;
+        busy = true;
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length) {
+            await checkIn({ qrToken: codes[0].rawValue }, 'this member');
+          }
+        } catch (e) { /* a missed frame isn't an error — just try again next tick */ }
+        busy = false;
+      }, 800);
+    } catch (e) {
+      showFeedback('Could not access the camera. You can still check people in with search below.', 'error');
+    }
+  });
+  stopBtn.addEventListener('click', stopScan);
+}
+
 async function renderAttendance(el) {
   const [people, services, existing] = await Promise.all([
     fetchJSON('/api/shepherd/members'),
@@ -152,6 +237,26 @@ async function renderAttendance(el) {
 
     ${PORTAL.canEdit ? `
       <div class="portal-card">
+        <h3>Quick Check-In (section 13)</h3>
+        <p class="hint">Scan a member's QR code, or search by name if scanning isn't available — either instantly marks them present for the service selected above.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+          <button type="button" class="btn btn-primary btn-sm" id="startScanBtn">📷 Scan QR Code</button>
+        </div>
+        <div id="scanArea" style="display:none; margin-bottom:14px;">
+          <video id="scanVideo" style="width:100%; max-width:360px; border-radius:12px; background:#000;" playsinline muted></video>
+          <div><button type="button" class="btn btn-outline btn-sm" id="stopScanBtn" style="margin-top:8px;">Stop Scanning</button></div>
+        </div>
+        <div class="field" style="max-width:360px;">
+          <label>Or search by name</label>
+          <input type="search" id="checkinSearch" placeholder="Type a name…" autocomplete="off">
+        </div>
+        <div id="checkinResults" style="max-width:360px;"></div>
+        <div id="checkinFeedback" class="form-msg"></div>
+      </div>
+    ` : ''}
+
+    ${PORTAL.canEdit ? `
+      <div class="portal-card">
         <div class="panel-head" style="margin-bottom:14px;">
           <div>
             <h3 style="margin:0;">Mark the register (${people.length} people)</h3>
@@ -173,7 +278,13 @@ async function renderAttendance(el) {
     ` : ''}
 
     <div class="portal-card">
-      <h3>Past Services (${services.length})</h3>
+      <div class="panel-head" style="margin-bottom:14px;">
+        <h3 style="margin:0;">Past Services (${services.length})</h3>
+        <div class="panel-actions">
+          <a class="btn btn-outline btn-sm" href="/api/shepherd/attendance-summary.pdf" target="_blank" rel="noopener">📄 Attendance % Report (PDF)</a>
+          <a class="btn btn-outline btn-sm" href="/api/shepherd/members/report.pdf" target="_blank" rel="noopener">📄 Membership Report (PDF)</a>
+        </div>
+      </div>
       <div class="table-wrap">
         <table class="portal-table">
           <thead>
@@ -191,6 +302,7 @@ async function renderAttendance(el) {
                 <td class="num"><strong>${s.total}</strong></td>
                 ${PORTAL.canEdit ? `<td class="row-actions">
                   <button data-open-register="${s.date}" data-service="${s.serviceType}">Open</button>
+                  <a href="/api/shepherd/attendance/${s.date}/report.pdf?serviceType=${s.serviceType}" target="_blank" rel="noopener" style="border:none; background:var(--lilac-mid); color:var(--purple-rich); padding:6px 11px; border-radius:7px; font-size:0.77rem; font-weight:700; text-decoration:none;">PDF</a>
                   <button class="danger" data-delete-register="${s.id}">Delete</button>
                 </td>` : ''}
               </tr>
@@ -224,6 +336,8 @@ async function renderAttendance(el) {
   });
 
   if (!PORTAL.canEdit) return;
+
+  wireQuickCheckIn(people);
 
   const listEl = document.getElementById('registerList');
   const tallyEl = document.getElementById('registerTally');

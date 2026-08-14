@@ -90,6 +90,7 @@
       title: 'Grow',
       links: [
         { href: '/bible.html', label: 'Bible', desc: 'Read a chapter, keep your streak', icon: ICON_BIBLE },
+        { href: '/bible-study.html', label: 'Bible Study', desc: 'Structured studies, linked to scripture', icon: ICON_BIBLE },
         { href: '/media.html', label: 'Sermons & Media', desc: 'Catch up on the word', icon: ICON_HEADPHONES },
         { href: '/prayer.html', label: 'Prayer Wall', desc: 'Send a request, pray for others', icon: ICON_PRAYER }
       ]
@@ -129,6 +130,16 @@
           <a href="/profile.html" class="more-tile">
             <span class="more-tile-icon">${svgIcon(ICON_USERS)}</span>
             <span class="more-tile-text"><strong>My Profile</strong><small>Details, badges and alert settings</small></span>
+            <span class="more-chevron">&rsaquo;</span>
+          </a>
+          <a href="/card.html" class="more-tile">
+            <span class="more-tile-icon">${svgIcon(ICON_USERS)}</span>
+            <span class="more-tile-text"><strong>Membership Card</strong><small>Your digital ACONSU ID + QR code</small></span>
+            <span class="more-chevron">&rsaquo;</span>
+          </a>
+          <a href="/sermon-notes.html" class="more-tile">
+            <span class="more-tile-icon">${svgIcon(ICON_HEADPHONES)}</span>
+            <span class="more-tile-text"><strong>Sermon Notes</strong><small>Private notes only you can see</small></span>
             <span class="more-chevron">&rsaquo;</span>
           </a>
           <button type="button" class="more-tile" id="moreLogoutBtn" style="text-align:left; border:none; font-family:inherit;">

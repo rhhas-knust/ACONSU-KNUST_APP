@@ -335,12 +335,13 @@ async function renderPublicityEvents(el) {
         <tbody>
           ${sorted.map(e => {
             const upcoming = new Date(`${e.date}T${e.time || '00:00'}:00`) >= now;
+            const statusTone = e.status === 'published' ? (upcoming ? 'green' : 'grey') : e.status === 'rejected' ? 'red' : 'amber';
             return `
               <tr>
-                <td><strong>${escapeHtml(e.title)}</strong>${e.recurring ? `<br><small class="muted">${escapeHtml(e.recurring)}</small>` : ''}</td>
+                <td><strong>${escapeHtml(e.title)}</strong>${e.recurring ? `<br><small class="muted">${escapeHtml(e.recurring)}</small>` : ''}${e.flyerFileId ? ' 🖼️' : ''}</td>
                 <td>${shortDate(e.date)}<br><small class="muted">${escapeHtml(e.time || '')}</small></td>
                 <td>${escapeHtml(e.location || '—')}</td>
-                <td>${pill(upcoming ? 'upcoming' : 'past', upcoming ? 'green' : 'grey')}</td>
+                <td>${pill(e.status === 'published' ? (upcoming ? 'upcoming' : 'past') : e.status, statusTone)}</td>
                 ${PORTAL.canEdit ? `<td class="row-actions"><button data-edit-event="${e.id}">Edit &amp; Announce</button></td>` : ''}
               </tr>
             `;
@@ -357,6 +358,88 @@ async function renderPublicityEvents(el) {
   });
 }
 
+// ---------- event review queue (section 9) ----------
+async function renderEventQueue(el) {
+  const queue = await fetchJSON('/api/publicity/events/queue');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Event Review Queue</h2>
+        <p class="sub">Events executives have submitted. Approve, then publish when the flyer (if any) is ready — nothing here is public yet.</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="portal-table">
+        <thead><tr><th>Event</th><th>Submitted By</th><th>When</th><th></th></tr></thead>
+        <tbody>
+          ${queue.map(e => `
+            <tr>
+              <td><strong>${escapeHtml(e.title)}</strong>${e.description ? `<br><small class="muted">${escapeHtml(e.description.slice(0, 80))}</small>` : ''}</td>
+              <td>${escapeHtml(e.submittedBy || '—')}</td>
+              <td>${shortDate(e.date)} ${escapeHtml(e.time || '')}</td>
+              <td class="row-actions">
+                <button data-approve="${e.id}">Approve</button>
+                <button data-reject="${e.id}" class="danger">Reject</button>
+              </td>
+            </tr>
+          `).join('') || emptyRow(4, 'Nothing waiting on review right now.')}
+        </tbody>
+      </table>
+    </div>
+    ${PORTAL.canEdit ? `
+      <div class="portal-card" style="margin-top:20px;">
+        <h3>Approved — Ready to Publish</h3>
+        <p class="hint">Add a flyer from the Events tab first if you want one, then publish.</p>
+        <div id="approvedList"><p class="empty-state">Loading...</p></div>
+      </div>
+    ` : ''}
+  `;
+
+  el.querySelectorAll('[data-approve]').forEach(btn => btn.addEventListener('click', () => reviewEvent(btn.dataset.approve, 'approved')));
+  el.querySelectorAll('[data-reject]').forEach(btn => btn.addEventListener('click', () => {
+    const notes = prompt('Optional note for the executive about why this was rejected:') || '';
+    reviewEvent(btn.dataset.reject, 'rejected', notes);
+  }));
+
+  const approvedHost = document.getElementById('approvedList');
+  if (approvedHost) {
+    const all = await fetchJSON('/api/events');
+    const approved = all.filter(e => e.status === 'approved');
+    approvedHost.innerHTML = approved.length ? `
+      <div class="table-wrap"><table class="portal-table" style="min-width:0;">
+        <tbody>
+          ${approved.map(e => `
+            <tr>
+              <td>${escapeHtml(e.title)}${e.flyerFileId ? ' 🖼️' : ' <small class="muted">(no flyer yet)</small>'}</td>
+              <td class="row-actions"><button data-publish="${e.id}">Publish</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table></div>
+    ` : '<p class="empty-state">Nothing approved yet.</p>';
+    approvedHost.querySelectorAll('[data-publish]').forEach(btn => btn.addEventListener('click', async () => {
+      try {
+        await fetchJSON(`/api/publicity/events/${btn.dataset.publish}/publish`, { method: 'PATCH' });
+        showToast('Event published!', 'success');
+        openPanel('eventQueue');
+      } catch (err) { showToast(err.message || 'Could not publish this event.', 'error'); }
+    }));
+  }
+}
+
+async function reviewEvent(id, decision, notes) {
+  try {
+    await fetchJSON(`/api/publicity/events/${id}/review`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision, notes })
+    });
+    showToast(decision === 'approved' ? 'Event approved.' : 'Event rejected.', 'success');
+    openPanel('eventQueue');
+  } catch (err) {
+    showToast(err.message || 'Could not review this event.', 'error');
+  }
+}
+
 function openEventForm(event) {
   const isEdit = !!event;
   showModal(`
@@ -370,6 +453,14 @@ function openEventForm(event) {
       <div class="field"><label>Location</label><input type="text" id="evLocation" value="${escapeHtml(event?.location || '')}"></div>
       <div class="field"><label>Description</label><textarea id="evDescription">${escapeHtml(event?.description || '')}</textarea></div>
       <div class="field"><label>Recurring label (optional)</label><input type="text" id="evRecurring" value="${escapeHtml(event?.recurring || '')}" placeholder="e.g. Every Wednesday"></div>
+      ${isEdit ? `
+        <div class="field">
+          <label>Flyer</label>
+          ${event?.flyerFileId ? `<img src="/api/files/${event.flyerFileId}" alt="" style="max-width:160px; border-radius:8px; display:block; margin-bottom:8px;">` : ''}
+          <input type="file" id="evFlyer" accept="image/*">
+          <small class="hint">Uploading replaces the current flyer. Shown on the event page and, once published, the homepage.</small>
+        </div>
+      ` : ''}
       ${isEdit ? `
         <label class="choice selected" style="margin-bottom:18px;">
           <input type="checkbox" id="evAnnounce" checked>
@@ -407,6 +498,14 @@ function openEventForm(event) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      const flyerFile = isEdit && document.getElementById('evFlyer') ? document.getElementById('evFlyer').files[0] : null;
+      if (flyerFile) {
+        const formData = new FormData();
+        formData.append('file', flyerFile);
+        formData.append('placement', 'event-flyer');
+        formData.append('targetId', event.id);
+        await fetchJSON('/api/admin/uploads', { method: 'POST', body: formData });
+      }
       closeModal();
       showToast('Event saved.', 'success');
       openPanel('events');
@@ -526,6 +625,192 @@ async function renderSmsLog(el) {
   `;
 }
 
+// ---------- Form Builder (section 11) ----------
+const FORM_FIELD_TYPE_LABELS = {
+  short_text: 'Short text', long_text: 'Long text', multiple_choice: 'Multiple choice',
+  checkboxes: 'Checkboxes', dropdown: 'Dropdown', date: 'Date', time: 'Time',
+  phone: 'Phone', email: 'Email', file: 'File upload'
+};
+const FORM_CATEGORY_LABELS = {
+  event_registration: 'Event Registration', travelling_event: 'Travelling Event',
+  executive: 'Executive Info', department: 'Department Activity', welfare: 'Welfare', custom: 'Custom'
+};
+
+function formFieldRow(field, i) {
+  const f = field || { id: '', label: '', type: 'short_text', required: false, options: [] };
+  const needsOptions = ['multiple_choice', 'checkboxes', 'dropdown'].includes(f.type);
+  return `
+    <div class="portal-card" data-field-row style="padding:14px; margin-bottom:10px;">
+      <input type="hidden" data-field-id value="${escapeHtml(f.id)}">
+      <div class="field-row">
+        <div class="field"><label>Question</label><input type="text" data-field-label value="${escapeHtml(f.label)}" required></div>
+        <div class="field"><label>Type</label>
+          <select data-field-type>
+            ${Object.entries(FORM_FIELD_TYPE_LABELS).map(([v, l]) => `<option value="${v}" ${f.type === v ? 'selected' : ''}>${l}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field" data-options-field style="${needsOptions ? '' : 'display:none;'}">
+        <label>Options (one per line)</label>
+        <textarea data-field-options rows="3">${escapeHtml((f.options || []).join('\n'))}</textarea>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:700; color:var(--purple-rich);">
+        <input type="checkbox" data-field-required style="width:auto;" ${f.required ? 'checked' : ''}> Required
+      </label>
+      <button type="button" class="btn btn-outline btn-sm" data-remove-field style="margin-top:8px;">Remove Question</button>
+    </div>
+  `;
+}
+
+function wireFormFieldRows(host) {
+  host.querySelectorAll('[data-field-type]').forEach((sel) => {
+    sel.onchange = () => {
+      const row = sel.closest('[data-field-row]');
+      row.querySelector('[data-options-field]').style.display = ['multiple_choice', 'checkboxes', 'dropdown'].includes(sel.value) ? '' : 'none';
+    };
+  });
+  host.querySelectorAll('[data-remove-field]').forEach((btn) => {
+    btn.onclick = () => {
+      if (host.querySelectorAll('[data-field-row]').length === 1) return;
+      btn.closest('[data-field-row]').remove();
+    };
+  });
+}
+
+function collectFormFields(host) {
+  return [...host.querySelectorAll('[data-field-row]')].map((row, i) => ({
+    id: row.querySelector('[data-field-id]').value || undefined,
+    label: row.querySelector('[data-field-label]').value.trim(),
+    type: row.querySelector('[data-field-type]').value,
+    required: row.querySelector('[data-field-required]').checked,
+    options: row.querySelector('[data-field-options]').value.split('\n').map(s => s.trim()).filter(Boolean),
+    order: i
+  })).filter(f => f.label);
+}
+
+function openFormBuilder(form) {
+  const isEdit = !!form;
+  const fields = form ? form.fields : [{}];
+  showModal(`
+    <h3>${isEdit ? 'Edit' : 'New'} Form</h3>
+    <form id="formBuilderForm">
+      <div class="field"><label>Title</label><input type="text" id="fTitle" value="${escapeHtml(form?.title || '')}" required></div>
+      <div class="field"><label>Description</label><textarea id="fDescription" rows="2">${escapeHtml(form?.description || '')}</textarea></div>
+      <div class="field"><label>Category</label>
+        <select id="fCategory">${Object.entries(FORM_CATEGORY_LABELS).map(([v, l]) => `<option value="${v}" ${form?.category === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+      <label style="display:block; font-weight:700; font-size:0.85rem; margin:14px 0 8px; color:var(--purple-rich);">Questions</label>
+      <div id="fieldRows">${fields.map((f, i) => formFieldRow(f, i)).join('')}</div>
+      <button type="button" class="btn btn-outline btn-sm" id="addFieldBtn">+ Add Question</button>
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Save Form</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="formBuilderMsg"></div>
+    </form>
+  `, true);
+
+  const rowsHost = document.getElementById('fieldRows');
+  wireFormFieldRows(rowsHost);
+  document.getElementById('addFieldBtn').addEventListener('click', () => {
+    rowsHost.insertAdjacentHTML('beforeend', formFieldRow(null, rowsHost.children.length));
+    wireFormFieldRows(rowsHost);
+  });
+
+  document.getElementById('formBuilderForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      title: document.getElementById('fTitle').value,
+      description: document.getElementById('fDescription').value,
+      category: document.getElementById('fCategory').value,
+      fields: collectFormFields(rowsHost)
+    };
+    try {
+      await fetchJSON(isEdit ? `/api/admin/forms/${form.id}` : '/api/admin/forms', {
+        method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      closeModal();
+      showToast('Form saved.', 'success');
+      openPanel('forms');
+    } catch (err) {
+      setFormMsg('formBuilderMsg', err.message || 'Could not save this form.', 'error');
+    }
+  });
+}
+
+async function viewFormSubmissions(formId) {
+  const { form, submissions } = await fetchJSON(`/api/admin/forms/${formId}/submissions`);
+  showModal(`
+    <h3>${escapeHtml(form.title)} — Submissions (${submissions.length})</h3>
+    <div class="table-wrap">
+      <table class="portal-table" style="min-width:0;">
+        <thead><tr><th>Submitted By</th><th>When</th>${form.fields.map(f => `<th>${escapeHtml(f.label)}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${submissions.map(s => `
+            <tr>
+              <td>${escapeHtml(s.submitterName || 'Anonymous')}<br><small class="muted">${escapeHtml(s.submitterEmail || '')}</small></td>
+              <td class="tiny muted">${dateTimeLabel(s.createdAt)}</td>
+              ${form.fields.map(f => `<td>${escapeHtml(String(s.answers[f.id] ?? '—'))}</td>`).join('')}
+            </tr>
+          `).join('') || emptyRow(2 + form.fields.length, 'No submissions yet.')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:18px;"><button type="button" class="btn btn-outline" id="cancelModalBtn">Close</button></div>
+  `, true);
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+}
+
+async function renderForms(el) {
+  const forms = await fetchJSON('/api/admin/forms');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Forms (${forms.length})</h2>
+        <p class="sub">Build once, reuse for event registration, travelling events, executive info, department activities and welfare.</p>
+      </div>
+      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newFormBtn">+ New Form</button></div>
+    </div>
+    <div class="table-wrap">
+      <table class="portal-table">
+        <thead><tr><th>Title</th><th>Category</th><th>Questions</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          ${forms.map(f => `
+            <tr>
+              <td><strong>${escapeHtml(f.title)}</strong></td>
+              <td>${escapeHtml(FORM_CATEGORY_LABELS[f.category] || f.category)}</td>
+              <td>${f.fields.length}</td>
+              <td>${pill(f.isOpen ? 'open' : 'closed', f.isOpen ? 'green' : 'grey')}</td>
+              <td class="row-actions">
+                <button data-view="${f.id}">Submissions</button>
+                <button data-edit="${f.id}">Edit</button>
+                <button data-toggle="${f.id}" data-open="${f.isOpen}">${f.isOpen ? 'Close' : 'Reopen'}</button>
+                <button data-delete="${f.id}" class="danger">Delete</button>
+              </td>
+            </tr>
+          `).join('') || emptyRow(5, 'No forms yet — create one to start collecting responses.')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('newFormBtn').addEventListener('click', () => openFormBuilder(null));
+  el.querySelectorAll('[data-view]').forEach(btn => btn.addEventListener('click', () => viewFormSubmissions(btn.dataset.view)));
+  el.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openFormBuilder(forms.find(f => f.id === btn.dataset.edit))));
+  el.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
+    await fetchJSON(`/api/admin/forms/${btn.dataset.toggle}/toggle`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isOpen: btn.dataset.open !== 'true' })
+    });
+    openPanel('forms');
+  }));
+  el.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this form and all of its submissions? This cannot be undone.')) return;
+    await fetchJSON(`/api/admin/forms/${btn.dataset.delete}`, { method: 'DELETE' });
+    showToast('Form deleted.', 'success');
+    openPanel('forms');
+  }));
+}
+
 initPortal({
   role: 'publicity',
   label: 'Publicity',
@@ -533,7 +818,9 @@ initPortal({
     { key: 'overview', label: 'Overview', render: renderPublicityOverview },
     { key: 'compose', label: 'Send Announcement', render: renderCompose },
     { key: 'scheduled', label: 'Scheduled', render: renderScheduled },
+    { key: 'eventQueue', label: 'Event Review Queue', render: renderEventQueue },
     { key: 'events', label: 'Events', render: renderPublicityEvents },
+    { key: 'forms', label: 'Forms', render: renderForms },
     { key: 'testimonies', label: 'Testimonies', render: renderTestimonies },
     { key: 'sms', label: 'SMS Log', render: renderSmsLog }
   ]

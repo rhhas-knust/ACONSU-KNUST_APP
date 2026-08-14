@@ -71,6 +71,16 @@
   </div>
 </section>
 
+<section id="flyerSection" style="display:none; padding-bottom:0;">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Don't Miss This</p>
+      <h2>Event Flyers</h2>
+    </div>
+    <div id="flyerStrip" style="display:flex; gap:16px; overflow-x:auto; padding-bottom:12px;"></div>
+  </div>
+</section>
+
 <section class="alt-bg">
   <div class="container">
     <div class="section-head">
@@ -225,6 +235,20 @@
         </div>
       </div>`;
     }).join('') || '<p class="empty-state">No upcoming events yet — check back soon.</p>';
+
+    // Approved, published event flyers (section 12) — only ever events that
+    // have actually cleared the executive->publicity review workflow, since
+    // /api/events already only returns 'published' ones to anonymous visitors.
+    const flyerEvents = upcoming.filter(e => e.flyerFileId);
+    if (flyerEvents.length) {
+      document.getElementById('flyerSection').style.display = 'block';
+      document.getElementById('flyerStrip').innerHTML = flyerEvents.map(e => `
+        <a href="/events.html" style="flex:none; width:220px; display:block;">
+          <img src="/api/files/${e.flyerFileId}" alt="${escapeHtml(e.title)}" loading="lazy" style="width:100%; height:280px; object-fit:cover; border-radius:14px; box-shadow:0 12px 28px rgba(58,27,84,0.18);">
+          <p style="margin-top:8px; font-weight:700; font-size:0.88rem; color:var(--purple-deep);">${escapeHtml(e.title)}</p>
+        </a>
+      `).join('');
+    }
 
     // countdown to next service
     const next = nextUpcomingEvent(events);

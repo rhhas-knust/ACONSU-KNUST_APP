@@ -481,4 +481,28 @@ Safe to re-run — it only ever fills in a **missing** `chapterId`, never overwr
 
 ### Deliberately not in this pass
 
-Matching the spec's own phased rollout, this pass is the *foundation* (chapter model, isolation, hierarchy, registration, membership workflow, national/chapter portals) — QR/barcode scanning UI, the digital membership card view, Forms builder, Bible Study, Prayer Wall responses, Community Chat, Groups, Welfare portal, Volunteer scheduling, Live Services, Seminars, E-Book Library, PDF report generation, and per-chapter payment integration are all still ahead (Phases 3–7 of the spec) and now have a chapter-aware foundation to build on rather than needing their own migration later.
+Matching the spec's own phased rollout, this pass was the *foundation* (chapter model, isolation, hierarchy, registration, membership workflow, national/chapter portals). Phase 3–4 (below) built directly on it. Community Chat, Groups, Welfare portal, Volunteer scheduling, Live Services, Seminars, E-Book Library, per-chapter payment/donation integration, and the full mobile UX overhaul are still ahead (Phases 5–9 of the spec).
+
+## 21. Core features + spiritual life (Phases 3–4 of the platform spec)
+
+Built directly on the Phase 2 foundation — every new piece below is chapter-isolated the same way (server-side, not just hidden in the UI) and covered by `test/smoke.js`.
+
+**Executive Portal** (`/executive.html`) — an executive signs in with their own portal account (role `executive`) and can only ever edit the one Executive record tied to that account, never anyone else's. Position/department changes are snapshotted into history automatically, the same pattern as a member's academic history. Executives submit events from here, which land in Publicity's review queue rather than publishing directly.
+
+**Event workflow** (section 9) — `Event.status` now runs `draft → submitted → approved/rejected → published`. Events created directly by Admin/Coordinator/Publicity still publish immediately (status defaults to `published`, so nothing existing changed behaviour). Only an executive's submission enters the pipeline: Publicity reviews it (`/api/publicity/events/:id/review`), then publishes it separately (`/api/publicity/events/:id/publish`) once any flyer is attached — the public `/api/events` endpoint only ever returns `published` events to anonymous visitors. Flyers upload through the same placement system as department headers and show on the event's card, on `events.html`, and in a flyer strip on the homepage once published.
+
+**Form Builder** (section 11, `/api/forms`, Publicity portal → Forms) — one generic engine (short text, long text, multiple choice, checkboxes, dropdown, date, time, phone, email, file) reused for event registration, travelling-event sign-ups, executive info, department activities and welfare, so a new kind of form never needs a new schema. Chapter Admin/Coordinator or Publicity can build one; anyone can fill one in; submissions are viewable per-form.
+
+**QR digital membership card + attendance** (sections 13–14) — every active member's card (`/card.html`, linked from Profile) shows a real, scannable QR code (generated server-side via the `qrcode` package, encoding an unguessable token — never the member's id or email). Shepherding's Attendance tab gained a Quick Check-In card: camera scanning via the browser's `BarcodeDetector` API where supported, with a manual name-search fallback everywhere else (section 13 requires this fallback explicitly). Both paths call the same server-side check that identifies the member *and verifies their chapter* before recording anything — a chapter's shepherd can never check in another chapter's member, even with a valid code.
+
+**PDF reports** (section 37, via the new `pdfkit`-based `lib/pdf.js`) — Finance gained a PDF sibling to its existing CSV export; Shepherding gained a per-service attendance report, an attendance-percentage report across a date range, and a membership roster, all downloadable straight from the portal.
+
+**Bible Study** (`/bible-study.html`, section 16) — chapter-scoped entries (topic, date, scripture reference, study material, questions, notes, resources) that link straight into the existing Bible reader (`bible.html` now accepts `?book=&chapter=` for exactly this). Managed from the admin dashboard's new Bible Study tab.
+
+**Sermon Notes** (`/sermon-notes.html`, section 17) — private, member-owned notes (title, preacher, date, scripture, notes, summary, key lessons, reflections). No admin or shepherding view of these exists on purpose — they're personal.
+
+**Prayer Wall** (`/prayer.html`, section 18) — prayer requests now carry a `visibility` (public / private / shepherd-only / anonymous) instead of a plain private flag. Public and anonymous requests appear on a real wall where members can tap "I'm praying for you" (tracked per-member, only a count is ever shown publicly) and the original submitter — or Shepherding, for anonymous ones — can mark a request answered with an optional testimony that then shows on the wall.
+
+### New dependencies
+
+`qrcode` and `pdfkit` — both pure-JS, no native compilation, same class of dependency as the ones already here. `npm audit` flagged 4 pre-existing high/critical advisories in **nodemailer, sharp, and Capacitor's `tar`** dependency (none from these two new packages) — all three fixes are breaking-change major-version bumps to libraries real features depend on (email delivery, image compression), so I left them for a dedicated, tested pass rather than bundling a risky upgrade into this one. Worth prioritizing soon.

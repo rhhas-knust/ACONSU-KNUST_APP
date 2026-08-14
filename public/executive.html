@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Executive Portal — ACONSU</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/images/logo.jpg">
+<meta name="theme-color" content="#5B2C82">
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/portal.css">
+</head>
+<body>
+
+<div class="portal-login-wrap" id="portalLoginWrap" style="display:none;">
+  <form class="portal-login-card" id="portalLoginForm">
+    <img class="mark" src="/images/logo.jpg" alt="ACONSU">
+    <h2>Executive Portal</h2>
+    <p class="sub">Manage your profile and submit events for review.</p>
+    <div class="field">
+      <label for="portalUsername">Username</label>
+      <input type="text" id="portalUsername" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="portalPassword">Password</label>
+      <input type="password" id="portalPassword" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block" id="portalLoginBtn">Sign In</button>
+    <div class="form-msg" id="portalLoginMsg"></div>
+    <p class="tiny muted" style="text-align:center; margin-top:18px;">Accounts are created by your Chapter Admin or Coordinator.</p>
+  </form>
+</div>
+
+<div class="portal-shell" id="portalShell">
+  <div class="portal-topbar">
+    <div class="brand">
+      <button class="portal-menu-toggle" id="portalMenuToggle" aria-label="Toggle menu">&#9776;</button>
+      <img src="/images/logo.jpg" alt="ACONSU">
+      <div>
+        <b>ACONSU</b>
+        <span id="portalRoleLabel"></span>
+      </div>
+    </div>
+    <div class="who">
+      <span class="name" id="portalWho"></span>
+      <button class="btn btn-outline btn-sm" id="portalLogoutBtn" style="color:#fff; border-color:rgba(255,255,255,0.4);">Log Out</button>
+    </div>
+  </div>
+  <div class="portal-layout">
+    <div class="portal-side" id="portalNav"></div>
+    <div class="portal-main" id="portalMain"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script src="/js/main.js"></script>
+<script src="/js/portal.js"></script>
+<script src="/js/executive.js"></script>
+</body>
+</html>

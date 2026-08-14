@@ -13,6 +13,18 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<style>
+  .prayer-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
+  .prayer-card p.request-text { margin:8px 0 12px; color:var(--purple-ink); line-height:1.5; }
+  .prayer-card .row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .prayer-card .who { font-weight:700; font-size:0.85rem; color:var(--purple-deep); }
+  .pray-btn { border:2px solid var(--purple-deep); background:#fff; color:var(--purple-deep); border-radius:999px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
+  .pray-btn.done { background:var(--purple-deep); color:#fff; }
+  .pray-count { font-size:0.78rem; color:#8a7595; }
+  .answered-badge { display:inline-block; background:#D9F0DE; color:#2E7D4F; font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:999px; margin-bottom:8px; }
+  .testimony-box { background:var(--lilac-light); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:0.85rem; font-style:italic; color:#5a4468; }
+  .mine-actions { margin-top:10px; }
+</style>
 </head>
 <body>
 
@@ -42,13 +54,31 @@
         <label for="request">Your Prayer Request</label>
         <textarea id="request" required placeholder="Share as much or as little as you'd like"></textarea>
       </div>
-      <div class="field checkbox-field">
-        <input type="checkbox" id="isPrivate">
-        <label for="isPrivate" style="margin:0;">Keep this private (only leaders will see it)</label>
+      <div class="field">
+        <label for="visibility">Who should see this?</label>
+        <select id="visibility">
+          <option value="private">Only leaders (private)</option>
+          <option value="shepherd_only">Only the Shepherding team</option>
+          <option value="public">The Prayer Wall — with my name</option>
+          <option value="anonymous">The Prayer Wall — anonymously</option>
+        </select>
       </div>
       <button type="submit" class="btn btn-flame btn-block" id="prayerSubmitBtn">Submit Prayer Request</button>
       <div class="form-msg" id="prayerMsg"></div>
     </form>
+  </div>
+</section>
+
+<section class="alt-bg">
+  <div class="container" style="max-width:700px;">
+    <div class="section-head">
+      <p class="eyebrow">Standing Together</p>
+      <h2>The Prayer Wall</h2>
+      <p class="lede">Requests shared publicly by the community. Tap to let someone know you're praying for them.</p>
+    </div>
+    <div id="prayerWallList" style="display:grid; gap:14px; margin-bottom:48px;">
+      <p class="empty-state">Loading...</p>
+    </div>
   </div>
 </section>
 
@@ -77,7 +107,67 @@
 
 <script src="/js/main.js"></script>
 <script>
-initLayout('/prayer.html');
+let currentMember = null;
+
+async function loadPrayerWall() {
+  const list = document.getElementById('prayerWallList');
+  try {
+    const items = await fetchJSON('/api/prayer-wall');
+    if (!items.length) {
+      list.innerHTML = '<p class="empty-state">No public prayer requests right now — be the first to share one above.</p>';
+      return;
+    }
+    list.innerHTML = items.map((p) => `
+      <div class="prayer-card" data-id="${p.id}">
+        ${p.answered ? '<span class="answered-badge">🙌 Answered</span>' : ''}
+        <p class="request-text">${escapeHtml(p.request)}</p>
+        <div class="row">
+          <span class="who">— ${escapeHtml(p.name || 'Anonymous')}</span>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="pray-count">${p.prayingCount} praying</span>
+            <button type="button" class="pray-btn" data-pray="${p.id}">🙏 I'm praying</button>
+          </div>
+        </div>
+        ${p.testimony ? `<div class="testimony-box">"${escapeHtml(p.testimony)}"</div>` : ''}
+        ${p.isMine && !p.answered ? `
+          <div class="mine-actions">
+            <button type="button" class="btn btn-outline btn-sm" data-mark-answered="${p.id}">Mark as answered</button>
+          </div>
+        ` : ''}
+      </div>
+    `).join('');
+
+    list.querySelectorAll('[data-pray]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!currentMember) { showToast('Log in to let them know you\'re praying.', 'error'); return; }
+      try {
+        await fetchJSON(`/api/prayer-requests/${btn.dataset.pray}/pray`, { method: 'POST' });
+        btn.classList.add('done');
+        btn.textContent = '🙏 Praying';
+        showToast('They\'ll be encouraged to know you\'re praying.', 'success');
+      } catch (err) { showToast(err.message || 'Could not record this.', 'error'); }
+    }));
+    list.querySelectorAll('[data-mark-answered]').forEach(btn => btn.addEventListener('click', async () => {
+      const testimony = prompt('Want to share how God answered this? (optional — leave blank to skip)');
+      try {
+        await fetchJSON(`/api/prayer-requests/${btn.dataset.markAnswered}/answered`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ testimony: testimony || '' })
+        });
+        showToast('Marked as answered — thank you for sharing!', 'success');
+        loadPrayerWall();
+      } catch (err) { showToast(err.message || 'Could not update this.', 'error'); }
+    }));
+  } catch (e) {
+    list.innerHTML = '<p class="empty-state">Could not load the prayer wall right now.</p>';
+  }
+}
+
+(async function () {
+  await initLayout('/prayer.html');
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  currentMember = authRes.member;
+  loadPrayerWall();
+})();
 
 document.getElementById('prayerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -92,13 +182,14 @@ document.getElementById('prayerForm').addEventListener('submit', async (e) => {
         name: document.getElementById('name').value,
         email: document.getElementById('email').value,
         request: document.getElementById('request').value,
-        isPrivate: document.getElementById('isPrivate').checked
+        visibility: document.getElementById('visibility').value
       })
     });
     msg.textContent = 'We received your request — the prayer team is praying with you.';
     msg.className = 'form-msg success';
     showToast('Prayer request received — praying with you.', 'success');
     document.getElementById('prayerForm').reset();
+    loadPrayerWall();
   } catch (err) {
     msg.textContent = err.message || 'Something went wrong. Please try again.';
     msg.className = 'form-msg error';

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bible Study — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .study-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px; cursor:pointer; transition:box-shadow 0.15s ease; }
+  .study-card:hover { box-shadow:0 10px 24px rgba(58,27,84,0.12); }
+  .study-card h3 { margin:0 0 4px; }
+  .study-card .meta { font-size:0.82rem; color:#8a7595; margin-bottom:8px; }
+  .study-detail { background:#fff; border:1px solid var(--line); border-radius:16px; padding:26px; }
+  .study-detail h4 { margin:18px 0 8px; color:var(--purple-deep); }
+  .study-detail ul { padding-left:20px; }
+  .scripture-link { display:inline-flex; align-items:center; gap:6px; background:var(--lilac-light); color:var(--purple-deep); padding:6px 14px; border-radius:999px; font-weight:700; font-size:0.85rem; text-decoration:none; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:40px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Go Deeper</p>
+    <h1>Bible Study</h1>
+    <p class="lede">Structured studies, each linked straight to the scripture it's built on.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:760px;">
+    <div id="studyListView">
+      <div id="studyList"><p class="empty-state">Loading...</p></div>
+    </div>
+    <div id="studyDetailView" style="display:none;">
+      <button class="btn btn-outline btn-sm" id="backToListBtn" style="margin-bottom:18px;">&larr; All Studies</button>
+      <div id="studyDetail"></div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+let STUDIES = [];
+
+function scriptureLinkHref(ref) {
+  if (!ref) return '/bible.html';
+  const m = String(ref).match(/^(\d?\s?[A-Za-z]+(?:\s[A-Za-z]+)?)\s+(\d+)/);
+  if (!m) return '/bible.html';
+  return `/bible.html?book=${encodeURIComponent(m[1].trim())}&chapter=${m[2]}`;
+}
+
+function renderList() {
+  const el = document.getElementById('studyList');
+  if (!STUDIES.length) {
+    el.innerHTML = '<p class="empty-state">No Bible studies posted yet — check back soon.</p>';
+    return;
+  }
+  el.innerHTML = STUDIES.map(s => `
+    <div class="study-card" data-id="${s.id}">
+      <h3>${escapeHtml(s.topic)}</h3>
+      <div class="meta">${[s.date, s.scriptureReference].filter(Boolean).map(escapeHtml).join(' · ') || 'ACONSU Bible Study'}</div>
+      <p style="color:#5a4468; font-size:0.9rem;">${escapeHtml((s.studyMaterial || '').slice(0, 140))}${(s.studyMaterial || '').length > 140 ? '…' : ''}</p>
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-id]').forEach(card => card.addEventListener('click', () => showDetail(card.dataset.id)));
+}
+
+function showDetail(id) {
+  const s = STUDIES.find(x => x.id === id);
+  if (!s) return;
+  document.getElementById('studyListView').style.display = 'none';
+  document.getElementById('studyDetailView').style.display = 'block';
+  document.getElementById('studyDetail').innerHTML = `
+    <div class="study-detail">
+      <p class="eyebrow">${escapeHtml(s.date || '')}</p>
+      <h2>${escapeHtml(s.topic)}</h2>
+      ${s.scriptureReference ? `<a class="scripture-link" href="${scriptureLinkHref(s.scriptureReference)}">📖 Read ${escapeHtml(s.scriptureReference)}</a>` : ''}
+      ${s.studyMaterial ? `<h4>Study Material</h4><p style="white-space:pre-wrap; line-height:1.6;">${escapeHtml(s.studyMaterial)}</p>` : ''}
+      ${(s.questions || []).length ? `<h4>Questions for Reflection</h4><ul>${s.questions.map(q => `<li>${escapeHtml(q)}</li>`).join('')}</ul>` : ''}
+      ${s.notes ? `<h4>Notes</h4><p style="white-space:pre-wrap; line-height:1.6;">${escapeHtml(s.notes)}</p>` : ''}
+      ${(s.resources || []).length ? `<h4>Additional Resources</h4><ul>${s.resources.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>` : ''}
+    </div>
+  `;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.getElementById('backToListBtn').addEventListener('click', () => {
+  document.getElementById('studyDetailView').style.display = 'none';
+  document.getElementById('studyListView').style.display = 'block';
+});
+
+(async function () {
+  await initLayout('/bible-study.html');
+  try {
+    STUDIES = await fetchJSON('/api/bible-studies');
+    renderList();
+  } catch (e) {
+    document.getElementById('studyList').innerHTML = '<p class="empty-state">Could not load Bible studies right now.</p>';
+  }
+})();
+</script>
+</body>
+</html>
