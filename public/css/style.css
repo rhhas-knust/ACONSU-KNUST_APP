@@ -213,6 +213,36 @@ section { padding: 72px 24px; }
 .dept-card { display: flex; flex-direction: column; gap: 10px; }
 .dept-meta { display: flex; gap: 10px; font-size: 0.82rem; color: var(--purple-deep); font-weight: 700; }
 
+/* Department header photos — the thumbnail on a card, and the full banner on
+   the department's own page. Both fall back to the flame gradient when no
+   photo has been set yet, so a department never looks broken. */
+.dept-thumb {
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--lilac-light);
+  margin-bottom: 4px;
+}
+.dept-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.35s ease; }
+.dept-card:hover .dept-thumb img { transform: scale(1.05); }
+.dept-thumb-fallback {
+  display: block; width: 100%; height: 100%;
+  background: linear-gradient(135deg, var(--purple-deep), var(--flame-gold));
+  opacity: 0.85;
+}
+
+.dept-banner { position: relative; width: 100%; height: clamp(200px, 34vw, 380px); overflow: hidden; }
+.dept-banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dept-banner-overlay {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 28px clamp(20px, 6vw, 64px);
+  background: linear-gradient(to top, rgba(36, 21, 48, 0.88) 0%, rgba(36, 21, 48, 0.35) 45%, rgba(36, 21, 48, 0.05) 100%);
+  color: #fff;
+}
+.dept-banner-overlay h1 { color: #fff; margin: 0 0 6px; font-size: clamp(1.7rem, 5vw, 3rem); }
+.dept-banner-overlay p { color: rgba(255, 255, 255, 0.88); margin: 0; max-width: 620px; }
+
 .event-card { display: flex; gap: 18px; align-items: flex-start; }
 .event-date-badge {
   flex: none; width: 64px; text-align: center;
@@ -443,25 +473,61 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 @media (min-width: 861px) { .bottom-nav { display: none; } }
 @media (max-width: 860px) { body { padding-bottom: 74px; } }
 
-.more-sheet-backdrop {
-  display: none; position: fixed; inset: 0; background: rgba(36,21,48,0.45); z-index: 360;
-  align-items: flex-end; justify-content: center;
+/* ---------- the More page ---------- */
+/* "More" used to be a pop-up sheet. It is now a page of its own, laid out as
+   grouped tiles so it reads like a proper section of the app rather than a
+   leftover menu. */
+.more-hero {
+  padding: 28px 0 16px;
+  background: linear-gradient(160deg, var(--lilac-light) 0%, var(--paper) 100%);
 }
-.more-sheet-backdrop.open { display: flex; }
-.more-sheet {
-  position: relative; background: #fff; width: 100%; max-width: 480px;
-  border-radius: 20px 20px 0 0; padding: 16px 20px 28px;
-  max-height: 72vh; overflow-y: auto;
-  animation: sheetUp 0.25s ease;
+.more-account-card {
+  background: linear-gradient(135deg, var(--purple-rich), var(--purple-deep));
+  border-radius: 18px;
+  padding: 4px;
+  box-shadow: 0 16px 36px rgba(58, 27, 84, 0.20);
 }
-@keyframes sheetUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-.more-sheet-handle { width: 40px; height: 4px; background: var(--line); border-radius: 99px; margin: 0 auto 18px; }
-.more-sheet a {
-  display: block; padding: 14px 4px; font-weight: 700; font-size: 0.95rem;
-  color: var(--purple-ink); border-bottom: 1px solid var(--line); text-decoration: none;
+.more-account-inner {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 20px; color: #fff; text-decoration: none;
 }
-.more-sheet a.active { color: var(--purple-deep); }
-.more-sheet-close { position: absolute; top: 10px; right: 14px; background: none; border: none; font-size: 1.5rem; color: #8a7595; cursor: pointer; }
+.more-avatar {
+  width: 52px; height: 52px; border-radius: 50%; flex: none; overflow: hidden;
+  background: rgba(255, 255, 255, 0.16);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; color: #fff;
+}
+.more-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.more-account-text { flex: 1; min-width: 0; }
+.more-account-text strong { display: block; font-size: 1.05rem; }
+.more-account-text small { color: rgba(255, 255, 255, 0.75); font-size: 0.82rem; }
+.more-chevron { font-size: 1.6rem; color: rgba(255, 255, 255, 0.55); line-height: 1; flex: none; }
+
+.more-group { margin-bottom: 28px; }
+.more-group .eyebrow { margin-bottom: 12px; }
+.more-tile-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.more-tile {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--white); border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px 18px; width: 100%; cursor: pointer;
+  text-decoration: none; color: var(--purple-ink);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.more-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--lilac-mid); }
+.more-tile-icon {
+  width: 44px; height: 44px; border-radius: 12px; flex: none;
+  background: var(--lilac-light); color: var(--purple-deep);
+  display: flex; align-items: center; justify-content: center;
+}
+.more-tile-icon svg { width: 22px; height: 22px; }
+.more-tile-text { flex: 1; min-width: 0; }
+.more-tile-text strong { display: flex; align-items: center; gap: 8px; font-size: 0.98rem; }
+.more-tile-text small { display: block; color: #7d6789; font-size: 0.82rem; margin-top: 2px; }
+.more-tile .more-chevron { color: var(--lilac-mid); }
+.more-tile-badge {
+  background: var(--flame-red); color: #fff; border-radius: 999px;
+  font-size: 0.68rem; padding: 1px 7px; font-weight: 800;
+}
 
 /* ---------- notification bell + feed ---------- */
 .bell-link svg { width: 22px; height: 22px; }
@@ -470,7 +536,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .notif-icon { width:40px; height:40px; border-radius:50%; background: var(--lilac-light); display:flex; align-items:center; justify-content:center; flex:none; color:var(--purple-deep); }
 .notif-icon svg { width:20px; height:20px; }
 .notif-time { font-size:0.75rem; color:#a08eb0; margin-top:4px; }
-.push-toggle-card { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
 
 /* ---------- dashboard tiles ---------- */
 .tile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 24px 0 8px; }

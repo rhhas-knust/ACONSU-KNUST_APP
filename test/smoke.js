@@ -1,0 +1,271 @@
+// Smoke test for the leadership portals.
+// Boots the real Express app against an in-memory stand-in for MongoDB
+// (see harness.js) and drives it over HTTP, so routes, permission rules and
+// the finance/attendance calculations are all exercised for real.
+//
+//   npm test              — the full suite
+//   SMOKE_SLOW=1 npm test — also waits out the 60s scheduled-send tick
+require('./harness.js');
+
+(async () => {
+  process.env.MONGODB_URI = 'mongodb://stub/aconsu_test';
+  process.env.PORT = '4321';
+  process.env.ADMIN_USERNAME = 'admin';
+  process.env.ADMIN_PASSWORD = 'admin123';
+  process.env.SESSION_SECRET = 'test';
+  delete process.env.SHEPHERD_USERNAME;
+
+  require('../server.js');
+  await new Promise(r => setTimeout(r, 1200));
+
+  const BASE = 'http://127.0.0.1:4321';
+  let failures = 0;
+  const jars = {};
+
+  async function call(jar, method, path, body, isForm) {
+    const headers = {};
+    if (jars[jar]) headers.cookie = jars[jar];
+    let payload;
+    if (body && !isForm) { headers['content-type'] = 'application/json'; payload = JSON.stringify(body); }
+    else if (body) payload = body;
+    const res = await fetch(BASE + path, { method, headers, body: payload });
+    const setCookie = res.headers.getSetCookie ? res.headers.getSetCookie() : [];
+    if (setCookie.length) jars[jar] = setCookie.map(c => c.split(';')[0]).join('; ');
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) { data = text; }
+    return { status: res.status, data };
+  }
+
+  function check(label, cond, detail) {
+    if (cond) { console.log(`  ok   ${label}`); }
+    else { failures++; console.log(`  FAIL ${label}${detail ? ` — ${JSON.stringify(detail).slice(0, 300)}` : ''}`); }
+  }
+
+  console.log('\n== auth ==');
+  let r = await call('admin', 'POST', '/api/admin/login', { username: 'admin', password: 'admin123' });
+  check('admin logs in', r.status === 200, r.data);
+
+  r = await call('anon', 'GET', '/api/finance/summary');
+  check('finance is locked to signed-out visitors', r.status === 401, r.data);
+
+  console.log('\n== leadership accounts ==');
+  for (const [role, user] of Object.entries({ finance: 'fin.ama', shepherding: 'shep.kojo', publicity: 'pub.esi', coordinator: 'coord.yaw' })) {
+    r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123' });
+    check(`create ${role} account`, r.status === 200, r.data);
+  }
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.ama', name: 'dupe', role: 'finance', password: 'password123' });
+  check('duplicate username rejected', r.status === 400, r.data);
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'weak', name: 'weak', role: 'finance', password: 'short' });
+  check('short password rejected', r.status === 400, r.data);
+
+  for (const [jar, user] of Object.entries({ fin: 'fin.ama', shep: 'shep.kojo', pub: 'pub.esi', coord: 'coord.yaw' })) {
+    r = await call(jar, 'POST', '/api/portal/login', { username: user, password: 'password123' });
+    check(`${user} signs in`, r.status === 200, r.data);
+  }
+  r = await call('bad', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'wrong' });
+  check('wrong password rejected', r.status === 401, r.data);
+
+  console.log('\n== role boundaries ==');
+  r = await call('pub', 'GET', '/api/finance/summary');
+  check('publicity cannot read finance', r.status === 401, r.data);
+  r = await call('coord', 'GET', '/api/finance/summary');
+  check('coordinator CAN read finance', r.status === 200, r.data);
+  r = await call('coord', 'POST', '/api/finance/entries', { entryType: 'income', category: 'momo', amount: 5, date: '2026-01-01' });
+  check('coordinator CANNOT write finance', r.status === 401, r.data);
+  r = await call('shep', 'POST', '/api/publicity/notifications', { title: 'x', body: 'y' });
+  check('shepherding cannot send announcements', r.status === 401, r.data);
+
+  console.log('\n== finance: budgets + ledger ==');
+  r = await call('fin', 'POST', '/api/finance/budgets', {
+    name: '2026 Year', startDate: '2026-01-01', endDate: '2026-12-31', status: 'active',
+    lines: [
+      { lineType: 'income', category: 'offertory', plannedAmount: 5000 },
+      { lineType: 'expense', category: 'Refreshments', plannedAmount: 800 }
+    ]
+  });
+  check('budget created with lines', r.status === 200 && r.data.item.lines.length === 2, r.data);
+  const budget = r.data.item;
+  const incomeLine = budget.lines.find(l => l.lineType === 'income');
+  const expenseLine = budget.lines.find(l => l.lineType === 'expense');
+
+  r = await call('fin', 'POST', '/api/finance/budgets', { name: 'bad', startDate: '2026-06-01', endDate: '2026-01-01' });
+  check('end-before-start rejected', r.status === 400, r.data);
+
+  r = await call('fin', 'POST', '/api/finance/entries', {
+    entryType: 'income', category: 'offertory', amount: 1200, date: '2026-02-01',
+    method: 'momo', reference: 'MM123', budgetId: budget.id, budgetLineId: incomeLine.lineId
+  });
+  check('income entry booked to a budget line', r.status === 200, r.data);
+  const entryId = r.data.item.id;
+
+  r = await call('fin', 'POST', '/api/finance/entries', {
+    entryType: 'expense', category: 'Refreshments', amount: 300, date: '2026-02-05',
+    budgetId: budget.id, budgetLineId: expenseLine.lineId
+  });
+  check('expense entry booked', r.status === 200, r.data);
+
+  r = await call('fin', 'POST', '/api/finance/entries', { entryType: 'income', category: 'not-a-source', amount: 10, date: '2026-02-05' });
+  check('invalid income category rejected', r.status === 400, r.data);
+  r = await call('fin', 'POST', '/api/finance/entries', { entryType: 'income', category: 'momo', amount: -50, date: '2026-02-05' });
+  check('negative amount rejected', r.status === 400, r.data);
+
+  r = await call('fin', 'GET', '/api/finance/summary');
+  check('summary totals correct', r.data.totalIncome === 1200 && r.data.totalExpense === 300 && r.data.balance === 900, r.data);
+  check('monthly series built', Array.isArray(r.data.monthly) && r.data.monthly[0].month === '2026-02', r.data.monthly);
+
+  r = await call('fin', 'GET', `/api/finance/budgets/${budget.id}`);
+  const line = r.data.lines.find(l => l.lineType === 'income');
+  check('budget actuals summed from the ledger', line.actual === 1200 && line.usedPercent === 24, r.data.lines);
+  check('expense variance is under-spend positive', r.data.lines.find(l => l.lineType === 'expense').variance === 500, r.data.lines);
+
+  r = await call('fin', 'GET', '/api/finance/entries?entryType=income&from=2026-01-01&to=2026-03-01');
+  check('ledger filters apply', Array.isArray(r.data) && r.data.length === 1, r.data);
+
+  r = await call('fin', 'GET', '/api/finance/export.csv');
+  check('CSV export renders with totals', typeof r.data === 'string' && r.data.includes('TOTAL INCOME') && r.data.includes('1200.00'), r.data.slice(0, 200));
+
+  r = await call('fin', 'DELETE', `/api/finance/budgets/${budget.id}`);
+  check('deleting a budget keeps its entries', r.status === 200, r.data);
+  r = await call('fin', 'GET', '/api/finance/summary');
+  check('entries survived the budget deletion', r.data.totalIncome === 1200, r.data);
+  await call('fin', 'DELETE', `/api/finance/entries/${entryId}`);
+
+  console.log('\n== shepherding: attendance ==');
+  r = await call('anon', 'POST', '/api/auth/register', { name: 'Ama Test', email: 'ama@test.com', password: 'secret123', phone: '0244123456' });
+  check('a member registers', r.status === 200, r.data);
+  r = await call('shep', 'GET', '/api/shepherd/members');
+  check('member appears in the shepherding list', r.data.length === 1, r.data);
+  const memberId = r.data[0].memberId;
+
+  r = await call('shep', 'POST', '/api/shepherd/attendance', {
+    date: '2026-08-09', serviceType: 'sunday', visitorCount: 4,
+    marks: [{ memberId, name: 'Ama Test', status: 'present' }]
+  });
+  check('register saved', r.status === 200, r.data);
+
+  r = await call('shep', 'POST', '/api/shepherd/attendance', {
+    date: '2026-08-09', serviceType: 'sunday', visitorCount: 6,
+    marks: [{ memberId, name: 'Ama Test', status: 'excused' }]
+  });
+  check('re-saving the same date updates rather than duplicates', r.status === 200, r.data);
+  r = await call('shep', 'GET', '/api/shepherd/attendance');
+  check('only one register exists for that date', r.data.length === 1 && r.data[0].visitorCount === 6, r.data);
+  check('totals computed', r.data[0].excused === 1 && r.data[0].total === 6, r.data[0]);
+
+  r = await call('shep', 'GET', `/api/shepherd/attendance-history/${memberId}`);
+  check('attendance history reads back', r.data.servicesRecorded === 1 && r.data.rate === 0, r.data);
+
+  console.log('\n== shepherding: member edits + messages ==');
+  r = await call('shep', 'PUT', `/api/shepherd/members/${memberId}`, { phone: '0201234567', level: '300' });
+  check('shepherding edits member details', r.status === 200 && r.data.item.phone === '0201234567', r.data);
+  check('email is never returned with a password hash', r.data.item.passwordHash === undefined, r.data);
+
+  r = await call('anon', 'POST', '/api/contact', { name: 'Kofi', email: 'kofi@test.com', message: 'Hello there' });
+  check('contact form accepts a message', r.status === 200, r.data);
+  r = await call('shep', 'GET', '/api/shepherd/contact-messages');
+  check('message reaches shepherding', r.data.length === 1, r.data);
+  const msgId = r.data[0].id;
+  r = await call('shep', 'PATCH', `/api/shepherd/contact-messages/${msgId}`, { status: 'replied' });
+  check('message can be marked replied', r.status === 200 && r.data.item.status === 'replied', r.data);
+
+  console.log('\n== publicity ==');
+  r = await call('pub', 'GET', '/api/publicity/audiences');
+  check('audiences list reachable numbers', r.status === 200 && r.data.audiences[0].reachable === 1, r.data);
+
+  r = await call('pub', 'POST', '/api/publicity/notifications', { title: 'Service at 9', body: 'Come early', channels: ['app', 'sms'] });
+  check('announcement sends on both channels', r.status === 200 && /posted to the app/.test(r.data.result), r.data);
+  check('SMS reports itself unconfigured rather than failing', /not configured/.test(r.data.result), r.data);
+
+  r = await call('pub', 'GET', '/api/publicity/sms-logs');
+  check('SMS attempt is logged even when skipped', r.data.length === 1 && r.data[0].status === 'skipped', r.data);
+
+  r = await call('pub', 'POST', '/api/publicity/scheduled', {
+    title: 'Tomorrow', body: 'Programme at 6', channels: ['app'],
+    scheduledFor: new Date(Date.now() + 3600000).toISOString()
+  });
+  check('announcement scheduled', r.status === 200, r.data);
+  const schedId = r.data.item.id;
+  r = await call('pub', 'POST', '/api/publicity/scheduled', {
+    title: 'Past', body: 'x', scheduledFor: new Date(Date.now() - 86400000).toISOString()
+  });
+  check('past send time rejected', r.status === 400, r.data);
+  r = await call('pub', 'PATCH', `/api/publicity/scheduled/${schedId}/cancel`);
+  check('scheduled announcement cancelled', r.status === 200 && r.data.item.status === 'cancelled', r.data);
+
+  r = await call('anon', 'POST', '/api/testimonies', { name: 'Esi', testimony: 'God is good' });
+  check('testimony submitted publicly', r.status === 200, r.data);
+  r = await call('pub', 'GET', '/api/publicity/testimonies');
+  check('testimony lands in the publicity inbox', r.data.length === 1 && r.data[0].published === false, r.data);
+  r = await call('pub', 'PATCH', `/api/publicity/testimonies/${r.data[0].id}`, { published: true });
+  check('publicity publishes it', r.status === 200 && r.data.item.published === true, r.data);
+  r = await call('anon', 'GET', '/api/testimonies');
+  check('published testimony now public', r.data.length === 1, r.data);
+
+  r = await call('pub', 'POST', '/api/publicity/events', { title: 'Revival', date: '2026-09-01', time: '18:00', location: 'Auditorium' });
+  check('publicity creates an event', r.status === 200, r.data);
+  const eventId = r.data.item.id;
+  r = await call('pub', 'PUT', `/api/publicity/events/${eventId}`, { title: 'Revival', date: '2026-09-02', time: '18:00', announceUpdate: true });
+  check('publicity updates and announces it', r.status === 200 && r.data.item.date === '2026-09-02', r.data);
+
+  console.log('\n== department header images ==');
+  r = await call('admin', 'POST', '/api/admin/departments', { name: 'Choir', tagline: 'Sing' });
+  check('department created', r.status === 200, r.data);
+  const deptId = r.data.item.id;
+  r = await call('admin', 'GET', '/api/admin/image-placements');
+  check('placement options served', r.status === 200 && r.data.placements.some(p => p.value === 'department-header'), r.data);
+  check('departments offered as targets', r.data.departments.some(d => d.id === deptId), r.data.departments);
+
+  const form = new FormData();
+  form.append('file', new Blob([Buffer.from('fake-image-bytes')], { type: 'image/png' }), 'header.png');
+  form.append('placement', 'department-header');
+  form.append('targetId', deptId);
+  const upRes = await fetch(BASE + '/api/admin/uploads', { method: 'POST', headers: { cookie: jars.admin }, body: form });
+  const upData = await upRes.json();
+  check('header upload succeeds', upRes.status === 200, upData);
+  check('upload explains where the image went', /Choir/.test(upData.message || ''), upData);
+  r = await call('anon', 'GET', `/api/departments/${deptId}`);
+  check('department now carries the header image', !!r.data.headerImageFileId, r.data);
+  const fileId = r.data.headerImageFileId;
+
+  r = await call('admin', 'DELETE', `/api/admin/files/${fileId}`);
+  check('deleting the file succeeds', r.status === 200, r.data);
+  r = await call('anon', 'GET', `/api/departments/${deptId}`);
+  check('department no longer points at a deleted image', !r.data.headerImageFileId, r.data);
+
+  console.log('\n== coordinator dashboard ==');
+  r = await call('coord', 'GET', '/api/coordinator/overview');
+  check('overview loads', r.status === 200, r.data);
+  check('finance section present', r.data.finance && typeof r.data.finance.balance === 'number', r.data.finance);
+  check('shepherding trend present', Array.isArray(r.data.shepherding.attendanceTrend), r.data.shepherding);
+  check('team list omits password hashes', r.data.team.every(t => t.passwordHash === undefined), r.data.team);
+  r = await call('fin', 'GET', '/api/coordinator/overview');
+  check('finance role cannot read the coordinator dashboard', r.status === 401, r.data);
+
+  console.log('\n== static pages ==');
+  for (const page of ['/more.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html', '/js/portal.js', '/css/portal.css']) {
+    const res = await fetch(BASE + page);
+    check(`${page} served`, res.status === 200);
+  }
+
+  // The send loop only ticks once a minute, so this one is opt-in: run it with
+  // SMOKE_SLOW=1 when the scheduling path itself is what changed.
+  if (process.env.SMOKE_SLOW === '1') {
+  console.log('\n== scheduler (waits for the 60s tick) ==');
+  const { fakeModels } = require('./harness.js');
+  await fakeModels.ScheduledNotification.create({
+    id: 'due_1', title: 'Due now', body: 'Should fire', url: '/index.html',
+    channels: ['app', 'sms'], audience: 'all', scheduledFor: new Date(Date.now() - 5000), status: 'scheduled'
+  });
+  const beforeCount = (await fakeModels.Notification.find({})).length;
+  await new Promise(res => setTimeout(res, 62000));
+  const fired = (await fakeModels.ScheduledNotification.findOne({ id: 'due_1' }));
+  check('due announcement was sent by the scheduler', fired.status === 'sent', fired);
+  check('scheduler recorded an outcome', /posted to the app/.test(fired.result || ''), fired.result);
+  const afterCount = (await fakeModels.Notification.find({})).length;
+  check('it reached the in-app feed', afterCount === beforeCount + 1, { beforeCount, afterCount });
+  }
+
+  console.log(`\n${failures ? `${failures} FAILURES` : 'all checks passed'}`);
+  process.exit(failures ? 1 : 0);
+})();

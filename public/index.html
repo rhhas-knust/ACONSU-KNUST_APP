@@ -192,7 +192,11 @@
     const deptWrap = document.getElementById('deptPreview');
     deptWrap.innerHTML = departments.slice(0, 4).map(d => `
       <a href="/department.html?id=${d.id}" class="card dept-card">
-        <div class="card-icon"></div>
+        <div class="dept-thumb">
+          ${d.headerImageFileId
+            ? `<img src="/api/files/${d.headerImageFileId}" alt="" loading="lazy">`
+            : '<span class="dept-thumb-fallback"></span>'}
+        </div>
         <h3>${escapeHtml(d.name)}</h3>
         <p style="color:#5a4468; font-size:0.92rem;">${escapeHtml(d.tagline)}</p>
         <div class="dept-meta">${escapeHtml(d.meetingDay)} · ${escapeHtml(d.meetingTime)}</div>

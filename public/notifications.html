@@ -29,14 +29,6 @@
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:640px;">
-    <div class="push-toggle-card">
-      <div>
-        <strong style="display:block; margin-bottom:4px;">Push Notifications</strong>
-        <span style="font-size:0.85rem; color:#5a4468;" id="pushStatusText">Checking status...</span>
-      </div>
-      <button class="btn btn-primary btn-sm" id="pushToggleBtn">Enable</button>
-    </div>
-
     <div id="notifList">
       <div class="skeleton skeleton-card" style="height:100px; margin-bottom:12px;"></div>
       <div class="skeleton skeleton-card" style="height:100px;"></div>
@@ -73,7 +65,10 @@
     document.getElementById('notifList').innerHTML = '<p class="empty-state">Could not load notifications right now.</p>';
   }
 
-  await refreshPushStatus();
+  // No prompt or button here: if this device has already allowed alerts, quietly
+  // make sure the server still knows about it. Turning alerts on or off lives in
+  // the member's profile settings.
+  resubscribePushIfAlreadyAllowed();
 })();
 
 function timeAgo(iso) {
@@ -88,35 +83,6 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString();
 }
 
-async function refreshPushStatus() {
-  const statusText = document.getElementById('pushStatusText');
-  const btn = document.getElementById('pushToggleBtn');
-  const subscribed = await isPushSubscribed();
-  if (subscribed) {
-    statusText.textContent = "You'll get alerts even when the app is closed.";
-    btn.textContent = 'Disable';
-  } else {
-    statusText.textContent = 'Turn on to get alerts even when the app is closed.';
-    btn.textContent = 'Enable';
-  }
-  btn.onclick = async () => {
-    btn.disabled = true;
-    try {
-      if (subscribed) {
-        await unsubscribeFromPush();
-        showToast('Push notifications turned off.', 'success');
-      } else {
-        await subscribeToPush();
-        showToast('Push notifications enabled!', 'success');
-      }
-      await refreshPushStatus();
-    } catch (err) {
-      showToast(err.message || 'Could not update notification settings.', 'error');
-    } finally {
-      btn.disabled = false;
-    }
-  };
-}
 </script>
 </body>
 </html>

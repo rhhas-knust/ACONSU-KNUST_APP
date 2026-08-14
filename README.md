@@ -6,8 +6,12 @@ Official website + admin backend for **ACONSU — The Apostles' Continuation Stu
 
 - **Public site**: Home dashboard, Bible reader, Events (with capacity/deadline-limited registration), Sermons & Media, Departments (with join forms), Prayer Wall, Discover/search, Custom Pages (admin-created galleries/bookshelves/info pages), Notifications, Contact.
 - **Member accounts**: sign up, log in, edit profile, forgot/reset password, birthdays (month/day only — no year, ever), App Streak and Badges.
-- **Admin dashboard** (`/admin.html`): manages all public content, executives, members (view/edit/delete), media library uploads, and sends push/in-app announcements.
-- **Shepherding portal** (`/shepherding.html`): a completely separate, restricted login for the Shepherding Head — pastoral care records and church finance tracking (MoMo, Tithe, Harvest, Offertory, Other income, plus expenses).
+- **Admin dashboard** (`/admin.html`): manages all public content, executives, members (view/edit/delete), media library uploads, leadership accounts, and sends push/in-app announcements.
+- **Leadership portals** — one signed-in area per office, each with its own account (see section 17):
+  - **Coordinator** (`/coordinator.html`) — a read-only dashboard across every office.
+  - **Finance** (`/finance.html`) — budgets with planned-vs-actual tracking, a full ledger, reports and CSV export.
+  - **Shepherding** (`/shepherding.html`) — Sunday attendance registers, member records they can edit, and the contact-message inbox.
+  - **Publicity** (`/publicity.html`) — app + SMS announcements, scheduled sends, event updates, and the testimony inbox.
 - **Installable app (PWA)** with offline support, real push notifications, and a Capacitor scaffold for native iOS/Android builds.
 - **MongoDB Atlas** as the data store — real cloud database with automatic backups and replication.
 - **Email notifications** (password reset, admin alerts on new join/prayer/testimony/contact submissions) and **automatic image compression** on every upload.
@@ -124,26 +128,40 @@ aconsu-app/
     gridfs.js              File storage (photos, ebooks, profile/exec photos)
     bibleBooks.js          Static book/chapter list for the Bible reader
     push.js                Web push notification sending + cleanup
-    mailer.js              SMTP email sending (password reset, admin alerts)
+    sms.js                 SMS sending via mNotify + audience resolution
+    mailer.js              SMTP email sending (password reset, office alerts)
     imageProcess.js        Automatic image resize/compression on upload
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
   capacitor.config.json    Native app (iOS/Android) wrapper config
+  test/
+    smoke.js               End-to-end test of the portals (`npm test`)
+    harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
     index.html, about.html, departments.html, department.html,
     events.html, media.html, bible.html, prayer.html, contact.html,
     login.html, register.html, forgot-password.html, reset-password.html,
-    profile.html, notifications.html, discover.html,
-    page.html, admin.html, shepherding.html
+    profile.html, notifications.html, discover.html, more.html,
+    page.html, admin.html
+    coordinator.html, finance.html, shepherding.html, publicity.html
     manifest.json           PWA app manifest
     sw.js                   Service worker (offline support)
     icons/                  Generated app icons, all sizes
     css/style.css           Design system (colors, type, components)
+    css/portal.css          Shared styling for the four leadership portals
     js/main.js              Shared header/footer, countdown, auth state, PWA install, toasts
     js/admin.js             Admin dashboard logic
-    js/shepherd.js          Shepherding portal logic (private, separate login)
+    js/portal.js            Shared portal shell — sign-in, nav, modals, formatting
+    js/coordinator.js       Coordinator dashboard
+    js/finance.js           Finance office (budgets, ledger, reports)
+    js/shepherd.js          Shepherding portal (attendance, members, messages)
+    js/publicity.js         Publicity portal (announcements, SMS, testimonies)
     images/logo.jpg         ACONSU logo
 ```
+
+Run `npm test` to check the portals still behave after a change — it boots the real
+app against an in-memory database and exercises every portal route, permission rule
+and money calculation. No database or network needed.
 
 ## 7. Custom pages, uploads, and event registration
 
@@ -162,7 +180,11 @@ Each page gets a slug (its URL, e.g. `ebook-store` → `yoursite.com/page.html?s
 
 **Executives** (admin dashboard → *Executives*): add each exec's name, role, a short bio, a display order, and an optional photo. They appear automatically on the public **About** page in the "Meet the Executives" section, and 1–2 of their photos also show up as gently floating accents in the About page hero.
 
-**Floating decorative images** on the Home, Departments, and individual Department pages pull automatically from any photo you've uploaded in the Media Library tagged as **"Photo"** and *not* attached to a specific gallery page — so a few favorite shots (worship, campus, group photos) uploaded there will start "floating" across those hero sections without any extra setup. No photos uploaded yet → those sections simply stay clean, nothing breaks.
+**Department header images**: every department can carry its own header photo. Set one from the admin dashboard → *Departments* → **Header Image** on the department's row. The screen shows what is there now, lets you upload a replacement, or lets you pick something already in the media library. That photo then appears as the banner across the top of the department's own page (with the name and tagline over it) and as the thumbnail on its card in the departments list and on the home page. Departments without a photo fall back to the flame gradient, so nothing ever looks broken.
+
+**Knowing where an image will go**: the Media Library's upload form now begins with **"Where will this image be used?"** Choosing an option explains, in plain words, exactly where the image will appear — and when the choice needs one, asks which department or page it belongs to. Pick "Department header" and the department is updated the moment the upload finishes; there's no second step to forget. Every card in the library then says what its image is doing ("Header for Choir", "On the Gallery page", "Floating photo on the home page") instead of leaving you to guess.
+
+**Floating decorative images** on the Home, Departments, and individual Department pages pull automatically from any photo uploaded with the **"Floating home-page photo"** placement (or, from before placements existed, any Photo not attached to a page) — so a few favourite shots start "floating" across those hero sections without extra setup. No photos uploaded yet → those sections simply stay clean, nothing breaks.
 
 ## 9. UI/UX pass
 
@@ -245,15 +267,17 @@ Building and submitting native apps requires tools (Android Studio, Xcode) that 
 **Tile dashboard**: the homepage now leads with a grid of quick-access tiles (Bible, Events, Departments, Sermons, Prayer Wall, Notifications), with any Custom Pages you've created appended automatically. This sits above the existing department/event previews — the tiles are for fast navigation, the sections below are for browsing.
 
 **Notifications** — two layers working together:
-- **In-app feed** (`/notifications.html`, also reachable via the bell icon or the "More" menu): every announcement and automatic update shows up here, newest first, with a small unread-count badge on the bell and the mobile "More" tab.
-- **Real push notifications**: visitors can tap "Enable" on the notifications page to get phone alerts even when the app isn't open — this uses the standard Web Push API (no third-party notification service, no per-message cost).
+- **In-app feed** (`/notifications.html`, also reachable via the bell icon or the More page): every announcement and automatic update shows up here, newest first, with a small unread-count badge on the bell and the mobile "More" tab.
+- **Real push notifications**: members turn alerts on under **Alerts** on their profile page, and get phone alerts even when the app isn't open — this uses the standard Web Push API (no third-party notification service, no per-message cost). There is deliberately no prompt or Enable button on the notifications page itself: a device that has already granted permission is quietly re-registered in the background, and everyone else is left alone until they go looking for the setting.
+
+**The "More" page**: the More tab used to open a pop-up sheet. It is now a page of its own at `/more.html`, laid out as grouped tiles — Stay Connected, Grow, Belong, your custom pages, and an account section — with the signed-in member's name and photo across the top. Being a real page means it can be linked to, shared, and left with the back button like anything else in the app.
 
 **What triggers a notification automatically:**
 - A new **event** is created by admin → "New Event: [title]"
 - A new **sermon** is added by admin → "New Sermon: [title]"
 - Once a day, if it's someone's **birthday** → "🎉 Happy Birthday!" naming whoever's celebrating (first names only, consistent with the privacy approach used elsewhere)
 
-**Admin can also send manual announcements** any time from the new **Notifications** tab in the dashboard — title, message, and where tapping it should take people.
+**Manual announcements** can be sent from the admin dashboard's **Notifications** tab, and — with more control over channel, audience and timing — from the Publicity portal (section 17).
 
 ### Push notifications setup (required for phone alerts to work)
 
@@ -298,33 +322,81 @@ Bible chapter reads are counted automatically each time a logged-in member opens
 
 **Discover page** (`/discover.html`, reachable from the bell/More menu) — a search bar across sermons, departments, events, and custom pages, plus browsable tiles for Sermons, Bible, Departments, Events, and any Custom Pages you've created.
 
-## 17. Shepherding portal (private — Shepherding Head only)
+## 17. Leadership portals (Coordinator, Finance, Shepherding, Publicity)
 
-A completely separate, restricted-access area at **`/shepherding.html`** for pastoral care and church finance records. It is not linked from anywhere in the public site or the admin dashboard — only someone with the direct URL and the Shepherding Head credentials can reach it.
+The union's back office is split into four signed-in areas, one per office. They share a look and a login system but nothing else: each opens only its own work, so access follows the person holding the office rather than a password everyone knows.
 
-**Why it's separate from admin**: this deliberately does *not* share a login with the main admin dashboard, so the church can hand shepherding/finance access to one specific person without also giving them (or requiring them to share) the admin password, and vice versa.
+| Portal | URL | What it opens |
+| --- | --- | --- |
+| Coordinator | `/coordinator.html` | Read-only dashboard across every office, plus who holds which portal |
+| Finance | `/finance.html` | Budgets, ledger, reports, CSV export |
+| Shepherding | `/shepherding.html` | Attendance registers, member records, contact messages |
+| Publicity | `/publicity.html` | Announcements (app + SMS), scheduled sends, events, testimonies |
 
-### Setup
-Add credentials to `.env` (leave blank and the portal will refuse all logins until set):
+None of these are linked from the public site. Give each leader their URL along with their credentials.
+
+### Creating accounts
+
+In the admin dashboard, open **Leadership Accounts** → **+ Add Account**. Enter the leader's name, a username, the portal their account should open, and a password (at least 8 characters). The password is shown in plain text while you type it so you can pass it on, then stored hashed — it can never be read back, only replaced.
+
+An account can be disabled without deleting it (untick "Account is active"), which is the right move when someone steps down mid-term.
+
+The old `SHEPHERD_USERNAME` / `SHEPHERD_PASSWORD` pair in `.env` still signs in to the shepherding portal, so nobody loses access the day this ships. Clear it once the shepherding lead has a proper account.
+
+### Coordinator
+
+The coordinator's dashboard reads across all four offices in one screen: balance in hand and this month's movement, the active budget's lines with progress bars, average attendance and the trend across recent services, how many people need following up, what publicity has sent and what is queued, and the counts of join requests, prayer requests and unanswered messages.
+
+A coordinator sign-in also opens the other three portals — in view-only mode, with a banner saying so. They can see everything and change nothing; the office that owns the work still does it.
+
+### Finance
+
+Finance stands on its own, built the way a small finance office actually works.
+
+**Budgets** — a budget covers a period (a term, an academic year) and is made of lines: planned income sources and planned spending areas. Actual figures are never typed into a budget. They are summed live from ledger entries booked against each line, so a budget can't drift out of step with the books. Each line shows planned, actual, variance and a progress bar; income going over plan reads as good, spending over plan reads as a problem.
+
+**Ledger** — every cedi in and out, with the things an auditor asks about: how the money moved (cash, MoMo, bank, cheque), a reference (MoMo transaction ID, receipt number), who paid or was paid, which budget line it belongs to, an approval state for money that needs a second pair of eyes, and who recorded it. Filter by date range, type or budget.
+
+**Reports** — a statement for any period, laid out to be read aloud at a meeting: income by source, expenditure by category, net for the period, and the running balance to date. Monthly movement is charted, and the whole filtered view exports to CSV for a spreadsheet or an audit.
+
+Income sources stay fixed to the union's actual ones — **MoMo, Tithe, Harvest, Offertory, Other** — while expense categories are free text, since spending varies far more than giving does.
+
+### Shepherding
+
+**Attendance** — the register is the centre of this portal. Pick a date (it defaults to the Sunday just gone) and a service, then mark each person Present, Excused or Absent, with a headcount box for walk-in visitors who aren't on any list. A running tally shows how many are in the room as you go. Saving the same date twice updates that register rather than creating a second one, so corrections during the week are just an edit. Every person's attendance rate is available from their row.
+
+**Members** — everyone with an ACONSU account appears automatically with their details pulled live from their account; visitors without accounts can be added by hand. Shepherding can now **edit a member's details** (name, phone, level, department, birthday) — they're the office that finds out a number has changed. Email and password stay with the member, since changing an email from someone else's screen is how people get locked out. Alongside that sits the pastoral layer only shepherding keeps: address, emergency contact, attendance pattern, last contact date and private notes.
+
+**Messages** — everything sent through the app's contact form arrives here, with a reply-by-email button and a handled/unhandled state. A copy is emailed to the shepherding address set under Site Settings (falling back to the main contact address).
+
+### Publicity
+
+**Send an announcement** — one composer, two channels. "In the app" posts to the notification feed and pushes an alert to phones that allowed them; "SMS" texts everyone in the chosen audience who has a phone number on file. The audience can be everyone or a single department, and each option shows how many numbers it will actually reach before you send. A live counter shows the character count and how many SMS segments each recipient will be charged.
+
+**Scheduled** — write it now, send it at the right moment: the night before a programme, or first thing on Sunday. The server checks for due announcements every minute and claims each one atomically before sending, so a restart mid-send can never double-send. Queued items can be cancelled; sent ones keep a record of what happened.
+
+**Events** — publicity keeps the calendar current. Adding an event announces it automatically; editing one offers to post an "Event Update" so people know it moved.
+
+**Testimonies** — members' testimonies land here for review, and publishing one puts it on the public wall. A copy of each new testimony is emailed to the publicity address under Site Settings.
+
+**SMS log** — the last 200 messages the app tried to send and what became of each, so a failed batch can be understood after the fact.
+
+### SMS setup (mNotify)
+
+SMS goes through [mNotify](https://mnotify.com), a Ghanaian bulk-SMS provider, so delivery to MTN/Telecel/AT numbers is direct. Add to `.env`:
+
 ```
-SHEPHERD_USERNAME=
-SHEPHERD_PASSWORD=
+MNOTIFY_API_KEY=your_api_key
+SMS_SENDER_ID=ACONSU
 ```
-Only share these with the Shepherding Head.
 
-### What it does
+The sender ID must be registered with mNotify first and is capped at 11 characters. Numbers are normalised before sending, so `024...`, `+233 24...` and `233...` all work; anything that can't be a Ghanaian mobile number is skipped rather than charged for.
 
-**Members tab** — every ACONSU member automatically appears here with their name, email, phone, birthday, and profile photo pulled live from their existing account (nothing is re-typed or duplicated). The Shepherding Head then fills in the parts that live nowhere else in the system: home address, emergency contact, attendance status (New/Regular/Irregular/Inactive), last contact date, and free-form pastoral notes. A **"+ Add Visitor Record"** button also allows tracking people who attend but don't have an ACONSU account yet — entered manually with just a name and phone number.
-
-**Finance tab** — logs day-to-day income and expenses:
-- **Income** is categorized into exactly the sources you specified: **MoMo, Tithe, Harvest, Offertory,** and **Other**.
-- **Expenses** use a free-text category (utilities, maintenance, outreach, etc.) since expense types vary more than income sources.
-- Every entry has a date, amount, and optional description; entries can be edited or deleted.
-
-**Overview tab** — total income, total expenses, net balance, and a breakdown of income by source, calculated live from every entry ever logged.
+Leave these blank and the app still works: publicity can compose, schedule and target messages, and every intended recipient is logged as "skipped" — nothing is delivered until the credentials are set, and no send silently fails.
 
 ### Data privacy note
-This portal can see phone numbers, addresses, and financial records — meaningfully more sensitive than anything the public admin dashboard touches. Treat the Shepherding Head credentials with the same care as the database password itself, and rotate them if the person holding the role ever changes.
+
+These portals see phone numbers, addresses, attendance and financial records — meaningfully more sensitive than anything the public site touches. Treat leadership passwords with the same care as the database password, and disable an account the day someone leaves the role.
 
 ## 18. Password reset, email notifications, image compression, and admin polish
 

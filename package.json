@@ -10,7 +10,8 @@
     "cap:add:ios": "npx cap add ios",
     "cap:sync": "npx cap sync",
     "cap:open:android": "npx cap open android",
-    "cap:open:ios": "npx cap open ios"
+    "cap:open:ios": "npx cap open ios",
+    "test": "node test/smoke.js"
   },
   "dependencies": {
     "express": "^4.19.2",

@@ -73,6 +73,7 @@ async function loadPanel(name) {
     sermons: () => renderResourcePanel('sermons', SERMON_FIELDS, 'Sermon'),
     pages: () => renderResourcePanel('pages', PAGE_FIELDS, 'Page'),
     media: renderMediaLibrary,
+    staff: renderStaffAccounts,
     joinRequests: renderJoinRequests,
     prayerRequests: renderPrayerRequests,
     testimonies: renderTestimonies,
@@ -173,18 +174,24 @@ async function renderResourcePanel(resource, fields, singular) {
       <button class="btn btn-primary btn-sm" id="addBtn-${resource}">+ Add ${singular}</button>
     </div>
     <table>
-      <thead><tr>${fields.slice(0, 3).map(f => `<th>${f.label}</th>`).join('')}${resource === 'events' ? '<th>Registrations</th>' : ''}<th>Actions</th></tr></thead>
+      <thead><tr>${resource === 'departments' ? '<th>Header</th>' : ''}${fields.slice(0, 3).map(f => `<th>${f.label}</th>`).join('')}${resource === 'events' ? '<th>Registrations</th>' : ''}<th>Actions</th></tr></thead>
       <tbody>
         ${pageItems.map(item => `
           <tr>
+            ${resource === 'departments' ? `<td>
+              <div style="width:74px; height:44px; border-radius:8px; overflow:hidden; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:#8a7595;">
+                ${item.headerImageFileId ? `<img src="/api/files/${item.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">` : 'none'}
+              </div>
+            </td>` : ''}
             ${fields.slice(0, 3).map(f => `<td>${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
             ${resource === 'events' ? `<td>${item.registrationEnabled ? `<button data-view-regs="${item.id}" data-title="${escapeHtml(item.title)}">View (${item.capacity > 0 ? `cap ${item.capacity}` : 'unlimited'})</button>` : '—'}</td>` : ''}
             <td class="row-actions">
+              ${resource === 'departments' ? `<button data-header-image="${item.id}">Header Image</button>` : ''}
               <button data-edit="${item.id}">Edit</button>
               <button class="danger" data-delete="${item.id}">Delete</button>
             </td>
           </tr>
-        `).join('') || `<tr><td colspan="${fields.length + (resource === 'events' ? 2 : 1)}">No ${singular.toLowerCase()}s yet.</td></tr>`}
+        `).join('') || `<tr><td colspan="${fields.length + (resource === 'events' ? 2 : 1) + (resource === 'departments' ? 1 : 0)}">No ${singular.toLowerCase()}s yet.</td></tr>`}
       </tbody>
     </table>
     <div id="resourcePagination-${resource}"></div>
@@ -198,6 +205,11 @@ async function renderResourcePanel(resource, fields, singular) {
   if (resource === 'events') {
     el.querySelectorAll('[data-view-regs]').forEach(btn => {
       btn.addEventListener('click', () => openRegistrationsModal(btn.dataset.viewRegs, btn.dataset.title));
+    });
+  }
+  if (resource === 'departments') {
+    el.querySelectorAll('[data-header-image]').forEach(btn => {
+      btn.addEventListener('click', () => openDepartmentImageModal(items.find(i => i.id === btn.dataset.headerImage)));
     });
   }
 
@@ -278,6 +290,227 @@ function openResourceForm(resource, fields, singular, item) {
     } catch (err) {
       document.getElementById('resourceFormMsg').textContent = err.message || 'Could not save.';
       document.getElementById('resourceFormMsg').className = 'form-msg error';
+    }
+  });
+}
+
+// ---------- leadership accounts ----------
+// One portal account per leader, so access follows the person holding the office
+// rather than a password everybody knows.
+const PORTAL_ROLES = [
+  { value: 'coordinator', label: 'Coordinator', blurb: 'Read-only view of every office, plus the union dashboard.', href: '/coordinator.html' },
+  { value: 'finance', label: 'Finance', blurb: 'Budgets, ledger, financial reports.', href: '/finance.html' },
+  { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance, member care, contact messages.', href: '/shepherding.html' },
+  { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' }
+];
+
+async function renderStaffAccounts() {
+  const el = document.getElementById('panel-staff');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  const users = await fetchJSON('/api/admin/staff');
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2 style="margin:0;">Leadership Accounts (${users.length})</h2>
+      <button class="btn btn-primary btn-sm" id="addStaffBtn">+ Add Account</button>
+    </div>
+    <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">
+      Each account opens one portal. Give the leader their username and password, then send them the portal link below —
+      they sign in there, not here.
+    </p>
+
+    <div class="media-grid" style="grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); margin-bottom:26px;">
+      ${PORTAL_ROLES.map(r => `
+        <div class="media-card" style="padding:14px;">
+          <h4 style="margin:0 0 4px;">${r.label}</h4>
+          <small class="hint" style="margin:0 0 8px;">${r.blurb}</small>
+          <a href="${r.href}" target="_blank" rel="noopener" style="font-size:0.8rem; font-weight:700; color:var(--purple-deep);">${r.href}</a>
+          <div style="margin-top:6px; font-size:0.78rem; color:#8a7595;">${users.filter(u => u.role === r.value).length} account(s)</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <table>
+      <thead><tr><th>Name</th><th>Username</th><th>Portal</th><th>Status</th><th>Last Sign-In</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${users.map(u => `
+          <tr>
+            <td>${escapeHtml(u.name || '—')}</td>
+            <td>${escapeHtml(u.username)}</td>
+            <td>${escapeHtml((PORTAL_ROLES.find(r => r.value === u.role) || {}).label || u.role)}</td>
+            <td><span class="status-pill ${u.active ? 'done' : ''}">${u.active ? 'active' : 'disabled'}</span></td>
+            <td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'never'}</td>
+            <td class="row-actions">
+              <button data-edit-staff="${u.id}">Edit</button>
+              <button class="danger" data-delete-staff="${u.id}">Delete</button>
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="6">No leadership accounts yet — add one to give a leader their portal.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('addStaffBtn').addEventListener('click', () => openStaffForm(null));
+  el.querySelectorAll('[data-edit-staff]').forEach(btn => {
+    btn.addEventListener('click', () => openStaffForm(users.find(u => u.id === btn.dataset.editStaff)));
+  });
+  el.querySelectorAll('[data-delete-staff]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this account? That leader will lose access to their portal immediately.')) return;
+      await fetchJSON(`/api/admin/staff/${btn.dataset.deleteStaff}`, { method: 'DELETE' });
+      showToast('Account deleted.', 'success');
+      renderStaffAccounts();
+    });
+  });
+}
+
+function openStaffForm(user) {
+  const isEdit = !!user;
+  showModal(`
+    <h3>${isEdit ? 'Edit' : 'New'} Leadership Account</h3>
+    <form id="staffForm">
+      <div class="field"><label>Full Name</label>
+        <input type="text" id="stName" value="${escapeHtml(user?.name || '')}" placeholder="e.g. Ama Mensah" required></div>
+      <div class="field"><label>Username</label>
+        ${isEdit
+          ? `<input type="text" value="${escapeHtml(user.username)}" disabled>`
+          : '<input type="text" id="stUsername" placeholder="e.g. finance.ama" required>'}
+        ${isEdit ? '<small class="hint">Usernames cannot be changed — delete and recreate the account if it must change.</small>' : ''}
+      </div>
+      <div class="field"><label>Which portal does this account open?</label>
+        <select id="stRole" ${isEdit ? '' : 'required'}>
+          ${PORTAL_ROLES.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label} — ${r.blurb}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>${isEdit ? 'New Password (leave blank to keep the current one)' : 'Password'}</label>
+        <input type="text" id="stPassword" ${isEdit ? '' : 'required'} placeholder="At least 8 characters">
+        <small class="hint">Shown in plain text so you can copy it to the leader — it is stored hashed and can never be read back.</small>
+      </div>
+      ${isEdit ? `
+        <div class="field checkbox-field">
+          <input type="checkbox" id="stActive" ${user.active ? 'checked' : ''}>
+          <label for="stActive" style="margin:0;">Account is active</label>
+        </div>` : ''}
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save Account</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="staffFormMsg"></div>
+    </form>
+  `);
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+
+  document.getElementById('staffForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      name: document.getElementById('stName').value,
+      role: document.getElementById('stRole').value
+    };
+    const password = document.getElementById('stPassword').value;
+    if (password) payload.password = password;
+    if (isEdit) payload.active = document.getElementById('stActive').checked;
+    else payload.username = document.getElementById('stUsername').value;
+
+    try {
+      await fetchJSON(isEdit ? `/api/admin/staff/${user.id}` : '/api/admin/staff', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      closeModal();
+      showToast('Account saved.', 'success');
+      renderStaffAccounts();
+    } catch (err) {
+      document.getElementById('staffFormMsg').textContent = err.message || 'Could not save this account.';
+      document.getElementById('staffFormMsg').className = 'form-msg error';
+    }
+  });
+}
+
+// ---------- department header images ----------
+// A department's header is the banner across the top of its page, so it gets a
+// dedicated screen: see what is there now, replace it, or pick something already
+// in the library.
+async function openDepartmentImageModal(dept) {
+  showModal(`<h3>Header Image — ${escapeHtml(dept.name)}</h3><p class="empty-state">Loading library...</p>`);
+  const files = await fetchJSON('/api/files?category=photo').catch(() => []);
+  const images = files.filter(f => (f.contentType || '').startsWith('image/'));
+
+  document.getElementById('modalContent').innerHTML = `
+    <h3>Header Image — ${escapeHtml(dept.name)}</h3>
+    <p class="hint" style="margin-bottom:16px;">
+      This photo appears as the banner across the top of the ${escapeHtml(dept.name)} page, and on its card in the departments list.
+      Landscape photos work best — anything wider than it is tall.
+    </p>
+
+    <div style="aspect-ratio:16/6; border-radius:12px; overflow:hidden; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; margin-bottom:18px;">
+      ${dept.headerImageFileId
+        ? `<img src="/api/files/${dept.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">`
+        : '<span style="color:#8a7595; font-weight:700;">No header image yet</span>'}
+    </div>
+
+    <form id="deptImageForm">
+      <div class="field"><label>Upload a new header</label><input type="file" id="deptImageFile" accept="image/*"></div>
+      <button type="submit" class="btn btn-primary btn-sm" id="deptImageBtn">Upload &amp; Set as Header</button>
+      <div class="form-msg" id="deptImageMsg"></div>
+    </form>
+
+    <h4 style="margin:22px 0 10px;">…or pick one already in the library</h4>
+    <div class="media-grid" style="grid-template-columns: repeat(auto-fill, minmax(110px,1fr));">
+      ${images.slice(0, 24).map(f => `
+        <div class="media-card" style="cursor:pointer;" data-pick="${f.id}">
+          <div class="thumb"><img src="/api/files/${f.id}" alt="${escapeHtml(f.title)}"></div>
+        </div>
+      `).join('') || '<p class="hint">Nothing in the library yet.</p>'}
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:22px;">
+      ${dept.headerImageFileId ? '<button type="button" class="btn btn-outline btn-sm" id="clearHeaderBtn">Remove header</button>' : ''}
+      <button type="button" class="btn btn-outline btn-sm" id="cancelModalBtn">Close</button>
+    </div>
+  `;
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+
+  async function setHeader(fileId) {
+    await fetchJSON(`/api/admin/departments/${dept.id}/header-image`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ headerImageFileId: fileId })
+    });
+    closeModal();
+    showToast(fileId ? 'Header image set.' : 'Header image removed.', 'success');
+    renderResourcePanel('departments', DEPARTMENT_FIELDS, 'Department');
+  }
+
+  document.querySelectorAll('[data-pick]').forEach(card => {
+    card.addEventListener('click', () => setHeader(card.dataset.pick));
+  });
+  const clearBtn = document.getElementById('clearHeaderBtn');
+  if (clearBtn) clearBtn.addEventListener('click', () => setHeader(''));
+
+  document.getElementById('deptImageForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('deptImageFile');
+    if (!input.files.length) return;
+    const btn = document.getElementById('deptImageBtn');
+    btn.disabled = true; btn.textContent = 'Uploading...';
+    const formData = new FormData();
+    formData.append('file', input.files[0]);
+    formData.append('category', 'photo');
+    formData.append('placement', 'department-header');
+    formData.append('targetId', dept.id);
+    formData.append('title', `${dept.name} header`);
+    try {
+      const res = await fetch('/api/admin/uploads', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      closeModal();
+      showToast(`Header set for ${dept.name}.`, 'success');
+      renderResourcePanel('departments', DEPARTMENT_FIELDS, 'Department');
+    } catch (err) {
+      document.getElementById('deptImageMsg').textContent = err.message;
+      document.getElementById('deptImageMsg').className = 'form-msg error';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Upload & Set as Header';
     }
   });
 }
@@ -765,20 +998,43 @@ async function openRegistrationsModal(eventId, title) {
 // ---------- media library ----------
 let mediaLibraryPage = 1;
 const MEDIA_PER_PAGE = 12;
+// Placement options and their targets, loaded with the panel and reused by the
+// cards so each one can say where its image actually ended up.
+let MEDIA_PLACEMENTS = { placements: [], departments: [], pages: [] };
 async function renderMediaLibrary() {
   const el = document.getElementById('panel-media');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
-  const [files, pages] = await Promise.all([
+  const [files, pages, placementData] = await Promise.all([
     fetchJSON('/api/files'),
-    fetchJSON('/api/pages')
+    fetchJSON('/api/pages'),
+    fetchJSON('/api/admin/image-placements')
   ]);
   const galleryBookPages = pages.filter(p => p.type === 'gallery' || p.type === 'bookshelf');
+  MEDIA_PLACEMENTS = placementData;
 
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Media Library</h2>
     <div class="upload-form">
-      <h3 style="margin-bottom:14px;">Upload a File</h3>
+      <h3 style="margin-bottom:6px;">Upload a File</h3>
+      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:16px;">
+        Say where the image is going and the app puts it there for you — no second step, and no guessing later about
+        which picture is doing what.
+      </p>
       <form id="uploadForm">
+        <div class="field">
+          <label>Where will this image be used?</label>
+          <select id="uploadPlacement">
+            ${placementData.placements.map(p => `<option value="${p.value}">${escapeHtml(p.label)}</option>`).join('')}
+          </select>
+        </div>
+
+        <div class="field" id="targetFieldWrap" style="display:none;">
+          <label id="targetLabel">Which one?</label>
+          <select id="uploadTarget"></select>
+        </div>
+
+        <div id="placementExplain" style="background:var(--lilac-light); border-left:3px solid var(--flame-gold); border-radius:8px; padding:12px 14px; font-size:0.85rem; color:var(--purple-rich); margin-bottom:18px;"></div>
+
         <div class="field-row">
           <div class="field">
             <label>File Type</label>
@@ -788,16 +1044,9 @@ async function renderMediaLibrary() {
             </select>
           </div>
           <div class="field">
-            <label>Which page does this belong to?</label>
-            <select id="uploadPageSlug">
-              <option value="">— Not tied to a page —</option>
-              ${galleryBookPages.map(p => `<option value="${p.slug}">${escapeHtml(p.title)}</option>`).join('')}
-            </select>
+            <label>Title</label>
+            <input type="text" id="uploadTitle" placeholder="e.g. Sunday Service — July 12">
           </div>
-        </div>
-        <div class="field">
-          <label>Title</label>
-          <input type="text" id="uploadTitle" placeholder="e.g. Sunday Service — July 12">
         </div>
         <div class="field">
           <label>Description (optional)</label>
@@ -810,7 +1059,7 @@ async function renderMediaLibrary() {
         <button type="submit" class="btn btn-primary" id="uploadSubmitBtn">Upload</button>
         <div class="form-msg" id="uploadMsg"></div>
       </form>
-      ${!galleryBookPages.length ? '<small class="hint">Tip: create a Gallery or Bookshelf page under "Custom Pages" first, so uploads here can be tied to it and show up on the public site.</small>' : ''}
+      ${!galleryBookPages.length ? '<small class="hint">Tip: create a Gallery or Bookshelf page under "Custom Pages" first, so photos can be placed on it.</small>' : ''}
     </div>
 
     <h3 style="margin-bottom:14px;">All Files (${files.length})</h3>
@@ -824,6 +1073,50 @@ async function renderMediaLibrary() {
     renderMediaLibrary();
   });
 
+  // The whole point of the picker: as soon as a placement is chosen, say in plain
+  // words where the image will show up — and, when it needs one, ask which
+  // department or page it belongs to.
+  function refreshPlacementUI() {
+    const value = document.getElementById('uploadPlacement').value;
+    const spec = placementData.placements.find(p => p.value === value);
+    const wrap = document.getElementById('targetFieldWrap');
+    const targetSelect = document.getElementById('uploadTarget');
+    const explain = document.getElementById('placementExplain');
+
+    if (spec.needsTarget) {
+      const list = spec.needsTarget === 'department' ? placementData.departments : placementData.pages;
+      document.getElementById('targetLabel').textContent =
+        spec.needsTarget === 'department' ? 'Which department?' : 'Which page?';
+      targetSelect.innerHTML = list.length
+        ? list.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.hasHeader ? ' (replaces current header)' : ''}</option>`).join('')
+        : `<option value="">— no ${spec.needsTarget}s exist yet —</option>`;
+      wrap.style.display = 'block';
+    } else {
+      wrap.style.display = 'none';
+      targetSelect.innerHTML = '';
+    }
+
+    const targetName = spec.needsTarget
+      ? (targetSelect.options[targetSelect.selectedIndex] || {}).text || ''
+      : '';
+    const messages = {
+      'department-header': `This image becomes the banner across the top of the <strong>${escapeHtml(targetName.replace(' (replaces current header)', '') || 'selected')}</strong> department page, and appears on its card in the departments list. Landscape photos work best.`,
+      'page-gallery': `This image is added to the <strong>${escapeHtml(targetName || 'selected')}</strong> page, where members will see it in that page's gallery.`,
+      'home-floating': 'This image drifts around the hero area on the home page and department pages as a decorative photo. Only the first few uploaded are used, and they are hidden on small phones.',
+      'executive-photo': 'This image is kept in the library ready to use as an executive portrait. Attach it to a person from the <strong>Executives</strong> panel.',
+      'library': 'Nothing on the public site changes. The image simply sits in the library until you place it somewhere.'
+    };
+    explain.innerHTML = `<strong>Where this goes:</strong> ${messages[value] || spec.description}`;
+    // A department header is always a photo, never a document.
+    if (value === 'department-header' || value === 'home-floating' || value === 'executive-photo') {
+      document.getElementById('uploadCategory').value = 'photo';
+    }
+  }
+
+  document.getElementById('uploadPlacement').addEventListener('change', refreshPlacementUI);
+  document.getElementById('uploadTarget').addEventListener('change', refreshPlacementUI);
+  refreshPlacementUI();
+
   document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('uploadSubmitBtn');
@@ -831,18 +1124,21 @@ async function renderMediaLibrary() {
     const fileInput = document.getElementById('uploadFile');
     if (!fileInput.files.length) return;
     btn.disabled = true; btn.textContent = 'Uploading...';
+    const placement = document.getElementById('uploadPlacement').value;
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
     formData.append('category', document.getElementById('uploadCategory').value);
-    formData.append('pageSlug', document.getElementById('uploadPageSlug').value);
+    formData.append('placement', placement);
+    formData.append('targetId', document.getElementById('uploadTarget').value || '');
     formData.append('title', document.getElementById('uploadTitle').value);
     formData.append('description', document.getElementById('uploadDescription').value);
     try {
       const res = await fetch('/api/admin/uploads', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
-      msg.textContent = 'Uploaded!';
+      msg.textContent = data.message ? `Uploaded — ${data.message}` : 'Uploaded!';
       msg.className = 'form-msg success';
+      showToast('Image uploaded and placed.', 'success');
       renderMediaLibrary();
     } catch (err) {
       msg.textContent = err.message || 'Upload failed.';
@@ -861,6 +1157,19 @@ async function renderMediaLibrary() {
   });
 }
 
+// Where each file ended up, in the admin's own words rather than a raw key.
+function placementSummary(f) {
+  const data = MEDIA_PLACEMENTS;
+  const name = (list, id) => ((list || []).find(t => t.id === id) || {}).name || id;
+  switch (f.placement) {
+    case 'department-header': return `Header for ${name(data.departments, f.targetId)}`;
+    case 'page-gallery': return `On the ${name(data.pages, f.targetId || f.pageSlug)} page`;
+    case 'home-floating': return 'Floating photo on the home page';
+    case 'executive-photo': return 'Executive portrait';
+    default: return f.pageSlug ? `On the ${escapeHtml(f.pageSlug)} page` : 'In the library only';
+  }
+}
+
 function mediaCardHtml(f) {
   const isImage = (f.contentType || '').startsWith('image/');
   return `
@@ -870,7 +1179,8 @@ function mediaCardHtml(f) {
       </div>
       <div class="info">
         <h4>${escapeHtml(f.title)}</h4>
-        <small>${f.category} · ${formatFileSize(f.length)}${f.pageSlug ? ` · ${escapeHtml(f.pageSlug)}` : ''}</small>
+        <small style="display:block; color:var(--purple-deep); font-weight:700;">${escapeHtml(placementSummary(f))}</small>
+        <small>${f.category} · ${formatFileSize(f.length)}</small>
         <div class="row-actions" style="margin-top:8px;">
           <button class="danger" data-delete-file="${f.id}">Delete</button>
         </div>
@@ -891,7 +1201,10 @@ async function renderSettings() {
     { key: 'tagline', label: 'Tagline' },
     { key: 'verseOfTheWeek', label: 'Verse of the Week' },
     { key: 'address', label: 'Address' },
-    { key: 'email', label: 'Contact Email' },
+    { key: 'email', label: 'Contact Email (everything goes here unless an office address is set below)' },
+    { key: 'shepherdingEmail', label: 'Shepherding Email (contact-form messages)' },
+    { key: 'publicityEmail', label: 'Publicity Email (new testimonies)' },
+    { key: 'financeEmail', label: 'Finance Email' },
     { key: 'phone', label: 'Phone' },
     { key: 'whatsapp', label: 'WhatsApp Number (digits only, with country code)' },
     { key: 'instagram', label: 'Instagram URL' },
