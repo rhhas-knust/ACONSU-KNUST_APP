@@ -4,10 +4,14 @@ Official website + admin backend for **ACONSU — The Apostles' Continuation Stu
 
 ## What's included
 
-- **Public site**: Home, About, Departments (list + individual pages with meeting info and a "Join" form), Events (with live countdown), Sermons & Media, Prayer Wall (prayer requests + testimonies), Contact.
-- **Admin dashboard** (`/admin.html`): password-protected. Add/edit/delete departments, events, and sermons; view and manage join requests, prayer requests, testimonies and contact messages; edit site-wide settings — no code required.
-- **MongoDB Atlas** as the data store — a real cloud database with automatic backups and replication, so content survives redeploys and server restarts.
-- **Security hardening**: rate-limiting on login and public forms, secure session cookies, security headers (via Helmet).
+- **Public site**: Home dashboard, Bible reader, Events (with capacity/deadline-limited registration), Sermons & Media, Departments (with join forms), Prayer Wall, Discover/search, Custom Pages (admin-created galleries/bookshelves/info pages), Notifications, Contact.
+- **Member accounts**: sign up, log in, edit profile, forgot/reset password, birthdays (month/day only — no year, ever), App Streak and Badges.
+- **Admin dashboard** (`/admin.html`): manages all public content, executives, members (view/edit/delete), media library uploads, and sends push/in-app announcements.
+- **Shepherding portal** (`/shepherding.html`): a completely separate, restricted login for the Shepherding Head — pastoral care records and church finance tracking (MoMo, Tithe, Harvest, Offertory, Other income, plus expenses).
+- **Installable app (PWA)** with offline support, real push notifications, and a Capacitor scaffold for native iOS/Android builds.
+- **MongoDB Atlas** as the data store — real cloud database with automatic backups and replication.
+- **Email notifications** (password reset, admin alerts on new join/prayer/testimony/contact submissions) and **automatic image compression** on every upload.
+- **Security hardening**: rate-limiting, secure session cookies, security headers, bcrypt-hashed passwords throughout.
 
 ---
 
@@ -69,7 +73,7 @@ Then start the app:
 npm start
 ```
 
-Visit `http://localhost:7000` for the public site, and `http://localhost:7000/admin.html` to log in.
+Visit `http://localhost:3000` for the public site, and `http://localhost:3000/admin.html` to log in.
 
 ## 3. Deployment (Render or Railway)
 
@@ -120,20 +124,24 @@ aconsu-app/
     gridfs.js              File storage (photos, ebooks, profile/exec photos)
     bibleBooks.js          Static book/chapter list for the Bible reader
     push.js                Web push notification sending + cleanup
+    mailer.js              SMTP email sending (password reset, admin alerts)
+    imageProcess.js        Automatic image resize/compression on upload
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
   capacitor.config.json    Native app (iOS/Android) wrapper config
   data/                    Old local JSON files — kept only as the migration source
   public/
     index.html, about.html, departments.html, department.html,
     events.html, media.html, bible.html, prayer.html, contact.html,
-    login.html, register.html, profile.html, notifications.html,
-    page.html, admin.html
+    login.html, register.html, forgot-password.html, reset-password.html,
+    profile.html, notifications.html, discover.html,
+    page.html, admin.html, shepherding.html
     manifest.json           PWA app manifest
     sw.js                   Service worker (offline support)
     icons/                  Generated app icons, all sizes
     css/style.css           Design system (colors, type, components)
     js/main.js              Shared header/footer, countdown, auth state, PWA install, toasts
     js/admin.js             Admin dashboard logic
+    js/shepherd.js          Shepherding portal logic (private, separate login)
     images/logo.jpg         ACONSU logo
 ```
 
@@ -270,6 +278,79 @@ If these aren't set, the app still works completely normally — the in-app noti
 - iPhones only support push notifications for sites that have been **added to the home screen** (installed as the PWA) — this is an Apple platform restriction, not something in this app's control. Android and desktop browsers support it directly, no install required.
 - The automatic birthday and daily checks require the server process to keep running continuously — true by default on Render/Railway's standard web service plans, just flagging it in case you ever move to a "serverless"-style host where this wouldn't apply.
 
-## 16. Design
+## 16. App Streak, Badges, and Discover
+
+**App Streak** — logged-in members get a daily streak counter, shown on the Home greeting bar and the Profile page. It increments automatically the first time they open the app each day (silently, in the background — no action needed), and resets if a day is missed. Both current and longest streak are tracked.
+
+**Badges** — computed live from real activity, not manually awarded, so they're always accurate:
+- Welcome to ACONSU (everyone)
+- 7-Day Streak / 30-Day Streak
+- Scripture Reader (10+ Bible chapters read) / Deeply Rooted (50+)
+- Prayer Warrior (submitted a prayer request)
+- Serving Heart (joined a department)
+- Event Goer (registered for an event)
+
+Bible chapter reads are counted automatically each time a logged-in member opens a chapter in the Bible reader.
+
+**Home page** now leads with a greeting bar (time-of-day greeting, streak flame, notification bell) and a proper "Verse of the Day" card, followed by the quick-access tile grid.
+
+**Profile page** now leads with the member's name and photo (tap the camera icon to update instantly), quick-access pills (My Events, Prayer Wall, Departments), the streak card, and the badges grid — account editing and password change stay below as "Account Settings."
+
+**Discover page** (`/discover.html`, reachable from the bell/More menu) — a search bar across sermons, departments, events, and custom pages, plus browsable tiles for Sermons, Bible, Departments, Events, and any Custom Pages you've created.
+
+## 17. Shepherding portal (private — Shepherding Head only)
+
+A completely separate, restricted-access area at **`/shepherding.html`** for pastoral care and church finance records. It is not linked from anywhere in the public site or the admin dashboard — only someone with the direct URL and the Shepherding Head credentials can reach it.
+
+**Why it's separate from admin**: this deliberately does *not* share a login with the main admin dashboard, so the church can hand shepherding/finance access to one specific person without also giving them (or requiring them to share) the admin password, and vice versa.
+
+### Setup
+Add credentials to `.env` (leave blank and the portal will refuse all logins until set):
+```
+SHEPHERD_USERNAME=
+SHEPHERD_PASSWORD=
+```
+Only share these with the Shepherding Head.
+
+### What it does
+
+**Members tab** — every ACONSU member automatically appears here with their name, email, phone, birthday, and profile photo pulled live from their existing account (nothing is re-typed or duplicated). The Shepherding Head then fills in the parts that live nowhere else in the system: home address, emergency contact, attendance status (New/Regular/Irregular/Inactive), last contact date, and free-form pastoral notes. A **"+ Add Visitor Record"** button also allows tracking people who attend but don't have an ACONSU account yet — entered manually with just a name and phone number.
+
+**Finance tab** — logs day-to-day income and expenses:
+- **Income** is categorized into exactly the sources you specified: **MoMo, Tithe, Harvest, Offertory,** and **Other**.
+- **Expenses** use a free-text category (utilities, maintenance, outreach, etc.) since expense types vary more than income sources.
+- Every entry has a date, amount, and optional description; entries can be edited or deleted.
+
+**Overview tab** — total income, total expenses, net balance, and a breakdown of income by source, calculated live from every entry ever logged.
+
+### Data privacy note
+This portal can see phone numbers, addresses, and financial records — meaningfully more sensitive than anything the public admin dashboard touches. Treat the Shepherding Head credentials with the same care as the database password itself, and rotate them if the person holding the role ever changes.
+
+## 18. Password reset, email notifications, image compression, and admin polish
+
+This closing pass fills in the remaining day-to-day gaps:
+
+**Forgot / Reset Password** — members who forget their password can now recover their account themselves at `/forgot-password.html`, no admin involvement needed. A reset link is emailed (valid for 1 hour), and the response is always the same generic message whether or not the email exists, so this can't be used to check who has an account. Requires SMTP setup (below) to actually deliver the email — without it, the request still completes safely but no email goes out.
+
+**Email notifications** — the admin now gets a real email whenever someone submits a **join request, prayer request, testimony, or contact message**, in addition to seeing it in the dashboard. Sent to whatever address is set as **Contact Email** under Site Settings.
+
+**Email setup (SMTP)** — add to `.env`:
+```
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+MAIL_FROM=ACONSU <noreply@aconsu.org>
+```
+Works with any standard SMTP provider — Gmail (using an [App Password](https://myaccount.google.com/apppasswords), not your normal password), SendGrid, Mailgun, Zoho, etc. Leave blank and the app runs completely normally — password reset and admin notification emails just won't send until this is filled in.
+
+**Image compression** — every photo uploaded anywhere in the app (media library, executive photos, member profile photos, shepherding record photos) is now automatically resized (max 1600px) and compressed before being stored, cutting Atlas storage usage significantly with no visible quality loss. Non-image files (PDFs, etc.) pass through untouched.
+
+**Admin can now edit and delete members** — previously read-only. Name, phone, level, and department can be edited from the Members tab; email and password changes still require the member to do it themselves (deliberately — prevents an admin action from silently locking someone out of their own account).
+
+**Pagination** — every admin and Shepherding portal table that can grow large (Members, Join Requests, Prayer Requests, Testimonies, Contact Messages, Notification History, Media Library, Departments/Events/Sermons/Pages, and the Shepherding Members/Finance tables) now paginates at 12–15 rows per page instead of rendering everything at once.
+
+## 19. Design
 
 Palette pulled from the ACONSU crest: deep purple (`#5B2C82`) and rich plum (`#3A1B54`) as primary, a light lilac background, with the crest's flame rendered as a gold-to-red gradient accent on key call-to-action buttons and the homepage hero. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).

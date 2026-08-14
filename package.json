@@ -21,15 +21,21 @@
     "express-session": "^1.18.0",
     "helmet": "^7.1.0",
     "mongoose": "^8.5.1",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^9.0.5",
+    "sharp": "^0.35.3",
+    "web-push": "^3.6.7"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
     "@capacitor/android": "^6.1.2",
-    "@capacitor/cli": "^8.4.2",
+    "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^6.1.2",
     "@capacitor/ios": "^6.1.2"
+  },
+  "allowScripts": {
+    "sharp@0.35.3": true
   }
 }

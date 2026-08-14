@@ -19,6 +19,11 @@
 
 <header id="site-header"></header>
 
+<div class="container" style="padding-top:20px;">
+  <div class="greeting-bar" id="greetingBar"></div>
+  <div id="birthdayBanner"></div>
+</div>
+
 <section class="hero" id="homeHero">
   <div class="hero-flame"></div>
   <div class="hero-content">
@@ -33,7 +38,24 @@
   </div>
 </section>
 
-<div class="verse-strip" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship..." — Acts 2:42</div>
+<section style="padding-bottom:8px;">
+  <div class="container">
+    <div class="verse-of-day-card" id="verseOfDayCard">
+      <p class="eyebrow" style="color:rgba(255,255,255,0.75);">Verse of the Day</p>
+      <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship..." — Acts 2:42</p>
+    </div>
+  </div>
+</section>
+
+<section style="padding-bottom:24px;">
+  <div class="container">
+    <div class="section-head" style="margin-bottom:8px;">
+      <p class="eyebrow">Quick Access</p>
+      <h2>Everything in one place</h2>
+    </div>
+    <div class="tile-grid" id="dashboardTiles"></div>
+  </div>
+</section>
 
 <section>
   <div class="container">
@@ -77,6 +99,88 @@
 <script>
 (async function () {
   const settings = await initLayout('/index.html');
+
+  // greeting bar — matches header auth state, shows streak for logged-in members
+  try {
+    const authRes = await fetchJSON('/api/auth/me');
+    const member = authRes.member;
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const firstName = member ? member.name.split(' ')[0] : '';
+    const unread = await getUnreadNotificationCount();
+
+    let streakHtml = '';
+    if (member) {
+      try {
+        const badgeData = await fetchJSON('/api/member/badges');
+        if (badgeData.currentStreak > 0) {
+          streakHtml = `<span class="streak-pill">🔥 ${badgeData.currentStreak}</span>`;
+        }
+      } catch (e) { /* streak is a nice-to-have, fine to skip if it fails */ }
+    }
+
+    document.getElementById('greetingBar').innerHTML = `
+      <h2 style="margin-bottom:0;">${greeting}${firstName ? ', ' + escapeHtml(firstName) : ''}</h2>
+      <div class="greeting-icons">
+        ${streakHtml}
+        <a href="/notifications.html" class="bell-link" style="position:relative; color:var(--purple-deep);" aria-label="Notifications">
+          ${svgIcon(ICON_BELL)}
+          ${unread > 0 ? `<span style="position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);"></span>` : ''}
+        </a>
+      </div>
+    `;
+  } catch (e) { /* greeting bar is decorative — page still works without it */ }
+
+  try {
+    const celebrants = await fetchJSON('/api/birthdays/today');
+    if (celebrants.length) {
+      document.getElementById('birthdayBanner').innerHTML = `
+        <div class="birthday-banner">
+          <span class="bday-emoji">🎉</span>
+          <div>
+            <strong style="display:block; margin-bottom:6px;">Happy Birthday${celebrants.length > 1 ? '' : ''}!</strong>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              ${celebrants.map(c => `
+                <span class="bday-pill">
+                  <span class="avatar">${c.profileImageFileId ? `<img src="/api/files/${c.profileImageFileId}" alt="">` : '🎂'}</span>
+                  ${escapeHtml(c.displayName)}
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  } catch (e) { /* banner is optional — fine to skip silently if it fails */ }
+
+  try {
+    const [customPages, unreadCount] = await Promise.all([
+      fetchJSON('/api/pages').catch(() => []),
+      getUnreadNotificationCount()
+    ]);
+    const coreTiles = [
+      { href: '/bible.html', label: 'Bible', icon: ICON_BIBLE },
+      { href: '/events.html', label: 'Events', icon: ICON_EVENTS },
+      { href: '/departments.html', label: 'Departments', icon: ICON_USERS },
+      { href: '/media.html', label: 'Sermons', icon: ICON_HEADPHONES },
+      { href: '/prayer.html', label: 'Prayer Wall', icon: ICON_PRAYER },
+      { href: '/notifications.html', label: 'Notifications', icon: ICON_BELL, badge: unreadCount }
+    ];
+    const customTiles = customPages.filter(p => p.showInNav).map(p => ({
+      href: `/page.html?slug=${encodeURIComponent(p.slug)}`,
+      label: p.navLabel || p.title,
+      icon: p.type === 'gallery' ? ICON_EVENTS : p.type === 'bookshelf' ? ICON_BIBLE : ICON_MORE
+    }));
+    const allTiles = [...coreTiles, ...customTiles];
+
+    document.getElementById('dashboardTiles').innerHTML = allTiles.map(t => `
+      <a href="${t.href}" class="tile">
+        ${t.badge ? `<span class="tile-badge">${t.badge > 9 ? '9+' : t.badge}</span>` : ''}
+        <div class="tile-icon">${svgIcon(t.icon)}</div>
+        <span class="tile-label">${escapeHtml(t.label)}</span>
+      </a>
+    `).join('');
+  } catch (e) { /* tiles are the core nav, but page still works via header/bottom nav if this fails */ }
 
   try {
     const [departments, events] = await Promise.all([
@@ -137,7 +241,7 @@
     console.error(e);
   }
 
-  initScrollReveal('.card');
+  initScrollReveal('.card, .tile');
 
   // floating decorative photos, pulled from whatever the admin has uploaded as general photos
   try {

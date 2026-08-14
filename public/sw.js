@@ -1,7 +1,7 @@
 // ACONSU service worker — enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v1';
+const CACHE_NAME = 'aconsu-v4';
 
 const APP_SHELL = [
   '/index.html',
@@ -9,6 +9,9 @@ const APP_SHELL = [
   '/departments.html',
   '/events.html',
   '/media.html',
+  '/bible.html',
+  '/notifications.html',
+  '/discover.html',
   '/prayer.html',
   '/contact.html',
   '/login.html',
@@ -84,3 +87,33 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+self.addEventListener('push', (event) => {
+  let data = { title: 'ACONSU', body: 'You have a new update.', url: '/index.html' };
+  try {
+    if (event.data) data = { ...data, ...event.data.json() };
+  } catch (e) { /* fall back to default text if payload isn't JSON */ }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-96.png',
+      data: { url: data.url || '/index.html' }
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/index.html';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(targetUrl) && 'focus' in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow(targetUrl);
+    })
+  );
+});
+

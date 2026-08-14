@@ -393,3 +393,118 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 /* ---------- smoother button micro-interaction ---------- */
 .btn { transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, filter 0.18s ease; }
 .btn:active { transform: translateY(0) scale(0.97); }
+
+/* ---------- birthday banner ---------- */
+.birthday-banner {
+  background: linear-gradient(120deg, var(--flame-gold), var(--flame-red));
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 32px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.birthday-banner .bday-emoji { font-size: 2rem; }
+.birthday-avatars { display: flex; gap: -8px; }
+.bday-pill { background: rgba(255,255,255,0.18); border-radius: 999px; padding: 6px 14px 6px 6px; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.88rem; }
+.bday-pill .avatar { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.3); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:0.8rem; }
+.bday-pill .avatar img { width:100%; height:100%; object-fit:cover; }
+
+/* ---------- bible reader ---------- */
+.bible-controls { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:24px; }
+.bible-controls select { padding:10px 12px; border-radius:10px; border:1.5px solid var(--line); font-family:'Manrope',sans-serif; background:var(--paper); }
+.bible-nav-btns { display:flex; gap:10px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
+.verse-block { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:28px 30px; }
+.verse-line { margin-bottom:0.9em; line-height:1.8; font-size:1.05rem; }
+.verse-num { font-weight:800; color: var(--flame-gold); font-size:0.78rem; vertical-align:super; margin-right:4px; }
+.bible-download-hint { background: var(--lilac-light); border-radius: var(--radius); padding:18px 20px; margin-top:24px; text-align:center; }
+
+/* ---------- bottom tab bar (mobile app nav) ---------- */
+.bottom-nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 350;
+  background: var(--white);
+  border-top: 1px solid var(--line);
+  display: flex; justify-content: space-around; align-items: center;
+  padding: 8px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -8px 24px rgba(58,27,84,0.10);
+}
+.bottom-nav-item {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  color: #9b87a8; background: none; border: none; text-decoration: none;
+  font-family: 'Manrope', sans-serif; font-size: 0.66rem; font-weight: 700;
+  padding: 4px 6px; flex: 1; cursor: pointer;
+}
+.bottom-nav-item svg { width: 22px; height: 22px; }
+.bottom-nav-item.active { color: var(--purple-deep); }
+
+/* keep bottom nav mobile/tablet-only; desktop keeps the top nav experience */
+@media (min-width: 861px) { .bottom-nav { display: none; } }
+@media (max-width: 860px) { body { padding-bottom: 74px; } }
+
+.more-sheet-backdrop {
+  display: none; position: fixed; inset: 0; background: rgba(36,21,48,0.45); z-index: 360;
+  align-items: flex-end; justify-content: center;
+}
+.more-sheet-backdrop.open { display: flex; }
+.more-sheet {
+  position: relative; background: #fff; width: 100%; max-width: 480px;
+  border-radius: 20px 20px 0 0; padding: 16px 20px 28px;
+  max-height: 72vh; overflow-y: auto;
+  animation: sheetUp 0.25s ease;
+}
+@keyframes sheetUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.more-sheet-handle { width: 40px; height: 4px; background: var(--line); border-radius: 99px; margin: 0 auto 18px; }
+.more-sheet a {
+  display: block; padding: 14px 4px; font-weight: 700; font-size: 0.95rem;
+  color: var(--purple-ink); border-bottom: 1px solid var(--line); text-decoration: none;
+}
+.more-sheet a.active { color: var(--purple-deep); }
+.more-sheet-close { position: absolute; top: 10px; right: 14px; background: none; border: none; font-size: 1.5rem; color: #8a7595; cursor: pointer; }
+
+/* ---------- notification bell + feed ---------- */
+.bell-link svg { width: 22px; height: 22px; }
+.notif-item { display:flex; gap:14px; padding:16px 4px; border-bottom:1px solid var(--line); }
+.notif-item:last-child { border-bottom:none; }
+.notif-icon { width:40px; height:40px; border-radius:50%; background: var(--lilac-light); display:flex; align-items:center; justify-content:center; flex:none; color:var(--purple-deep); }
+.notif-icon svg { width:20px; height:20px; }
+.notif-time { font-size:0.75rem; color:#a08eb0; margin-top:4px; }
+.push-toggle-card { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:20px; margin-bottom:24px; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+
+/* ---------- dashboard tiles ---------- */
+.tile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 24px 0 8px; }
+@media (min-width: 600px) { .tile-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 900px) { .tile-grid { grid-template-columns: repeat(6, 1fr); } }
+.tile {
+  background: #fff; border: 1px solid var(--line); border-radius: 16px;
+  padding: 18px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  text-decoration: none; color: var(--purple-ink); text-align: center; position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.tile-icon {
+  width: 50px; height: 50px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--purple-deep), var(--purple-rich));
+  display: flex; align-items: center; justify-content: center; color: #fff;
+}
+.tile-icon svg { width: 24px; height: 24px; }
+.tile .tile-label { font-size: 0.76rem; font-weight: 700; line-height: 1.2; }
+.tile-badge {
+  position: absolute; top: 8px; right: 12px; background: var(--flame-red); color: #fff;
+  font-size: 0.62rem; font-weight: 800; border-radius: 999px; padding: 1px 6px; min-width: 16px;
+}
+
+/* ---------- greeting bar (home) ---------- */
+.greeting-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.greeting-bar h2 { font-size: 1.4rem; }
+.greeting-icons { display: flex; align-items: center; gap: 14px; }
+.streak-pill { background: var(--lilac-light); border: 1px solid var(--lilac-mid); border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 0.85rem; color: var(--purple-deep); }
+
+/* ---------- verse of the day card ---------- */
+.verse-of-day-card {
+  background: linear-gradient(135deg, var(--purple-deep), var(--purple-rich) 60%, var(--flame-red));
+  border-radius: 20px; padding: 26px 24px; color: #fff;
+  box-shadow: 0 16px 36px rgba(58,27,84,0.25);
+}
+.verse-of-day-text { font-family: var(--font-display); font-size: 1.25rem; line-height: 1.5; margin: 6px 0 0; }

@@ -2,8 +2,7 @@
 //   node migrate-to-mongo.js
 // Safe to re-run — it upserts by "id", so it won't create duplicates.
 
-require('dotenv').config(); 
-console.log('MONGODB_URI is:', process.env.MONGODB_URI);
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');

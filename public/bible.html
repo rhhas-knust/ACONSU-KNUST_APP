@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Read the Bible — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:40px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">The Word</p>
+    <h1>Read the Bible</h1>
+    <p class="lede">Read scripture right in the app, in the translation of your choice.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:760px;">
+    <div class="bible-controls">
+      <select id="bookSelect"></select>
+      <select id="chapterSelect"></select>
+      <select id="translationSelect"></select>
+      <button class="btn btn-flame btn-sm" id="downloadChapterBtn">Download This Chapter</button>
+    </div>
+
+    <div id="verseWrap">
+      <div class="skeleton skeleton-card" style="height:280px;"></div>
+    </div>
+
+    <div class="bible-nav-btns">
+      <button class="btn btn-outline btn-sm" id="prevChapterBtn">&larr; Previous Chapter</button>
+      <button class="btn btn-outline btn-sm" id="nextChapterBtn">Next Chapter &rarr;</button>
+    </div>
+
+    <div class="bible-download-hint" id="fullVersionHint" style="display:none;">
+      <p style="margin-bottom:10px; color:#5a4468;">Looking for a full offline copy of a Bible version?</p>
+      <a href="#" id="fullVersionLink" class="btn btn-outline btn-sm">Browse Downloadable Versions</a>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+let BOOKS = [];
+let CURRENT_VERSES = [];
+let CURRENT_REFERENCE = '';
+
+(async function () {
+  await initLayout('/bible.html');
+
+  try {
+    const { books, translations } = await fetchJSON('/api/bible/books');
+    BOOKS = books;
+
+    const bookSelect = document.getElementById('bookSelect');
+    bookSelect.innerHTML = books.map(b => `<option value="${escapeHtml(b.name)}">${escapeHtml(b.name)}</option>`).join('');
+    bookSelect.value = 'John';
+
+    const transSelect = document.getElementById('translationSelect');
+    transSelect.innerHTML = translations.map(t => `<option value="${t.code}">${escapeHtml(t.label)}</option>`).join('');
+
+    populateChapters();
+    document.getElementById('chapterSelect').value = 3;
+
+    loadPassage();
+
+    // check whether admin has set up a downloadable Bible versions bookshelf page
+    try {
+      const pages = await fetchJSON('/api/pages');
+      const bookshelfPage = pages.find(p => p.type === 'bookshelf' && /bible|scripture/i.test(p.title + p.slug));
+      if (bookshelfPage) {
+        document.getElementById('fullVersionLink').href = `/page.html?slug=${encodeURIComponent(bookshelfPage.slug)}`;
+        document.getElementById('fullVersionHint').style.display = 'block';
+      }
+    } catch (e) { /* optional */ }
+  } catch (e) {
+    document.getElementById('verseWrap').innerHTML = '<p class="empty-state">Could not load the Bible reader right now.</p>';
+  }
+
+  document.getElementById('bookSelect').addEventListener('change', () => { populateChapters(); loadPassage(); });
+  document.getElementById('chapterSelect').addEventListener('change', loadPassage);
+  document.getElementById('translationSelect').addEventListener('change', loadPassage);
+  document.getElementById('prevChapterBtn').addEventListener('click', () => stepChapter(-1));
+  document.getElementById('nextChapterBtn').addEventListener('click', () => stepChapter(1));
+  document.getElementById('downloadChapterBtn').addEventListener('click', downloadChapter);
+})();
+
+function populateChapters() {
+  const bookName = document.getElementById('bookSelect').value;
+  const book = BOOKS.find(b => b.name === bookName);
+  const chapterSelect = document.getElementById('chapterSelect');
+  const count = book ? book.chapters : 1;
+  const current = Number(chapterSelect.value) || 1;
+  chapterSelect.innerHTML = Array.from({ length: count }, (_, i) => i + 1)
+    .map(c => `<option value="${c}">Chapter ${c}</option>`).join('');
+  chapterSelect.value = Math.min(current, count);
+}
+
+function stepChapter(delta) {
+  const chapterSelect = document.getElementById('chapterSelect');
+  const bookSelect = document.getElementById('bookSelect');
+  let chapter = Number(chapterSelect.value) + delta;
+  const bookIndex = BOOKS.findIndex(b => b.name === bookSelect.value);
+  const book = BOOKS[bookIndex];
+
+  if (chapter < 1) {
+    if (bookIndex > 0) {
+      bookSelect.value = BOOKS[bookIndex - 1].name;
+      populateChapters();
+      chapterSelect.value = BOOKS[bookIndex - 1].chapters;
+    }
+  } else if (chapter > book.chapters) {
+    if (bookIndex < BOOKS.length - 1) {
+      bookSelect.value = BOOKS[bookIndex + 1].name;
+      populateChapters();
+      chapterSelect.value = 1;
+    }
+  } else {
+    chapterSelect.value = chapter;
+  }
+  loadPassage();
+}
+
+async function loadPassage() {
+  const book = document.getElementById('bookSelect').value;
+  const chapter = document.getElementById('chapterSelect').value;
+  const translation = document.getElementById('translationSelect').value;
+  const wrap = document.getElementById('verseWrap');
+  wrap.innerHTML = '<div class="skeleton skeleton-card" style="height:280px;"></div>';
+
+  try {
+    const data = await fetchJSON(`/api/bible/passage?book=${encodeURIComponent(book)}&chapter=${chapter}&translation=${translation}`);
+    CURRENT_VERSES = data.verses;
+    CURRENT_REFERENCE = data.reference;
+    wrap.innerHTML = `
+      <div class="verse-block">
+        <h2 style="margin-bottom:18px;">${escapeHtml(data.reference)}</h2>
+        ${data.verses.map(v => `<p class="verse-line"><span class="verse-num">${v.verse}</span>${escapeHtml(v.text)}</p>`).join('')}
+      </div>
+    `;
+    window.scrollTo({ top: wrap.offsetTop - 100, behavior: 'smooth' });
+    fetchJSON('/api/member/bible-read', { method: 'POST' }).catch(() => {}); // only counts if logged in; silently skips otherwise
+  } catch (e) {
+    wrap.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load this passage right now.')}</p>`;
+  }
+}
+
+function downloadChapter() {
+  if (!CURRENT_VERSES.length) return;
+  const text = `${CURRENT_REFERENCE}\n\n` + CURRENT_VERSES.map(v => `${v.verse}. ${v.text}`).join('\n');
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${CURRENT_REFERENCE.replace(/\s+/g, '_')}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('Chapter downloaded.', 'success');
+}
+</script>
+</body>
+</html>

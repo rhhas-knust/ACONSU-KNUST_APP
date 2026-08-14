@@ -37,6 +37,7 @@
 <div class="pub-modal-backdrop" id="regModalBackdrop">
   <div class="pub-modal">
     <h3 id="regModalTitle">Register</h3>
+    <p id="regAutofillNote" style="display:none; font-size:0.85rem; color:#5a4468; margin-bottom:14px;"></p>
     <form id="regForm">
       <div class="field">
         <label for="regName">Full Name</label>
@@ -65,6 +66,7 @@
 <script>
 let CURRENT_EVENTS = [];
 let ACTIVE_EVENT_ID = null;
+let CURRENT_MEMBER = null;
 
 function spotsBadge(e) {
   if (!e.registrationEnabled) return '';
@@ -81,6 +83,10 @@ function canRegister(e) {
 
 (async function () {
   await initLayout('/events.html');
+  try {
+    const authRes = await fetchJSON('/api/auth/me');
+    CURRENT_MEMBER = authRes.member;
+  } catch (e) { /* fine to stay logged out — form just starts blank */ }
   try {
     const events = await fetchJSON('/api/events');
     CURRENT_EVENTS = events;
@@ -145,6 +151,25 @@ function openRegModal(eventId) {
   document.getElementById('regMsg').textContent = '';
   document.getElementById('regMsg').className = 'form-msg';
   document.getElementById('regForm').reset();
+
+  const noteEl = document.getElementById('regAutofillNote');
+  if (CURRENT_MEMBER) {
+    document.getElementById('regName').value = CURRENT_MEMBER.name || '';
+    document.getElementById('regEmail').value = CURRENT_MEMBER.email || '';
+    document.getElementById('regPhone').value = CURRENT_MEMBER.phone || '';
+    if (noteEl) {
+      noteEl.style.display = 'block';
+      noteEl.innerHTML = `Registering as <strong>${escapeHtml(CURRENT_MEMBER.name)}</strong>. <a href="#" id="regClearBtn" style="color:var(--purple-deep); font-weight:700;">Not you? Clear the form</a>`;
+      document.getElementById('regClearBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('regForm').reset();
+        noteEl.style.display = 'none';
+      });
+    }
+  } else if (noteEl) {
+    noteEl.style.display = 'none';
+  }
+
   document.getElementById('regModalBackdrop').classList.add('open');
 }
 document.getElementById('regCancelBtn').addEventListener('click', () => {

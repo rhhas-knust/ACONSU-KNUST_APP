@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notifications — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:40px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Stay in the Loop</p>
+    <h1>Notifications</h1>
+    <p class="lede">Events, sermons, birthdays and announcements from ACONSU.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:640px;">
+    <div class="push-toggle-card">
+      <div>
+        <strong style="display:block; margin-bottom:4px;">Push Notifications</strong>
+        <span style="font-size:0.85rem; color:#5a4468;" id="pushStatusText">Checking status...</span>
+      </div>
+      <button class="btn btn-primary btn-sm" id="pushToggleBtn">Enable</button>
+    </div>
+
+    <div id="notifList">
+      <div class="skeleton skeleton-card" style="height:100px; margin-bottom:12px;"></div>
+      <div class="skeleton skeleton-card" style="height:100px;"></div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/notifications.html');
+  markNotificationsSeen();
+
+  try {
+    const items = await fetchJSON('/api/notifications');
+    const wrap = document.getElementById('notifList');
+    if (!items.length) {
+      wrap.innerHTML = '<p class="empty-state">No notifications yet — check back soon.</p>';
+    } else {
+      wrap.innerHTML = `<div class="card" style="padding:8px 20px;">${items.map(n => `
+        <a href="${n.url || '/index.html'}" class="notif-item" style="text-decoration:none; color:inherit;">
+          <div class="notif-icon">${n.source === 'system' ? '🔔' : '📣'}</div>
+          <div>
+            <strong style="display:block;">${escapeHtml(n.title)}</strong>
+            <span style="color:#5a4468; font-size:0.9rem;">${escapeHtml(n.body)}</span>
+            <div class="notif-time">${timeAgo(n.createdAt)}</div>
+          </div>
+        </a>
+      `).join('')}</div>`;
+    }
+  } catch (e) {
+    document.getElementById('notifList').innerHTML = '<p class="empty-state">Could not load notifications right now.</p>';
+  }
+
+  await refreshPushStatus();
+})();
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+async function refreshPushStatus() {
+  const statusText = document.getElementById('pushStatusText');
+  const btn = document.getElementById('pushToggleBtn');
+  const subscribed = await isPushSubscribed();
+  if (subscribed) {
+    statusText.textContent = "You'll get alerts even when the app is closed.";
+    btn.textContent = 'Disable';
+  } else {
+    statusText.textContent = 'Turn on to get alerts even when the app is closed.';
+    btn.textContent = 'Enable';
+  }
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try {
+      if (subscribed) {
+        await unsubscribeFromPush();
+        showToast('Push notifications turned off.', 'success');
+      } else {
+        await subscribeToPush();
+        showToast('Push notifications enabled!', 'success');
+      }
+      await refreshPushStatus();
+    } catch (err) {
+      showToast(err.message || 'Could not update notification settings.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+</script>
+</body>
+</html>

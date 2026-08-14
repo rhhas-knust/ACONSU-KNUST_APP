@@ -20,18 +20,49 @@
   .profile-tabs { display:flex; gap:10px; justify-content:center; margin-bottom:24px; flex-wrap:wrap; }
   .profile-tabs button { background:none; border:2px solid var(--line); border-radius:999px; padding:8px 18px; font-weight:700; font-size:0.85rem; cursor:pointer; color:var(--purple-ink); }
   .profile-tabs button.active { border-color: var(--purple-deep); background: var(--purple-deep); color: #fff; }
+
+  /* ---------- redesigned profile header ---------- */
+  .profile-top-row { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:20px; }
+  .profile-name h1 { font-size:1.7rem; margin-bottom:4px; }
+  .profile-avatar-wrap { position:relative; flex:none; }
+  .profile-avatar { width:76px; height:76px; border-radius:50%; overflow:hidden; border:3px solid var(--lilac-mid); background:var(--lilac-light); display:flex; align-items:center; justify-content:center; }
+  .profile-avatar img { width:100%; height:100%; object-fit:cover; }
+  .profile-avatar .initial { font-family:var(--font-display); font-size:1.6rem; color:var(--purple-deep); }
+  .avatar-camera-btn { position:absolute; bottom:-2px; right:-2px; width:28px; height:28px; border-radius:50%; background:var(--purple-deep); color:#fff; border:2px solid #fff; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.85rem; }
+  .quick-pills { display:flex; gap:10px; margin-bottom:22px; }
+  .quick-pill { flex:1; background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 8px; text-align:center; text-decoration:none; color:var(--purple-ink); font-size:0.78rem; font-weight:700; }
+  .quick-pill .qp-icon { font-size:1.3rem; display:block; margin-bottom:4px; }
+  .streak-card { background:linear-gradient(120deg, var(--flame-gold), var(--flame-red)); border-radius:16px; padding:20px; color:#fff; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .streak-card .streak-num { font-family:var(--font-display); font-size:2rem; font-weight:700; }
+  .badges-section h3 { margin-bottom:14px; }
+  .badges-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr)); gap:14px; margin-bottom:28px; }
+  .badge-item { text-align:center; }
+  .badge-circle { width:56px; height:56px; border-radius:50%; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; font-size:1.6rem; margin:0 auto 6px; opacity:0.35; filter:grayscale(1); }
+  .badge-circle.earned { opacity:1; filter:none; background:linear-gradient(135deg, var(--flame-gold), var(--flame-red)); box-shadow:0 6px 16px rgba(232,151,30,0.35); }
+  .badge-label { font-size:0.68rem; font-weight:700; color:#5a4468; line-height:1.2; }
 </style>
 </head>
 <body>
 
 <header id="site-header"></header>
 
-<section style="padding-top:56px; padding-bottom:64px;">
+<section style="padding-top:32px; padding-bottom:64px;">
   <div class="container" style="max-width:560px;">
-    <div id="profileHead" style="text-align:center; margin-bottom:24px;">
+    <div id="profileTopRow">
       <p class="empty-state">Loading your profile...</p>
     </div>
 
+    <div id="quickPills"></div>
+    <div id="streakCardWrap"></div>
+
+    <div class="badges-section">
+      <h3>Badges</h3>
+      <div class="badges-grid" id="badgesGrid">
+        <div class="skeleton skeleton-card" style="height:80px;"></div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:14px;">Account Settings</h3>
     <div class="profile-tabs">
       <button data-tab="details" class="active">My Details</button>
       <button data-tab="password">Change Password</button>
@@ -53,6 +84,21 @@
       <div class="field">
         <label for="level">Level / Year of Study</label>
         <input type="text" id="level">
+      </div>
+      <div class="field">
+        <label>Birthday (month &amp; day only — no year is ever stored)</label>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <select id="birthdayMonth">
+            <option value="">Month</option>
+            <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+            <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+            <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+          </select>
+          <select id="birthdayDay">
+            <option value="">Day</option>
+          </select>
+        </div>
       </div>
       <div class="field">
         <label for="profileImage">Profile Photo</label>
@@ -92,20 +138,65 @@ let CURRENT_MEMBER = null;
   if (!authRes.member) { window.location.href = '/login.html'; return; }
   CURRENT_MEMBER = authRes.member;
   await initLayout('/profile.html');
-  renderProfileHead();
+  renderProfileTopRow();
+  renderQuickPills();
   fillDetailsForm();
+  loadBadgesAndStreak();
 })();
 
-function renderProfileHead() {
-  const el = document.getElementById('profileHead');
+function renderProfileTopRow() {
+  const el = document.getElementById('profileTopRow');
   const m = CURRENT_MEMBER;
   el.innerHTML = `
-    <div class="profile-photo">
-      ${m.profileImageFileId ? `<img src="/api/files/${m.profileImageFileId}" alt="${escapeHtml(m.name)}">` : `<span class="initial">${escapeHtml((m.name || '?').charAt(0))}</span>`}
+    <div class="profile-top-row">
+      <div class="profile-name">
+        <h1>${escapeHtml(m.name)}</h1>
+        <p style="color:#5a4468; margin:0;">${escapeHtml(m.email)}</p>
+      </div>
+      <div class="profile-avatar-wrap">
+        <div class="profile-avatar">
+          ${m.profileImageFileId ? `<img src="/api/files/${m.profileImageFileId}" alt="${escapeHtml(m.name)}">` : `<span class="initial">${escapeHtml((m.name || '?').charAt(0))}</span>`}
+        </div>
+        <label class="avatar-camera-btn" for="profileImage" title="Change photo">📷</label>
+      </div>
     </div>
-    <h1 style="margin-bottom:2px;">${escapeHtml(m.name)}</h1>
-    <p style="color:#5a4468;">${escapeHtml(m.email)}</p>
   `;
+}
+
+function renderQuickPills() {
+  document.getElementById('quickPills').innerHTML = `
+    <div class="quick-pills">
+      <a href="/events.html" class="quick-pill"><span class="qp-icon">🎟️</span>My Events</a>
+      <a href="/prayer.html" class="quick-pill"><span class="qp-icon">🙏</span>Prayer Wall</a>
+      <a href="/departments.html" class="quick-pill"><span class="qp-icon">🤝</span>Departments</a>
+    </div>
+  `;
+}
+
+async function loadBadgesAndStreak() {
+  try {
+    const data = await fetchJSON('/api/member/badges');
+    document.getElementById('streakCardWrap').innerHTML = `
+      <div class="streak-card">
+        <div>
+          <div style="font-size:0.8rem; opacity:0.9; font-weight:700;">App Streak</div>
+          <div class="streak-num">${data.currentStreak} day${data.currentStreak === 1 ? '' : 's'}</div>
+        </div>
+        <div style="text-align:right; font-size:0.8rem; opacity:0.9;">
+          Longest: ${data.longestStreak} day${data.longestStreak === 1 ? '' : 's'}<br>
+          ${data.bibleChaptersRead} chapters read
+        </div>
+      </div>
+    `;
+    document.getElementById('badgesGrid').innerHTML = data.badges.map(b => `
+      <div class="badge-item">
+        <div class="badge-circle ${b.earned ? 'earned' : ''}">${b.icon}</div>
+        <div class="badge-label">${escapeHtml(b.label)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('badgesGrid').innerHTML = '<p class="empty-state">Could not load badges.</p>';
+  }
 }
 
 function fillDetailsForm() {
@@ -113,6 +204,14 @@ function fillDetailsForm() {
   document.getElementById('email').value = CURRENT_MEMBER.email || '';
   document.getElementById('phone').value = CURRENT_MEMBER.phone || '';
   document.getElementById('level').value = CURRENT_MEMBER.level || '';
+  const daySelect = document.getElementById('birthdayDay');
+  for (let d = 1; d <= 31; d++) {
+    const opt = document.createElement('option');
+    opt.value = d; opt.textContent = d;
+    daySelect.appendChild(opt);
+  }
+  if (CURRENT_MEMBER.birthdayMonth) document.getElementById('birthdayMonth').value = CURRENT_MEMBER.birthdayMonth;
+  if (CURRENT_MEMBER.birthdayDay) document.getElementById('birthdayDay').value = CURRENT_MEMBER.birthdayDay;
 }
 
 document.querySelectorAll('.profile-tabs button').forEach(btn => {
@@ -124,6 +223,10 @@ document.querySelectorAll('.profile-tabs button').forEach(btn => {
   });
 });
 
+document.getElementById('profileImage').addEventListener('change', (e) => {
+  if (e.target.files.length) document.getElementById('detailsForm').requestSubmit();
+});
+
 document.getElementById('detailsForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('detailsSubmitBtn');
@@ -133,6 +236,8 @@ document.getElementById('detailsForm').addEventListener('submit', async (e) => {
   formData.append('name', document.getElementById('name').value);
   formData.append('phone', document.getElementById('phone').value);
   formData.append('level', document.getElementById('level').value);
+  formData.append('birthdayMonth', document.getElementById('birthdayMonth').value);
+  formData.append('birthdayDay', document.getElementById('birthdayDay').value);
   const fileInput = document.getElementById('profileImage');
   if (fileInput.files.length) formData.append('profileImage', fileInput.files[0]);
   try {
@@ -140,7 +245,7 @@ document.getElementById('detailsForm').addEventListener('submit', async (e) => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Could not save');
     CURRENT_MEMBER = data.member;
-    renderProfileHead();
+    renderProfileTopRow();
     msg.textContent = 'Profile updated.';
     msg.className = 'form-msg success';
     showToast('Profile updated.', 'success');

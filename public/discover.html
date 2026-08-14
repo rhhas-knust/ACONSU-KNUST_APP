@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discover — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .discover-search { width:100%; padding:14px 18px; border-radius:999px; border:1.5px solid var(--line); font-family:'Manrope',sans-serif; font-size:0.95rem; background:#fff; margin-bottom:22px; }
+  .discover-search:focus { outline:none; border-color:var(--purple-deep); }
+  .discover-tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:28px; }
+  .discover-tile { background:#fff; border:1px solid var(--line); border-radius:16px; padding:20px 16px; text-decoration:none; color:var(--purple-ink); display:flex; align-items:center; gap:12px; font-weight:700; }
+  .discover-tile .dt-icon { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,var(--purple-deep),var(--purple-rich)); display:flex; align-items:center; justify-content:center; color:#fff; flex:none; }
+  .discover-tile .dt-icon svg { width:20px; height:20px; }
+  .discover-result { display:block; padding:14px 4px; border-bottom:1px solid var(--line); text-decoration:none; color:inherit; }
+  .discover-result .dr-type { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--flame-gold); font-weight:800; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section style="padding-top:32px;">
+  <div class="container" style="max-width:640px;">
+    <h1 style="margin-bottom:16px;">Discover</h1>
+    <input type="text" class="discover-search" id="searchInput" placeholder="Search sermons, departments, events...">
+
+    <div id="searchResults" style="display:none;"></div>
+
+    <div id="browseSection">
+      <div class="discover-tiles" id="discoverTiles"></div>
+
+      <h3 style="margin-bottom:14px;">Latest Sermons</h3>
+      <div id="sermonPreview" style="margin-bottom:8px;">
+        <div class="skeleton skeleton-card" style="height:90px; margin-bottom:10px;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+let ALL_SERMONS = [], ALL_DEPARTMENTS = [], ALL_EVENTS = [], ALL_PAGES = [];
+
+(async function () {
+  await initLayout('/discover.html');
+
+  const [sermons, departments, events, pages] = await Promise.all([
+    fetchJSON('/api/sermons').catch(() => []),
+    fetchJSON('/api/departments').catch(() => []),
+    fetchJSON('/api/events').catch(() => []),
+    fetchJSON('/api/pages').catch(() => [])
+  ]);
+  ALL_SERMONS = sermons; ALL_DEPARTMENTS = departments; ALL_EVENTS = events; ALL_PAGES = pages;
+
+  const coreTiles = [
+    { href: '/media.html', label: 'Sermons & Media', icon: ICON_HEADPHONES },
+    { href: '/bible.html', label: 'Bible', icon: ICON_BIBLE },
+    { href: '/departments.html', label: 'Departments', icon: ICON_USERS },
+    { href: '/events.html', label: 'Events', icon: ICON_EVENTS }
+  ];
+  const pageTiles = pages.filter(p => p.showInNav).map(p => ({
+    href: `/page.html?slug=${encodeURIComponent(p.slug)}`,
+    label: p.navLabel || p.title,
+    icon: p.type === 'gallery' ? ICON_EVENTS : p.type === 'bookshelf' ? ICON_BIBLE : ICON_MORE
+  }));
+  document.getElementById('discoverTiles').innerHTML = [...coreTiles, ...pageTiles].map(t => `
+    <a href="${t.href}" class="discover-tile"><span class="dt-icon">${svgIcon(t.icon)}</span>${escapeHtml(t.label)}</a>
+  `).join('');
+
+  const sortedSermons = [...sermons].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4);
+  document.getElementById('sermonPreview').innerHTML = sortedSermons.map(s => `
+    <a href="/media.html" class="discover-result">
+      <div class="dr-type">${s.type === 'video' ? 'Video' : 'Audio'}</div>
+      <strong>${escapeHtml(s.title)}</strong>
+      <div style="font-size:0.85rem; color:#5a4468;">${escapeHtml(s.speaker || '')}</div>
+    </a>
+  `).join('') || '<p class="empty-state">No sermons uploaded yet.</p>';
+
+  document.getElementById('searchInput').addEventListener('input', (e) => runSearch(e.target.value));
+})();
+
+function runSearch(query) {
+  const q = query.trim().toLowerCase();
+  const resultsEl = document.getElementById('searchResults');
+  const browseEl = document.getElementById('browseSection');
+
+  if (!q) {
+    resultsEl.style.display = 'none';
+    browseEl.style.display = 'block';
+    return;
+  }
+  browseEl.style.display = 'none';
+  resultsEl.style.display = 'block';
+
+  const results = [
+    ...ALL_SERMONS.filter(s => (s.title + s.speaker).toLowerCase().includes(q)).map(s => ({ type: 'Sermon', title: s.title, sub: s.speaker, href: '/media.html' })),
+    ...ALL_DEPARTMENTS.filter(d => d.name.toLowerCase().includes(q)).map(d => ({ type: 'Department', title: d.name, sub: d.tagline, href: `/department.html?id=${d.id}` })),
+    ...ALL_EVENTS.filter(e => e.title.toLowerCase().includes(q)).map(e => ({ type: 'Event', title: e.title, sub: e.date, href: '/events.html' })),
+    ...ALL_PAGES.filter(p => p.title.toLowerCase().includes(q)).map(p => ({ type: 'Page', title: p.title, sub: p.description, href: `/page.html?slug=${encodeURIComponent(p.slug)}` }))
+  ];
+
+  resultsEl.innerHTML = results.length
+    ? results.map(r => `
+        <a href="${r.href}" class="discover-result">
+          <div class="dr-type">${escapeHtml(r.type)}</div>
+          <strong>${escapeHtml(r.title)}</strong>
+          ${r.sub ? `<div style="font-size:0.85rem; color:#5a4468;">${escapeHtml(r.sub)}</div>` : ''}
+        </a>
+      `).join('')
+    : '<p class="empty-state">No results found.</p>';
+}
+</script>
+</body>
+</html>

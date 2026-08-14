@@ -18,13 +18,203 @@ function formatDate(dateStr) {
   return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-// ---------- header / footer ----------
+// ---------- bottom tab bar (mobile app navigation) ----------
+const ICON_HOME = '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/>';
+const ICON_EVENTS = '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>';
+const ICON_BIBLE = '<path d="M12 6.2c-2-1.5-5-2-8-1v13c3-1 6-.5 8 1 2-1.5 5-2 8-1V5.2c-3-1-6-.5-8 1Z"/><path d="M12 6.2v13"/>';
+const ICON_PRAYER = '<path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4c2-.3 4 .8 6 3 2-2.2 4-3.3 6-3 3.5.5 5 4 3.5 8-2.5 4.5-9.5 9-9.5 9Z"/>';
+const ICON_MORE = '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>';
+const ICON_BELL = '<path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 2 7H4c.5-1 2-2.5 2-7Z"/><path d="M10 19a2 2 0 0 0 4 0"/>';
+const ICON_USERS = '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c2.6.4 4.5 2.6 4.5 5.3"/>';
+const ICON_HEADPHONES = '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="2.5" y="13" width="4" height="6" rx="1.5"/><rect x="17.5" y="13" width="4" height="6" rx="1.5"/>';
+
+function svgIcon(pathData) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${pathData}</svg>`;
+}
+
+// ---------- push notification subscription ----------
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+async function isPushSubscribed() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  return !!sub;
+}
+
+async function subscribeToPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error('Push notifications are not supported on this browser.');
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('Notification permission was not granted.');
+
+  const { publicKey } = await fetchJSON('/api/push/vapid-public-key');
+  if (!publicKey) throw new Error('Push notifications are not configured on the server yet.');
+
+  const reg = await navigator.serviceWorker.ready;
+  const subscription = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey)
+  });
+  await fetchJSON('/api/push/subscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subscription })
+  });
+  return true;
+}
+
+async function unsubscribeFromPush() {
+  if (!('serviceWorker' in navigator)) return;
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (sub) {
+    await fetchJSON('/api/push/unsubscribe', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint })
+    }).catch(() => {});
+    await sub.unsubscribe();
+  }
+}
+
+// ---------- unread notification badge ----------
+async function getUnreadNotificationCount() {
+  try {
+    const items = await fetchJSON('/api/notifications');
+    if (!items.length) return 0;
+    const lastSeen = localStorage.getItem('aconsu_last_seen_notif') || '';
+    return items.filter((n) => n.createdAt > lastSeen).length;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function markNotificationsSeen() {
+  localStorage.setItem('aconsu_last_seen_notif', new Date().toISOString());
+}
+
+// ---------- shared pagination (admin & shepherding dashboards) ----------
+function paginate(array, page, perPage) {
+  const start = (page - 1) * perPage;
+  return array.slice(start, start + perPage);
+}
+
+function renderPaginationControls(containerId, totalItems, perPage, currentPage, onPageChange) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage));
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:center; gap:14px; margin-top:16px;">
+      <button type="button" id="${containerId}-prev" class="btn btn-outline btn-sm" ${currentPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>&larr; Prev</button>
+      <span style="font-size:0.85rem; color:#5a4468; font-weight:700;">Page ${currentPage} of ${totalPages}</span>
+      <button type="button" id="${containerId}-next" class="btn btn-outline btn-sm" ${currentPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>Next &rarr;</button>
+    </div>
+  `;
+  const prevBtn = document.getElementById(`${containerId}-prev`);
+  const nextBtn = document.getElementById(`${containerId}-next`);
+  if (prevBtn) prevBtn.addEventListener('click', () => currentPage > 1 && onPageChange(currentPage - 1));
+  if (nextBtn) nextBtn.addEventListener('click', () => currentPage < totalPages && onPageChange(currentPage + 1));
+}
+
+// ---------- daily streak check-in ----------
+function dailyCheckin() {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (localStorage.getItem('aconsu_last_checkin') === todayKey) return; // already pinged today
+  fetchJSON('/api/member/checkin', { method: 'POST' })
+    .then(() => localStorage.setItem('aconsu_last_checkin', todayKey))
+    .catch(() => {}); // non-critical — silently skip if it fails
+}
+
+const BOTTOM_TABS = [
+  { href: '/index.html', label: 'Home', icon: ICON_HOME },
+  { href: '/events.html', label: 'Events', icon: ICON_EVENTS },
+  { href: '/bible.html', label: 'Bible', icon: ICON_BIBLE },
+  { href: '/prayer.html', label: 'Prayer', icon: ICON_PRAYER }
+];
+
+function renderBottomNav(activePath, customPages, member) {
+  document.getElementById('bottomNav')?.remove();
+  document.getElementById('moreSheetBackdrop')?.remove();
+
+  const tabHrefs = BOTTOM_TABS.map(t => t.href);
+  const isMoreActive = activePath && !tabHrefs.includes(activePath);
+
+  const nav = document.createElement('nav');
+  nav.id = 'bottomNav';
+  nav.className = 'bottom-nav';
+  nav.innerHTML = `
+    ${BOTTOM_TABS.map(t => `
+      <a href="${t.href}" class="bottom-nav-item ${activePath === t.href ? 'active' : ''}">
+        ${svgIcon(t.icon)}
+        <span>${t.label}</span>
+      </a>
+    `).join('')}
+    <button type="button" class="bottom-nav-item ${isMoreActive ? 'active' : ''}" id="moreTabBtn">
+      ${svgIcon(ICON_MORE)}
+      <span>More</span>
+    </button>
+  `;
+  document.body.appendChild(nav);
+
+  const custom = (customPages || []).filter(p => p.showInNav).map(p => ({
+    href: `/page.html?slug=${encodeURIComponent(p.slug)}`,
+    label: p.navLabel || p.title
+  }));
+  const moreLinks = [
+    { href: '/notifications.html', label: 'Notifications' },
+    { href: '/discover.html', label: 'Discover' },
+    { href: '/about.html', label: 'About ACONSU' },
+    { href: '/departments.html', label: 'Departments' },
+    { href: '/media.html', label: 'Sermons & Media' },
+    ...custom,
+    { href: '/contact.html', label: 'Contact' }
+  ];
+  const accountLink = member
+    ? { href: '/profile.html', label: `My Profile (${member.name.split(' ')[0]})` }
+    : { href: '/login.html', label: 'Log In / Sign Up' };
+
+  const backdrop = document.createElement('div');
+  backdrop.id = 'moreSheetBackdrop';
+  backdrop.className = 'more-sheet-backdrop';
+  backdrop.innerHTML = `
+    <div class="more-sheet">
+      <button class="more-sheet-close" id="moreSheetClose" aria-label="Close">&times;</button>
+      <div class="more-sheet-handle"></div>
+      ${moreLinks.map(l => `<a href="${l.href}" class="${activePath === l.href ? 'active' : ''}">${escapeHtml(l.label)}</a>`).join('')}
+      <a href="${accountLink.href}" style="border-top:2px solid var(--lilac-light); margin-top:6px; padding-top:16px; color:var(--purple-deep);">${escapeHtml(accountLink.label)}</a>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+
+  document.getElementById('moreTabBtn').addEventListener('click', () => backdrop.classList.add('open'));
+  document.getElementById('moreSheetClose').addEventListener('click', () => backdrop.classList.remove('open'));
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.classList.remove('open'); });
+
+  getUnreadNotificationCount().then((count) => {
+    if (count > 0) {
+      const moreBtn = document.getElementById('moreTabBtn');
+      const dot = document.createElement('span');
+      dot.style.cssText = 'position:absolute; top:2px; right:22%; width:8px; height:8px; border-radius:50%; background:var(--flame-red);';
+      moreBtn.style.position = 'relative';
+      moreBtn.appendChild(dot);
+    }
+  });
+}
+
+
 const NAV_LINKS = [
   { href: '/index.html', label: 'Home' },
   { href: '/about.html', label: 'About' },
   { href: '/departments.html', label: 'Departments' },
   { href: '/events.html', label: 'Events' },
   { href: '/media.html', label: 'Sermons' },
+  { href: '/bible.html', label: 'Bible' },
   { href: '/prayer.html', label: 'Prayer Wall' },
   { href: '/contact.html', label: 'Contact' }
 ];
@@ -49,6 +239,9 @@ function renderHeader(activePath, customPages, member) {
       </a>
       <ul class="nav-links" id="navLinks">${links}</ul>
       <div class="nav-cta">
+        <a href="/notifications.html" class="bell-link" id="navBellLink" aria-label="Notifications" style="position:relative; color:var(--purple-deep); display:flex; align-items:center;">
+          ${svgIcon(ICON_BELL)}
+        </a>
         ${accountLink}
         <a href="/prayer.html" class="btn btn-primary btn-sm">Prayer Request</a>
         <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">&#9776;</button>
@@ -57,6 +250,14 @@ function renderHeader(activePath, customPages, member) {
   `;
   document.getElementById('navToggle').addEventListener('click', () => {
     document.getElementById('navLinks').classList.toggle('open');
+  });
+  getUnreadNotificationCount().then((count) => {
+    if (count > 0) {
+      const bell = document.getElementById('navBellLink');
+      const dot = document.createElement('span');
+      dot.style.cssText = 'position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);';
+      bell.appendChild(dot);
+    }
   });
 }
 
@@ -114,8 +315,10 @@ async function initLayout(activePath) {
   try {
     const authRes = await fetchJSON('/api/auth/me');
     member = authRes.member;
+    if (member) dailyCheckin();
   } catch (e) { /* nav still works without auth state */ }
   renderHeader(activePath, customPages, member);
+  renderBottomNav(activePath, customPages, member);
   try {
     const settings = await fetchJSON('/api/settings');
     renderFooter(settings);

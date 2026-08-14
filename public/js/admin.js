@@ -68,6 +68,7 @@ async function loadPanel(name) {
     departments: () => renderResourcePanel('departments', DEPARTMENT_FIELDS, 'Department'),
     executives: renderExecutives,
     members: renderMembers,
+    notifications: renderNotifications,
     events: () => renderResourcePanel('events', EVENT_FIELDS, 'Event'),
     sermons: () => renderResourcePanel('sermons', SERMON_FIELDS, 'Sermon'),
     pages: () => renderResourcePanel('pages', PAGE_FIELDS, 'Page'),
@@ -157,20 +158,24 @@ const PAGE_FIELDS = [
 ];
 
 // ---------- generic CRUD panel ----------
+const resourcePageState = {};
+
 async function renderResourcePanel(resource, fields, singular) {
   const el = document.getElementById(`panel-${resource}`);
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   const items = await fetchJSON(`/api/${resource}`);
+  const page = resourcePageState[resource] || 1;
+  const pageItems = paginate(items, page, ROWS_PER_PAGE);
 
   el.innerHTML = `
     <div class="panel-head">
-      <h2>${singular}s</h2>
+      <h2>${singular}s (${items.length})</h2>
       <button class="btn btn-primary btn-sm" id="addBtn-${resource}">+ Add ${singular}</button>
     </div>
     <table>
       <thead><tr>${fields.slice(0, 3).map(f => `<th>${f.label}</th>`).join('')}${resource === 'events' ? '<th>Registrations</th>' : ''}<th>Actions</th></tr></thead>
       <tbody>
-        ${items.map(item => `
+        ${pageItems.map(item => `
           <tr>
             ${fields.slice(0, 3).map(f => `<td>${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
             ${resource === 'events' ? `<td>${item.registrationEnabled ? `<button data-view-regs="${item.id}" data-title="${escapeHtml(item.title)}">View (${item.capacity > 0 ? `cap ${item.capacity}` : 'unlimited'})</button>` : '—'}</td>` : ''}
@@ -182,7 +187,13 @@ async function renderResourcePanel(resource, fields, singular) {
         `).join('') || `<tr><td colspan="${fields.length + (resource === 'events' ? 2 : 1)}">No ${singular.toLowerCase()}s yet.</td></tr>`}
       </tbody>
     </table>
+    <div id="resourcePagination-${resource}"></div>
   `;
+
+  renderPaginationControls(`resourcePagination-${resource}`, items.length, ROWS_PER_PAGE, page, (p) => {
+    resourcePageState[resource] = p;
+    renderResourcePanel(resource, fields, singular);
+  });
 
   if (resource === 'events') {
     el.querySelectorAll('[data-view-regs]').forEach(btn => {
@@ -272,6 +283,9 @@ function openResourceForm(resource, fields, singular, item) {
 }
 
 // ---------- join requests ----------
+let joinReqPage = 1;
+const ROWS_PER_PAGE = 15;
+
 async function renderJoinRequests() {
   const el = document.getElementById('panel-joinRequests');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
@@ -280,12 +294,13 @@ async function renderJoinRequests() {
     fetchJSON('/api/departments')
   ]);
   const deptName = (id) => (departments.find(d => d.id === id) || {}).name || id;
+  const pageItems = paginate(items, joinReqPage, ROWS_PER_PAGE);
   el.innerHTML = `
-    <h2 style="margin-bottom:20px;">Join Requests</h2>
+    <h2 style="margin-bottom:20px;">Join Requests (${items.length})</h2>
     <table>
       <thead><tr><th>Name</th><th>Department</th><th>Contact</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
-        ${items.map(r => `
+        ${pageItems.map(r => `
           <tr>
             <td>${escapeHtml(r.name)}${r.message ? `<br><small class="hint">${escapeHtml(r.message)}</small>` : ''}</td>
             <td>${escapeHtml(deptName(r.departmentId))}</td>
@@ -299,7 +314,12 @@ async function renderJoinRequests() {
         `).join('') || `<tr><td colspan="6">No join requests yet.</td></tr>`}
       </tbody>
     </table>
+    <div id="joinReqPagination"></div>
   `;
+  renderPaginationControls('joinReqPagination', items.length, ROWS_PER_PAGE, joinReqPage, (p) => {
+    joinReqPage = p;
+    renderJoinRequests();
+  });
   el.querySelectorAll('[data-mark]').forEach(btn => {
     btn.addEventListener('click', async () => {
       await fetchJSON(`/api/admin/join-requests/${btn.dataset.mark}`, {
@@ -311,16 +331,18 @@ async function renderJoinRequests() {
 }
 
 // ---------- prayer requests ----------
+let prayerReqPage = 1;
 async function renderPrayerRequests() {
   const el = document.getElementById('panel-prayerRequests');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   const items = await fetchJSON('/api/admin/prayer-requests');
+  const pageItems = paginate(items, prayerReqPage, ROWS_PER_PAGE);
   el.innerHTML = `
-    <h2 style="margin-bottom:20px;">Prayer Requests</h2>
+    <h2 style="margin-bottom:20px;">Prayer Requests (${items.length})</h2>
     <table>
       <thead><tr><th>Name</th><th>Request</th><th>Contact</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
-        ${items.map(r => `
+        ${pageItems.map(r => `
           <tr>
             <td>${escapeHtml(r.name)} ${r.isPrivate ? '<span class="badge">Private</span>' : ''}</td>
             <td>${escapeHtml(r.request)}</td>
@@ -334,7 +356,12 @@ async function renderPrayerRequests() {
         `).join('') || `<tr><td colspan="6">No prayer requests yet.</td></tr>`}
       </tbody>
     </table>
+    <div id="prayerReqPagination"></div>
   `;
+  renderPaginationControls('prayerReqPagination', items.length, ROWS_PER_PAGE, prayerReqPage, (p) => {
+    prayerReqPage = p;
+    renderPrayerRequests();
+  });
   el.querySelectorAll('[data-mark]').forEach(btn => {
     btn.addEventListener('click', async () => {
       await fetchJSON(`/api/admin/prayer-requests/${btn.dataset.mark}`, {
@@ -346,16 +373,18 @@ async function renderPrayerRequests() {
 }
 
 // ---------- testimonies ----------
+let testimoniesPage = 1;
 async function renderTestimonies() {
   const el = document.getElementById('panel-testimonies');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   const items = await fetchJSON('/api/admin/testimonies');
+  const pageItems = paginate(items, testimoniesPage, ROWS_PER_PAGE);
   el.innerHTML = `
-    <h2 style="margin-bottom:20px;">Testimonies</h2>
+    <h2 style="margin-bottom:20px;">Testimonies (${items.length})</h2>
     <table>
       <thead><tr><th>Name</th><th>Testimony</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
-        ${items.map(t => `
+        ${pageItems.map(t => `
           <tr>
             <td>${escapeHtml(t.name)}</td>
             <td>${escapeHtml(t.testimony)}</td>
@@ -368,7 +397,12 @@ async function renderTestimonies() {
         `).join('') || `<tr><td colspan="5">No testimonies yet.</td></tr>`}
       </tbody>
     </table>
+    <div id="testimoniesPagination"></div>
   `;
+  renderPaginationControls('testimoniesPagination', items.length, ROWS_PER_PAGE, testimoniesPage, (p) => {
+    testimoniesPage = p;
+    renderTestimonies();
+  });
   el.querySelectorAll('[data-toggle]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const newVal = btn.dataset.current !== 'true';
@@ -381,16 +415,18 @@ async function renderTestimonies() {
 }
 
 // ---------- contact messages ----------
+let contactMsgPage = 1;
 async function renderContactMessages() {
   const el = document.getElementById('panel-contactMessages');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   const items = await fetchJSON('/api/admin/contact-messages');
+  const pageItems = paginate(items, contactMsgPage, ROWS_PER_PAGE);
   el.innerHTML = `
-    <h2 style="margin-bottom:20px;">Contact Messages</h2>
+    <h2 style="margin-bottom:20px;">Contact Messages (${items.length})</h2>
     <table>
       <thead><tr><th>Name</th><th>Email</th><th>Message</th><th>Date</th></tr></thead>
       <tbody>
-        ${items.map(m => `
+        ${pageItems.map(m => `
           <tr>
             <td>${escapeHtml(m.name)}</td>
             <td>${escapeHtml(m.email)}</td>
@@ -400,31 +436,182 @@ async function renderContactMessages() {
         `).join('') || `<tr><td colspan="4">No messages yet.</td></tr>`}
       </tbody>
     </table>
+    <div id="contactMsgPagination"></div>
   `;
+  renderPaginationControls('contactMsgPagination', items.length, ROWS_PER_PAGE, contactMsgPage, (p) => {
+    contactMsgPage = p;
+    renderContactMessages();
+  });
 }
 
-// ---------- members (read-only) ----------
+// ---------- notifications ----------
+let notifHistoryPage = 1;
+async function renderNotifications() {
+  const el = document.getElementById('panel-notifications');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  const items = await fetchJSON('/api/notifications');
+
+  el.innerHTML = `
+    <h2 style="margin-bottom:20px;">Notifications</h2>
+    <div class="upload-form">
+      <h3 style="margin-bottom:14px;">Send an Announcement</h3>
+      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:14px;">This posts to everyone's in-app notification feed and sends a real push alert to anyone who has enabled push notifications.</p>
+      <form id="notifForm">
+        <div class="field"><label>Title</label><input type="text" id="notifTitle" required placeholder="e.g. Service moved to 9AM"></div>
+        <div class="field"><label>Message</label><textarea id="notifBody" required placeholder="Short, clear message..."></textarea></div>
+        <div class="field"><label>Link (optional — where tapping the notification should go)</label>
+          <select id="notifUrl">
+            <option value="/index.html">Home</option>
+            <option value="/events.html">Events</option>
+            <option value="/media.html">Sermons & Media</option>
+            <option value="/prayer.html">Prayer Wall</option>
+            <option value="/bible.html">Bible</option>
+            <option value="/departments.html">Departments</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary" id="notifSubmitBtn">Send Announcement</button>
+        <div class="form-msg" id="notifMsg"></div>
+      </form>
+    </div>
+
+    <h3 style="margin-bottom:14px;">History (${items.length})</h3>
+    <table>
+      <thead><tr><th>Title</th><th>Message</th><th>Source</th><th>Sent</th></tr></thead>
+      <tbody>
+        ${paginate(items, notifHistoryPage, ROWS_PER_PAGE).map(n => `
+          <tr>
+            <td>${escapeHtml(n.title)}</td>
+            <td>${escapeHtml(n.body)}</td>
+            <td><span class="status-pill ${n.source === 'system' ? 'done' : ''}">${n.source}</span></td>
+            <td>${new Date(n.createdAt).toLocaleString()}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="4">No notifications sent yet.</td></tr>'}
+      </tbody>
+    </table>
+    <div id="notifHistoryPagination"></div>
+  `;
+  renderPaginationControls('notifHistoryPagination', items.length, ROWS_PER_PAGE, notifHistoryPage, (p) => {
+    notifHistoryPage = p;
+    renderNotifications();
+  });
+
+  document.getElementById('notifForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('notifSubmitBtn');
+    const msg = document.getElementById('notifMsg');
+    btn.disabled = true; btn.textContent = 'Sending...';
+    try {
+      await fetchJSON('/api/admin/notifications', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: document.getElementById('notifTitle').value,
+          body: document.getElementById('notifBody').value,
+          url: document.getElementById('notifUrl').value
+        })
+      });
+      msg.textContent = 'Announcement sent!';
+      msg.className = 'form-msg success';
+      renderNotifications();
+    } catch (err) {
+      msg.textContent = err.message || 'Could not send';
+      msg.className = 'form-msg error';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send Announcement';
+    }
+  });
+}
+
+
+let membersPage = 1;
+const MEMBERS_PER_PAGE = 15;
+
 async function renderMembers() {
   const el = document.getElementById('panel-members');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   const members = await fetchJSON('/api/admin/members');
+  const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const bday = (m) => m.birthdayMonth && m.birthdayDay ? `${monthNames[m.birthdayMonth]} ${m.birthdayDay}` : '—';
+  const pageItems = paginate(members, membersPage, MEMBERS_PER_PAGE);
+
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Members (${members.length})</h2>
     <table>
-      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Level</th><th>Joined</th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Level</th><th>Birthday</th><th>Joined</th><th>Actions</th></tr></thead>
       <tbody>
-        ${members.map(m => `
+        ${pageItems.map(m => `
           <tr>
             <td>${escapeHtml(m.name)}</td>
             <td>${escapeHtml(m.email)}</td>
             <td>${escapeHtml(m.phone || '—')}</td>
             <td>${escapeHtml(m.level || '—')}</td>
+            <td>${bday(m)}</td>
             <td>${new Date(m.createdAt).toLocaleDateString()}</td>
+            <td class="row-actions">
+              <button data-edit-member="${m.id}">Edit</button>
+              <button class="danger" data-delete-member="${m.id}">Delete</button>
+            </td>
           </tr>
-        `).join('') || '<tr><td colspan="5">No members have signed up yet.</td></tr>'}
+        `).join('') || '<tr><td colspan="7">No members have signed up yet.</td></tr>'}
       </tbody>
     </table>
+    <div id="membersPagination"></div>
   `;
+
+  renderPaginationControls('membersPagination', members.length, MEMBERS_PER_PAGE, membersPage, (p) => {
+    membersPage = p;
+    renderMembers();
+  });
+
+  el.querySelectorAll('[data-edit-member]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const member = members.find(m => m.id === btn.dataset.editMember);
+      openMemberEditForm(member);
+    });
+  });
+  el.querySelectorAll('[data-delete-member]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm("Delete this member's account? This can't be undone.")) return;
+      await fetchJSON(`/api/admin/members/${btn.dataset.deleteMember}`, { method: 'DELETE' });
+      renderMembers();
+    });
+  });
+}
+
+function openMemberEditForm(member) {
+  showModal(`
+    <h3>Edit Member</h3>
+    <p style="font-size:0.85rem; color:#8a7595; margin-bottom:14px;">Email and password can only be changed by the member themselves, from their own account.</p>
+    <form id="memberEditForm">
+      <div class="field"><label>Full Name</label><input type="text" id="editMemberName" value="${escapeHtml(member.name || '')}" required></div>
+      <div class="field"><label>Phone</label><input type="tel" id="editMemberPhone" value="${escapeHtml(member.phone || '')}"></div>
+      <div class="field"><label>Level / Year of Study</label><input type="text" id="editMemberLevel" value="${escapeHtml(member.level || '')}"></div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="memberEditMsg"></div>
+    </form>
+  `);
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+  document.getElementById('memberEditForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await fetchJSON(`/api/admin/members/${member.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: document.getElementById('editMemberName').value,
+          phone: document.getElementById('editMemberPhone').value,
+          level: document.getElementById('editMemberLevel').value
+        })
+      });
+      closeModal();
+      showToast('Member updated.', 'success');
+      renderMembers();
+    } catch (err) {
+      document.getElementById('memberEditMsg').textContent = err.message || 'Could not save.';
+      document.getElementById('memberEditMsg').className = 'form-msg error';
+    }
+  });
 }
 
 
@@ -576,6 +763,8 @@ async function openRegistrationsModal(eventId, title) {
 }
 
 // ---------- media library ----------
+let mediaLibraryPage = 1;
+const MEDIA_PER_PAGE = 12;
 async function renderMediaLibrary() {
   const el = document.getElementById('panel-media');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
@@ -624,11 +813,16 @@ async function renderMediaLibrary() {
       ${!galleryBookPages.length ? '<small class="hint">Tip: create a Gallery or Bookshelf page under "Custom Pages" first, so uploads here can be tied to it and show up on the public site.</small>' : ''}
     </div>
 
-    <h3 style="margin-bottom:14px;">All Files</h3>
+    <h3 style="margin-bottom:14px;">All Files (${files.length})</h3>
     <div class="media-grid" id="mediaGrid">
-      ${files.map(f => mediaCardHtml(f)).join('') || '<p class="empty-state">No files uploaded yet.</p>'}
+      ${paginate(files, mediaLibraryPage, MEDIA_PER_PAGE).map(f => mediaCardHtml(f)).join('') || '<p class="empty-state">No files uploaded yet.</p>'}
     </div>
+    <div id="mediaPagination"></div>
   `;
+  renderPaginationControls('mediaPagination', files.length, MEDIA_PER_PAGE, mediaLibraryPage, (p) => {
+    mediaLibraryPage = p;
+    renderMediaLibrary();
+  });
 
   document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
