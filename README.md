@@ -54,11 +54,11 @@ cp .env.example .env
 
 Fill in `.env`:
 ```
-PORT=3000
+PORT=7000
 NODE_ENV=development
 SESSION_SECRET=some_long_random_string
-ADMIN_USERNAME=your_admin_username
-ADMIN_PASSWORD=a_strong_password
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123
 MONGODB_URI=your_atlas_connection_string_from_step_1
 ```
 

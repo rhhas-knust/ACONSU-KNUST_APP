@@ -4,7 +4,7 @@
   "webDir": "public",
   "server": {
     "androidScheme": "https",
-    "url": "https://YOUR-DEPLOYED-DOMAIN-HERE",
+    "url": "https://aconsu-knust-app.onrender.com",
     "cleartext": false
   },
   "backgroundColor": "#FDFBFF",
