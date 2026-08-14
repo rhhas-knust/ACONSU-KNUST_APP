@@ -1,7 +1,7 @@
 // ACONSU service worker — enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v4';
+const CACHE_NAME = 'aconsu-v5';
 
 const APP_SHELL = [
   '/index.html',
@@ -12,6 +12,7 @@ const APP_SHELL = [
   '/bible.html',
   '/notifications.html',
   '/discover.html',
+  '/more.html',
   '/prayer.html',
   '/contact.html',
   '/login.html',
@@ -65,8 +66,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Admin dashboard is never cached — it should always reflect live session/auth state.
-  if (url.pathname.startsWith('/admin.html')) {
+  // Admin and the leadership portals are never cached — they must always
+  // reflect live session/auth state, never a stale signed-in-looking shell.
+  const LIVE_ONLY = ['/admin.html', '/coordinator.html', '/finance.html', '/shepherding.html', '/publicity.html'];
+  if (LIVE_ONLY.some((p) => url.pathname.startsWith(p)) || url.pathname.startsWith('/js/portal.js') || url.pathname.startsWith('/css/portal.css')) {
     event.respondWith(fetch(request));
     return;
   }

@@ -12,6 +12,7 @@ const gridfs = require('./lib/gridfs');
 const models = require('./lib/models');
 const BIBLE_BOOKS = require('./lib/bibleBooks');
 const push = require('./lib/push');
+const sms = require('./lib/sms');
 const mailer = require('./lib/mailer');
 const { compressIfImage } = require('./lib/imageProcess');
 const crypto = require('crypto');
@@ -97,7 +98,7 @@ app.get('/api/admin/check', (req, res) => {
 // portal (not a role flag on the admin account) so admin and shepherding
 // access can be handed to different people without sharing a password.
 function requireShepherd(req, res, next) {
-  if (req.session && req.session.isShepherd) return next();
+  if (hasRole(req, 'shepherding')) return next();
   return res.status(401).json({ error: 'Not authenticated' });
 }
 
@@ -121,7 +122,113 @@ app.post('/api/shepherd/logout', (req, res) => {
 });
 
 app.get('/api/shepherd/check', (req, res) => {
-  res.json({ isShepherd: !!(req.session && req.session.isShepherd) });
+  res.json({ isShepherd: hasRole(req, 'shepherding') });
+});
+
+// ---------- leadership portal auth (coordinator / finance / shepherding / publicity) ----------
+// Every union leader gets their own account, created by the admin, so access can
+// be handed to a person rather than to a shared password. Three ways in are
+// accepted, in this order:
+//   1. a StaffUser account with the matching role  (the normal case)
+//   2. the main admin session                       (admin can always get in)
+//   3. the legacy SHEPHERD_* env login              (kept so nothing breaks mid-term)
+// The coordinator role deliberately satisfies *read* checks for every area —
+// that's the whole point of the role — but never the write ones.
+const PORTAL_ROLES = ['coordinator', 'finance', 'shepherding', 'publicity'];
+
+function currentStaff(req) {
+  return (req.session && req.session.staff) || null;
+}
+
+// Who to stamp on a record they just created. Records outlive sessions, so this
+// is stored as a readable name rather than an account id.
+function actorName(req) {
+  const staff = currentStaff(req);
+  if (staff) return staff.name || staff.username;
+  if (req.session && req.session.isAdmin) return 'Admin';
+  if (req.session && req.session.isShepherd) return 'Shepherding';
+  return '';
+}
+
+function hasRole(req, role) {
+  if (!req.session) return false;
+  if (req.session.isAdmin) return true;
+  if (role === 'shepherding' && req.session.isShepherd) return true;
+  const staff = currentStaff(req);
+  return !!(staff && staff.role === role);
+}
+
+// Read access: the role itself, or the coordinator who oversees all of them.
+function canView(req, role) {
+  return hasRole(req, role) || hasRole(req, 'coordinator');
+}
+
+function requireRole(role) {
+  return (req, res, next) => {
+    if (hasRole(req, role)) return next();
+    return res.status(401).json({ error: 'Not authenticated' });
+  };
+}
+
+function requireViewRole(role) {
+  return (req, res, next) => {
+    if (canView(req, role)) return next();
+    return res.status(401).json({ error: 'Not authenticated' });
+  };
+}
+
+const requireFinance = requireRole('finance');
+const requirePublicity = requireRole('publicity');
+const requireCoordinator = requireRole('coordinator');
+
+app.post('/api/portal/login', loginLimiter, async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+  try {
+    // The shepherding portal shipped with an env-file login before leadership
+    // accounts existed. Honour it here so whoever is using it today keeps
+    // getting in while the admin creates their proper account.
+    if (process.env.SHEPHERD_USERNAME
+        && username === process.env.SHEPHERD_USERNAME
+        && password === process.env.SHEPHERD_PASSWORD) {
+      req.session.isShepherd = true;
+      req.session.staff = { id: '', username, name: 'Shepherding Head', role: 'shepherding' };
+      return res.json({ success: true, staff: req.session.staff });
+    }
+
+    const user = await models.StaffUser.findOne({ username: String(username).toLowerCase().trim() });
+    if (!user || !user.active) return res.status(401).json({ error: 'Invalid credentials' });
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+
+    req.session.staff = { id: user.id, username: user.username, name: user.name || user.username, role: user.role };
+    models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
+    res.json({ success: true, staff: req.session.staff });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not sign you in right now. Please try again.' });
+  }
+});
+
+app.post('/api/portal/logout', (req, res) => {
+  if (req.session) {
+    delete req.session.staff;
+    delete req.session.isShepherd;
+  }
+  res.json({ success: true });
+});
+
+// Tells a portal page who is signed in and which areas they may open.
+app.get('/api/portal/me', (req, res) => {
+  const staff = currentStaff(req);
+  const isAdmin = !!(req.session && req.session.isAdmin);
+  res.json({
+    staff,
+    isAdmin,
+    access: PORTAL_ROLES.reduce((acc, role) => {
+      acc[role] = { view: canView(req, role), edit: hasRole(req, role) };
+      return acc;
+    }, {})
+  });
 });
 
 // ---------- member auth middleware ----------
@@ -156,6 +263,18 @@ async function notifyAdminByEmail(subject, html) {
     if (!settings.email) return; // no admin email configured — nothing to send to
     mailer.sendMail({ to: settings.email, subject, html }).catch(() => {});
   } catch (e) { /* non-critical — never let this break the original request */ }
+}
+
+// Same idea, but for mail that belongs to one particular office (shepherding,
+// finance, publicity). Falls back to the main contact address when that office
+// hasn't set its own, and de-duplicates so nobody gets the same mail twice.
+async function notifyOfficeByEmail(officeKey, subject, html) {
+  try {
+    const settings = await repo.getSettings();
+    const recipients = [...new Set([settings[officeKey], settings.email].filter(Boolean))];
+    if (!recipients.length) return;
+    mailer.sendMail({ to: recipients.join(','), subject, html }).catch(() => {});
+  } catch (e) { /* non-critical */ }
 }
 
 // ---------- member auth routes ----------
@@ -588,6 +707,7 @@ app.get('/api/files', async (req, res) => {
     const query = {};
     if (req.query.category) query['metadata.category'] = req.query.category;
     if (req.query.pageSlug) query['metadata.pageSlug'] = req.query.pageSlug;
+    if (req.query.placement) query['metadata.placement'] = req.query.placement;
     const files = await gridfs.listFiles(query);
     res.json(files.map((f) => ({
       id: f._id,
@@ -597,6 +717,10 @@ app.get('/api/files', async (req, res) => {
       contentType: f.metadata?.contentType || '',
       category: f.metadata?.category || '',
       pageSlug: f.metadata?.pageSlug || '',
+      // Files uploaded before placements existed have none — treat them as
+      // library items so they still list cleanly.
+      placement: f.metadata?.placement || 'library',
+      targetId: f.metadata?.targetId || '',
       title: f.metadata?.title || f.filename,
       description: f.metadata?.description || ''
     })));
@@ -691,9 +815,11 @@ app.post('/api/testimonies', formLimiter, async (req, res) => {
       name: name || 'Anonymous', testimony, published: false
     }, 'test');
     res.json({ success: true });
-    notifyAdminByEmail(
+    // Testimonies are publicity's to review and publish.
+    notifyOfficeByEmail(
+      'publicityEmail',
       'New Testimony Submitted — ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> shared a testimony awaiting your review.</p><p>Log in to the admin dashboard to publish or review it.</p>`
+      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> shared a testimony awaiting review.</p><p>Open the Publicity portal to publish it.</p>`
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not save your testimony. Please try again.' });
@@ -706,9 +832,12 @@ app.post('/api/contact', formLimiter, async (req, res) => {
   try {
     await repo.create('contactMessages', { name, email, message, status: 'new' }, 'msg');
     res.json({ success: true });
-    notifyAdminByEmail(
+    // Contact messages are shepherding's to answer, so they get the mail too —
+    // alongside the admin, who keeps oversight of everything.
+    notifyOfficeByEmail(
+      'shepherdingEmail',
       'New Contact Message — ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name)}</strong> (${escapeHtmlForEmail(email)}) sent a message:</p><p>${escapeHtmlForEmail(message)}</p>`
+      `<p><strong>${escapeHtmlForEmail(name)}</strong> (${escapeHtmlForEmail(email)}) sent a message:</p><p>${escapeHtmlForEmail(message)}</p><p>Open the Shepherding portal to reply and mark it handled.</p>`
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not send your message. Please try again.' });
@@ -769,6 +898,7 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
         name: m.name,
         email: m.email,
         phone: m.phone,
+        level: m.level,
         department: m.department,
         birthdayMonth: m.birthdayMonth,
         birthdayDay: m.birthdayDay,
@@ -788,6 +918,7 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
       name: r.name,
       email: '',
       phone: r.phone,
+      level: '',
       department: '',
       birthdayMonth: null,
       birthdayDay: null,
@@ -867,72 +998,297 @@ app.delete('/api/shepherd/records/:id', requireShepherd, async (req, res) => {
   }
 });
 
-// ---------- Shepherding portal: finance ----------
+// ---------- Shepherding portal: attendance register ----------
+// One register per date + service. Saving the same date twice updates the
+// existing register rather than creating a second one, so a Sunday can be
+// corrected during the week without ending up with duplicate records.
+app.get('/api/shepherd/attendance', requireViewRole('shepherding'), async (req, res) => {
+  try {
+    let records = await repo.getAll('attendanceRecords');
+    const { from, to } = req.query;
+    if (from) records = records.filter(r => r.date >= from);
+    if (to) records = records.filter(r => r.date <= to);
+    records.sort((a, b) => (a.date < b.date ? 1 : -1));
+    // The list view only needs the totals — sending every person's mark for
+    // every service would balloon the response for no reason.
+    res.json(records.map((r) => ({
+      id: r.id, date: r.date, serviceType: r.serviceType, title: r.title,
+      present: r.marks.filter(m => m.status === 'present').length,
+      absent: r.marks.filter(m => m.status === 'absent').length,
+      excused: r.marks.filter(m => m.status === 'excused').length,
+      visitorCount: r.visitorCount || 0,
+      total: r.marks.filter(m => m.status === 'present').length + (r.visitorCount || 0),
+      notes: r.notes, recordedBy: r.recordedBy, updatedAt: r.updatedAt
+    })));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load attendance records' });
+  }
+});
+
+// The register for one specific service, with every person's mark — this is what
+// the "take attendance" screen loads before it renders the checklist.
+app.get('/api/shepherd/attendance/:date', requireViewRole('shepherding'), async (req, res) => {
+  try {
+    const serviceType = req.query.serviceType || 'sunday';
+    const records = await repo.getAll('attendanceRecords');
+    const record = records.find(r => r.date === req.params.date && r.serviceType === serviceType) || null;
+    res.json({ record });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load this register' });
+  }
+});
+
+app.post('/api/shepherd/attendance', requireShepherd, async (req, res) => {
+  try {
+    const { date, serviceType, title, marks, visitorCount, notes } = req.body;
+    if (!date) return res.status(400).json({ error: 'A service date is required' });
+    const service = serviceType || 'sunday';
+    const cleanMarks = (Array.isArray(marks) ? marks : []).map((m) => ({
+      memberId: m.memberId || '',
+      recordId: m.recordId || '',
+      name: m.name || '',
+      status: ['present', 'absent', 'excused'].includes(m.status) ? m.status : 'absent'
+    }));
+
+    const existing = (await repo.getAll('attendanceRecords')).find(r => r.date === date && r.serviceType === service);
+    const fields = {
+      date, serviceType: service, title: title || '',
+      marks: cleanMarks,
+      visitorCount: Number(visitorCount || 0),
+      notes: notes || '',
+      recordedBy: actorName(req)
+    };
+    const record = existing
+      ? await repo.updateById('attendanceRecords', existing.id, fields)
+      : await repo.create('attendanceRecords', fields, 'att');
+    res.json({ success: true, item: record });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save this register' });
+  }
+});
+
+app.delete('/api/shepherd/attendance/:id', requireShepherd, async (req, res) => {
+  try {
+    await repo.removeById('attendanceRecords', req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not delete this register' });
+  }
+});
+
+// Attendance history for one person — how many of the last services they made.
+app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherding'), async (req, res) => {
+  try {
+    const records = await repo.getAll('attendanceRecords');
+    const key = req.params.memberId;
+    const history = records
+      .map((r) => {
+        const mark = r.marks.find(m => m.memberId === key || m.recordId === key);
+        return mark ? { date: r.date, serviceType: r.serviceType, status: mark.status } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    const attended = history.filter(h => h.status === 'present').length;
+    res.json({
+      history: history.slice(0, 20),
+      servicesRecorded: history.length,
+      attended,
+      rate: history.length ? Math.round((attended / history.length) * 100) : null
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load attendance history' });
+  }
+});
+
+// ---------- Shepherding portal: member details ----------
+// Shepherding keeps the pastoral picture of each person up to date, so they can
+// correct the account details a member typed in a hurry at registration. Email
+// and password stay off-limits here — changing an email from another person's
+// screen is how people get locked out of their own account.
+app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
+  try {
+    const existing = await repo.getById('members', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Member not found' });
+    const { name, phone, level, department, birthdayMonth, birthdayDay } = req.body;
+    const updated = await repo.updateById('members', req.params.id, {
+      ...existing,
+      name: name !== undefined ? name : existing.name,
+      phone: phone !== undefined ? phone : existing.phone,
+      level: level !== undefined ? level : existing.level,
+      department: department !== undefined ? department : existing.department,
+      birthdayMonth: birthdayMonth !== undefined ? (birthdayMonth ? Number(birthdayMonth) : null) : existing.birthdayMonth,
+      birthdayDay: birthdayDay !== undefined ? (birthdayDay ? Number(birthdayDay) : null) : existing.birthdayDay
+    });
+    const { passwordHash, ...safe } = updated;
+    res.json({ success: true, item: safe });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this member' });
+  }
+});
+
+// ---------- Shepherding portal: contact messages ----------
+// Messages sent through the public contact form land here as well as with the
+// admin — following up with the person who reached out is pastoral work.
+app.get('/api/shepherd/contact-messages', requireViewRole('shepherding'), async (req, res) => {
+  try {
+    const items = await repo.getAll('contactMessages');
+    items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(items);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load messages' });
+  }
+});
+
+app.patch('/api/shepherd/contact-messages/:id', requireShepherd, async (req, res) => {
+  try {
+    const status = req.body.status === 'replied' ? 'replied' : 'new';
+    const item = await repo.patchById('contactMessages', req.params.id, { status });
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this message' });
+  }
+});
+
+// ---------- Finance office ----------
+// Finance is its own department with its own portal: budgets, a ledger, and
+// reporting that ties the two together. The coordinator can read all of it;
+// only the finance role can record or change money.
 const INCOME_CATEGORIES = ['momo', 'tithe', 'harvest', 'offertory', 'other'];
 
-app.get('/api/shepherd/finance', requireShepherd, async (req, res) => {
+function financeTotals(entries) {
+  const totalIncome = entries.filter(e => e.entryType === 'income').reduce((s, e) => s + e.amount, 0);
+  const totalExpense = entries.filter(e => e.entryType === 'expense').reduce((s, e) => s + e.amount, 0);
+  return { totalIncome, totalExpense, balance: totalIncome - totalExpense };
+}
+
+function filterEntries(entries, { from, to, entryType, category, budgetId }) {
+  let out = entries;
+  if (from) out = out.filter(e => e.date >= from);
+  if (to) out = out.filter(e => e.date <= to);
+  if (entryType) out = out.filter(e => e.entryType === entryType);
+  if (category) out = out.filter(e => e.category === category);
+  if (budgetId) out = out.filter(e => e.budgetId === budgetId);
+  return out;
+}
+
+app.get('/api/finance/entries', requireViewRole('finance'), async (req, res) => {
   try {
-    let entries = await repo.getAll('financeEntries');
-    const { from, to, entryType } = req.query;
-    if (from) entries = entries.filter(e => e.date >= from);
-    if (to) entries = entries.filter(e => e.date <= to);
-    if (entryType) entries = entries.filter(e => e.entryType === entryType);
-    entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+    const entries = filterEntries(await repo.getAll('financeEntries'), req.query);
+    entries.sort((a, b) => (a.date === b.date ? new Date(b.createdAt) - new Date(a.createdAt) : (a.date < b.date ? 1 : -1)));
     res.json(entries);
   } catch (e) {
     res.status(500).json({ error: 'Could not load finance records' });
   }
 });
 
-app.get('/api/shepherd/finance/summary', requireShepherd, async (req, res) => {
+app.get('/api/finance/summary', requireViewRole('finance'), async (req, res) => {
   try {
-    const entries = await repo.getAll('financeEntries');
-    const totalIncome = entries.filter(e => e.entryType === 'income').reduce((sum, e) => sum + e.amount, 0);
-    const totalExpense = entries.filter(e => e.entryType === 'expense').reduce((sum, e) => sum + e.amount, 0);
+    const all = await repo.getAll('financeEntries');
+    const entries = filterEntries(all, req.query);
+    const { totalIncome, totalExpense, balance } = financeTotals(entries);
+
     const byIncomeCategory = {};
     INCOME_CATEGORIES.forEach((c) => { byIncomeCategory[c] = 0; });
-    entries.filter(e => e.entryType === 'income').forEach((e) => {
-      byIncomeCategory[e.category] = (byIncomeCategory[e.category] || 0) + e.amount;
+    const byExpenseCategory = {};
+    entries.forEach((e) => {
+      if (e.entryType === 'income') byIncomeCategory[e.category] = (byIncomeCategory[e.category] || 0) + e.amount;
+      else byExpenseCategory[e.category] = (byExpenseCategory[e.category] || 0) + e.amount;
     });
-    res.json({ totalIncome, totalExpense, balance: totalIncome - totalExpense, byIncomeCategory, entryCount: entries.length });
+
+    // Month-by-month movement, oldest first — this is what the trend chart draws.
+    const monthly = {};
+    entries.forEach((e) => {
+      const month = (e.date || '').slice(0, 7);
+      if (!month) return;
+      if (!monthly[month]) monthly[month] = { month, income: 0, expense: 0 };
+      monthly[month][e.entryType === 'income' ? 'income' : 'expense'] += e.amount;
+    });
+
+    res.json({
+      totalIncome, totalExpense, balance,
+      byIncomeCategory, byExpenseCategory,
+      monthly: Object.values(monthly).sort((a, b) => (a.month < b.month ? -1 : 1)),
+      entryCount: entries.length,
+      // The running balance of everything ever recorded, regardless of the filter —
+      // what's actually in hand today.
+      overallBalance: financeTotals(all).balance,
+      pendingApprovals: all.filter(e => e.approvalStatus === 'pending').length
+    });
   } catch (e) {
-    res.status(500).json({ error: 'Could not load finance summary' });
+    res.status(500).json({ error: 'Could not load the finance summary' });
   }
 });
 
-app.post('/api/shepherd/finance', requireShepherd, async (req, res) => {
+function financeEntryFromBody(body, req) {
+  return {
+    entryType: body.entryType,
+    category: body.category,
+    amount: Number(body.amount),
+    date: body.date,
+    description: body.description || '',
+    method: ['cash', 'momo', 'bank', 'cheque', 'other'].includes(body.method) ? body.method : 'cash',
+    reference: body.reference || '',
+    payee: body.payee || '',
+    budgetId: body.budgetId || '',
+    budgetLineId: body.budgetLineId || '',
+    approvalStatus: ['recorded', 'pending', 'approved', 'rejected'].includes(body.approvalStatus) ? body.approvalStatus : 'recorded',
+    recordedBy: actorName(req)
+  };
+}
+
+app.post('/api/finance/entries', requireFinance, async (req, res) => {
   try {
-    const { entryType, category, amount, date, description } = req.body;
+    const { entryType, category, amount, date } = req.body;
     if (!entryType || !category || !amount || !date) {
       return res.status(400).json({ error: 'Type, category, amount, and date are required' });
     }
+    if (Number(amount) <= 0) return res.status(400).json({ error: 'Amount must be greater than zero' });
     if (entryType === 'income' && !INCOME_CATEGORIES.includes(category)) {
       return res.status(400).json({ error: 'Invalid income category' });
     }
-    const entry = await repo.create('financeEntries', {
-      entryType, category, amount: Number(amount), date, description: description || ''
-    }, 'fin');
+    const entry = await repo.create('financeEntries', financeEntryFromBody(req.body, req), 'fin');
     res.json({ success: true, item: entry });
   } catch (e) {
     res.status(500).json({ error: 'Could not save this entry' });
   }
 });
 
-app.put('/api/shepherd/finance/:id', requireShepherd, async (req, res) => {
+app.put('/api/finance/entries/:id', requireFinance, async (req, res) => {
   try {
-    const { entryType, category, amount, date, description } = req.body;
+    const existing = await repo.getById('financeEntries', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (Number(req.body.amount) <= 0) return res.status(400).json({ error: 'Amount must be greater than zero' });
     const entry = await repo.updateById('financeEntries', req.params.id, {
-      entryType, category, amount: Number(amount), date, description: description || ''
+      ...existing, ...financeEntryFromBody(req.body, req), recordedBy: existing.recordedBy || actorName(req)
     });
-    if (!entry) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, item: entry });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this entry' });
   }
 });
 
-app.delete('/api/shepherd/finance/:id', requireShepherd, async (req, res) => {
+app.patch('/api/finance/entries/:id/approval', requireFinance, async (req, res) => {
   try {
+    const status = req.body.approvalStatus;
+    if (!['pending', 'approved', 'rejected', 'recorded'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid approval status' });
+    }
+    const item = await repo.patchById('financeEntries', req.params.id, {
+      approvalStatus: status,
+      approvedBy: status === 'approved' ? actorName(req) : ''
+    });
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this entry' });
+  }
+});
+
+app.delete('/api/finance/entries/:id', requireFinance, async (req, res) => {
+  try {
+    const existing = await repo.getById('financeEntries', req.params.id);
+    if (existing && existing.receiptFileId) gridfs.deleteFile(existing.receiptFileId).catch(() => {});
     await repo.removeById('financeEntries', req.params.id);
     res.json({ success: true });
   } catch (e) {
@@ -940,7 +1296,509 @@ app.delete('/api/shepherd/finance/:id', requireShepherd, async (req, res) => {
   }
 });
 
+// ---------- Finance office: budgets ----------
+// Planned amounts live on the budget; actuals are summed from the ledger every
+// time this is read, so a budget can never quietly disagree with the books.
+async function budgetPerformance(budget, allEntries) {
+  const entries = allEntries.filter(e => e.budgetId === budget.id);
+  const lines = budget.lines.map((line) => {
+    const actual = entries
+      .filter(e => e.budgetLineId === line.lineId)
+      .reduce((sum, e) => sum + e.amount, 0);
+    const variance = line.lineType === 'income'
+      ? actual - line.plannedAmount          // income: over plan is good
+      : line.plannedAmount - actual;         // expense: under plan is good
+    return {
+      ...line,
+      actual,
+      variance,
+      usedPercent: line.plannedAmount > 0 ? Math.round((actual / line.plannedAmount) * 100) : null
+    };
+  });
+  const plannedIncome = lines.filter(l => l.lineType === 'income').reduce((s, l) => s + l.plannedAmount, 0);
+  const plannedExpense = lines.filter(l => l.lineType === 'expense').reduce((s, l) => s + l.plannedAmount, 0);
+  const actualIncome = lines.filter(l => l.lineType === 'income').reduce((s, l) => s + l.actual, 0);
+  const actualExpense = lines.filter(l => l.lineType === 'expense').reduce((s, l) => s + l.actual, 0);
+  return {
+    ...budget,
+    lines,
+    plannedIncome, plannedExpense, plannedBalance: plannedIncome - plannedExpense,
+    actualIncome, actualExpense, actualBalance: actualIncome - actualExpense,
+    // Entries booked against this budget but not against any of its lines.
+    unallocated: entries.filter(e => !e.budgetLineId).reduce((s, e) => s + e.amount, 0)
+  };
+}
+
+app.get('/api/finance/budgets', requireViewRole('finance'), async (req, res) => {
+  try {
+    const [budgets, entries] = await Promise.all([repo.getAll('budgets'), repo.getAll('financeEntries')]);
+    budgets.sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
+    const withPerformance = await Promise.all(budgets.map(b => budgetPerformance(b, entries)));
+    res.json(withPerformance);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load budgets' });
+  }
+});
+
+app.get('/api/finance/budgets/:id', requireViewRole('finance'), async (req, res) => {
+  try {
+    const budget = await repo.getById('budgets', req.params.id);
+    if (!budget) return res.status(404).json({ error: 'Budget not found' });
+    res.json(await budgetPerformance(budget, await repo.getAll('financeEntries')));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load this budget' });
+  }
+});
+
+function budgetLinesFromBody(lines) {
+  return (Array.isArray(lines) ? lines : [])
+    .filter(l => l && l.category)
+    .map((l, i) => ({
+      lineId: l.lineId || `line_${Date.now()}_${i}`,
+      lineType: l.lineType === 'income' ? 'income' : 'expense',
+      category: String(l.category).trim(),
+      plannedAmount: Number(l.plannedAmount || 0),
+      notes: l.notes || ''
+    }));
+}
+
+app.post('/api/finance/budgets', requireFinance, async (req, res) => {
+  try {
+    const { name, startDate, endDate, status, notes, lines } = req.body;
+    if (!name || !startDate || !endDate) {
+      return res.status(400).json({ error: 'Name, start date and end date are required' });
+    }
+    if (endDate < startDate) return res.status(400).json({ error: 'The end date cannot be before the start date' });
+    const budget = await repo.create('budgets', {
+      name, startDate, endDate,
+      status: ['draft', 'active', 'closed'].includes(status) ? status : 'draft',
+      notes: notes || '',
+      lines: budgetLinesFromBody(lines),
+      createdBy: actorName(req)
+    }, 'bud');
+    res.json({ success: true, item: budget });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save this budget' });
+  }
+});
+
+app.put('/api/finance/budgets/:id', requireFinance, async (req, res) => {
+  try {
+    const existing = await repo.getById('budgets', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Budget not found' });
+    const { name, startDate, endDate, status, notes, lines } = req.body;
+    if (endDate && startDate && endDate < startDate) {
+      return res.status(400).json({ error: 'The end date cannot be before the start date' });
+    }
+    const budget = await repo.updateById('budgets', req.params.id, {
+      ...existing,
+      name: name || existing.name,
+      startDate: startDate || existing.startDate,
+      endDate: endDate || existing.endDate,
+      status: ['draft', 'active', 'closed'].includes(status) ? status : existing.status,
+      notes: notes !== undefined ? notes : existing.notes,
+      lines: lines !== undefined ? budgetLinesFromBody(lines) : existing.lines
+    });
+    res.json({ success: true, item: budget });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this budget' });
+  }
+});
+
+app.delete('/api/finance/budgets/:id', requireFinance, async (req, res) => {
+  try {
+    // Ledger entries survive their budget — the money still moved. They simply
+    // stop pointing at a plan that no longer exists.
+    await models.FinanceEntry.updateMany({ budgetId: req.params.id }, { $set: { budgetId: '', budgetLineId: '' } });
+    await repo.removeById('budgets', req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not delete this budget' });
+  }
+});
+
+// Spreadsheet-ready export of whatever the finance office is currently looking at.
+app.get('/api/finance/export.csv', requireViewRole('finance'), async (req, res) => {
+  try {
+    const entries = filterEntries(await repo.getAll('financeEntries'), req.query);
+    entries.sort((a, b) => (a.date < b.date ? -1 : 1));
+    const budgets = await repo.getAll('budgets');
+    const budgetName = (id) => (budgets.find(b => b.id === id) || {}).name || '';
+
+    const cell = (v) => {
+      const s = v === undefined || v === null ? '' : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = ['Date', 'Type', 'Category', 'Amount (GHS)', 'Method', 'Reference', 'Payee', 'Description', 'Budget', 'Approval', 'Recorded By'];
+    const rows = entries.map(e => [
+      e.date, e.entryType, e.category, e.amount.toFixed(2), e.method || '', e.reference || '',
+      e.payee || '', e.description || '', budgetName(e.budgetId), e.approvalStatus || '', e.recordedBy || ''
+    ].map(cell).join(','));
+    const { totalIncome, totalExpense, balance } = financeTotals(entries);
+    rows.push('', ['', 'TOTAL INCOME', '', totalIncome.toFixed(2)].join(','));
+    rows.push(['', 'TOTAL EXPENSE', '', totalExpense.toFixed(2)].join(','));
+    rows.push(['', 'BALANCE', '', balance.toFixed(2)].join(','));
+
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', `attachment; filename="aconsu-finance-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send([header.map(cell).join(','), ...rows].join('\n'));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not build the export' });
+  }
+});
+
+// ---------- Publicity office ----------
+// Publicity owns everything that goes out to people: in-app announcements, push
+// alerts, SMS, event updates, and the testimonies members send in.
+
+// Does the actual sending for both "send now" and anything the scheduler picks
+// up later, so a scheduled announcement behaves exactly like an immediate one.
+async function dispatchAnnouncement({ title, body, url, channels, audience, sourceId }) {
+  const useApp = !channels || channels.includes('app');
+  const useSms = channels && channels.includes('sms');
+  const parts = [];
+
+  if (useApp) {
+    await createNotification(title, body, url, 'admin');
+    parts.push('posted to the app');
+  }
+  if (useSms) {
+    const numbers = await sms.resolveAudience(audience);
+    const text = `${title}\n${body}`.slice(0, 320); // ~2 SMS segments, keeps costs predictable
+    const result = await sms.sendBatch(numbers, text, sourceId);
+    parts.push(result.configured
+      ? `SMS: ${result.sent} sent${result.failed ? `, ${result.failed} failed` : ''}${result.note ? ` — ${result.note}` : ''}`
+      : `SMS skipped — ${result.note}`);
+  }
+  return parts.join(' · ') || 'Nothing to send — no channel was selected.';
+}
+
+app.get('/api/publicity/overview', requireViewRole('publicity'), async (req, res) => {
+  try {
+    const [notifications, scheduled, testimonies, smsLogs, events] = await Promise.all([
+      repo.getAll('notifications'), repo.getAll('scheduledNotifications'),
+      repo.getAll('testimonies'), repo.getAll('smsLogs'), repo.getAll('events')
+    ]);
+    const now = new Date();
+    res.json({
+      notificationsSent: notifications.length,
+      scheduledPending: scheduled.filter(s => s.status === 'scheduled').length,
+      testimoniesPending: testimonies.filter(t => !t.published).length,
+      testimoniesPublished: testimonies.filter(t => t.published).length,
+      smsSent: smsLogs.filter(s => s.status === 'sent').length,
+      smsFailed: smsLogs.filter(s => s.status === 'failed').length,
+      smsConfigured: sms.isConfigured(),
+      pushConfigured: push.ensureConfigured(),
+      upcomingEvents: events.filter(e => new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
+      recent: notifications
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 5)
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the publicity overview' });
+  }
+});
+
+// Who an announcement can be aimed at, with a live count of reachable phone
+// numbers so publicity knows what an SMS blast will actually cost before sending.
+app.get('/api/publicity/audiences', requireViewRole('publicity'), async (req, res) => {
+  try {
+    const departments = await repo.getAll('departments');
+    const options = [{ value: 'all', label: 'Everyone (members + visitors)' }];
+    departments.forEach(d => options.push({ value: `department:${d.id}`, label: `${d.name} department` }));
+    const withCounts = await Promise.all(options.map(async (o) => ({
+      ...o, reachable: (await sms.resolveAudience(o.value)).length
+    })));
+    res.json({ audiences: withCounts, smsConfigured: sms.isConfigured() });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load audiences' });
+  }
+});
+
+app.post('/api/publicity/notifications', requirePublicity, async (req, res) => {
+  const { title, body, url, channels, audience } = req.body;
+  if (!title || !body) return res.status(400).json({ error: 'Title and message are required' });
+  const picked = Array.isArray(channels) && channels.length ? channels : ['app'];
+  try {
+    const result = await dispatchAnnouncement({
+      title, body, url: url || '/index.html', channels: picked, audience: audience || 'all'
+    });
+    res.json({ success: true, result });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not send this announcement' });
+  }
+});
+
+app.get('/api/publicity/scheduled', requireViewRole('publicity'), async (req, res) => {
+  try {
+    const items = await repo.getAll('scheduledNotifications');
+    items.sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor));
+    res.json(items);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load scheduled announcements' });
+  }
+});
+
+app.post('/api/publicity/scheduled', requirePublicity, async (req, res) => {
+  const { title, body, url, channels, audience, scheduledFor } = req.body;
+  if (!title || !body || !scheduledFor) {
+    return res.status(400).json({ error: 'Title, message and a send time are required' });
+  }
+  const when = new Date(scheduledFor);
+  if (isNaN(when.getTime())) return res.status(400).json({ error: 'That send time is not a valid date and time' });
+  if (when.getTime() < Date.now() - 60 * 1000) {
+    return res.status(400).json({ error: 'That send time is in the past — pick a time from now onwards' });
+  }
+  try {
+    const item = await repo.create('scheduledNotifications', {
+      title, body, url: url || '/index.html',
+      channels: Array.isArray(channels) && channels.length ? channels : ['app'],
+      audience: audience || 'all',
+      scheduledFor: when,
+      status: 'scheduled',
+      createdBy: actorName(req)
+    }, 'sched');
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not schedule this announcement' });
+  }
+});
+
+app.patch('/api/publicity/scheduled/:id/cancel', requirePublicity, async (req, res) => {
+  try {
+    const existing = await repo.getById('scheduledNotifications', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (existing.status !== 'scheduled') {
+      return res.status(400).json({ error: 'This announcement has already gone out.' });
+    }
+    const item = await repo.patchById('scheduledNotifications', req.params.id, { status: 'cancelled' });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not cancel this announcement' });
+  }
+});
+
+app.delete('/api/publicity/scheduled/:id', requirePublicity, async (req, res) => {
+  try {
+    await repo.removeById('scheduledNotifications', req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove this announcement' });
+  }
+});
+
+// Testimonies come in from the public form; publicity reviews them and decides
+// what appears on the wall.
+app.get('/api/publicity/testimonies', requireViewRole('publicity'), async (req, res) => {
+  try {
+    const items = await repo.getAll('testimonies');
+    items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(items);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load testimonies' });
+  }
+});
+
+app.patch('/api/publicity/testimonies/:id', requirePublicity, async (req, res) => {
+  try {
+    const item = await repo.patchById('testimonies', req.params.id, { published: !!req.body.published });
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this testimony' });
+  }
+});
+
+app.delete('/api/publicity/testimonies/:id', requirePublicity, async (req, res) => {
+  try {
+    await repo.removeById('testimonies', req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not delete this testimony' });
+  }
+});
+
+// Event updates: publicity keeps the calendar current and tells people when
+// something changes, which is the part that actually matters to members.
+app.post('/api/publicity/events', requirePublicity, async (req, res) => {
+  try {
+    const item = await repo.create('events', req.body, 'even');
+    res.json({ success: true, item });
+    createNotification(
+      'New Event: ' + (item.title || 'Untitled'),
+      `${item.title || 'A new event'} — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
+      '/events.html', 'system'
+    ).catch(() => {});
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save this event' });
+  }
+});
+
+app.put('/api/publicity/events/:id', requirePublicity, async (req, res) => {
+  try {
+    const { announceUpdate, ...fields } = req.body;
+    const item = await repo.updateById('events', req.params.id, fields);
+    if (!item) return res.status(404).json({ error: 'Event not found' });
+    res.json({ success: true, item });
+    if (announceUpdate) {
+      createNotification(
+        'Event Update: ' + (item.title || 'Untitled'),
+        `${item.title || 'An event'} has been updated — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
+        '/events.html', 'system'
+      ).catch(() => {});
+    }
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this event' });
+  }
+});
+
+app.get('/api/publicity/sms-logs', requireViewRole('publicity'), async (req, res) => {
+  try {
+    const logs = await repo.getAll('smsLogs');
+    logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(logs.slice(0, 200));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the SMS log' });
+  }
+});
+
+// ---------- Coordinator ----------
+// One screen showing the state of every office. Read-only by design: the
+// coordinator oversees the work, the office that owns the data still does it.
+app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req, res) => {
+  try {
+    const [
+      members, departments, events, finance, budgets, attendance,
+      joinRequests, prayerRequests, testimonies, contactMessages,
+      notifications, scheduled, smsLogs, shepherdingRecords, staff
+    ] = await Promise.all([
+      repo.getAll('members'), repo.getAll('departments'), repo.getAll('events'),
+      repo.getAll('financeEntries'), repo.getAll('budgets'), repo.getAll('attendanceRecords'),
+      repo.getAll('joinRequests'), repo.getAll('prayerRequests'), repo.getAll('testimonies'),
+      repo.getAll('contactMessages'), repo.getAll('notifications'), repo.getAll('scheduledNotifications'),
+      repo.getAll('smsLogs'), repo.getAll('shepherdingRecords'), repo.getAll('staffUsers')
+    ]);
+
+    const now = new Date();
+    const monthKey = now.toISOString().slice(0, 7);
+    const thisMonth = finance.filter(e => (e.date || '').startsWith(monthKey));
+    const recentServices = [...attendance].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
+    const attendanceTrend = recentServices.map(r => ({
+      date: r.date,
+      serviceType: r.serviceType,
+      present: r.marks.filter(m => m.status === 'present').length + (r.visitorCount || 0)
+    })).reverse();
+    const avgAttendance = attendanceTrend.length
+      ? Math.round(attendanceTrend.reduce((s, a) => s + a.present, 0) / attendanceTrend.length)
+      : 0;
+
+    const activeBudget = budgets.find(b => b.status === 'active') || null;
+
+    res.json({
+      finance: {
+        ...financeTotals(finance),
+        thisMonth: financeTotals(thisMonth),
+        entryCount: finance.length,
+        activeBudget: activeBudget ? await budgetPerformance(activeBudget, finance) : null,
+        budgetCount: budgets.length
+      },
+      shepherding: {
+        memberCount: members.length,
+        visitorCount: shepherdingRecords.filter(r => !r.memberId).length,
+        servicesRecorded: attendance.length,
+        lastService: recentServices[0] || null,
+        averageAttendance: avgAttendance,
+        attendanceTrend,
+        followUpNeeded: shepherdingRecords.filter(r => ['irregular', 'inactive'].includes(r.attendanceStatus)).length
+      },
+      publicity: {
+        notificationsSent: notifications.length,
+        scheduledPending: scheduled.filter(s => s.status === 'scheduled').length,
+        nextScheduled: scheduled
+          .filter(s => s.status === 'scheduled')
+          .sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor))[0] || null,
+        smsSent: smsLogs.filter(s => s.status === 'sent').length,
+        testimoniesPending: testimonies.filter(t => !t.published).length
+      },
+      engagement: {
+        departments: departments.length,
+        upcomingEvents: events.filter(e => new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
+        newJoinRequests: joinRequests.filter(r => r.status === 'new').length,
+        newPrayerRequests: prayerRequests.filter(r => r.status === 'new').length,
+        unreadMessages: contactMessages.filter(m => m.status !== 'replied').length
+      },
+      team: staff.map(({ passwordHash, ...s }) => s),
+      generatedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the coordinator dashboard' });
+  }
+});
+
 // ---------- admin protected routes ----------
+// Leadership accounts. The admin creates one account per leader and assigns the
+// office it belongs to; passwords are hashed and never readable afterwards.
+app.get('/api/admin/staff', requireAdmin, async (req, res) => {
+  try {
+    const users = await repo.getAll('staffUsers');
+    res.json(users.map(({ passwordHash, ...safe }) => safe));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load leadership accounts' });
+  }
+});
+
+app.post('/api/admin/staff', requireAdmin, async (req, res) => {
+  const { username, name, role, password } = req.body;
+  if (!username || !role || !password) {
+    return res.status(400).json({ error: 'Username, role and password are required' });
+  }
+  if (!PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  try {
+    const clean = String(username).toLowerCase().trim();
+    const existing = await models.StaffUser.findOne({ username: clean });
+    if (existing) return res.status(400).json({ error: 'That username is already taken' });
+    const user = await repo.create('staffUsers', {
+      username: clean, name: name || clean, role,
+      passwordHash: await bcrypt.hash(password, 10), active: true
+    }, 'staff');
+    const { passwordHash, ...safe } = user;
+    res.json({ success: true, item: safe });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not create this account' });
+  }
+});
+
+app.put('/api/admin/staff/:id', requireAdmin, async (req, res) => {
+  const { name, role, password, active } = req.body;
+  if (role && !PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
+  if (password && password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  try {
+    const existing = await repo.getById('staffUsers', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Account not found' });
+    const updated = await repo.updateById('staffUsers', req.params.id, {
+      ...existing,
+      name: name !== undefined ? name : existing.name,
+      role: role || existing.role,
+      active: active !== undefined ? !!active : existing.active,
+      passwordHash: password ? await bcrypt.hash(password, 10) : existing.passwordHash
+    });
+    const { passwordHash, ...safe } = updated;
+    res.json({ success: true, item: safe });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this account' });
+  }
+});
+
+app.delete('/api/admin/staff/:id', requireAdmin, async (req, res) => {
+  try {
+    await repo.removeById('staffUsers', req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not delete this account' });
+  }
+});
+
 app.get('/api/admin/members', requireAdmin, async (req, res) => {
   try {
     const members = await repo.getAll('members');
@@ -1033,26 +1891,116 @@ app.get('/api/admin/events/:id/registrations', requireAdmin, async (req, res) =>
   }
 });
 
+// Every upload says where it is going to be used. This is stored on the file
+// itself, so the media library can show "this one is the Choir header" instead
+// of a wall of anonymous thumbnails — and so a header can be wired up to its
+// department in the same step as the upload.
+const IMAGE_PLACEMENTS = {
+  'department-header': {
+    label: 'Department header',
+    needsTarget: 'department',
+    describe: (name) => `Shown as the big banner across the top of the ${name || 'selected'} department page, and on its card in the departments list.`
+  },
+  'page-gallery': {
+    label: 'Photo on a custom page',
+    needsTarget: 'page',
+    describe: (name) => `Added to the ${name || 'selected'} page's gallery or resource shelf.`
+  },
+  'home-floating': {
+    label: 'Floating home-page photo',
+    needsTarget: '',
+    describe: () => 'Drifts around the hero area on the home page and department pages as a decorative photo.'
+  },
+  'executive-photo': {
+    label: 'Executive portrait',
+    needsTarget: '',
+    describe: () => 'Kept in the library for use as an executive portrait. Assign it from the Executives panel.'
+  },
+  'library': {
+    label: 'Library only (not shown anywhere yet)',
+    needsTarget: '',
+    describe: () => 'Stored in the media library only. Nothing on the public site changes until you place it somewhere.'
+  }
+};
+
+// The front-end asks for this so the placement picker and its explanations are
+// defined in exactly one place.
+app.get('/api/admin/image-placements', requireAdmin, async (req, res) => {
+  try {
+    const [departments, pages] = await Promise.all([repo.getAll('departments'), repo.getAll('pages')]);
+    res.json({
+      placements: Object.entries(IMAGE_PLACEMENTS).map(([value, p]) => ({
+        value, label: p.label, needsTarget: p.needsTarget, description: p.describe('')
+      })),
+      departments: departments.map(d => ({ id: d.id, name: d.name, hasHeader: !!d.headerImageFileId })),
+      pages: pages.filter(p => p.type === 'gallery' || p.type === 'bookshelf').map(p => ({ id: p.slug, name: p.title }))
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load placement options' });
+  }
+});
+
 app.post('/api/admin/uploads', requireAdmin, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' });
-    const { category, pageSlug, title, description } = req.body;
+    const { category, pageSlug, title, description, targetId } = req.body;
+    const placement = IMAGE_PLACEMENTS[req.body.placement] ? req.body.placement : 'library';
+    const spec = IMAGE_PLACEMENTS[placement];
+    if (spec.needsTarget && !targetId) {
+      return res.status(400).json({ error: `Choose which ${spec.needsTarget} this image belongs to.` });
+    }
+
     const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+    // A gallery placement is really "photo on this page", which the public pages
+    // already read through pageSlug — so keep that field in step with it.
+    const slug = placement === 'page-gallery' ? targetId : (pageSlug || '');
     const fileId = await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
-      category: category || 'file',
-      pageSlug: pageSlug || '',
+      category: category || 'photo',
+      pageSlug: slug,
+      placement,
+      targetId: targetId || '',
       title: title || req.file.originalname,
       description: description || '',
       contentType: compressed.contentType
     });
-    res.json({ success: true, id: fileId });
+
+    // A department header is only useful once the department points at it, so
+    // do that here rather than making the admin remember a second step.
+    let placedOn = '';
+    if (placement === 'department-header' && targetId) {
+      const dept = await repo.getById('departments', targetId);
+      if (dept) {
+        if (dept.headerImageFileId) gridfs.deleteFile(dept.headerImageFileId).catch(() => {});
+        await repo.patchById('departments', targetId, { headerImageFileId: String(fileId) });
+        placedOn = dept.name;
+      }
+    }
+    res.json({ success: true, id: fileId, placement, placedOn, message: spec.describe(placedOn) });
   } catch (e) {
     res.status(500).json({ error: 'Upload failed. The file may be too large (30MB max).' });
   }
 });
 
+// Point a department at an image that is already in the library, without
+// re-uploading it.
+app.put('/api/admin/departments/:id/header-image', requireAdmin, async (req, res) => {
+  try {
+    const dept = await repo.getById('departments', req.params.id);
+    if (!dept) return res.status(404).json({ error: 'Department not found' });
+    const fileId = req.body.headerImageFileId || '';
+    await repo.patchById('departments', req.params.id, { headerImageFileId: fileId });
+    res.json({ success: true, headerImageFileId: fileId });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not set the header image' });
+  }
+});
+
 app.delete('/api/admin/files/:id', requireAdmin, async (req, res) => {
   try {
+    // Don't leave a department pointing at a header that no longer exists.
+    await models.Department.updateMany(
+      { headerImageFileId: req.params.id }, { $set: { headerImageFileId: '' } }
+    );
     await gridfs.deleteFile(req.params.id);
     res.json({ success: true });
   } catch (e) {
@@ -1202,6 +2150,41 @@ async function checkBirthdaysAndNotify() {
   }
 }
 
+// ---------- scheduled announcements ----------
+// Publicity picks a time; this loop is what makes that time mean something.
+// Each due announcement is claimed with a single atomic update before it is
+// sent, so two server instances (or a restart mid-send) can never double-send.
+async function sendDueAnnouncements() {
+  try {
+    const due = await models.ScheduledNotification.find({
+      status: 'scheduled', scheduledFor: { $lte: new Date() }
+    }).lean();
+
+    for (const item of due) {
+      const claimed = await models.ScheduledNotification.findOneAndUpdate(
+        { id: item.id, status: 'scheduled' },
+        { $set: { status: 'sent', sentAt: new Date() } },
+        { new: true }
+      );
+      if (!claimed) continue; // another worker got there first
+
+      try {
+        const result = await dispatchAnnouncement({
+          title: item.title, body: item.body, url: item.url,
+          channels: item.channels, audience: item.audience, sourceId: item.id
+        });
+        await models.ScheduledNotification.updateOne({ id: item.id }, { $set: { result } });
+      } catch (err) {
+        await models.ScheduledNotification.updateOne(
+          { id: item.id }, { $set: { status: 'failed', result: err.message } }
+        );
+      }
+    }
+  } catch (e) {
+    console.error('Scheduled announcement check failed:', e.message);
+  }
+}
+
 // ---------- startup ----------
 connectDB()
   .then(() => {
@@ -1210,6 +2193,8 @@ connectDB()
     });
     checkBirthdaysAndNotify();
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
+    sendDueAnnouncements();
+    setInterval(sendDueAnnouncements, 60 * 1000); // a minute's precision is plenty for announcements
   })
   .catch((err) => {
     console.error('Failed to start server:', err.message);

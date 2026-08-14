@@ -18,7 +18,9 @@
 
 <header id="site-header"></header>
 
-<section style="padding-top:56px; position:relative;" id="deptDetailHero">
+<div id="deptBanner"></div>
+
+<section style="padding-top:32px; position:relative;" id="deptDetailHero">
   <div class="container" style="max-width:760px;">
     <a href="/departments.html" class="back-link">&larr; All Departments</a>
     <div id="deptDetail">
@@ -79,10 +81,26 @@
   try {
     const dept = await fetchJSON(`/api/departments/${id}`);
     document.title = `${dept.name} — ACONSU`;
+
+    // The header photo the admin set for this department, if there is one.
+    if (dept.headerImageFileId) {
+      document.getElementById('deptBanner').innerHTML = `
+        <div class="dept-banner">
+          <img src="/api/files/${dept.headerImageFileId}" alt="${escapeHtml(dept.name)}">
+          <div class="dept-banner-overlay">
+            <p class="eyebrow" style="color:rgba(255,255,255,0.8);">Department</p>
+            <h1>${escapeHtml(dept.name)}</h1>
+            <p>${escapeHtml(dept.tagline || '')}</p>
+          </div>
+        </div>
+      `;
+    }
+
     detailEl.innerHTML = `
-      <p class="eyebrow">Department</p>
-      <h1>${escapeHtml(dept.name)}</h1>
-      <p style="color:#5a4468; font-size:1.05rem;">${escapeHtml(dept.tagline)}</p>
+      ${dept.headerImageFileId ? '' : `
+        <p class="eyebrow">Department</p>
+        <h1>${escapeHtml(dept.name)}</h1>
+        <p style="color:#5a4468; font-size:1.05rem;">${escapeHtml(dept.tagline || '')}</p>`}
       <div class="card" style="margin:28px 0;">
         <h3 style="margin-bottom:16px;">Meeting Information</h3>
         <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">

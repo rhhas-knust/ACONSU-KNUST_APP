@@ -70,6 +70,31 @@ async function subscribeToPush() {
   return true;
 }
 
+// Quietly re-register a device that has already granted permission — no prompt,
+// no button, nothing shown. This keeps the server's subscription list accurate
+// (browsers rotate endpoints) without ever asking a member twice.
+async function resubscribePushIfAlreadyAllowed() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const { publicKey } = await fetchJSON('/api/push/vapid-public-key');
+      if (!publicKey) return;
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+    }
+    await fetchJSON('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscription: sub })
+    });
+  } catch (e) { /* alerts are optional — never let this surface to the member */ }
+}
+
 async function unsubscribeFromPush() {
   if (!('serviceWorker' in navigator)) return;
   const reg = await navigator.serviceWorker.ready;
@@ -140,11 +165,12 @@ const BOTTOM_TABS = [
 
 function renderBottomNav(activePath, customPages, member) {
   document.getElementById('bottomNav')?.remove();
-  document.getElementById('moreSheetBackdrop')?.remove();
 
   const tabHrefs = BOTTOM_TABS.map(t => t.href);
   const isMoreActive = activePath && !tabHrefs.includes(activePath);
 
+  // "More" is a full page of its own rather than a pop-up sheet, so it can be
+  // linked to, shared, and reached with the back button like anything else.
   const nav = document.createElement('nav');
   nav.id = 'bottomNav';
   nav.className = 'bottom-nav';
@@ -155,53 +181,18 @@ function renderBottomNav(activePath, customPages, member) {
         <span>${t.label}</span>
       </a>
     `).join('')}
-    <button type="button" class="bottom-nav-item ${isMoreActive ? 'active' : ''}" id="moreTabBtn">
+    <a href="/more.html" class="bottom-nav-item ${isMoreActive ? 'active' : ''}" id="moreTabBtn" style="position:relative;">
       ${svgIcon(ICON_MORE)}
       <span>More</span>
-    </button>
+    </a>
   `;
   document.body.appendChild(nav);
-
-  const custom = (customPages || []).filter(p => p.showInNav).map(p => ({
-    href: `/page.html?slug=${encodeURIComponent(p.slug)}`,
-    label: p.navLabel || p.title
-  }));
-  const moreLinks = [
-    { href: '/notifications.html', label: 'Notifications' },
-    { href: '/discover.html', label: 'Discover' },
-    { href: '/about.html', label: 'About ACONSU' },
-    { href: '/departments.html', label: 'Departments' },
-    { href: '/media.html', label: 'Sermons & Media' },
-    ...custom,
-    { href: '/contact.html', label: 'Contact' }
-  ];
-  const accountLink = member
-    ? { href: '/profile.html', label: `My Profile (${member.name.split(' ')[0]})` }
-    : { href: '/login.html', label: 'Log In / Sign Up' };
-
-  const backdrop = document.createElement('div');
-  backdrop.id = 'moreSheetBackdrop';
-  backdrop.className = 'more-sheet-backdrop';
-  backdrop.innerHTML = `
-    <div class="more-sheet">
-      <button class="more-sheet-close" id="moreSheetClose" aria-label="Close">&times;</button>
-      <div class="more-sheet-handle"></div>
-      ${moreLinks.map(l => `<a href="${l.href}" class="${activePath === l.href ? 'active' : ''}">${escapeHtml(l.label)}</a>`).join('')}
-      <a href="${accountLink.href}" style="border-top:2px solid var(--lilac-light); margin-top:6px; padding-top:16px; color:var(--purple-deep);">${escapeHtml(accountLink.label)}</a>
-    </div>
-  `;
-  document.body.appendChild(backdrop);
-
-  document.getElementById('moreTabBtn').addEventListener('click', () => backdrop.classList.add('open'));
-  document.getElementById('moreSheetClose').addEventListener('click', () => backdrop.classList.remove('open'));
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.classList.remove('open'); });
 
   getUnreadNotificationCount().then((count) => {
     if (count > 0) {
       const moreBtn = document.getElementById('moreTabBtn');
       const dot = document.createElement('span');
       dot.style.cssText = 'position:absolute; top:2px; right:22%; width:8px; height:8px; border-radius:50%; background:var(--flame-red);';
-      moreBtn.style.position = 'relative';
       moreBtn.appendChild(dot);
     }
   });

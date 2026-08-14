@@ -121,6 +121,12 @@
       <div class="form-msg" id="passwordMsg"></div>
     </form>
 
+    <div class="form-card" style="margin-top:24px;">
+      <h3 style="margin-bottom:6px;">Alerts</h3>
+      <p style="font-size:0.87rem; color:#5a4468; margin-bottom:16px;" id="alertsStatus">Checking…</p>
+      <button type="button" class="btn btn-outline btn-sm" id="alertsToggleBtn">Enable Alerts</button>
+    </div>
+
     <div style="text-align:center; margin-top:24px;">
       <button class="btn btn-outline btn-sm" id="logoutBtn">Log Out</button>
     </div>
@@ -287,6 +293,40 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetchJSON('/api/auth/logout', { method: 'POST' });
   window.location.href = '/index.html';
 });
+
+// Alerts live here, in the member's own settings, rather than as a banner on
+// the notifications page — one place to turn them on, and it stays out of the
+// way of people who have already decided.
+(async function initAlertsToggle() {
+  const status = document.getElementById('alertsStatus');
+  const btn = document.getElementById('alertsToggleBtn');
+
+  async function refresh() {
+    const subscribed = await isPushSubscribed();
+    status.textContent = subscribed
+      ? "Alerts are on — you'll hear about events and announcements even when the app is closed."
+      : 'Alerts are off. Turn them on to hear about events and announcements when the app is closed.';
+    btn.textContent = subscribed ? 'Turn Alerts Off' : 'Enable Alerts';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        if (subscribed) {
+          await unsubscribeFromPush();
+          showToast('Alerts turned off.', 'success');
+        } else {
+          await subscribeToPush();
+          showToast('Alerts enabled.', 'success');
+        }
+        await refresh();
+      } catch (err) {
+        showToast(err.message || 'Could not update your alert settings.', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  }
+  await refresh();
+})();
 </script>
 </body>
 </html>
