@@ -8,11 +8,15 @@ const clone = (o) => JSON.parse(JSON.stringify(o, (k, v) => v));
 
 function matches(doc, query) {
   return Object.entries(query || {}).every(([key, cond]) => {
+    if (key === '$or') return (cond || []).some((sub) => matches(doc, sub));
     const value = doc[key];
+    if (Array.isArray(cond)) return cond.includes(value); // bare-array shorthand, used nowhere yet but cheap to support
     if (cond && typeof cond === 'object' && !(cond instanceof Date)) {
       if ('$lte' in cond) return new Date(value) <= new Date(cond.$lte);
       if ('$gte' in cond) return new Date(value) >= new Date(cond.$gte);
       if ('$ne' in cond) return value !== cond.$ne;
+      if ('$in' in cond) return (cond.$in || []).includes(value);
+      if ('$exists' in cond) return cond.$exists ? value !== undefined : value === undefined;
       return true;
     }
     if (cond instanceof Date) return new Date(value).getTime() === cond.getTime();
@@ -77,28 +81,38 @@ function makeModel(defaults) {
 }
 
 const fakeModels = {
-  Department: makeModel({ headerImageFileId: '' }),
-  Event: makeModel({ registrationEnabled: false, capacity: 0, registrationDeadline: '' }),
-  Sermon: makeModel({}),
-  JoinRequest: makeModel({ status: 'new' }),
-  PrayerRequest: makeModel({ status: 'new' }),
-  Testimony: makeModel({ published: false }),
-  ContactMessage: makeModel({ status: 'new' }),
+  Chapter: makeModel({
+    status: 'active', fullName: '', institution: '', location: '', address: '',
+    contact: {}, payment: {}, about: {}, coordinatorStaffId: '', coordinatorName: '', createdBy: ''
+  }),
+  FeatureFlags: makeModel({ modules: {} }),
+  Department: makeModel({ chapterId: '', headerImageFileId: '' }),
+  Event: makeModel({ chapterId: '', isNational: false, registrationEnabled: false, capacity: 0, registrationDeadline: '' }),
+  Sermon: makeModel({ chapterId: '' }),
+  JoinRequest: makeModel({ chapterId: '', status: 'new' }),
+  PrayerRequest: makeModel({ chapterId: '', status: 'new' }),
+  Testimony: makeModel({ chapterId: '', published: false }),
+  ContactMessage: makeModel({ chapterId: '', status: 'new' }),
   Settings: makeModel({}),
-  CustomPage: makeModel({ showInNav: true, order: 0 }),
-  EventRegistration: makeModel({}),
-  Executive: makeModel({ order: 0, imageFileId: '' }),
-  Member: makeModel({ phone: '', level: '', department: '', profileImageFileId: '', currentStreak: 0, longestStreak: 0, bibleChaptersRead: 0, birthdayMonth: null, birthdayDay: null }),
-  Notification: makeModel({ source: 'admin' }),
-  PushSubscription: makeModel({}),
+  CustomPage: makeModel({ chapterId: '', showInNav: true, order: 0 }),
+  EventRegistration: makeModel({ chapterId: '' }),
+  Executive: makeModel({ chapterId: '', order: 0, imageFileId: '' }),
+  Member: makeModel({
+    chapterId: '', phone: '', level: '', programme: '', hostel: '', academicHistory: [], department: '',
+    profileImageFileId: '', membershipStage: 'visitor', membershipNumber: '', qrToken: '',
+    shepherdStaffId: '', shepherdName: '',
+    currentStreak: 0, longestStreak: 0, bibleChaptersRead: 0, birthdayMonth: null, birthdayDay: null
+  }),
+  Notification: makeModel({ chapterId: '', source: 'admin' }),
+  PushSubscription: makeModel({ chapterId: '' }),
   SystemState: makeModel({ lastBirthdayNotifDate: '' }),
-  ShepherdingRecord: makeModel({ memberId: '', name: '', phone: '', address: '', emergencyContact: '', attendanceStatus: 'new', lastContactDate: '', pastoralNotes: '', imageFileId: '' }),
-  FinanceEntry: makeModel({ method: 'cash', reference: '', payee: '', budgetId: '', budgetLineId: '', approvalStatus: 'recorded', approvedBy: '', receiptFileId: '', description: '', recordedBy: '' }),
-  Budget: makeModel({ status: 'draft', notes: '', lines: [], createdBy: '' }),
-  AttendanceRecord: makeModel({ serviceType: 'sunday', title: '', marks: [], visitorCount: 0, notes: '', recordedBy: '' }),
-  ScheduledNotification: makeModel({ status: 'scheduled', channels: ['app'], audience: 'all', url: '/index.html', sentAt: null, result: '', createdBy: '' }),
-  SmsLog: makeModel({ status: 'sent', detail: '', sourceId: '' }),
-  StaffUser: makeModel({ active: true, lastLoginAt: null, name: '' })
+  ShepherdingRecord: makeModel({ chapterId: '', memberId: '', name: '', phone: '', address: '', emergencyContact: '', attendanceStatus: 'new', lastContactDate: '', pastoralNotes: '', imageFileId: '' }),
+  FinanceEntry: makeModel({ chapterId: '', method: 'cash', reference: '', payee: '', budgetId: '', budgetLineId: '', approvalStatus: 'recorded', approvedBy: '', receiptFileId: '', description: '', recordedBy: '' }),
+  Budget: makeModel({ chapterId: '', status: 'draft', notes: '', lines: [], createdBy: '' }),
+  AttendanceRecord: makeModel({ chapterId: '', serviceType: 'sunday', title: '', marks: [], visitorCount: 0, notes: '', recordedBy: '' }),
+  ScheduledNotification: makeModel({ chapterId: '', status: 'scheduled', channels: ['app'], audience: 'all', url: '/index.html', sentAt: null, result: '', createdBy: '' }),
+  SmsLog: makeModel({ chapterId: '', status: 'sent', detail: '', sourceId: '' }),
+  StaffUser: makeModel({ chapterId: '', memberId: '', active: true, lastLoginAt: null, name: '' })
 };
 
 // In-memory GridFS: enough for uploads, listing, streaming and deletion.

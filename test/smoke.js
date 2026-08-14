@@ -13,6 +13,7 @@ require('./harness.js');
   process.env.ADMIN_USERNAME = 'admin';
   process.env.ADMIN_PASSWORD = 'admin123';
   process.env.SESSION_SECRET = 'test';
+  process.env.LOGIN_RATE_LIMIT_MAX = '200'; // this suite signs far more accounts in/out per run than any real IP would in 15 minutes
   delete process.env.SHEPHERD_USERNAME;
 
   require('../server.js');
@@ -49,6 +50,20 @@ require('./harness.js');
   r = await call('anon', 'GET', '/api/finance/summary');
   check('finance is locked to signed-out visitors', r.status === 401, r.data);
 
+  console.log('\n== multi-chapter foundation: the one chapter every other test runs inside ==');
+  // The legacy admin login is treated as the bootstrap National Coordinator
+  // (see lib/roles.js) — it can create chapters and, with exactly one active
+  // chapter in play, every chapter-scoped write below auto-defaults to it
+  // without needing to say so explicitly (see resolveChapterIdForWrite).
+  r = await call('admin', 'POST', '/api/national/chapters', { id: 'test-chapter', name: 'ACONSU-Test', institution: 'Test University' });
+  check('national coordinator creates a chapter', r.status === 200 && r.data.item.id === 'test-chapter', r.data);
+  r = await call('admin', 'POST', '/api/national/chapters', { id: 'test-chapter', name: 'dupe' });
+  check('duplicate chapter id rejected', r.status === 400, r.data);
+  const chapterId = 'test-chapter';
+  r = await call('anon', 'GET', '/api/chapters');
+  check('chapters are publicly listable', r.data.length === 1 && r.data[0].id === chapterId, r.data);
+  check('the public chapter list omits payment details', r.data[0].payment === undefined, r.data[0]);
+
   console.log('\n== leadership accounts ==');
   for (const [role, user] of Object.entries({ finance: 'fin.ama', shepherding: 'shep.kojo', publicity: 'pub.esi', coordinator: 'coord.yaw' })) {
     r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123' });
@@ -65,6 +80,16 @@ require('./harness.js');
   }
   r = await call('bad', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'wrong' });
   check('wrong password rejected', r.status === 401, r.data);
+
+  console.log('\n== national coordinator ==');
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  check('national dashboard loads', r.status === 200 && r.data.totalChapters === 1 && r.data.activeChapters === 1, r.data);
+  r = await call('fin', 'GET', '/api/national/dashboard');
+  check('a chapter-level role cannot read the national dashboard', r.status === 401, r.data);
+  r = await call('coord', 'GET', '/api/national/dashboard');
+  check('a Chapter Coordinator cannot read the national dashboard either', r.status === 401, r.data);
+  r = await call('fin', 'POST', '/api/admin/staff', { username: 'sneaky', name: 'sneaky', role: 'coordinator', password: 'password123' });
+  check('a non-national role cannot self-elevate a new account to coordinator', r.status === 403 || r.status === 401, r.data);
 
   console.log('\n== role boundaries ==');
   r = await call('pub', 'GET', '/api/finance/summary');
@@ -131,11 +156,30 @@ require('./harness.js');
   check('entries survived the budget deletion', r.data.totalIncome === 1200, r.data);
   await call('fin', 'DELETE', `/api/finance/entries/${entryId}`);
 
+  console.log('\n== registration: chapter + compulsory photo (section 6) ==');
+  r = await call('anon', 'POST', '/api/auth/register', { name: 'No Photo', email: 'nophoto@test.com', password: 'secret123', chapterId });
+  check('registration without a photo is rejected', r.status === 400, r.data);
+  r = await call('anon', 'POST', '/api/auth/register', { name: 'No Chapter', email: 'nochapter@test.com', password: 'secret123' });
+  check('registration without a chapter is rejected', r.status === 400, r.data);
+
+  const regForm = new FormData();
+  regForm.append('profileImage', new Blob([Buffer.from('fake-photo-bytes')], { type: 'image/png' }), 'me.png');
+  regForm.append('name', 'Ama Test');
+  regForm.append('email', 'ama@test.com');
+  regForm.append('password', 'secret123');
+  regForm.append('phone', '0244123456');
+  regForm.append('chapterId', chapterId);
+  regForm.append('programme', 'BSc. Computer Science');
+  regForm.append('hostel', 'Hostel A');
+  const regRes = await fetch(BASE + '/api/auth/register', { method: 'POST', body: regForm });
+  const regData = await regRes.json();
+  jars.member = (regRes.headers.getSetCookie ? regRes.headers.getSetCookie() : []).map(c => c.split(';')[0]).join('; ');
+  check('a member registers with chapter + photo', regRes.status === 200, regData);
+
   console.log('\n== shepherding: attendance ==');
-  r = await call('anon', 'POST', '/api/auth/register', { name: 'Ama Test', email: 'ama@test.com', password: 'secret123', phone: '0244123456' });
-  check('a member registers', r.status === 200, r.data);
   r = await call('shep', 'GET', '/api/shepherd/members');
   check('member appears in the shepherding list', r.data.length === 1, r.data);
+  check('new registration starts as a visitor', r.data[0].membershipStage === 'visitor', r.data);
   const memberId = r.data[0].memberId;
 
   r = await call('shep', 'POST', '/api/shepherd/attendance', {
@@ -155,6 +199,20 @@ require('./harness.js');
 
   r = await call('shep', 'GET', `/api/shepherd/attendance-history/${memberId}`);
   check('attendance history reads back', r.data.servicesRecorded === 1 && r.data.rate === 0, r.data);
+
+  console.log('\n== membership workflow (section 7): visitor -> active ==');
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'not_a_real_stage' });
+  check('an unknown membership stage is rejected', r.status === 400, r.data);
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'under_review' });
+  check('shepherding begins review', r.status === 200 && r.data.item.membershipStage === 'under_review', r.data);
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'accepted' });
+  check('shepherding accepts the visitor as a member', r.status === 200 && r.data.item.membershipStage === 'accepted', r.data);
+  check('no membership number yet — not active', !r.data.item.membershipNumber, r.data);
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active', shepherdName: 'Sister Grace' });
+  check('shepherding assigns a shepherd and activates membership', r.status === 200 && r.data.item.membershipStage === 'active', r.data);
+  check('a membership number is issued on activation', /^TEST-CHAPTER-\d{4}$/.test(r.data.item.membershipNumber), r.data.item);
+  check('the assigned shepherd is recorded', r.data.item.shepherdName === 'Sister Grace', r.data.item);
+  check('a QR token was generated for the digital membership card', !!r.data.item.qrToken, r.data.item);
 
   console.log('\n== shepherding: member edits + messages ==');
   r = await call('shep', 'PUT', `/api/shepherd/members/${memberId}`, { phone: '0201234567', level: '300' });
@@ -241,9 +299,67 @@ require('./harness.js');
   check('team list omits password hashes', r.data.team.every(t => t.passwordHash === undefined), r.data.team);
   r = await call('fin', 'GET', '/api/coordinator/overview');
   check('finance role cannot read the coordinator dashboard', r.status === 401, r.data);
+  r = await call('admin', 'GET', `/api/coordinator/overview?chapterId=${chapterId}`);
+  check('national coordinator can open a specific chapter\'s coordinator dashboard', r.status === 200 && r.data.chapter.id === chapterId, r.data);
+  r = await call('admin', 'GET', '/api/coordinator/overview');
+  check('national coordinator must pick a chapter — no implicit "everything" view here', r.status === 400, r.data);
+
+  console.log('\n== chapter isolation (section 1, 43, 44) — the whole point of this phase ==');
+  r = await call('admin', 'POST', '/api/national/chapters', { id: 'test-chapter-2', name: 'ACONSU-Test-2', institution: 'Second University' });
+  check('a second chapter is created', r.status === 200, r.data);
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  check('national dashboard now counts two chapters', r.data.totalChapters === 2, r.data);
+
+  r = await call('admin', 'POST', '/api/admin/departments', { name: 'Chapter 1 Only Dept', chapterId });
+  check('explicit chapterId still works now that a default can no longer be assumed', r.status === 200, r.data);
+  r = await call('admin', 'POST', '/api/admin/departments', { name: 'No Chapter Given' });
+  check('a national actor MUST specify a chapter once more than one exists', r.status === 400, r.data);
+
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin2', name: 'fin2', role: 'finance', password: 'password123', chapterId: 'test-chapter-2' });
+  check('finance account created for chapter 2', r.status === 200 && r.data.item.chapterId === 'test-chapter-2', r.data);
+  r = await call('fin2', 'POST', '/api/portal/login', { username: 'fin2', password: 'password123' });
+  check('chapter 2 finance officer signs in', r.status === 200, r.data);
+
+  // Captured fresh rather than assumed, since an earlier (unrelated) test
+  // already deleted the original 1200 income entry as its own cleanup step —
+  // isolation is "chapter 2's activity never moves this number", not any
+  // particular absolute figure.
+  r = await call('fin', 'GET', '/api/finance/summary');
+  const chapter1IncomeBefore = r.data.totalIncome;
+
+  r = await call('fin2', 'POST', '/api/finance/entries', { entryType: 'income', category: 'offertory', amount: 999, date: '2026-03-01' });
+  check('chapter 2 records its own income', r.status === 200, r.data);
+  const chapter2EntryId = r.data.item.id;
+
+  r = await call('fin', 'GET', '/api/finance/summary');
+  check("chapter 1's finance summary is untouched by chapter 2's income", r.data.totalIncome === chapter1IncomeBefore, r.data);
+  r = await call('fin', 'GET', '/api/finance/entries');
+  check("chapter 1's ledger does not list chapter 2's entry", !r.data.some(e => e.id === chapter2EntryId), r.data);
+  r = await call('fin', 'PATCH', `/api/finance/entries/${chapter2EntryId}/approval`, { approvalStatus: 'approved' });
+  check("chapter 1's finance officer cannot approve chapter 2's entry by guessing its id", r.status === 404, r.data);
+  r = await call('fin', 'DELETE', `/api/finance/entries/${chapter2EntryId}`);
+  check("chapter 1's finance officer cannot delete chapter 2's entry by id either", r.status === 404, r.data);
+  r = await call('fin2', 'GET', '/api/finance/summary');
+  check('chapter 2 sees its own 999 income, not chapter 1\'s books', r.data.totalIncome === 999, r.data);
+
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'shep2', name: 'shep2', role: 'shepherding', password: 'password123', chapterId: 'test-chapter-2' });
+  check('shepherding account created for chapter 2', r.status === 200, r.data);
+  r = await call('shep2', 'POST', '/api/portal/login', { username: 'shep2', password: 'password123' });
+  check('chapter 2 shepherd signs in', r.status === 200, r.data);
+  r = await call('shep2', 'GET', '/api/shepherd/members');
+  check("chapter 2's member list does not include chapter 1's registered member", r.data.length === 0, r.data);
+
+  r = await call('admin', 'POST', `/api/national/chapters/test-chapter-2/assign-coordinator`, { username: 'coord2', name: 'Coord Two', password: 'password123' });
+  check('national coordinator assigns chapter 2 its own Chapter Coordinator', r.status === 200, r.data);
+  r = await call('coord2', 'POST', '/api/portal/login', { username: 'coord2', password: 'password123' });
+  check('chapter 2 coordinator signs in', r.status === 200, r.data);
+  r = await call('coord2', 'GET', '/api/finance/summary');
+  check("chapter 2's coordinator reads chapter 2's finances (999), never chapter 1's", r.status === 200 && r.data.totalIncome === 999, r.data);
+  r = await call('coord', 'GET', '/api/finance/summary');
+  check("chapter 1's coordinator still reads only chapter 1's finances, unaffected by any of the above", r.data.totalIncome === chapter1IncomeBefore, r.data);
 
   console.log('\n== static pages ==');
-  for (const page of ['/more.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html', '/js/portal.js', '/css/portal.css']) {
+  for (const page of ['/more.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html', '/register.html', '/js/portal.js', '/js/national.js', '/css/portal.css']) {
     const res = await fetch(BASE + page);
     check(`${page} served`, res.status === 200);
   }

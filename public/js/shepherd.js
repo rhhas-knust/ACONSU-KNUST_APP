@@ -619,11 +619,134 @@ async function renderMessages(el) {
   });
 }
 
+// ---------- membership workflow (section 7) ----------
+// REGISTERED -> VISITOR -> SHEPHERDING REVIEW -> ACCEPTED -> ASSIGNED
+// SHEPHERD -> ACTIVE. Every registration lands here first; this is the one
+// place that moves someone forward.
+const STAGE_LABELS = { visitor: 'Visitor', under_review: 'Under Review', accepted: 'Accepted', active: 'Active Member' };
+const NEXT_STAGE = { visitor: 'under_review', under_review: 'accepted' };
+const NEXT_ACTION_LABEL = { visitor: 'Begin Review', under_review: 'Accept as Member' };
+
+async function moveStage(memberId, stage, extra) {
+  try {
+    await fetchJSON(`/api/shepherd/members/${memberId}/stage`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage, ...(extra || {}) })
+    });
+    showToast(`Marked as ${STAGE_LABELS[stage]}.`, 'success');
+    openPanel('visitors');
+  } catch (err) {
+    showToast(err.message || 'Could not update this person.', 'error');
+  }
+}
+
+function assignShepherdForm(person) {
+  showModal(`
+    <h3>Assign Shepherd &amp; Activate</h3>
+    <p class="hint">${escapeHtml(person.name)} becomes an active member once a shepherd is assigned — their digital membership card is issued at the same time.</p>
+    <form id="assignShepherdForm">
+      <div class="field"><label>Shepherd's Name</label>
+        <input type="text" id="shepherdNameInput" placeholder="Who is shepherding this person?" required></div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Activate Membership</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="assignShepherdMsg"></div>
+    </form>
+  `);
+  document.getElementById('assignShepherdForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const shepherdName = document.getElementById('shepherdNameInput').value.trim();
+    if (!shepherdName) return;
+    await moveStage(person.memberId, 'active', { shepherdName });
+    closeModal();
+  });
+}
+
+async function renderVisitors(el) {
+  const people = await fetchJSON('/api/shepherd/members');
+  // Only ACONSU accounts go through this workflow — a manually-added visitor
+  // record with no account isn't a "registration" to review yet.
+  const withAccount = people.filter(p => p.source === 'member');
+  const pipeline = withAccount.filter(p => p.membershipStage !== 'active');
+  const active = withAccount.filter(p => p.membershipStage === 'active');
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Membership Workflow</h2>
+        <p class="sub">Visitor &rarr; Shepherding Review &rarr; Accepted &rarr; Assigned Shepherd &rarr; Active Member.</p>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      ${statCard('New Visitors', withAccount.filter(p => p.membershipStage === 'visitor').length, { tone: 'gold' })}
+      ${statCard('Under Review', withAccount.filter(p => p.membershipStage === 'under_review').length)}
+      ${statCard('Accepted, Awaiting Shepherd', withAccount.filter(p => p.membershipStage === 'accepted').length)}
+      ${statCard('Active Members', active.length, { tone: 'good' })}
+    </div>
+
+    <div class="portal-card">
+      <h3>In Progress</h3>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th></th><th>Name</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${pipeline.map(p => `
+              <tr>
+                <td>${avatar(p)}</td>
+                <td><strong>${escapeHtml(p.name)}</strong></td>
+                <td class="tiny muted">${escapeHtml(p.email || p.phone || '—')}</td>
+                <td>${pill(STAGE_LABELS[p.membershipStage] || p.membershipStage)}</td>
+                <td>
+                  <div class="row-actions">
+                    ${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}
+                    ${p.membershipStage === 'accepted' ? `<button data-assign="${p.memberId}">Assign Shepherd &amp; Activate</button>` : ''}
+                  </div>
+                </td>
+              </tr>
+            `).join('') || emptyRow(5, 'Nobody is in the visitor pipeline right now.')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="portal-card">
+      <h3>Active Members</h3>
+      <p class="hint">${active.length} member${active.length === 1 ? '' : 's'} with an assigned shepherd and a digital membership card.</p>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th></th><th>Name</th><th>Membership No.</th><th>Shepherd</th></tr></thead>
+          <tbody>
+            ${active.slice(0, 20).map(p => `
+              <tr>
+                <td>${avatar(p)}</td>
+                <td>${escapeHtml(p.name)}</td>
+                <td class="tiny muted">${escapeHtml(p.membershipNumber || '—')}</td>
+                <td class="tiny muted">${escapeHtml(p.shepherdName || '—')}</td>
+              </tr>
+            `).join('') || emptyRow(4, 'No active members yet.')}
+          </tbody>
+        </table>
+      </div>
+      ${active.length > 20 ? `<p class="tiny muted" style="margin-top:10px;">Showing the first 20 — see the Members tab for everyone.</p>` : ''}
+    </div>
+  `;
+
+  el.querySelectorAll('[data-advance]').forEach(btn => {
+    btn.addEventListener('click', () => moveStage(btn.dataset.advance, btn.dataset.stage));
+  });
+  el.querySelectorAll('[data-assign]').forEach(btn => {
+    btn.addEventListener('click', () => assignShepherdForm(pipeline.find(p => p.memberId === btn.dataset.assign)));
+  });
+}
+
 initPortal({
   role: 'shepherding',
   label: 'Shepherding',
   panels: [
     { key: 'overview', label: 'Overview', render: renderShepOverview },
+    { key: 'visitors', label: 'Membership Workflow', render: renderVisitors },
     { key: 'attendance', label: 'Attendance', render: renderAttendance },
     { key: 'members', label: 'Members', render: renderShepMembers },
     { key: 'messages', label: 'Messages', render: renderMessages }

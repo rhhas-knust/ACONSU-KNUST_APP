@@ -125,6 +125,7 @@ aconsu-app/
     db.js                 MongoDB Atlas connection
     models.js              Mongoose schemas
     repo.js                Generic CRUD used by server.js
+    roles.js                Multi-chapter role hierarchy + chapter-scope resolution (section 20)
     gridfs.js              File storage (photos, ebooks, profile/exec photos)
     bibleBooks.js          Static book/chapter list for the Bible reader
     push.js                Web push notification sending + cleanup
@@ -132,6 +133,7 @@ aconsu-app/
     mailer.js              SMTP email sending (password reset, office alerts)
     imageProcess.js        Automatic image resize/compression on upload
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
+  migrate-multichapter.js One-time migration to the multi-chapter model — see section 20
   capacitor.config.json    Native app (iOS/Android) wrapper config
   test/
     smoke.js               End-to-end test of the portals (`npm test`)
@@ -142,19 +144,20 @@ aconsu-app/
     events.html, media.html, bible.html, prayer.html, contact.html,
     login.html, register.html, forgot-password.html, reset-password.html,
     profile.html, notifications.html, discover.html, more.html,
-    page.html, admin.html
-    coordinator.html, finance.html, shepherding.html, publicity.html
+    page.html, admin.html (also the Chapter Admin portal — section 20)
+    national.html, coordinator.html, finance.html, shepherding.html, publicity.html
     manifest.json           PWA app manifest
     sw.js                   Service worker (offline support)
     icons/                  Generated app icons, all sizes
     css/style.css           Design system (colors, type, components)
-    css/portal.css          Shared styling for the four leadership portals
-    js/main.js              Shared header/footer, countdown, auth state, PWA install, toasts
-    js/admin.js             Admin dashboard logic
+    css/portal.css          Shared styling for the leadership portals
+    js/main.js              Shared header/footer, chapter selection, auth state, PWA install, toasts
+    js/admin.js             Admin / Chapter Admin dashboard logic
     js/portal.js            Shared portal shell — sign-in, nav, modals, formatting
-    js/coordinator.js       Coordinator dashboard
+    js/national.js          National Coordinator portal (chapters, national dashboard/announcements)
+    js/coordinator.js       Chapter Coordinator dashboard (approvals, chapter-wide announcements)
     js/finance.js           Finance office (budgets, ledger, reports)
-    js/shepherd.js          Shepherding portal (attendance, members, messages)
+    js/shepherd.js          Shepherding portal (attendance, members, messages, membership workflow)
     js/publicity.js         Publicity portal (announcements, SMS, testimonies)
     images/logo.jpg         ACONSU logo
 ```
@@ -426,3 +429,56 @@ Works with any standard SMTP provider — Gmail (using an [App Password](https:/
 ## 19. Design
 
 Palette pulled from the ACONSU crest: deep purple (`#5B2C82`) and rich plum (`#3A1B54`) as primary, a light lilac background, with the crest's flame rendered as a gold-to-red gradient accent on key call-to-action buttons and the homepage hero. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
+
+## 20. Multi-chapter platform (Phase 2 of the ACONSU platform spec)
+
+What used to be a single-chapter app (one ACONSU-KNUST) is now built to run **many ACONSU chapters from one deployment**, each with its own members, events, finances, attendance and content, with a National Coordinator overseeing all of them. This section covers what changed and how to switch a live install over.
+
+### Hierarchy
+
+```
+National Coordinator          — every chapter (env admin login doubles as this — see below)
+      ↓
+Chapter Coordinator           — role 'coordinator' — top authority in ONE chapter
+      ↓
+Chapter Admin                 — role 'chapterAdmin' — day-to-day admin (this is admin.html)
+      ↓
+Executive / Finance / Shepherding / Publicity / Welfare / Department Leader
+      ↓
+Members  →  Visitors
+```
+
+`coordinator` keeps its original database value on purpose (nothing that already exists had to be renamed) — its *meaning* changed from "read-only rollup" to "highest local authority," gaining approval powers (finance entry approval) and a chapter-wide announcement tool on top of the read access it already had.
+
+### How chapter isolation actually works
+
+Every chapter-owned collection (members, events, departments, finance entries, attendance, shepherding records, join/prayer/testimony/contact submissions, custom pages, sermons, executives, scheduled notifications, SMS logs) carries a `chapterId`. This is enforced **server-side**, not just hidden in the UI (section 43):
+
+- `lib/roles.js` → `getActingScope(req)` decides, from the session alone, which chapter (if any) a request may touch.
+- Every chapter-scoped route filters reads and stamps writes through `chapterFilter(req)` / `chapterIdForWrite(req)` — a chapter-scoped account can never read or write another chapter's row even by guessing its id in the URL.
+- A `chapterId` in a request **body** is never trusted for who-owns-this — it's always derived from the session server-side.
+- National-level accounts (the env admin login, or a real `nationalCoordinator` account) can act across every chapter, and must explicitly pick one (`?chapterId=`) for anything that only makes sense for a single chapter (like the Chapter Coordinator dashboard).
+- Notifications and events can be marked national (blank `chapterId` / `isNational: true`) to broadcast to every chapter — everything else defaults to exactly one chapter, never "all of them," unless a route is explicitly a national one.
+
+`test/smoke.js` has a dedicated "chapter isolation" section that spins up a second chapter with its own Finance/Shepherding/Coordinator accounts and asserts none of it is reachable from the first chapter's accounts, including by guessing a document id directly.
+
+### What's new
+
+- **National Coordinator portal** (`/national.html`) — create/edit/activate/deactivate chapters, assign or change a Chapter Coordinator (the outgoing one steps down to Chapter Admin rather than losing their account), a national dashboard with aggregated (never individually-identifying) per-chapter comparison, and national announcements.
+- **Chapter Coordinator** (`/coordinator.html`, upgraded) — same dashboard as before, now genuinely scoped to one chapter, plus an Approvals tab (finance entries flagged pending) and a chapter-wide announcement composer.
+- **Chapter Admin** — `/admin.html` now accepts sign-in from a `chapterAdmin` or `coordinator` portal account, not only the legacy env admin login. A national/env-admin session gets a chapter picker on the Leadership Accounts form; a chapter-scoped account is auto-confined to its own chapter with no picker shown.
+- **Registration** (`/register.html`) — now asks for a chapter, a profile photo (compulsory, section 6), programme and hostel, and a new account starts as a **visitor**, not a full member.
+- **Membership workflow** (Shepherding → Membership Workflow tab) — visitor → under review → accepted → assigned shepherd + active, matching section 7. Activating a member issues their membership number and a QR token (the digital membership card and QR attendance scanning that consume these are Phase 3 work — the data is ready for them).
+- Public pages pick up which chapter they're showing via a small chapter-selector (`main.js`: `ensureChapterSelected`) — invisible with one active chapter, asks once a second chapter exists, and a signed-in member's own chapter always wins.
+
+### Migrating an existing (single-chapter) install
+
+```bash
+node migrate-multichapter.js
+```
+
+Safe to re-run — it only ever fills in a **missing** `chapterId`, never overwrites one that's already set. It creates one `Chapter` document from whatever is already in Site Settings, backfills that chapter's id onto every existing document, and grandfathers existing member accounts straight to **active** membership (they already went through the old direct-registration flow, so demoting them to "visitor" would be wrong). Existing admin/member logins are completely unaffected — nothing about how they sign in changed.
+
+### Deliberately not in this pass
+
+Matching the spec's own phased rollout, this pass is the *foundation* (chapter model, isolation, hierarchy, registration, membership workflow, national/chapter portals) — QR/barcode scanning UI, the digital membership card view, Forms builder, Bible Study, Prayer Wall responses, Community Chat, Groups, Welfare portal, Volunteer scheduling, Live Services, Seminars, E-Book Library, PDF report generation, and per-chapter payment integration are all still ahead (Phases 3–7 of the spec) and now have a chapter-aware foundation to build on rather than needing their own migration later.

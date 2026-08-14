@@ -1,9 +1,84 @@
 // ---------- shared helpers ----------
+// Every request automatically carries whichever chapter is selected (see
+// "chapter selection" below) via a header, so chapter-scoped API routes know
+// which chapter's content to return without every single call site having
+// to remember to pass it.
 async function fetchJSON(url, options) {
-  const res = await fetch(url, options);
+  const opts = { ...(options || {}) };
+  if (typeof url === 'string' && url.startsWith('/api/')) {
+    const chapterId = getSelectedChapterId();
+    if (chapterId) opts.headers = { ...(opts.headers || {}), 'X-Chapter-Id': chapterId };
+  }
+  const res = await fetch(url, opts);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
+}
+
+// ---------- chapter selection ----------
+// ACONSU is a multi-chapter platform: every chapter-scoped page needs to know
+// which chapter it's showing. With a single active chapter (true for most
+// deployments most of the time) this resolves itself silently on first
+// visit. The moment a second chapter exists, a visitor is asked once and
+// it's remembered on that device from then on — a signed-in member's own
+// account overrides it automatically once they log in (see initLayout).
+const CHAPTER_STORAGE_KEY = 'aconsu_chapter_id';
+
+function getSelectedChapterId() {
+  try { return localStorage.getItem(CHAPTER_STORAGE_KEY) || ''; } catch (e) { return ''; }
+}
+function setSelectedChapterId(id) {
+  try {
+    if (id) localStorage.setItem(CHAPTER_STORAGE_KEY, id);
+    else localStorage.removeItem(CHAPTER_STORAGE_KEY);
+  } catch (e) { /* private-browsing storage errors are non-fatal here */ }
+}
+
+function showChapterPicker(chapters) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px;';
+    backdrop.innerHTML = `
+      <div style="background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:'Manrope',sans-serif;">
+        <h3 style="margin:0 0 6px; font-family:'Fraunces',serif; color:var(--purple-deep,#3A1B54);">Choose your ACONSU chapter</h3>
+        <p style="color:#5a4468; font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters — pick yours to continue. You can change this later from your profile.</p>
+        <div id="chapterPickList" style="display:flex; flex-direction:column; gap:10px;"></div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    const list = backdrop.querySelector('#chapterPickList');
+    chapters.forEach((c) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-outline';
+      btn.style.cssText = 'text-align:left; padding:12px 16px;';
+      btn.innerHTML = `<strong>${escapeHtml(c.name)}</strong>${c.institution ? `<br><small style="opacity:0.7;">${escapeHtml(c.institution)}</small>` : ''}`;
+      btn.addEventListener('click', () => {
+        setSelectedChapterId(c.id);
+        backdrop.remove();
+        resolve(c.id);
+      });
+      list.appendChild(btn);
+    });
+  });
+}
+
+// Resolves (and, if needed, asks) which chapter this browser is looking at.
+// Safe to call on every page load — instant once a chapter is already
+// chosen. Called from initLayout, so ordinary pages never need this directly.
+async function ensureChapterSelected() {
+  if (getSelectedChapterId()) return getSelectedChapterId();
+  try {
+    const chapters = await fetch('/api/chapters').then(r => r.json());
+    if (Array.isArray(chapters) && chapters.length === 1) {
+      setSelectedChapterId(chapters[0].id);
+      return chapters[0].id;
+    }
+    if (Array.isArray(chapters) && chapters.length > 1) {
+      return await showChapterPicker(chapters);
+    }
+  } catch (e) { /* chapters not reachable yet — pages fall back to unscoped content */ }
+  return '';
 }
 
 function escapeHtml(str) {
@@ -293,21 +368,31 @@ function renderFooter(settings) {
         <span>&copy; ${new Date().getFullYear()} ACONSU. All Rights Reserved.</span>
         <span>Built with love, for the union.</span>
       </div>
+      <div style="text-align:center; padding-top:10px; font-size:0.72rem; color:#9b86a9;">Powered by HasTech Solutions</div>
     </div>
   `;
 }
 
 async function initLayout(activePath) {
-  let customPages = [];
-  try {
-    customPages = await fetchJSON('/api/pages');
-  } catch (e) { /* nav still works without custom pages */ }
+  await ensureChapterSelected();
   let member = null;
   try {
     const authRes = await fetchJSON('/api/auth/me');
     member = authRes.member;
-    if (member) dailyCheckin();
+    if (member) {
+      dailyCheckin();
+      // A signed-in member's own chapter is authoritative — keeps this
+      // browser in step even if it last browsed anonymously as another
+      // chapter (a shared/public computer, a link from a friend, etc.).
+      if (member.chapterId && member.chapterId !== getSelectedChapterId()) {
+        setSelectedChapterId(member.chapterId);
+      }
+    }
   } catch (e) { /* nav still works without auth state */ }
+  let customPages = [];
+  try {
+    customPages = await fetchJSON('/api/pages');
+  } catch (e) { /* nav still works without custom pages */ }
   renderHeader(activePath, customPages, member);
   renderBottomNav(activePath, customPages, member);
   try {

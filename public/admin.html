@@ -27,6 +27,8 @@
   .admin-panel { display: none; }
   .admin-panel.active { display: block; }
   .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .field-row { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .app-watermark { text-align: center; padding: 18px 12px 28px; font-size: 0.75rem; color: #a993b3; }
   table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 0.88rem; vertical-align: top; }
   th { background: var(--lilac-light); font-family: var(--font-body); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; color: var(--purple-deep); }
@@ -110,6 +112,7 @@
       <div class="admin-panel" id="panel-testimonies"></div>
       <div class="admin-panel" id="panel-contactMessages"></div>
       <div class="admin-panel" id="panel-settings"></div>
+      <div class="app-watermark">Powered by HasTech Solutions</div>
     </div>
   </div>
 </div>

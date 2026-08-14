@@ -10,6 +10,7 @@ const { connectDB } = require('./lib/db');
 const repo = require('./lib/repo');
 const gridfs = require('./lib/gridfs');
 const models = require('./lib/models');
+const rolesLib = require('./lib/roles');
 const BIBLE_BOOKS = require('./lib/bibleBooks');
 const push = require('./lib/push');
 const sms = require('./lib/sms');
@@ -50,9 +51,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------- rate limiting ----------
 // Login: slow down brute-force password guessing.
+// Configurable so the automated test suite (which legitimately signs many
+// more accounts in and out per run than any real IP would in 15 minutes,
+// especially now that it also exercises a second chapter's worth of
+// accounts) can raise it — production keeps the same strict default of 10.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: Number(process.env.LOGIN_RATE_LIMIT_MAX) || 10,
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false
@@ -125,16 +130,27 @@ app.get('/api/shepherd/check', (req, res) => {
   res.json({ isShepherd: hasRole(req, 'shepherding') });
 });
 
-// ---------- leadership portal auth (coordinator / finance / shepherding / publicity) ----------
-// Every union leader gets their own account, created by the admin, so access can
-// be handed to a person rather than to a shared password. Three ways in are
-// accepted, in this order:
+// ---------- leadership portal auth (coordinator / finance / shepherding / publicity / ...) ----------
+// Every union leader gets their own account, created by an authorised admin,
+// so access can be handed to a person rather than to a shared password.
+// Three ways in are accepted, in this order:
 //   1. a StaffUser account with the matching role  (the normal case)
-//   2. the main admin session                       (admin can always get in)
+//   2. the main admin session                       (admin can always get in — treated as the
+//                                                      bootstrap National Coordinator, see lib/roles.js)
 //   3. the legacy SHEPHERD_* env login              (kept so nothing breaks mid-term)
-// The coordinator role deliberately satisfies *read* checks for every area —
-// that's the whole point of the role — but never the write ones.
-const PORTAL_ROLES = ['coordinator', 'finance', 'shepherding', 'publicity'];
+// The coordinator role — the Chapter Coordinator — deliberately satisfies
+// *read* checks for every office in its own chapter, that's the whole point
+// of the role, but only some of the write ones (see requireChapterCoordinator
+// below for the powers that are genuinely coordinator-and-above).
+//
+// Multi-chapter note: every role below except nationalCoordinator requires a
+// chapterId (enforced when the account is created — see /api/admin/staff).
+// lib/roles.js is what actually turns "which role" into "which chapter's
+// data this session may touch" — these helpers only answer "which role".
+const PORTAL_ROLES = [
+  'nationalCoordinator', 'coordinator', 'chapterAdmin', 'executive',
+  'finance', 'shepherding', 'publicity', 'welfare', 'departmentLeader'
+];
 
 function currentStaff(req) {
   return (req.session && req.session.staff) || null;
@@ -153,13 +169,18 @@ function actorName(req) {
 function hasRole(req, role) {
   if (!req.session) return false;
   if (req.session.isAdmin) return true;
-  if (role === 'shepherding' && req.session.isShepherd) return true;
   const staff = currentStaff(req);
+  if (staff && staff.role === 'nationalCoordinator') return true; // national outranks every office
+  if (role === 'shepherding' && req.session.isShepherd) return true;
   return !!(staff && staff.role === role);
 }
 
-// Read access: the role itself, or the coordinator who oversees all of them.
+// Read access: the role itself, or the coordinator who oversees all of them
+// (within their own chapter — chapterFilter() is what actually confines it).
+// National is deliberately excluded from that blanket bypass — a Chapter
+// Coordinator outranks every office in their own chapter, but not National.
 function canView(req, role) {
+  if (role === 'nationalCoordinator') return hasRole(req, 'nationalCoordinator');
   return hasRole(req, role) || hasRole(req, 'coordinator');
 }
 
@@ -181,6 +202,32 @@ const requireFinance = requireRole('finance');
 const requirePublicity = requireRole('publicity');
 const requireCoordinator = requireRole('coordinator');
 
+// ---------- chapter hierarchy helpers ----------
+// Chapter Admin (or above): the operational tier from section 5 — manages
+// users/content/events/forms/attendance/reports for their own chapter.
+function isChapterAdminOrAbove(req) {
+  if (req.session && req.session.isAdmin) return true;
+  const staff = currentStaff(req);
+  if (staff && staff.role === 'nationalCoordinator') return true;
+  return !!(staff && staff.chapterId && ['coordinator', 'chapterAdmin'].includes(staff.role));
+}
+function requireChapterAdmin(req, res, next) {
+  if (isChapterAdminOrAbove(req)) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+// Chapter Coordinator (or above): the top chapter authority — approvals,
+// chapter-wide announcements, assigning who runs the chapter's offices.
+function isChapterCoordinatorOrAbove(req) {
+  if (req.session && req.session.isAdmin) return true;
+  const staff = currentStaff(req);
+  if (staff && staff.role === 'nationalCoordinator') return true;
+  return !!(staff && staff.chapterId && staff.role === 'coordinator');
+}
+function requireChapterCoordinator(req, res, next) {
+  if (isChapterCoordinatorOrAbove(req)) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
 app.post('/api/portal/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
@@ -192,7 +239,8 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
         && username === process.env.SHEPHERD_USERNAME
         && password === process.env.SHEPHERD_PASSWORD) {
       req.session.isShepherd = true;
-      req.session.staff = { id: '', username, name: 'Shepherding Head', role: 'shepherding' };
+      // Pinned to the seed chapter — this credential predates chapters existing at all.
+      req.session.staff = { id: '', username, name: 'Shepherding Head', role: 'shepherding', chapterId: rolesLib.LEGACY_CHAPTER_ID };
       return res.json({ success: true, staff: req.session.staff });
     }
 
@@ -201,7 +249,10 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
 
-    req.session.staff = { id: user.id, username: user.username, name: user.name || user.username, role: user.role };
+    req.session.staff = {
+      id: user.id, username: user.username, name: user.name || user.username,
+      role: user.role, chapterId: user.chapterId || ''
+    };
     models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
     res.json({ success: true, staff: req.session.staff });
   } catch (e) {
@@ -218,12 +269,19 @@ app.post('/api/portal/logout', (req, res) => {
 });
 
 // Tells a portal page who is signed in and which areas they may open.
-app.get('/api/portal/me', (req, res) => {
+app.get('/api/portal/me', async (req, res) => {
   const staff = currentStaff(req);
   const isAdmin = !!(req.session && req.session.isAdmin);
+  const scope = rolesLib.getActingScope(req);
+  let chapter = null;
+  if (scope.chapterId && scope.chapterId !== '__none__') {
+    chapter = await repo.getById('chapters', scope.chapterId).catch(() => null);
+  }
   res.json({
-    staff,
+    staff: staff ? { ...staff, roleLabel: rolesLib.roleLabel(staff.role) } : null,
     isAdmin,
+    isNational: scope.isNational,
+    chapter: chapter ? { id: chapter.id, name: chapter.name } : null,
     access: PORTAL_ROLES.reduce((acc, role) => {
       acc[role] = { view: canView(req, role), edit: hasRole(req, role) };
       return acc;
@@ -237,15 +295,61 @@ function requireMember(req, res, next) {
   return res.status(401).json({ error: 'Please log in to continue' });
 }
 
+// ---------- public chapter context ----------
+// Anonymous/public pages send which chapter they're browsing via this header
+// (see main.js: fetchJSON attaches it automatically once a chapter is
+// selected). Chapter-scoped public GET routes use it to show only that
+// chapter's content. Absent (old cached client, or nobody has picked yet) ->
+// '' -> those routes fall back to showing everything, i.e. exactly today's
+// single-chapter behaviour, so a rollout in progress never looks broken.
+function publicChapterId(req) {
+  const id = req.headers['x-chapter-id'];
+  return typeof id === 'string' && id.trim() ? id.trim() : '';
+}
+
+// For anonymous public *submissions* (join request / prayer request /
+// testimony / contact message): the X-Chapter-Id header is normally present
+// (main.js sends it once a chapter is selected), but this is the safety net.
+// With exactly one active chapter there's no ambiguity to ask about, so this
+// defaults to it — the same "single chapter, zero friction" rule used
+// elsewhere — rather than ever letting someone's message silently vanish
+// into an unscoped void no chapter's inbox looks at. With more than one
+// active chapter and no header, the caller must reject rather than guess
+// which chapter's inbox should see it.
+async function resolvePublicChapterId(req) {
+  const explicit = publicChapterId(req);
+  if (explicit) return explicit;
+  const chapters = await repo.getAll('chapters', { status: 'active' });
+  return chapters.length === 1 ? chapters[0].id : '';
+}
+
+// A handful of read routes (departments/events/sermons/pages/executives/
+// testimonies) serve both the public site and the admin/leadership
+// dashboards. An authenticated chapter-scoped session always wins — so a
+// Chapter Admin's dashboard shows their own chapter regardless of whatever
+// the public chapter-picker last selected on that browser. A national/admin
+// session with no chapter chosen sees everything, matching today's
+// behaviour. A genuinely anonymous visitor falls back to the public header.
+function contentChapterFilter(req) {
+  const scope = rolesLib.getActingScope(req);
+  if (scope.kind === 'anonymous') {
+    const chapterId = publicChapterId(req);
+    return chapterId ? { chapterId } : {};
+  }
+  return rolesLib.chapterFilter(req, { required: false });
+}
+
 // ---------- notifications helper ----------
 // Saves a notification for the in-app feed AND fires a real push to every
 // subscribed device. Used both by the manual admin route and automatic
 // triggers (new event, new sermon, birthdays).
-async function createNotification(title, body, url, source) {
+// `chapterId` blank = national broadcast, visible in every chapter's feed —
+// pass a real chapter id to keep an announcement inside one chapter.
+async function createNotification(title, body, url, source, chapterId) {
   const notif = await repo.create('notifications', {
-    title, body, url: url || '/index.html', source: source || 'admin'
+    chapterId: chapterId || '', title, body, url: url || '/index.html', source: source || 'admin'
   }, 'notif');
-  push.sendPushToAll({ title, body, url: url || '/index.html' }).catch(() => {});
+  push.sendPushToAll({ title, body, url: url || '/index.html' }, chapterId).catch(() => {});
   return notif;
 }
 
@@ -278,13 +382,23 @@ async function notifyOfficeByEmail(officeKey, subject, html) {
 }
 
 // ---------- member auth routes ----------
-app.post('/api/auth/register', loginLimiter, async (req, res) => {
-  const { name, email, password, phone, level, department, birthdayMonth, birthdayDay } = req.body;
+// Registration is multipart now — a profile photo is compulsory for member
+// registration (section 6), same upload pipeline as the profile-photo update
+// route below. Every new account starts life as a 'visitor': the Shepherding
+// workflow (section 7) is what moves someone from here to an active member.
+app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), async (req, res) => {
+  const { name, email, password, phone, level, programme, hostel, department, chapterId, birthdayMonth, birthdayDay } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email and password are required' });
   }
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+  if (!chapterId) {
+    return res.status(400).json({ error: 'Please select your ACONSU chapter' });
+  }
+  if (!req.file) {
+    return res.status(400).json({ error: 'A profile photo is required to register' });
   }
   const month = birthdayMonth ? Number(birthdayMonth) : null;
   const day = birthdayDay ? Number(birthdayDay) : null;
@@ -294,16 +408,31 @@ app.post('/api/auth/register', loginLimiter, async (req, res) => {
   if (month && (month < 1 || month > 12)) return res.status(400).json({ error: 'Invalid birthday month' });
   if (day && (day < 1 || day > 31)) return res.status(400).json({ error: 'Invalid birthday day' });
   try {
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter || chapter.status !== 'active') {
+      return res.status(400).json({ error: 'Please choose a valid, active chapter' });
+    }
     const existing = await models.Member.findOne({ email: email.toLowerCase().trim() });
     if (existing) return res.status(400).json({ error: 'An account with this email already exists' });
+
+    const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+    const profileImageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+      category: 'member-profile', contentType: compressed.contentType, title: name, chapterId: chapter.id
+    }));
+
     const passwordHash = await bcrypt.hash(password, 10);
     const member = await repo.create('members', {
+      chapterId: chapter.id,
       name, email: email.toLowerCase().trim(), passwordHash,
-      phone: phone || '', level: level || '', department: department || '',
+      phone: phone || '', level: level || '', programme: programme || '', hostel: hostel || '',
+      department: department || '',
+      profileImageFileId,
+      membershipStage: 'visitor',
+      qrToken: crypto.randomBytes(16).toString('hex'),
       birthdayMonth: month, birthdayDay: day
     }, 'mem');
     req.session.memberId = member.id;
-    res.json({ success: true, member: { id: member.id, name: member.name, email: member.email } });
+    res.json({ success: true, member: { id: member.id, name: member.name, email: member.email, chapterId: member.chapterId } });
   } catch (e) {
     res.status(500).json({ error: 'Could not create account. Please try again.' });
   }
@@ -395,6 +524,15 @@ app.get('/api/auth/me', async (req, res) => {
   }
 });
 
+// Ghanaian academic years run roughly August-to-July, so "which year is this"
+// is computed rather than asked for — used only to label an academic-history
+// snapshot (section 8), never anything security- or access-relevant.
+function currentAcademicYearLabel() {
+  const now = new Date();
+  const y = now.getFullYear();
+  return now.getMonth() + 1 >= 8 ? `${y}/${y + 1}` : `${y - 1}/${y}`;
+}
+
 app.put('/api/member/profile', requireMember, upload.single('profileImage'), async (req, res) => {
   try {
     const existing = await repo.getById('members', req.session.memberId);
@@ -403,7 +541,7 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
     if (req.file) {
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
       profileImageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
-        category: 'member-profile', contentType: compressed.contentType, title: req.body.name || existing.name
+        category: 'member-profile', contentType: compressed.contentType, title: req.body.name || existing.name, chapterId: existing.chapterId
       }));
       if (existing.profileImageFileId) gridfs.deleteFile(existing.profileImageFileId).catch(() => {});
     }
@@ -412,10 +550,24 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
     if ((month && !day) || (day && !month)) {
       return res.status(400).json({ error: 'Please provide both a birthday month and day, or leave both blank' });
     }
+    const level = req.body.level !== undefined ? req.body.level : existing.level;
+    const hostel = req.body.hostel !== undefined ? req.body.hostel : existing.hostel;
+    // A real academic-year change (not just a typo fix) — snapshot where they
+    // were before overwriting, so "2025/2026: Level 200, Hostel A" is never lost.
+    let academicHistory = existing.academicHistory || [];
+    if ((level && level !== existing.level) || (hostel && hostel !== existing.hostel)) {
+      academicHistory = [
+        ...academicHistory,
+        { year: currentAcademicYearLabel(), level: existing.level || '', hostel: existing.hostel || '', updatedAt: new Date() }
+      ];
+    }
     const updates = {
       name: req.body.name || existing.name,
       phone: req.body.phone || '',
-      level: req.body.level || '',
+      level,
+      programme: req.body.programme !== undefined ? req.body.programme : existing.programme,
+      hostel,
+      academicHistory,
       department: req.body.department || '',
       profileImageFileId,
       birthdayMonth: month,
@@ -525,7 +677,7 @@ app.get('/api/birthdays/today', async (req, res) => {
     const now = new Date();
     const month = now.getMonth() + 1;
     const day = now.getDate();
-    const members = await models.Member.find({ birthdayMonth: month, birthdayDay: day }).lean();
+    const members = await models.Member.find({ birthdayMonth: month, birthdayDay: day, ...contentChapterFilter(req) }).lean();
     // Privacy: only first name + last initial, and a profile photo if they have one.
     // No email, phone, level, or any other identifying detail is exposed publicly.
     const celebrants = members.map((m) => {
@@ -543,7 +695,11 @@ app.get('/api/birthdays/today', async (req, res) => {
 // ---------- notifications & push ----------
 app.get('/api/notifications', async (req, res) => {
   try {
-    const items = await repo.getAll('notifications');
+    const base = contentChapterFilter(req);
+    // Always include national broadcasts (blank chapterId) alongside this
+    // chapter's own — a national announcement should reach every chapter.
+    const filter = base.chapterId ? { $or: [{ chapterId: base.chapterId }, { chapterId: '' }] } : base;
+    const items = await repo.getAll('notifications', filter);
     res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 40));
   } catch (e) {
     res.status(500).json({ error: 'Could not load notifications' });
@@ -560,10 +716,15 @@ app.post('/api/push/subscribe', async (req, res) => {
   try {
     const existing = await models.PushSubscription.findOne({ endpoint: subscription.endpoint });
     if (existing) return res.json({ success: true }); // already subscribed on this device
+    const memberId = (req.session && req.session.memberId) || '';
+    // Denormalized so a chapter-scoped push send doesn't need to join through
+    // Member every time — see lib/push.js.
+    const owner = memberId ? await repo.getById('members', memberId) : null;
     await repo.create('pushSubscriptions', {
       endpoint: subscription.endpoint,
       keys: subscription.keys || {},
-      memberId: (req.session && req.session.memberId) || ''
+      memberId,
+      chapterId: (owner && owner.chapterId) || ''
     }, 'push');
     res.json({ success: true });
   } catch (e) {
@@ -646,7 +807,7 @@ app.get('/api/bible/passage', async (req, res) => {
 ['departments', 'sermons', 'testimonies'].forEach((resource) => {
   app.get(`/api/${resource}`, async (req, res) => {
     try {
-      const items = await repo.getAll(resource);
+      const items = await repo.getAll(resource, contentChapterFilter(req));
       // Only publish testimonies that have been approved by an admin.
       if (resource === 'testimonies') {
         return res.json(items.filter((t) => t.published));
@@ -658,10 +819,13 @@ app.get('/api/bible/passage', async (req, res) => {
   });
 });
 
-// events need per-event registration counts attached, so they get their own route
+// events need per-event registration counts attached, so they get their own route.
+// A chapter sees its own events plus any national event, never another chapter's.
 app.get('/api/events', async (req, res) => {
   try {
-    const events = await repo.getAll('events');
+    const base = contentChapterFilter(req);
+    const filter = base.chapterId ? { $or: [{ chapterId: base.chapterId }, { isNational: true }] } : base;
+    const events = await repo.getAll('events', filter);
     const withCounts = await Promise.all(events.map(async (e) => {
       const registrationCount = e.registrationEnabled
         ? await models.EventRegistration.countDocuments({ eventId: e.id })
@@ -683,7 +847,7 @@ app.get('/api/events', async (req, res) => {
 // custom admin-created pages (bookshelf / gallery / text tabs)
 app.get('/api/pages', async (req, res) => {
   try {
-    const pages = await repo.getAll('pages');
+    const pages = await repo.getAll('pages', contentChapterFilter(req));
     res.json(pages.sort((a, b) => (a.order || 0) - (b.order || 0)));
   } catch (e) {
     res.status(500).json({ error: 'Could not load pages' });
@@ -692,7 +856,7 @@ app.get('/api/pages', async (req, res) => {
 
 app.get('/api/pages/:slug', async (req, res) => {
   try {
-    const pages = await repo.getAll('pages');
+    const pages = await repo.getAll('pages', contentChapterFilter(req));
     const page = pages.find((p) => p.slug === req.params.slug);
     if (!page) return res.status(404).json({ error: 'Page not found' });
     res.json(page);
@@ -750,6 +914,34 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
+// Public chapter directory — powers the registration chapter dropdown and
+// the "choose your chapter" picker on the public site (see main.js). Only
+// active chapters are offered; payment/contact/about detail isn't needed
+// here so it's deliberately left off this response.
+app.get('/api/chapters', async (req, res) => {
+  try {
+    const chapters = await repo.getAll('chapters', { status: 'active' });
+    res.json(chapters
+      .map(c => ({ id: c.id, name: c.name, fullName: c.fullName, institution: c.institution, location: c.location }))
+      .sort((a, b) => a.name.localeCompare(b.name)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load chapters' });
+  }
+});
+
+// Public chapter profile (About page use) — deliberately excludes `payment`,
+// which stays visible only to that chapter's own leadership and National.
+app.get('/api/chapters/:id', async (req, res) => {
+  try {
+    const chapter = await repo.getById('chapters', req.params.id);
+    if (!chapter || chapter.status !== 'active') return res.status(404).json({ error: 'Chapter not found' });
+    const { payment, ...safe } = chapter;
+    res.json(safe);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load chapter' });
+  }
+});
+
 app.get('/api/departments/:id', async (req, res) => {
   try {
     const dept = await repo.getById('departments', req.params.id);
@@ -762,7 +954,7 @@ app.get('/api/departments/:id', async (req, res) => {
 
 app.get('/api/executives', async (req, res) => {
   try {
-    const execs = await repo.getAll('executives');
+    const execs = await repo.getAll('executives', contentChapterFilter(req));
     res.json(execs.sort((a, b) => (a.order || 0) - (b.order || 0)));
   } catch (e) {
     res.status(500).json({ error: 'Could not load executives' });
@@ -776,7 +968,10 @@ app.post('/api/join-requests', formLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Name, email and department are required' });
   }
   try {
+    const chapterId = await resolvePublicChapterId(req);
+    if (!chapterId) return res.status(400).json({ error: 'Please select your chapter and try again.' });
     await repo.create('joinRequests', {
+      chapterId,
       departmentId, name, email, phone: phone || '', level: level || '', message: message || '',
       status: 'new'
     }, 'join');
@@ -794,7 +989,10 @@ app.post('/api/prayer-requests', formLimiter, async (req, res) => {
   const { name, email, request, isPrivate } = req.body;
   if (!request) return res.status(400).json({ error: 'Request details are required' });
   try {
+    const chapterId = await resolvePublicChapterId(req);
+    if (!chapterId) return res.status(400).json({ error: 'Please select your chapter and try again.' });
     await repo.create('prayerRequests', {
+      chapterId,
       name: name || 'Anonymous', email: email || '', request, isPrivate: !!isPrivate, status: 'new'
     }, 'prayer');
     res.json({ success: true });
@@ -811,7 +1009,10 @@ app.post('/api/testimonies', formLimiter, async (req, res) => {
   const { name, testimony } = req.body;
   if (!testimony) return res.status(400).json({ error: 'Testimony is required' });
   try {
+    const chapterId = await resolvePublicChapterId(req);
+    if (!chapterId) return res.status(400).json({ error: 'Please select your chapter and try again.' });
     await repo.create('testimonies', {
+      chapterId,
       name: name || 'Anonymous', testimony, published: false
     }, 'test');
     res.json({ success: true });
@@ -830,7 +1031,9 @@ app.post('/api/contact', formLimiter, async (req, res) => {
   const { name, email, message } = req.body;
   if (!name || !email || !message) return res.status(400).json({ error: 'All fields are required' });
   try {
-    await repo.create('contactMessages', { name, email, message, status: 'new' }, 'msg');
+    const chapterId = await resolvePublicChapterId(req);
+    if (!chapterId) return res.status(400).json({ error: 'Please select your chapter and try again.' });
+    await repo.create('contactMessages', { chapterId, name, email, message, status: 'new' }, 'msg');
     res.json({ success: true });
     // Contact messages are shepherding's to answer, so they get the mail too —
     // alongside the admin, who keeps oversight of everything.
@@ -861,7 +1064,7 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
       }
     }
     await repo.create('eventRegistrations', {
-      eventId: event.id, name, email, phone: phone || ''
+      chapterId: event.chapterId || '', eventId: event.id, name, email, phone: phone || ''
     }, 'reg');
     res.json({ success: true });
   } catch (e) {
@@ -882,9 +1085,10 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
 // or re-entered, it's joined at read time from data the church already has.
 app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
   try {
+    const filter = rolesLib.chapterFilter(req);
     const [members, records] = await Promise.all([
-      repo.getAll('members'),
-      repo.getAll('shepherdingRecords')
+      repo.getAll('members', filter),
+      repo.getAll('shepherdingRecords', filter)
     ]);
     const recordByMemberId = new Map(records.filter(r => r.memberId).map(r => [r.memberId, r]));
     const standaloneRecords = records.filter(r => !r.memberId); // manually-added visitors, no account
@@ -899,6 +1103,8 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
         email: m.email,
         phone: m.phone,
         level: m.level,
+        programme: m.programme || '',
+        hostel: m.hostel || '',
         department: m.department,
         birthdayMonth: m.birthdayMonth,
         birthdayDay: m.birthdayDay,
@@ -907,7 +1113,12 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
         emergencyContact: record ? record.emergencyContact : '',
         attendanceStatus: record ? record.attendanceStatus : 'new',
         lastContactDate: record ? record.lastContactDate : '',
-        pastoralNotes: record ? record.pastoralNotes : ''
+        pastoralNotes: record ? record.pastoralNotes : '',
+        // Membership workflow (section 7).
+        membershipStage: m.membershipStage || 'visitor',
+        membershipNumber: m.membershipNumber || '',
+        shepherdStaffId: m.shepherdStaffId || '',
+        shepherdName: m.shepherdName || ''
       };
     });
 
@@ -955,14 +1166,18 @@ app.post('/api/shepherd/records', requireShepherd, upload.single('image'), async
 
     // Find the record to update: by its own id if given (visitor edits), otherwise
     // by memberId (linked-member edits), otherwise this is a brand new record.
+    // Scoped to this shepherd's own chapter throughout, so an id from another
+    // chapter can never be edited even if it were guessed.
+    const scopeFilter = rolesLib.chapterFilter(req);
     let existing = null;
     if (recordId) {
-      existing = await repo.getById('shepherdingRecords', recordId);
+      existing = await repo.getById('shepherdingRecords', recordId, scopeFilter);
     } else if (memberId) {
-      existing = (await repo.getAll('shepherdingRecords')).find(r => r.memberId === memberId) || null;
+      existing = (await repo.getAll('shepherdingRecords', scopeFilter)).find(r => r.memberId === memberId) || null;
     }
 
     const fields = {
+      chapterId: rolesLib.chapterIdForWrite(req),
       memberId: memberId || '',
       name: name || '',
       phone: phone || '',
@@ -989,9 +1204,11 @@ app.post('/api/shepherd/records', requireShepherd, upload.single('image'), async
 
 app.delete('/api/shepherd/records/:id', requireShepherd, async (req, res) => {
   try {
-    const existing = await repo.getById('shepherdingRecords', req.params.id);
-    if (existing && existing.imageFileId) gridfs.deleteFile(existing.imageFileId).catch(() => {});
-    await repo.removeById('shepherdingRecords', req.params.id);
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('shepherdingRecords', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (existing.imageFileId) gridfs.deleteFile(existing.imageFileId).catch(() => {});
+    await repo.removeById('shepherdingRecords', req.params.id, filter);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete this record' });
@@ -1004,7 +1221,7 @@ app.delete('/api/shepherd/records/:id', requireShepherd, async (req, res) => {
 // corrected during the week without ending up with duplicate records.
 app.get('/api/shepherd/attendance', requireViewRole('shepherding'), async (req, res) => {
   try {
-    let records = await repo.getAll('attendanceRecords');
+    let records = await repo.getAll('attendanceRecords', rolesLib.chapterFilter(req));
     const { from, to } = req.query;
     if (from) records = records.filter(r => r.date >= from);
     if (to) records = records.filter(r => r.date <= to);
@@ -1030,7 +1247,7 @@ app.get('/api/shepherd/attendance', requireViewRole('shepherding'), async (req, 
 app.get('/api/shepherd/attendance/:date', requireViewRole('shepherding'), async (req, res) => {
   try {
     const serviceType = req.query.serviceType || 'sunday';
-    const records = await repo.getAll('attendanceRecords');
+    const records = await repo.getAll('attendanceRecords', rolesLib.chapterFilter(req));
     const record = records.find(r => r.date === req.params.date && r.serviceType === serviceType) || null;
     res.json({ record });
   } catch (e) {
@@ -1050,8 +1267,10 @@ app.post('/api/shepherd/attendance', requireShepherd, async (req, res) => {
       status: ['present', 'absent', 'excused'].includes(m.status) ? m.status : 'absent'
     }));
 
-    const existing = (await repo.getAll('attendanceRecords')).find(r => r.date === date && r.serviceType === service);
+    const scopeFilter = rolesLib.chapterFilter(req);
+    const existing = (await repo.getAll('attendanceRecords', scopeFilter)).find(r => r.date === date && r.serviceType === service);
     const fields = {
+      chapterId: rolesLib.chapterIdForWrite(req),
       date, serviceType: service, title: title || '',
       marks: cleanMarks,
       visitorCount: Number(visitorCount || 0),
@@ -1059,7 +1278,7 @@ app.post('/api/shepherd/attendance', requireShepherd, async (req, res) => {
       recordedBy: actorName(req)
     };
     const record = existing
-      ? await repo.updateById('attendanceRecords', existing.id, fields)
+      ? await repo.updateById('attendanceRecords', existing.id, fields, scopeFilter)
       : await repo.create('attendanceRecords', fields, 'att');
     res.json({ success: true, item: record });
   } catch (e) {
@@ -1069,7 +1288,7 @@ app.post('/api/shepherd/attendance', requireShepherd, async (req, res) => {
 
 app.delete('/api/shepherd/attendance/:id', requireShepherd, async (req, res) => {
   try {
-    await repo.removeById('attendanceRecords', req.params.id);
+    await repo.removeById('attendanceRecords', req.params.id, rolesLib.chapterFilter(req));
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete this register' });
@@ -1079,7 +1298,7 @@ app.delete('/api/shepherd/attendance/:id', requireShepherd, async (req, res) => 
 // Attendance history for one person — how many of the last services they made.
 app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherding'), async (req, res) => {
   try {
-    const records = await repo.getAll('attendanceRecords');
+    const records = await repo.getAll('attendanceRecords', rolesLib.chapterFilter(req));
     const key = req.params.memberId;
     const history = records
       .map((r) => {
@@ -1107,22 +1326,75 @@ app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherdi
 // screen is how people get locked out of their own account.
 app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
   try {
-    const existing = await repo.getById('members', req.params.id);
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('members', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Member not found' });
-    const { name, phone, level, department, birthdayMonth, birthdayDay } = req.body;
+    const { name, phone, level, programme, hostel, department, birthdayMonth, birthdayDay } = req.body;
     const updated = await repo.updateById('members', req.params.id, {
       ...existing,
       name: name !== undefined ? name : existing.name,
       phone: phone !== undefined ? phone : existing.phone,
       level: level !== undefined ? level : existing.level,
+      programme: programme !== undefined ? programme : existing.programme,
+      hostel: hostel !== undefined ? hostel : existing.hostel,
       department: department !== undefined ? department : existing.department,
       birthdayMonth: birthdayMonth !== undefined ? (birthdayMonth ? Number(birthdayMonth) : null) : existing.birthdayMonth,
       birthdayDay: birthdayDay !== undefined ? (birthdayDay ? Number(birthdayDay) : null) : existing.birthdayDay
-    });
+    }, filter);
     const { passwordHash, ...safe } = updated;
     res.json({ success: true, item: safe });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this member' });
+  }
+});
+
+// ---------- Shepherding portal: membership workflow ----------
+// REGISTERED -> VISITOR -> SHEPHERDING REVIEW -> ACCEPTED -> ASSIGNED SHEPHERD
+// -> ACTIVE (section 7). Every registration already starts as 'visitor';
+// everything from here on is Shepherding moving someone forward (or, in
+// principle, back — e.g. correcting a mistaken acceptance).
+const MEMBERSHIP_STAGES = ['visitor', 'under_review', 'accepted', 'active'];
+
+app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('members', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Member not found' });
+    const stage = req.body.stage;
+    if (!MEMBERSHIP_STAGES.includes(stage)) return res.status(400).json({ error: 'Unknown membership stage' });
+
+    const updates = { membershipStage: stage };
+    if (!existing.qrToken) updates.qrToken = crypto.randomBytes(16).toString('hex');
+
+    // Assigning a shepherd is allowed alongside any stage change, or on its own.
+    if (req.body.shepherdStaffId !== undefined || req.body.shepherdName !== undefined) {
+      const shepherdStaffId = req.body.shepherdStaffId || '';
+      let shepherdName = req.body.shepherdName || '';
+      if (shepherdStaffId) {
+        // A portal account holder — pull their name from the account rather
+        // than trust free text, so it can never drift out of sync.
+        const shepherdStaff = await repo.getById('staffUsers', shepherdStaffId, filter);
+        if (!shepherdStaff) return res.status(400).json({ error: 'Unknown shepherd' });
+        shepherdName = shepherdStaff.name;
+      }
+      // Otherwise a lay shepherd with no portal login of their own — the
+      // name typed in is all that's recorded, same as `recordedBy` elsewhere.
+      updates.shepherdStaffId = shepherdStaffId;
+      updates.shepherdName = shepherdName;
+    }
+
+    // First time reaching 'active' — issue the membership number the digital
+    // card (section 14) will show. Never reassigned once set.
+    if (stage === 'active' && !existing.membershipNumber) {
+      const activeCount = await models.Member.countDocuments({ chapterId: existing.chapterId, membershipStage: 'active' });
+      updates.membershipNumber = `${String(existing.chapterId).toUpperCase()}-${String(activeCount + 1).padStart(4, '0')}`;
+    }
+
+    const updated = await repo.updateById('members', req.params.id, { ...existing, ...updates }, filter);
+    const { passwordHash, ...safe } = updated;
+    res.json({ success: true, item: safe });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update membership status' });
   }
 });
 
@@ -1131,7 +1403,7 @@ app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
 // admin — following up with the person who reached out is pastoral work.
 app.get('/api/shepherd/contact-messages', requireViewRole('shepherding'), async (req, res) => {
   try {
-    const items = await repo.getAll('contactMessages');
+    const items = await repo.getAll('contactMessages', rolesLib.chapterFilter(req));
     items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json(items);
   } catch (e) {
@@ -1142,7 +1414,7 @@ app.get('/api/shepherd/contact-messages', requireViewRole('shepherding'), async 
 app.patch('/api/shepherd/contact-messages/:id', requireShepherd, async (req, res) => {
   try {
     const status = req.body.status === 'replied' ? 'replied' : 'new';
-    const item = await repo.patchById('contactMessages', req.params.id, { status });
+    const item = await repo.patchById('contactMessages', req.params.id, { status }, rolesLib.chapterFilter(req));
     if (!item) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, item });
   } catch (e) {
@@ -1174,7 +1446,7 @@ function filterEntries(entries, { from, to, entryType, category, budgetId }) {
 
 app.get('/api/finance/entries', requireViewRole('finance'), async (req, res) => {
   try {
-    const entries = filterEntries(await repo.getAll('financeEntries'), req.query);
+    const entries = filterEntries(await repo.getAll('financeEntries', rolesLib.chapterFilter(req)), req.query);
     entries.sort((a, b) => (a.date === b.date ? new Date(b.createdAt) - new Date(a.createdAt) : (a.date < b.date ? 1 : -1)));
     res.json(entries);
   } catch (e) {
@@ -1184,7 +1456,7 @@ app.get('/api/finance/entries', requireViewRole('finance'), async (req, res) => 
 
 app.get('/api/finance/summary', requireViewRole('finance'), async (req, res) => {
   try {
-    const all = await repo.getAll('financeEntries');
+    const all = await repo.getAll('financeEntries', rolesLib.chapterFilter(req));
     const entries = filterEntries(all, req.query);
     const { totalIncome, totalExpense, balance } = financeTotals(entries);
 
@@ -1222,6 +1494,7 @@ app.get('/api/finance/summary', requireViewRole('finance'), async (req, res) => 
 
 function financeEntryFromBody(body, req) {
   return {
+    chapterId: rolesLib.chapterIdForWrite(req),
     entryType: body.entryType,
     category: body.category,
     amount: Number(body.amount),
@@ -1256,19 +1529,29 @@ app.post('/api/finance/entries', requireFinance, async (req, res) => {
 
 app.put('/api/finance/entries/:id', requireFinance, async (req, res) => {
   try {
-    const existing = await repo.getById('financeEntries', req.params.id);
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('financeEntries', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     if (Number(req.body.amount) <= 0) return res.status(400).json({ error: 'Amount must be greater than zero' });
     const entry = await repo.updateById('financeEntries', req.params.id, {
       ...existing, ...financeEntryFromBody(req.body, req), recordedBy: existing.recordedBy || actorName(req)
-    });
+    }, filter);
     res.json({ success: true, item: entry });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this entry' });
   }
 });
 
-app.patch('/api/finance/entries/:id/approval', requireFinance, async (req, res) => {
+// Approving money above a certain size is exactly the kind of "sensitive
+// chapter operation" the Chapter Coordinator is meant to sign off on
+// (section 4), so this is one of the few finance actions open to coordinator
+// as well as finance itself.
+function requireFinanceApprover(req, res, next) {
+  if (hasRole(req, 'finance') || isChapterCoordinatorOrAbove(req)) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
+app.patch('/api/finance/entries/:id/approval', requireFinanceApprover, async (req, res) => {
   try {
     const status = req.body.approvalStatus;
     if (!['pending', 'approved', 'rejected', 'recorded'].includes(status)) {
@@ -1277,7 +1560,7 @@ app.patch('/api/finance/entries/:id/approval', requireFinance, async (req, res) 
     const item = await repo.patchById('financeEntries', req.params.id, {
       approvalStatus: status,
       approvedBy: status === 'approved' ? actorName(req) : ''
-    });
+    }, rolesLib.chapterFilter(req));
     if (!item) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, item });
   } catch (e) {
@@ -1287,9 +1570,11 @@ app.patch('/api/finance/entries/:id/approval', requireFinance, async (req, res) 
 
 app.delete('/api/finance/entries/:id', requireFinance, async (req, res) => {
   try {
-    const existing = await repo.getById('financeEntries', req.params.id);
-    if (existing && existing.receiptFileId) gridfs.deleteFile(existing.receiptFileId).catch(() => {});
-    await repo.removeById('financeEntries', req.params.id);
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('financeEntries', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (existing.receiptFileId) gridfs.deleteFile(existing.receiptFileId).catch(() => {});
+    await repo.removeById('financeEntries', req.params.id, filter);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete this entry' });
@@ -1331,7 +1616,8 @@ async function budgetPerformance(budget, allEntries) {
 
 app.get('/api/finance/budgets', requireViewRole('finance'), async (req, res) => {
   try {
-    const [budgets, entries] = await Promise.all([repo.getAll('budgets'), repo.getAll('financeEntries')]);
+    const filter = rolesLib.chapterFilter(req);
+    const [budgets, entries] = await Promise.all([repo.getAll('budgets', filter), repo.getAll('financeEntries', filter)]);
     budgets.sort((a, b) => (a.startDate < b.startDate ? 1 : -1));
     const withPerformance = await Promise.all(budgets.map(b => budgetPerformance(b, entries)));
     res.json(withPerformance);
@@ -1342,9 +1628,10 @@ app.get('/api/finance/budgets', requireViewRole('finance'), async (req, res) => 
 
 app.get('/api/finance/budgets/:id', requireViewRole('finance'), async (req, res) => {
   try {
-    const budget = await repo.getById('budgets', req.params.id);
+    const filter = rolesLib.chapterFilter(req);
+    const budget = await repo.getById('budgets', req.params.id, filter);
     if (!budget) return res.status(404).json({ error: 'Budget not found' });
-    res.json(await budgetPerformance(budget, await repo.getAll('financeEntries')));
+    res.json(await budgetPerformance(budget, await repo.getAll('financeEntries', filter)));
   } catch (e) {
     res.status(500).json({ error: 'Could not load this budget' });
   }
@@ -1370,6 +1657,7 @@ app.post('/api/finance/budgets', requireFinance, async (req, res) => {
     }
     if (endDate < startDate) return res.status(400).json({ error: 'The end date cannot be before the start date' });
     const budget = await repo.create('budgets', {
+      chapterId: rolesLib.chapterIdForWrite(req),
       name, startDate, endDate,
       status: ['draft', 'active', 'closed'].includes(status) ? status : 'draft',
       notes: notes || '',
@@ -1384,7 +1672,8 @@ app.post('/api/finance/budgets', requireFinance, async (req, res) => {
 
 app.put('/api/finance/budgets/:id', requireFinance, async (req, res) => {
   try {
-    const existing = await repo.getById('budgets', req.params.id);
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('budgets', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Budget not found' });
     const { name, startDate, endDate, status, notes, lines } = req.body;
     if (endDate && startDate && endDate < startDate) {
@@ -1398,7 +1687,7 @@ app.put('/api/finance/budgets/:id', requireFinance, async (req, res) => {
       status: ['draft', 'active', 'closed'].includes(status) ? status : existing.status,
       notes: notes !== undefined ? notes : existing.notes,
       lines: lines !== undefined ? budgetLinesFromBody(lines) : existing.lines
-    });
+    }, filter);
     res.json({ success: true, item: budget });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this budget' });
@@ -1407,10 +1696,13 @@ app.put('/api/finance/budgets/:id', requireFinance, async (req, res) => {
 
 app.delete('/api/finance/budgets/:id', requireFinance, async (req, res) => {
   try {
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('budgets', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Budget not found' });
     // Ledger entries survive their budget — the money still moved. They simply
     // stop pointing at a plan that no longer exists.
-    await models.FinanceEntry.updateMany({ budgetId: req.params.id }, { $set: { budgetId: '', budgetLineId: '' } });
-    await repo.removeById('budgets', req.params.id);
+    await models.FinanceEntry.updateMany({ budgetId: req.params.id, ...filter }, { $set: { budgetId: '', budgetLineId: '' } });
+    await repo.removeById('budgets', req.params.id, filter);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete this budget' });
@@ -1420,9 +1712,10 @@ app.delete('/api/finance/budgets/:id', requireFinance, async (req, res) => {
 // Spreadsheet-ready export of whatever the finance office is currently looking at.
 app.get('/api/finance/export.csv', requireViewRole('finance'), async (req, res) => {
   try {
-    const entries = filterEntries(await repo.getAll('financeEntries'), req.query);
+    const filter = rolesLib.chapterFilter(req);
+    const entries = filterEntries(await repo.getAll('financeEntries', filter), req.query);
     entries.sort((a, b) => (a.date < b.date ? -1 : 1));
-    const budgets = await repo.getAll('budgets');
+    const budgets = await repo.getAll('budgets', filter);
     const budgetName = (id) => (budgets.find(b => b.id === id) || {}).name || '';
 
     const cell = (v) => {
@@ -1453,19 +1746,22 @@ app.get('/api/finance/export.csv', requireViewRole('finance'), async (req, res) 
 
 // Does the actual sending for both "send now" and anything the scheduler picks
 // up later, so a scheduled announcement behaves exactly like an immediate one.
-async function dispatchAnnouncement({ title, body, url, channels, audience, sourceId }) {
+// `chapterId` blank means a genuine national broadcast (National Coordinator
+// only — see the scheduled-send loop and the national announcements route);
+// every chapter-level publicity send passes its own chapter through here.
+async function dispatchAnnouncement({ title, body, url, channels, audience, sourceId, chapterId }) {
   const useApp = !channels || channels.includes('app');
   const useSms = channels && channels.includes('sms');
   const parts = [];
 
   if (useApp) {
-    await createNotification(title, body, url, 'admin');
+    await createNotification(title, body, url, 'admin', chapterId);
     parts.push('posted to the app');
   }
   if (useSms) {
-    const numbers = await sms.resolveAudience(audience);
+    const numbers = await sms.resolveAudience(audience, chapterId);
     const text = `${title}\n${body}`.slice(0, 320); // ~2 SMS segments, keeps costs predictable
-    const result = await sms.sendBatch(numbers, text, sourceId);
+    const result = await sms.sendBatch(numbers, text, sourceId, chapterId);
     parts.push(result.configured
       ? `SMS: ${result.sent} sent${result.failed ? `, ${result.failed} failed` : ''}${result.note ? ` — ${result.note}` : ''}`
       : `SMS skipped — ${result.note}`);
@@ -1475,9 +1771,10 @@ async function dispatchAnnouncement({ title, body, url, channels, audience, sour
 
 app.get('/api/publicity/overview', requireViewRole('publicity'), async (req, res) => {
   try {
+    const filter = rolesLib.chapterFilter(req);
     const [notifications, scheduled, testimonies, smsLogs, events] = await Promise.all([
-      repo.getAll('notifications'), repo.getAll('scheduledNotifications'),
-      repo.getAll('testimonies'), repo.getAll('smsLogs'), repo.getAll('events')
+      repo.getAll('notifications', filter), repo.getAll('scheduledNotifications', filter),
+      repo.getAll('testimonies', filter), repo.getAll('smsLogs', filter), repo.getAll('events', filter)
     ]);
     const now = new Date();
     res.json({
@@ -1503,11 +1800,12 @@ app.get('/api/publicity/overview', requireViewRole('publicity'), async (req, res
 // numbers so publicity knows what an SMS blast will actually cost before sending.
 app.get('/api/publicity/audiences', requireViewRole('publicity'), async (req, res) => {
   try {
-    const departments = await repo.getAll('departments');
+    const chapterId = rolesLib.getActingScope(req).chapterId || '';
+    const departments = await repo.getAll('departments', chapterId ? { chapterId } : {});
     const options = [{ value: 'all', label: 'Everyone (members + visitors)' }];
     departments.forEach(d => options.push({ value: `department:${d.id}`, label: `${d.name} department` }));
     const withCounts = await Promise.all(options.map(async (o) => ({
-      ...o, reachable: (await sms.resolveAudience(o.value)).length
+      ...o, reachable: (await sms.resolveAudience(o.value, chapterId)).length
     })));
     res.json({ audiences: withCounts, smsConfigured: sms.isConfigured() });
   } catch (e) {
@@ -1521,7 +1819,8 @@ app.post('/api/publicity/notifications', requirePublicity, async (req, res) => {
   const picked = Array.isArray(channels) && channels.length ? channels : ['app'];
   try {
     const result = await dispatchAnnouncement({
-      title, body, url: url || '/index.html', channels: picked, audience: audience || 'all'
+      title, body, url: url || '/index.html', channels: picked, audience: audience || 'all',
+      chapterId: rolesLib.chapterIdForWrite(req)
     });
     res.json({ success: true, result });
   } catch (e) {
@@ -1531,7 +1830,7 @@ app.post('/api/publicity/notifications', requirePublicity, async (req, res) => {
 
 app.get('/api/publicity/scheduled', requireViewRole('publicity'), async (req, res) => {
   try {
-    const items = await repo.getAll('scheduledNotifications');
+    const items = await repo.getAll('scheduledNotifications', rolesLib.chapterFilter(req));
     items.sort((a, b) => new Date(a.scheduledFor) - new Date(b.scheduledFor));
     res.json(items);
   } catch (e) {
@@ -1551,6 +1850,7 @@ app.post('/api/publicity/scheduled', requirePublicity, async (req, res) => {
   }
   try {
     const item = await repo.create('scheduledNotifications', {
+      chapterId: rolesLib.chapterIdForWrite(req),
       title, body, url: url || '/index.html',
       channels: Array.isArray(channels) && channels.length ? channels : ['app'],
       audience: audience || 'all',
@@ -1566,12 +1866,13 @@ app.post('/api/publicity/scheduled', requirePublicity, async (req, res) => {
 
 app.patch('/api/publicity/scheduled/:id/cancel', requirePublicity, async (req, res) => {
   try {
-    const existing = await repo.getById('scheduledNotifications', req.params.id);
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('scheduledNotifications', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     if (existing.status !== 'scheduled') {
       return res.status(400).json({ error: 'This announcement has already gone out.' });
     }
-    const item = await repo.patchById('scheduledNotifications', req.params.id, { status: 'cancelled' });
+    const item = await repo.patchById('scheduledNotifications', req.params.id, { status: 'cancelled' }, filter);
     res.json({ success: true, item });
   } catch (e) {
     res.status(500).json({ error: 'Could not cancel this announcement' });
@@ -1580,7 +1881,7 @@ app.patch('/api/publicity/scheduled/:id/cancel', requirePublicity, async (req, r
 
 app.delete('/api/publicity/scheduled/:id', requirePublicity, async (req, res) => {
   try {
-    await repo.removeById('scheduledNotifications', req.params.id);
+    await repo.removeById('scheduledNotifications', req.params.id, rolesLib.chapterFilter(req));
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not remove this announcement' });
@@ -1591,7 +1892,7 @@ app.delete('/api/publicity/scheduled/:id', requirePublicity, async (req, res) =>
 // what appears on the wall.
 app.get('/api/publicity/testimonies', requireViewRole('publicity'), async (req, res) => {
   try {
-    const items = await repo.getAll('testimonies');
+    const items = await repo.getAll('testimonies', rolesLib.chapterFilter(req));
     items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json(items);
   } catch (e) {
@@ -1601,7 +1902,7 @@ app.get('/api/publicity/testimonies', requireViewRole('publicity'), async (req, 
 
 app.patch('/api/publicity/testimonies/:id', requirePublicity, async (req, res) => {
   try {
-    const item = await repo.patchById('testimonies', req.params.id, { published: !!req.body.published });
+    const item = await repo.patchById('testimonies', req.params.id, { published: !!req.body.published }, rolesLib.chapterFilter(req));
     if (!item) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, item });
   } catch (e) {
@@ -1611,7 +1912,7 @@ app.patch('/api/publicity/testimonies/:id', requirePublicity, async (req, res) =
 
 app.delete('/api/publicity/testimonies/:id', requirePublicity, async (req, res) => {
   try {
-    await repo.removeById('testimonies', req.params.id);
+    await repo.removeById('testimonies', req.params.id, rolesLib.chapterFilter(req));
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete this testimony' });
@@ -1622,12 +1923,13 @@ app.delete('/api/publicity/testimonies/:id', requirePublicity, async (req, res) 
 // something changes, which is the part that actually matters to members.
 app.post('/api/publicity/events', requirePublicity, async (req, res) => {
   try {
-    const item = await repo.create('events', req.body, 'even');
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    const item = await repo.create('events', { ...req.body, chapterId }, 'even');
     res.json({ success: true, item });
     createNotification(
       'New Event: ' + (item.title || 'Untitled'),
       `${item.title || 'A new event'} — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
-      '/events.html', 'system'
+      '/events.html', 'system', item.isNational ? '' : chapterId
     ).catch(() => {});
   } catch (e) {
     res.status(500).json({ error: 'Could not save this event' });
@@ -1636,15 +1938,16 @@ app.post('/api/publicity/events', requirePublicity, async (req, res) => {
 
 app.put('/api/publicity/events/:id', requirePublicity, async (req, res) => {
   try {
-    const { announceUpdate, ...fields } = req.body;
-    const item = await repo.updateById('events', req.params.id, fields);
+    const filter = rolesLib.chapterFilter(req);
+    const { announceUpdate, chapterId, ...fields } = req.body;
+    const item = await repo.updateById('events', req.params.id, fields, filter);
     if (!item) return res.status(404).json({ error: 'Event not found' });
     res.json({ success: true, item });
     if (announceUpdate) {
       createNotification(
         'Event Update: ' + (item.title || 'Untitled'),
         `${item.title || 'An event'} has been updated — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
-        '/events.html', 'system'
+        '/events.html', 'system', item.isNational ? '' : item.chapterId
       ).catch(() => {});
     }
   } catch (e) {
@@ -1654,7 +1957,7 @@ app.put('/api/publicity/events/:id', requirePublicity, async (req, res) => {
 
 app.get('/api/publicity/sms-logs', requireViewRole('publicity'), async (req, res) => {
   try {
-    const logs = await repo.getAll('smsLogs');
+    const logs = await repo.getAll('smsLogs', rolesLib.chapterFilter(req));
     logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     res.json(logs.slice(0, 200));
   } catch (e) {
@@ -1662,21 +1965,30 @@ app.get('/api/publicity/sms-logs', requireViewRole('publicity'), async (req, res
   }
 });
 
-// ---------- Coordinator ----------
-// One screen showing the state of every office. Read-only by design: the
-// coordinator oversees the work, the office that owns the data still does it.
+// ---------- Chapter Coordinator ----------
+// One screen showing the state of every office in ONE chapter. Mostly
+// read-only by design — the office that owns the work still does it — but
+// the Chapter Coordinator additionally gets approval and chapter-wide
+// announcement powers below (section 4), which is what separates this role
+// from a plain read-only rollup.
 app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req, res) => {
   try {
+    const scope = rolesLib.getActingScope(req);
+    if (scope.isNational && !scope.chapterId) {
+      return res.status(400).json({ error: 'Pick a chapter to view (?chapterId=...).' });
+    }
+    const filter = { chapterId: scope.chapterId };
     const [
       members, departments, events, finance, budgets, attendance,
       joinRequests, prayerRequests, testimonies, contactMessages,
-      notifications, scheduled, smsLogs, shepherdingRecords, staff
+      notifications, scheduled, smsLogs, shepherdingRecords, staff, chapter
     ] = await Promise.all([
-      repo.getAll('members'), repo.getAll('departments'), repo.getAll('events'),
-      repo.getAll('financeEntries'), repo.getAll('budgets'), repo.getAll('attendanceRecords'),
-      repo.getAll('joinRequests'), repo.getAll('prayerRequests'), repo.getAll('testimonies'),
-      repo.getAll('contactMessages'), repo.getAll('notifications'), repo.getAll('scheduledNotifications'),
-      repo.getAll('smsLogs'), repo.getAll('shepherdingRecords'), repo.getAll('staffUsers')
+      repo.getAll('members', filter), repo.getAll('departments', filter), repo.getAll('events', filter),
+      repo.getAll('financeEntries', filter), repo.getAll('budgets', filter), repo.getAll('attendanceRecords', filter),
+      repo.getAll('joinRequests', filter), repo.getAll('prayerRequests', filter), repo.getAll('testimonies', filter),
+      repo.getAll('contactMessages', filter), repo.getAll('notifications', filter), repo.getAll('scheduledNotifications', filter),
+      repo.getAll('smsLogs', filter), repo.getAll('shepherdingRecords', filter), repo.getAll('staffUsers', filter),
+      repo.getById('chapters', scope.chapterId)
     ]);
 
     const now = new Date();
@@ -1695,12 +2007,15 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
     const activeBudget = budgets.find(b => b.status === 'active') || null;
 
     res.json({
+      chapter: chapter ? { id: chapter.id, name: chapter.name, status: chapter.status } : null,
       finance: {
         ...financeTotals(finance),
         thisMonth: financeTotals(thisMonth),
         entryCount: finance.length,
         activeBudget: activeBudget ? await budgetPerformance(activeBudget, finance) : null,
-        budgetCount: budgets.length
+        budgetCount: budgets.length,
+        // Sensitive-operation approvals a Chapter Coordinator can act on directly.
+        pendingApprovals: finance.filter(e => e.approvalStatus === 'pending').length
       },
       shepherding: {
         memberCount: members.length,
@@ -1709,7 +2024,12 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
         lastService: recentServices[0] || null,
         averageAttendance: avgAttendance,
         attendanceTrend,
-        followUpNeeded: shepherdingRecords.filter(r => ['irregular', 'inactive'].includes(r.attendanceStatus)).length
+        followUpNeeded: shepherdingRecords.filter(r => ['irregular', 'inactive'].includes(r.attendanceStatus)).length,
+        // Membership pipeline (section 7): how many are still working their
+        // way from visitor to active member.
+        awaitingReview: members.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length,
+        acceptedNotYetActive: members.filter(m => m.membershipStage === 'accepted').length,
+        activeMembers: members.filter(m => m.membershipStage === 'active').length
       },
       publicity: {
         notificationsSent: notifications.length,
@@ -1735,31 +2055,232 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
   }
 });
 
+// Chapter-wide announcements (section 4) — a separate, explicit Chapter
+// Coordinator action from Publicity's own composer, even though both end up
+// calling the same dispatch logic underneath.
+app.post('/api/coordinator/announcements', requireChapterCoordinator, async (req, res) => {
+  const { title, body, url, channels } = req.body;
+  if (!title || !body) return res.status(400).json({ error: 'Title and message are required' });
+  const chapterId = rolesLib.chapterIdForWrite(req);
+  if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to announce to.' });
+  try {
+    const result = await dispatchAnnouncement({
+      title, body, url: url || '/index.html',
+      channels: Array.isArray(channels) && channels.length ? channels : ['app'],
+      audience: 'all',
+      chapterId
+    });
+    res.json({ success: true, result });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not send this announcement' });
+  }
+});
+
+// ---------- National Coordinator ----------
+// Oversight across every chapter (section 3). requireNational accepts the
+// legacy global admin session too, so this works the moment the app is
+// deployed — no separate national account has to exist first.
+app.get('/api/national/chapters', rolesLib.requireNational, async (req, res) => {
+  try {
+    const chapters = await repo.getAll('chapters');
+    res.json(chapters.sort((a, b) => a.name.localeCompare(b.name)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load chapters' });
+  }
+});
+
+app.post('/api/national/chapters', rolesLib.requireNational, async (req, res) => {
+  const { id, name, institution, location, address } = req.body;
+  if (!id || !name) return res.status(400).json({ error: 'A chapter id and name are required' });
+  const slug = String(id).toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!slug) return res.status(400).json({ error: 'That chapter id is not usable — try letters, numbers and hyphens.' });
+  try {
+    const existing = await repo.getById('chapters', slug);
+    if (existing) return res.status(400).json({ error: 'A chapter with that id already exists' });
+    const chapter = await repo.create('chapters', {
+      id: slug, name, fullName: req.body.fullName || '', institution: institution || '',
+      location: location || '', address: address || '', status: 'active',
+      createdBy: actorName(req)
+    }, slug);
+    res.json({ success: true, item: chapter });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not create this chapter' });
+  }
+});
+
+app.put('/api/national/chapters/:id', rolesLib.requireNational, async (req, res) => {
+  try {
+    const existing = await repo.getById('chapters', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Chapter not found' });
+    const { id, status, coordinatorStaffId, coordinatorName, ...editable } = req.body;
+    const updated = await repo.updateById('chapters', req.params.id, { ...existing, ...editable });
+    res.json({ success: true, item: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this chapter' });
+  }
+});
+
+app.patch('/api/national/chapters/:id/status', rolesLib.requireNational, async (req, res) => {
+  const status = req.body.status === 'inactive' ? 'inactive' : 'active';
+  try {
+    const item = await repo.patchById('chapters', req.params.id, { status });
+    if (!item) return res.status(404).json({ error: 'Chapter not found' });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this chapter' });
+  }
+});
+
+// Assign or change a chapter's Coordinator (section 3) — either promote an
+// existing staff account in that chapter, or create a brand new one. Any
+// current coordinator steps down to Chapter Admin rather than being deleted,
+// so their account and history stay intact.
+app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNational, async (req, res) => {
+  try {
+    const chapter = await repo.getById('chapters', req.params.id);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+
+    await models.StaffUser.updateMany(
+      { chapterId: chapter.id, role: 'coordinator' },
+      { $set: { role: 'chapterAdmin' } }
+    );
+
+    let account;
+    if (req.body.staffId) {
+      const staff = await repo.getById('staffUsers', req.body.staffId);
+      if (!staff || staff.chapterId !== chapter.id) {
+        return res.status(400).json({ error: 'That account does not belong to this chapter' });
+      }
+      account = await repo.updateById('staffUsers', staff.id, { ...staff, role: 'coordinator' });
+    } else {
+      const { username, name, password } = req.body;
+      if (!username || !password) return res.status(400).json({ error: 'Username and password are required for a new account' });
+      if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      const clean = String(username).toLowerCase().trim();
+      const dupe = await models.StaffUser.findOne({ username: clean });
+      if (dupe) return res.status(400).json({ error: 'That username is already taken' });
+      account = await repo.create('staffUsers', {
+        username: clean, name: name || clean, role: 'coordinator', chapterId: chapter.id,
+        passwordHash: await bcrypt.hash(password, 10), active: true
+      }, 'staff');
+    }
+
+    const updatedChapter = await repo.updateById('chapters', chapter.id, {
+      ...chapter, coordinatorStaffId: account.id, coordinatorName: account.name
+    });
+    const { passwordHash, ...safeAccount } = account;
+    res.json({ success: true, chapter: updatedChapter, coordinator: safeAccount });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not assign a coordinator' });
+  }
+});
+
+// National dashboard: chapter counts, aggregated (never individually
+// identifying) membership/attendance/finance/welfare figures across every
+// chapter, plus a per-chapter breakdown for comparison (section 3, 38).
+app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) => {
+  try {
+    const [chapters, members, events, financeEntries, attendance, shepherdingRecords, executives] = await Promise.all([
+      repo.getAll('chapters'), repo.getAll('members'), repo.getAll('events'),
+      repo.getAll('financeEntries'), repo.getAll('attendanceRecords'),
+      repo.getAll('shepherdingRecords'), repo.getAll('executives')
+    ]);
+    const now = new Date();
+    const byChapter = chapters.map((c) => {
+      const chMembers = members.filter(m => m.chapterId === c.id);
+      const chFinance = financeEntries.filter(f => f.chapterId === c.id);
+      const chAttendance = attendance.filter(a => a.chapterId === c.id);
+      const recent = [...chAttendance].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+      return {
+        id: c.id, name: c.name, status: c.status,
+        memberCount: chMembers.filter(m => m.membershipStage === 'active').length,
+        visitorCount: chMembers.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length
+          + shepherdingRecords.filter(r => r.chapterId === c.id && !r.memberId).length,
+        executiveCount: executives.filter(e => e.chapterId === c.id).length,
+        upcomingEvents: events.filter(e => e.chapterId === c.id && new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
+        lastServiceAttendance: recent ? recent.marks.filter(m => m.status === 'present').length + (recent.visitorCount || 0) : null,
+        balance: financeTotals(chFinance).balance
+      };
+    });
+    res.json({
+      totalChapters: chapters.length,
+      activeChapters: chapters.filter(c => c.status === 'active').length,
+      totalVisitors: byChapter.reduce((s, c) => s + c.visitorCount, 0),
+      totalMembers: byChapter.reduce((s, c) => s + c.memberCount, 0),
+      totalExecutives: byChapter.reduce((s, c) => s + c.executiveCount, 0),
+      upcomingEvents: events.filter(e => new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
+      financialOverview: financeTotals(financeEntries),
+      chapters: byChapter,
+      generatedAt: new Date().toISOString()
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the national dashboard' });
+  }
+});
+
+// National announcement — reaches every chapter (blank chapterId).
+app.post('/api/national/announcements', rolesLib.requireNational, async (req, res) => {
+  const { title, body, url, channels } = req.body;
+  if (!title || !body) return res.status(400).json({ error: 'Title and message are required' });
+  try {
+    const result = await dispatchAnnouncement({
+      title, body, url: url || '/index.html',
+      channels: Array.isArray(channels) && channels.length ? channels : ['app'],
+      audience: 'all', chapterId: ''
+    });
+    res.json({ success: true, result });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not send this announcement' });
+  }
+});
+
 // ---------- admin protected routes ----------
 // Leadership accounts. The admin creates one account per leader and assigns the
 // office it belongs to; passwords are hashed and never readable afterwards.
-app.get('/api/admin/staff', requireAdmin, async (req, res) => {
+// Only a National Coordinator may create/edit/hand over these two roles —
+// assigning and changing a Chapter Coordinator is explicitly a national
+// power (section 3), and nationalCoordinator accounts obviously can't be
+// self-service either. Everything else (chapterAdmin and below) can be
+// managed by that chapter's own Chapter Coordinator/Admin.
+const NATIONAL_ONLY_ROLES = ['nationalCoordinator', 'coordinator'];
+
+app.get('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   try {
-    const users = await repo.getAll('staffUsers');
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const users = await repo.getAll('staffUsers', filter);
     res.json(users.map(({ passwordHash, ...safe }) => safe));
   } catch (e) {
     res.status(500).json({ error: 'Could not load leadership accounts' });
   }
 });
 
-app.post('/api/admin/staff', requireAdmin, async (req, res) => {
+app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   const { username, name, role, password } = req.body;
   if (!username || !role || !password) {
     return res.status(400).json({ error: 'Username, role and password are required' });
   }
   if (!PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  const scope = rolesLib.getActingScope(req);
+  if (NATIONAL_ONLY_ROLES.includes(role) && !scope.isNational) {
+    return res.status(403).json({ error: 'Only the National Coordinator can assign this role.' });
+  }
+  // A chapter-scoped admin can only ever create accounts for their own
+  // chapter, regardless of what the request body claims.
+  const chapterId = role === 'nationalCoordinator' ? '' : await resolveChapterIdForWrite(req, req.body.chapterId);
+  if (role !== 'nationalCoordinator' && !chapterId) {
+    return res.status(400).json({ error: 'A chapter is required for this role — this deployment now has more than one, please specify which.' });
+  }
   try {
+    if (chapterId) {
+      const chapter = await repo.getById('chapters', chapterId);
+      if (!chapter) return res.status(400).json({ error: 'Unknown chapter' });
+    }
     const clean = String(username).toLowerCase().trim();
     const existing = await models.StaffUser.findOne({ username: clean });
     if (existing) return res.status(400).json({ error: 'That username is already taken' });
     const user = await repo.create('staffUsers', {
-      username: clean, name: name || clean, role,
+      username: clean, name: name || clean, role, chapterId,
       passwordHash: await bcrypt.hash(password, 10), active: true
     }, 'staff');
     const { passwordHash, ...safe } = user;
@@ -1769,13 +2290,20 @@ app.post('/api/admin/staff', requireAdmin, async (req, res) => {
   }
 });
 
-app.put('/api/admin/staff/:id', requireAdmin, async (req, res) => {
+app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
   const { name, role, password, active } = req.body;
   if (role && !PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
   if (password && password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  const scope = rolesLib.getActingScope(req);
   try {
     const existing = await repo.getById('staffUsers', req.params.id);
     if (!existing) return res.status(404).json({ error: 'Account not found' });
+    if (!scope.isNational && existing.chapterId !== scope.chapterId) {
+      return res.status(403).json({ error: 'That account belongs to a different chapter.' });
+    }
+    if (!scope.isNational && (NATIONAL_ONLY_ROLES.includes(existing.role) || (role && NATIONAL_ONLY_ROLES.includes(role)))) {
+      return res.status(403).json({ error: 'Only the National Coordinator can change this role.' });
+    }
     const updated = await repo.updateById('staffUsers', req.params.id, {
       ...existing,
       name: name !== undefined ? name : existing.name,
@@ -1790,8 +2318,17 @@ app.put('/api/admin/staff/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/staff/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
+  const scope = rolesLib.getActingScope(req);
   try {
+    const existing = await repo.getById('staffUsers', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Account not found' });
+    if (!scope.isNational && existing.chapterId !== scope.chapterId) {
+      return res.status(403).json({ error: 'That account belongs to a different chapter.' });
+    }
+    if (!scope.isNational && NATIONAL_ONLY_ROLES.includes(existing.role)) {
+      return res.status(403).json({ error: 'Only the National Coordinator can remove this role.' });
+    }
     await repo.removeById('staffUsers', req.params.id);
     res.json({ success: true });
   } catch (e) {
@@ -1799,32 +2336,35 @@ app.delete('/api/admin/staff/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.get('/api/admin/members', requireAdmin, async (req, res) => {
+app.get('/api/admin/members', requireChapterAdmin, async (req, res) => {
   try {
-    const members = await repo.getAll('members');
+    const members = await repo.getAll('members', rolesLib.chapterFilter(req, { required: false }));
     res.json(members.map(({ passwordHash, ...safe }) => safe));
   } catch (e) {
     res.status(500).json({ error: 'Could not load members' });
   }
 });
 
-app.put('/api/admin/members/:id', requireAdmin, async (req, res) => {
+app.put('/api/admin/members/:id', requireChapterAdmin, async (req, res) => {
   try {
-    const existing = await repo.getById('members', req.params.id);
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('members', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Member not found' });
     // Deliberately whitelist editable fields — never allow admin to touch
     // passwordHash or email through this route (email changes go through the
     // member's own account flow to avoid silently locking someone out).
-    const { name, phone, level, department, birthdayMonth, birthdayDay } = req.body;
+    const { name, phone, level, programme, hostel, department, birthdayMonth, birthdayDay } = req.body;
     const updated = await repo.updateById('members', req.params.id, {
       ...existing,
       name: name !== undefined ? name : existing.name,
       phone: phone !== undefined ? phone : existing.phone,
       level: level !== undefined ? level : existing.level,
+      programme: programme !== undefined ? programme : existing.programme,
+      hostel: hostel !== undefined ? hostel : existing.hostel,
       department: department !== undefined ? department : existing.department,
       birthdayMonth: birthdayMonth !== undefined ? (birthdayMonth ? Number(birthdayMonth) : null) : existing.birthdayMonth,
       birthdayDay: birthdayDay !== undefined ? (birthdayDay ? Number(birthdayDay) : null) : existing.birthdayDay
-    });
+    }, filter);
     const { passwordHash, ...safe } = updated;
     res.json({ success: true, item: safe });
   } catch (e) {
@@ -1832,13 +2372,15 @@ app.put('/api/admin/members/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/members/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/members/:id', requireChapterAdmin, async (req, res) => {
   try {
-    const existing = await repo.getById('members', req.params.id);
-    if (existing && existing.profileImageFileId) {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('members', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Member not found' });
+    if (existing.profileImageFileId) {
       gridfs.deleteFile(existing.profileImageFileId).catch(() => {});
     }
-    await repo.removeById('members', req.params.id);
+    await repo.removeById('members', req.params.id, filter);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete member' });
@@ -1846,45 +2388,52 @@ app.delete('/api/admin/members/:id', requireAdmin, async (req, res) => {
 });
 
 
-app.get('/api/admin/join-requests', requireAdmin, async (req, res) => {
-  res.json(await repo.getAll('joinRequests'));
+app.get('/api/admin/join-requests', requireChapterAdmin, async (req, res) => {
+  res.json(await repo.getAll('joinRequests', rolesLib.chapterFilter(req, { required: false })));
 });
-app.get('/api/admin/prayer-requests', requireAdmin, async (req, res) => {
-  res.json(await repo.getAll('prayerRequests'));
+app.get('/api/admin/prayer-requests', requireChapterAdmin, async (req, res) => {
+  res.json(await repo.getAll('prayerRequests', rolesLib.chapterFilter(req, { required: false })));
 });
-app.get('/api/admin/testimonies', requireAdmin, async (req, res) => {
-  res.json(await repo.getAll('testimonies'));
+app.get('/api/admin/testimonies', requireChapterAdmin, async (req, res) => {
+  res.json(await repo.getAll('testimonies', rolesLib.chapterFilter(req, { required: false })));
 });
-app.get('/api/admin/contact-messages', requireAdmin, async (req, res) => {
-  res.json(await repo.getAll('contactMessages'));
+app.get('/api/admin/contact-messages', requireChapterAdmin, async (req, res) => {
+  res.json(await repo.getAll('contactMessages', rolesLib.chapterFilter(req, { required: false })));
 });
 
+// National settings only — a chapter's own About/contact/payment info lives
+// on its Chapter record instead (edited via the National/Chapter Coordinator
+// portals), so this stays a National Coordinator action.
 app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   await repo.setSettings(req.body);
   res.json({ success: true });
 });
 
-app.patch('/api/admin/join-requests/:id', requireAdmin, async (req, res) => {
-  const item = await repo.patchById('joinRequests', req.params.id, req.body);
+app.patch('/api/admin/join-requests/:id', requireChapterAdmin, async (req, res) => {
+  const { chapterId, ...body } = req.body;
+  const item = await repo.patchById('joinRequests', req.params.id, body, rolesLib.chapterFilter(req, { required: false }));
   if (!item) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
 });
 
-app.patch('/api/admin/prayer-requests/:id', requireAdmin, async (req, res) => {
-  const item = await repo.patchById('prayerRequests', req.params.id, req.body);
+app.patch('/api/admin/prayer-requests/:id', requireChapterAdmin, async (req, res) => {
+  const { chapterId, ...body } = req.body;
+  const item = await repo.patchById('prayerRequests', req.params.id, body, rolesLib.chapterFilter(req, { required: false }));
   if (!item) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
 });
 
-app.patch('/api/admin/testimonies/:id', requireAdmin, async (req, res) => {
-  const item = await repo.patchById('testimonies', req.params.id, req.body);
+app.patch('/api/admin/testimonies/:id', requireChapterAdmin, async (req, res) => {
+  const { chapterId, ...body } = req.body;
+  const item = await repo.patchById('testimonies', req.params.id, body, rolesLib.chapterFilter(req, { required: false }));
   if (!item) return res.status(404).json({ error: 'Not found' });
   res.json({ success: true });
 });
 
-app.get('/api/admin/events/:id/registrations', requireAdmin, async (req, res) => {
+app.get('/api/admin/events/:id/registrations', requireChapterAdmin, async (req, res) => {
   try {
-    const regs = await models.EventRegistration.find({ eventId: req.params.id }).sort({ createdAt: -1 }).lean();
+    const filter = { eventId: req.params.id, ...rolesLib.chapterFilter(req, { required: false }) };
+    const regs = await models.EventRegistration.find(filter).sort({ createdAt: -1 }).lean();
     res.json(regs.map((r) => { delete r._id; delete r.__v; return r; }));
   } catch (e) {
     res.status(500).json({ error: 'Could not load registrations' });
@@ -1925,9 +2474,10 @@ const IMAGE_PLACEMENTS = {
 
 // The front-end asks for this so the placement picker and its explanations are
 // defined in exactly one place.
-app.get('/api/admin/image-placements', requireAdmin, async (req, res) => {
+app.get('/api/admin/image-placements', requireChapterAdmin, async (req, res) => {
   try {
-    const [departments, pages] = await Promise.all([repo.getAll('departments'), repo.getAll('pages')]);
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const [departments, pages] = await Promise.all([repo.getAll('departments', filter), repo.getAll('pages', filter)]);
     res.json({
       placements: Object.entries(IMAGE_PLACEMENTS).map(([value, p]) => ({
         value, label: p.label, needsTarget: p.needsTarget, description: p.describe('')
@@ -1940,7 +2490,7 @@ app.get('/api/admin/image-placements', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/uploads', requireAdmin, upload.single('file'), async (req, res) => {
+app.post('/api/admin/uploads', requireChapterAdmin, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file provided' });
     const { category, pageSlug, title, description, targetId } = req.body;
@@ -1949,6 +2499,8 @@ app.post('/api/admin/uploads', requireAdmin, upload.single('file'), async (req, 
     if (spec.needsTarget && !targetId) {
       return res.status(400).json({ error: `Choose which ${spec.needsTarget} this image belongs to.` });
     }
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const chapterId = rolesLib.chapterIdForWrite(req);
 
     const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
     // A gallery placement is really "photo on this page", which the public pages
@@ -1961,17 +2513,18 @@ app.post('/api/admin/uploads', requireAdmin, upload.single('file'), async (req, 
       targetId: targetId || '',
       title: title || req.file.originalname,
       description: description || '',
-      contentType: compressed.contentType
+      contentType: compressed.contentType,
+      chapterId
     });
 
     // A department header is only useful once the department points at it, so
     // do that here rather than making the admin remember a second step.
     let placedOn = '';
     if (placement === 'department-header' && targetId) {
-      const dept = await repo.getById('departments', targetId);
+      const dept = await repo.getById('departments', targetId, filter);
       if (dept) {
         if (dept.headerImageFileId) gridfs.deleteFile(dept.headerImageFileId).catch(() => {});
-        await repo.patchById('departments', targetId, { headerImageFileId: String(fileId) });
+        await repo.patchById('departments', targetId, { headerImageFileId: String(fileId) }, filter);
         placedOn = dept.name;
       }
     }
@@ -1983,20 +2536,30 @@ app.post('/api/admin/uploads', requireAdmin, upload.single('file'), async (req, 
 
 // Point a department at an image that is already in the library, without
 // re-uploading it.
-app.put('/api/admin/departments/:id/header-image', requireAdmin, async (req, res) => {
+app.put('/api/admin/departments/:id/header-image', requireChapterAdmin, async (req, res) => {
   try {
-    const dept = await repo.getById('departments', req.params.id);
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const dept = await repo.getById('departments', req.params.id, filter);
     if (!dept) return res.status(404).json({ error: 'Department not found' });
     const fileId = req.body.headerImageFileId || '';
-    await repo.patchById('departments', req.params.id, { headerImageFileId: fileId });
+    await repo.patchById('departments', req.params.id, { headerImageFileId: fileId }, filter);
     res.json({ success: true, headerImageFileId: fileId });
   } catch (e) {
     res.status(500).json({ error: 'Could not set the header image' });
   }
 });
 
-app.delete('/api/admin/files/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/files/:id', requireChapterAdmin, async (req, res) => {
   try {
+    const scope = rolesLib.getActingScope(req);
+    const file = await gridfs.findFile(req.params.id);
+    if (!file) return res.status(404).json({ error: 'File not found' });
+    // A chapter-scoped admin can only delete files uploaded under their own
+    // chapter — files predating this field (chapterId '') are treated as
+    // belonging to nobody in particular and left to a national actor.
+    if (!scope.isNational && (file.metadata || {}).chapterId !== scope.chapterId) {
+      return res.status(403).json({ error: 'That file belongs to a different chapter.' });
+    }
     // Don't leave a department pointing at a header that no longer exists.
     await models.Department.updateMany(
       { headerImageFileId: req.params.id }, { $set: { headerImageFileId: '' } }
@@ -2008,16 +2571,19 @@ app.delete('/api/admin/files/:id', requireAdmin, async (req, res) => {
   }
 });
 
-app.post('/api/admin/executives', requireAdmin, upload.single('image'), async (req, res) => {
+app.post('/api/admin/executives', requireChapterAdmin, upload.single('image'), async (req, res) => {
   try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'A chapter is required — this deployment now has more than one, please specify which.' });
     let imageFileId = '';
     if (req.file) {
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
       imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
-        category: 'executive', contentType: compressed.contentType, title: req.body.name || req.file.originalname
+        category: 'executive', contentType: compressed.contentType, title: req.body.name || req.file.originalname, chapterId
       }));
     }
     const exec = await repo.create('executives', {
+      chapterId,
       name: req.body.name || '',
       role: req.body.role || '',
       bio: req.body.bio || '',
@@ -2030,15 +2596,16 @@ app.post('/api/admin/executives', requireAdmin, upload.single('image'), async (r
   }
 });
 
-app.put('/api/admin/executives/:id', requireAdmin, upload.single('image'), async (req, res) => {
+app.put('/api/admin/executives/:id', requireChapterAdmin, upload.single('image'), async (req, res) => {
   try {
-    const existing = await repo.getById('executives', req.params.id);
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('executives', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     let imageFileId = existing.imageFileId || '';
     if (req.file) {
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
       imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
-        category: 'executive', contentType: compressed.contentType, title: req.body.name || req.file.originalname
+        category: 'executive', contentType: compressed.contentType, title: req.body.name || req.file.originalname, chapterId: existing.chapterId
       }));
       if (existing.imageFileId) {
         gridfs.deleteFile(existing.imageFileId).catch(() => {}); // best-effort cleanup of the old photo
@@ -2050,46 +2617,67 @@ app.put('/api/admin/executives/:id', requireAdmin, upload.single('image'), async
       bio: req.body.bio || '',
       order: Number(req.body.order || 0),
       imageFileId
-    });
+    }, filter);
     res.json({ success: true, item: updated });
   } catch (e) {
     res.status(500).json({ error: 'Could not update executive' });
   }
 });
 
-app.delete('/api/admin/executives/:id', requireAdmin, async (req, res) => {
+app.delete('/api/admin/executives/:id', requireChapterAdmin, async (req, res) => {
   try {
-    const existing = await repo.getById('executives', req.params.id);
-    if (existing && existing.imageFileId) {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('executives', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (existing.imageFileId) {
       gridfs.deleteFile(existing.imageFileId).catch(() => {});
     }
-    await repo.removeById('executives', req.params.id);
+    await repo.removeById('executives', req.params.id, filter);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete executive' });
   }
 });
 
-// generic CRUD for departments / events / sermons / pages (admin only)
+// When a national actor (the bootstrap admin login, or a real National
+// Coordinator account) writes chapter-scoped content without saying which
+// chapter, and exactly one chapter exists, default to it — keeps today's
+// single-chapter flow exactly as frictionless as before this shipped, while
+// still requiring an explicit choice the moment a second chapter exists. A
+// chapter-scoped admin/coordinator always writes into their own chapter,
+// regardless of anything the request body claims.
+async function resolveChapterIdForWrite(req, explicitChapterId) {
+  const scope = rolesLib.getActingScope(req);
+  if (!scope.isNational) return scope.chapterId;
+  if (explicitChapterId) return explicitChapterId;
+  const chapters = await repo.getAll('chapters', { status: 'active' });
+  return chapters.length === 1 ? chapters[0].id : '';
+}
+
+// generic CRUD for departments / events / sermons / pages (Chapter Admin and above)
 ['departments', 'events', 'sermons', 'pages'].forEach((resource) => {
   const prefix = resource.slice(0, 4);
 
-  app.post(`/api/admin/${resource}`, requireAdmin, async (req, res) => {
+  app.post(`/api/admin/${resource}`, requireChapterAdmin, async (req, res) => {
     try {
-      const item = await repo.create(resource, req.body, prefix);
+      const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+      if (!chapterId && !(resource === 'events' && req.body.isNational)) {
+        return res.status(400).json({ error: 'A chapter is required — this deployment now has more than one, please specify which.' });
+      }
+      const item = await repo.create(resource, { ...req.body, chapterId }, prefix);
       res.json({ success: true, item });
       // Automatic announcement — fires after responding, so it never slows down or breaks the save itself.
       if (resource === 'events') {
         createNotification(
           'New Event: ' + (item.title || 'Untitled'),
           `${item.title || 'A new event'} — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
-          '/events.html', 'system'
+          '/events.html', 'system', item.isNational ? '' : chapterId
         ).catch(() => {});
       } else if (resource === 'sermons') {
         createNotification(
           'New Sermon: ' + (item.title || 'Untitled'),
           `${item.speaker ? item.speaker + ' — ' : ''}${item.title || 'A new sermon'} is now available.`,
-          '/media.html', 'system'
+          '/media.html', 'system', chapterId
         ).catch(() => {});
       }
     } catch (e) {
@@ -2097,14 +2685,20 @@ app.delete('/api/admin/executives/:id', requireAdmin, async (req, res) => {
     }
   });
 
-  app.put(`/api/admin/${resource}/:id`, requireAdmin, async (req, res) => {
-    const item = await repo.updateById(resource, req.params.id, req.body);
+  app.put(`/api/admin/${resource}/:id`, requireChapterAdmin, async (req, res) => {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    // chapterId isn't editable through this route — moving a record between
+    // chapters isn't a supported operation, and silently allowing it here
+    // would be exactly the kind of body-tampering section 43 rules out.
+    const { chapterId, ...body } = req.body;
+    const item = await repo.updateById(resource, req.params.id, body, filter);
     if (!item) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, item });
   });
 
-  app.delete(`/api/admin/${resource}/:id`, requireAdmin, async (req, res) => {
-    await repo.removeById(resource, req.params.id);
+  app.delete(`/api/admin/${resource}/:id`, requireChapterAdmin, async (req, res) => {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    await repo.removeById(resource, req.params.id, filter);
     res.json({ success: true });
   });
 });
@@ -2133,15 +2727,24 @@ async function checkBirthdaysAndNotify() {
     const day = now.getDate();
     const members = await models.Member.find({ birthdayMonth: month, birthdayDay: day }).lean();
 
-    if (members.length) {
-      const firstNames = members.map((m) => (m.name || '').trim().split(/\s+/)[0]).filter(Boolean);
+    // One notification per chapter, so Chapter A never sees a shout-out for a
+    // Chapter B member — grouped rather than sent per-member to keep it to a
+    // single friendly push per chapter per day, same tone as before.
+    const byChapter = new Map();
+    members.forEach((m) => {
+      const key = m.chapterId || '';
+      if (!byChapter.has(key)) byChapter.set(key, []);
+      byChapter.get(key).push(m);
+    });
+    for (const [chapterId, group] of byChapter) {
+      const firstNames = group.map((m) => (m.name || '').trim().split(/\s+/)[0]).filter(Boolean);
       const names = firstNames.length <= 3
         ? firstNames.join(', ')
         : `${firstNames.slice(0, 3).join(', ')} and ${firstNames.length - 3} more`;
       await createNotification(
         '🎉 Happy Birthday!',
         `Join us in celebrating ${names} today!`,
-        '/index.html', 'system'
+        '/index.html', 'system', chapterId
       );
     }
     await models.SystemState.updateOne({ singleton: 'main' }, { $set: { lastBirthdayNotifDate: todayKey } });
@@ -2171,7 +2774,8 @@ async function sendDueAnnouncements() {
       try {
         const result = await dispatchAnnouncement({
           title: item.title, body: item.body, url: item.url,
-          channels: item.channels, audience: item.audience, sourceId: item.id
+          channels: item.channels, audience: item.audience, sourceId: item.id,
+          chapterId: item.chapterId
         });
         await models.ScheduledNotification.updateOne({ id: item.id }, { $set: { result } });
       } catch (err) {

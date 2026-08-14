@@ -1,4 +1,9 @@
 let CURRENT_SETTINGS = {};
+// Who's actually driving this dashboard — the legacy env admin (national-
+// equivalent, sees a chapter switcher on resource forms) or a chapter-scoped
+// Chapter Admin/Coordinator account (auto-scoped, no switcher needed). Set
+// by checkAuth() before the shell ever renders.
+let ADMIN_SCOPE = { isNational: true, chapterId: '' };
 
 function showModal(html) {
   document.getElementById('modalContent').innerHTML = html;
@@ -12,31 +17,63 @@ document.getElementById('modalBackdrop').addEventListener('click', (e) => {
 });
 
 // ---------- auth ----------
+// Two accounts can open this dashboard: the original env-based admin login
+// (kept working unchanged — see /api/admin/login), and, going forward, a
+// Chapter Admin or Chapter Coordinator account created under Leadership
+// Accounts (signed in the same way every other portal does). Both are
+// checked here so nothing about the legacy login has to change.
 async function checkAuth() {
-  const { isAdmin } = await fetchJSON('/api/admin/check');
-  if (isAdmin) {
-    document.getElementById('loginWrap').style.display = 'none';
-    document.getElementById('adminShell').style.display = 'block';
-    initAdminNav();
-    loadPanel('overview');
-  } else {
-    document.getElementById('loginWrap').style.display = 'flex';
-    document.getElementById('adminShell').style.display = 'none';
-  }
+  try {
+    const { isAdmin } = await fetchJSON('/api/admin/check');
+    if (isAdmin) {
+      ADMIN_SCOPE = { isNational: true, chapterId: '' };
+      return showAdminShell();
+    }
+  } catch (e) { /* fall through to the portal-login check below */ }
+  try {
+    const me = await fetchJSON('/api/portal/me');
+    const role = me.staff && me.staff.role;
+    if (me.isNational || role === 'coordinator' || role === 'chapterAdmin') {
+      ADMIN_SCOPE = { isNational: !!me.isNational, chapterId: (me.staff && me.staff.chapterId) || '' };
+      return showAdminShell();
+    }
+  } catch (e) { /* not signed in either way */ }
+  document.getElementById('loginWrap').style.display = 'flex';
+  document.getElementById('adminShell').style.display = 'none';
+}
+
+function showAdminShell() {
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('adminShell').style.display = 'block';
+  initAdminNav();
+  loadPanel('overview');
 }
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = document.getElementById('loginMsg');
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
   try {
     await fetchJSON('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: document.getElementById('username').value,
-        password: document.getElementById('password').value
-      })
+      body: JSON.stringify({ username, password })
     });
+    return checkAuth();
+  } catch (adminErr) { /* not the legacy admin login — try a portal account next */ }
+  try {
+    const { staff } = await fetchJSON('/api/portal/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!staff || !['coordinator', 'chapterAdmin', 'nationalCoordinator'].includes(staff.role)) {
+      await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
+      msg.textContent = 'That account does not have Chapter Admin access.';
+      msg.className = 'form-msg error';
+      return;
+    }
     checkAuth();
   } catch (err) {
     msg.textContent = 'Invalid username or password.';
@@ -45,7 +82,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await fetchJSON('/api/admin/logout', { method: 'POST' });
+  await fetchJSON('/api/admin/logout', { method: 'POST' }).catch(() => {});
+  await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
   checkAuth();
 });
 
@@ -298,11 +336,17 @@ function openResourceForm(resource, fields, singular, item) {
 // One portal account per leader, so access follows the person holding the office
 // rather than a password everybody knows.
 const PORTAL_ROLES = [
-  { value: 'coordinator', label: 'Coordinator', blurb: 'Read-only view of every office, plus the union dashboard.', href: '/coordinator.html' },
+  { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority — oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
+  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — this dashboard.', href: '/admin.html' },
+  { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/admin.html' },
   { value: 'finance', label: 'Finance', blurb: 'Budgets, ledger, financial reports.', href: '/finance.html' },
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance, member care, contact messages.', href: '/shepherding.html' },
-  { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' }
+  { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' },
+  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/admin.html' },
+  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department.', href: '/admin.html' }
 ];
+// Only a National Coordinator may hand out these two — see /api/admin/staff.
+const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];
 
 async function renderStaffAccounts() {
   const el = document.getElementById('panel-staff');
@@ -364,8 +408,17 @@ async function renderStaffAccounts() {
   });
 }
 
-function openStaffForm(user) {
+async function openStaffForm(user) {
   const isEdit = !!user;
+  // A chapter-scoped admin can't hand out Chapter Coordinator (only National
+  // can — see NATIONAL_ONLY_STAFF_ROLES) and never needs a chapter picker,
+  // since the server always scopes their accounts to their own chapter.
+  const roleOptions = PORTAL_ROLES.filter(r => ADMIN_SCOPE.isNational || !NATIONAL_ONLY_STAFF_ROLES.includes(r.value));
+  let chapters = [];
+  if (ADMIN_SCOPE.isNational) {
+    chapters = await fetchJSON('/api/national/chapters').catch(() => []);
+  }
+
   showModal(`
     <h3>${isEdit ? 'Edit' : 'New'} Leadership Account</h3>
     <form id="staffForm">
@@ -379,9 +432,17 @@ function openStaffForm(user) {
       </div>
       <div class="field"><label>Which portal does this account open?</label>
         <select id="stRole" ${isEdit ? '' : 'required'}>
-          ${PORTAL_ROLES.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label} — ${r.blurb}</option>`).join('')}
+          ${roleOptions.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label} — ${r.blurb}</option>`).join('')}
         </select>
       </div>
+      ${ADMIN_SCOPE.isNational ? `
+        <div class="field"><label>Chapter</label>
+          <select id="stChapter">
+            ${chapters.map(c => `<option value="${c.id}" ${(user?.chapterId || ADMIN_SCOPE.chapterId) === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+          </select>
+          <small class="hint">Ignored for National Coordinator accounts.</small>
+        </div>
+      ` : ''}
       <div class="field"><label>${isEdit ? 'New Password (leave blank to keep the current one)' : 'Password'}</label>
         <input type="text" id="stPassword" ${isEdit ? '' : 'required'} placeholder="At least 8 characters">
         <small class="hint">Shown in plain text so you can copy it to the leader — it is stored hashed and can never be read back.</small>
@@ -406,6 +467,9 @@ function openStaffForm(user) {
       name: document.getElementById('stName').value,
       role: document.getElementById('stRole').value
     };
+    if (ADMIN_SCOPE.isNational && document.getElementById('stChapter')) {
+      payload.chapterId = document.getElementById('stChapter').value;
+    }
     const password = document.getElementById('stPassword').value;
     if (password) payload.password = password;
     if (isEdit) payload.active = document.getElementById('stActive').checked;
@@ -768,8 +832,9 @@ async function renderMembers() {
 
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Members (${members.length})</h2>
+    <p style="font-size:0.85rem; color:#8a7595; margin:-12px 0 18px;">Membership status (visitor → active) is moved forward by Shepherding, not from here.</p>
     <table>
-      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Level</th><th>Birthday</th><th>Joined</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Level</th><th>Status</th><th>Birthday</th><th>Joined</th><th>Actions</th></tr></thead>
       <tbody>
         ${pageItems.map(m => `
           <tr>
@@ -777,6 +842,7 @@ async function renderMembers() {
             <td>${escapeHtml(m.email)}</td>
             <td>${escapeHtml(m.phone || '—')}</td>
             <td>${escapeHtml(m.level || '—')}</td>
+            <td><span class="status-pill ${m.membershipStage === 'active' ? 'done' : ''}">${escapeHtml(m.membershipStage || 'visitor')}</span></td>
             <td>${bday(m)}</td>
             <td>${new Date(m.createdAt).toLocaleDateString()}</td>
             <td class="row-actions">
@@ -784,7 +850,7 @@ async function renderMembers() {
               <button class="danger" data-delete-member="${m.id}">Delete</button>
             </td>
           </tr>
-        `).join('') || '<tr><td colspan="7">No members have signed up yet.</td></tr>'}
+        `).join('') || '<tr><td colspan="8">No members have signed up yet.</td></tr>'}
       </tbody>
     </table>
     <div id="membersPagination"></div>
@@ -817,7 +883,11 @@ function openMemberEditForm(member) {
     <form id="memberEditForm">
       <div class="field"><label>Full Name</label><input type="text" id="editMemberName" value="${escapeHtml(member.name || '')}" required></div>
       <div class="field"><label>Phone</label><input type="tel" id="editMemberPhone" value="${escapeHtml(member.phone || '')}"></div>
-      <div class="field"><label>Level / Year of Study</label><input type="text" id="editMemberLevel" value="${escapeHtml(member.level || '')}"></div>
+      <div class="field-row">
+        <div class="field"><label>Level / Year of Study</label><input type="text" id="editMemberLevel" value="${escapeHtml(member.level || '')}"></div>
+        <div class="field"><label>Programme</label><input type="text" id="editMemberProgramme" value="${escapeHtml(member.programme || '')}"></div>
+      </div>
+      <div class="field"><label>Hostel / Residence</label><input type="text" id="editMemberHostel" value="${escapeHtml(member.hostel || '')}"></div>
       <div style="display:flex; gap:10px;">
         <button type="submit" class="btn btn-primary">Save</button>
         <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
@@ -834,7 +904,9 @@ function openMemberEditForm(member) {
         body: JSON.stringify({
           name: document.getElementById('editMemberName').value,
           phone: document.getElementById('editMemberPhone').value,
-          level: document.getElementById('editMemberLevel').value
+          level: document.getElementById('editMemberLevel').value,
+          programme: document.getElementById('editMemberProgramme').value,
+          hostel: document.getElementById('editMemberHostel').value
         })
       });
       closeModal();

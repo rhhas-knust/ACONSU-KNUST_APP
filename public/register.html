@@ -24,6 +24,21 @@
       <img src="/images/logo.jpg" alt="ACONSU" style="width:56px; height:56px; border-radius:50%; margin:0 auto 14px; display:block;">
       <h2 style="text-align:center;">Join ACONSU</h2>
       <p style="text-align:center; color:#5a4468; margin-bottom:24px;">Create your account to register for events faster and keep your profile up to date.</p>
+
+      <div class="field">
+        <label for="chapterId">ACONSU Chapter</label>
+        <select id="chapterId" required>
+          <option value="">Loading chapters…</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="profileImage">Profile Photo</label>
+        <input type="file" id="profileImage" accept="image/*" required>
+        <small class="hint" style="color:#8a7595;">Required — used on your digital membership card once you're accepted as a member.</small>
+        <img id="photoPreview" alt="" style="display:none; width:88px; height:88px; border-radius:50%; object-fit:cover; margin-top:10px;">
+      </div>
+
       <div class="field">
         <label for="name">Full Name</label>
         <input type="text" id="name" required>
@@ -42,8 +57,18 @@
         <input type="tel" id="phone">
       </div>
       <div class="field">
-        <label for="level">Level / Year of Study (optional)</label>
-        <input type="text" id="level" placeholder="e.g. 200 Level">
+        <label for="programme">Programme / Course (optional)</label>
+        <input type="text" id="programme" placeholder="e.g. BSc. Computer Science">
+      </div>
+      <div class="field-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="field">
+          <label for="level">Academic Year / Level (optional)</label>
+          <input type="text" id="level" placeholder="e.g. 200 Level">
+        </div>
+        <div class="field">
+          <label for="hostel">Hostel / Residence (optional)</label>
+          <input type="text" id="hostel" placeholder="e.g. Hostel A">
+        </div>
       </div>
       <div class="field">
         <label>Birthday (optional — month &amp; day only, no year, ever)</label>
@@ -61,6 +86,7 @@
         </div>
         <small class="hint" style="color:#8a7595;">We'll celebrate you on the day — your birth year is never collected or stored.</small>
       </div>
+      <p style="font-size:0.82rem; color:#8a7595; margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong> — the Shepherding team will follow up and accept you as an official member.</p>
       <button type="submit" class="btn btn-primary btn-block" id="registerBtn">Create Account</button>
       <div class="form-msg" id="registerMsg"></div>
       <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:#5a4468;">
@@ -84,27 +110,61 @@
     opt.value = d; opt.textContent = d;
     daySelect.appendChild(opt);
   }
+
+  const chapterSelect = document.getElementById('chapterId');
+  try {
+    const chapters = await fetchJSON('/api/chapters');
+    chapterSelect.innerHTML = chapters.length
+      ? `<option value="">Select your chapter…</option>` + chapters.map(c =>
+          `<option value="${c.id}">${escapeHtml(c.name)}${c.institution ? ' — ' + escapeHtml(c.institution) : ''}</option>`
+        ).join('')
+      : `<option value="">No chapters available yet</option>`;
+    // Only one chapter exists in most deployments — pick it automatically so
+    // registration stays a single step until a second chapter is added.
+    if (chapters.length === 1) chapterSelect.value = chapters[0].id;
+    else if (getSelectedChapterId()) chapterSelect.value = getSelectedChapterId();
+  } catch (e) {
+    chapterSelect.innerHTML = `<option value="">Could not load chapters</option>`;
+  }
 })();
+
+document.getElementById('profileImage').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  const preview = document.getElementById('photoPreview');
+  if (!file) { preview.style.display = 'none'; return; }
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = 'block';
+});
 
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('registerBtn');
   const msg = document.getElementById('registerMsg');
+  const photoFile = document.getElementById('profileImage').files[0];
+  if (!photoFile) {
+    msg.textContent = 'A profile photo is required to register.';
+    msg.className = 'form-msg error';
+    return;
+  }
   btn.disabled = true; btn.textContent = 'Creating account...';
   try {
-    await fetchJSON('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: document.getElementById('name').value,
-        email: document.getElementById('email').value,
-        password: document.getElementById('password').value,
-        phone: document.getElementById('phone').value,
-        level: document.getElementById('level').value,
-        birthdayMonth: document.getElementById('birthdayMonth').value,
-        birthdayDay: document.getElementById('birthdayDay').value
-      })
-    });
+    const formData = new FormData();
+    formData.append('profileImage', photoFile);
+    formData.append('chapterId', document.getElementById('chapterId').value);
+    formData.append('name', document.getElementById('name').value);
+    formData.append('email', document.getElementById('email').value);
+    formData.append('password', document.getElementById('password').value);
+    formData.append('phone', document.getElementById('phone').value);
+    formData.append('programme', document.getElementById('programme').value);
+    formData.append('level', document.getElementById('level').value);
+    formData.append('hostel', document.getElementById('hostel').value);
+    formData.append('birthdayMonth', document.getElementById('birthdayMonth').value);
+    formData.append('birthdayDay', document.getElementById('birthdayDay').value);
+    // fetchJSON attaches an X-Chapter-Id header automatically; multipart
+    // bodies must not get a manual Content-Type (the browser sets the
+    // multipart boundary itself), so this call intentionally passes none.
+    await fetchJSON('/api/auth/register', { method: 'POST', body: formData });
+    setSelectedChapterId(document.getElementById('chapterId').value);
     showToast('Account created — welcome to ACONSU!', 'success');
     window.location.href = '/profile.html';
   } catch (err) {
