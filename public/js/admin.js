@@ -110,6 +110,9 @@ async function loadPanel(name) {
     events: () => renderResourcePanel('events', EVENT_FIELDS, 'Event'),
     sermons: () => renderResourcePanel('sermons', SERMON_FIELDS, 'Sermon'),
     bibleStudies: renderBibleStudies,
+    groups: renderGroupsAdmin,
+    welfare: renderWelfareAdmin,
+    chatModeration: renderChatModeration,
     pages: () => renderResourcePanel('pages', PAGE_FIELDS, 'Page'),
     media: renderMediaLibrary,
     staff: renderStaffAccounts,
@@ -897,6 +900,228 @@ async function renderBibleStudies() {
   });
 }
 
+// ---------- Groups (section 20) ----------
+const GROUP_TYPE_LABELS = { bible_study: 'Bible Study', prayer: 'Prayer', fellowship: 'Fellowship', department: 'Department', cell: 'Cell', other: 'Other' };
+
+async function renderGroupsAdmin() {
+  const el = document.getElementById('panel-groups');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  const [groups, members] = await Promise.all([fetchJSON('/api/groups'), fetchJSON('/api/admin/members')]);
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2 style="margin:0;">Groups (${groups.length})</h2>
+      <button class="btn btn-primary btn-sm" id="newGroupBtn">+ New Group</button>
+    </div>
+    <p style="font-size:0.85rem; color:#8a7595; margin:8px 0 18px;">The group's own leader can update meeting details and resources from the group's page — this is for creating groups and reassigning leadership.</p>
+    <table>
+      <thead><tr><th>Name</th><th>Type</th><th>Leader</th><th>Members</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${groups.map(g => `
+          <tr>
+            <td>${escapeHtml(g.name)}</td>
+            <td>${GROUP_TYPE_LABELS[g.type] || g.type}</td>
+            <td>${escapeHtml(g.leaderName || '—')}</td>
+            <td>${g.memberCount}</td>
+            <td class="row-actions">
+              <button data-edit-group="${g.id}">Edit</button>
+              <button class="danger" data-delete-group="${g.id}">Delete</button>
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="5">No groups yet.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  function openGroupForm(group) {
+    const isEdit = !!group;
+    showModal(`
+      <h3>${isEdit ? 'Edit' : 'New'} Group</h3>
+      <form id="groupForm">
+        <div class="field"><label>Name</label><input type="text" id="gName" value="${escapeHtml(group?.name || '')}" required></div>
+        <div class="field"><label>Type</label>
+          <select id="gType">${Object.entries(GROUP_TYPE_LABELS).map(([v, l]) => `<option value="${v}" ${group?.type === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Description</label><textarea id="gDescription">${escapeHtml(group?.description || '')}</textarea></div>
+        <div class="field"><label>Leader</label>
+          <select id="gLeader">
+            <option value="">No leader assigned</option>
+            ${members.map(m => `<option value="${m.id}" ${group?.leaderMemberId === m.id ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Meeting Day</label><input type="text" id="gDay" value="${escapeHtml(group?.meetingDay || '')}"></div>
+          <div class="field"><label>Meeting Time</label><input type="text" id="gTime" value="${escapeHtml(group?.meetingTime || '')}"></div>
+        </div>
+        <div class="field"><label>Meeting Location</label><input type="text" id="gLocation" value="${escapeHtml(group?.meetingLocation || '')}"></div>
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary">Save Group</button>
+          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+        </div>
+        <div class="form-msg" id="groupFormMsg"></div>
+      </form>
+    `);
+    document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+    document.getElementById('groupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('gName').value,
+        type: document.getElementById('gType').value,
+        description: document.getElementById('gDescription').value,
+        leaderMemberId: document.getElementById('gLeader').value,
+        meetingDay: document.getElementById('gDay').value,
+        meetingTime: document.getElementById('gTime').value,
+        meetingLocation: document.getElementById('gLocation').value
+      };
+      try {
+        await fetchJSON(isEdit ? `/api/admin/groups/${group.id}` : '/api/admin/groups', {
+          method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        closeModal();
+        showToast('Group saved.', 'success');
+        renderGroupsAdmin();
+      } catch (err) {
+        document.getElementById('groupFormMsg').textContent = err.message || 'Could not save.';
+        document.getElementById('groupFormMsg').className = 'form-msg error';
+      }
+    });
+  }
+
+  document.getElementById('newGroupBtn').addEventListener('click', () => openGroupForm(null));
+  el.querySelectorAll('[data-edit-group]').forEach(btn => btn.addEventListener('click', () => openGroupForm(groups.find(g => g.id === btn.dataset.editGroup))));
+  el.querySelectorAll('[data-delete-group]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this group? Its posts and meeting logs go with it.')) return;
+    await fetchJSON(`/api/admin/groups/${btn.dataset.deleteGroup}`, { method: 'DELETE' });
+    renderGroupsAdmin();
+  }));
+}
+
+// ---------- Welfare (section 33) ----------
+const WELFARE_STATUS_LABELS = { submitted: 'Submitted', under_review: 'Under Review', approved: 'Approved', declined: 'Declined', fulfilled: 'Fulfilled' };
+
+async function renderWelfareAdmin() {
+  const el = document.getElementById('panel-welfare');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  try {
+    const items = await fetchJSON('/api/welfare/requests');
+    el.innerHTML = `
+      <h2 style="margin-bottom:8px;">Welfare Requests (${items.length})</h2>
+      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Sensitive — visible only to Welfare Officers and Chapter Admin/Coordinator.</p>
+      <table>
+        <thead><tr><th>Member</th><th>Category</th><th>Description</th><th>Status</th><th>Referred By</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${items.map(w => `
+            <tr>
+              <td>${escapeHtml(w.memberName || 'Unknown')}</td>
+              <td>${escapeHtml(w.category)}</td>
+              <td style="max-width:220px;">${escapeHtml((w.description || '').slice(0, 100))}</td>
+              <td>
+                <select data-status-for="${w.id}">
+                  ${Object.entries(WELFARE_STATUS_LABELS).map(([v, l]) => `<option value="${v}" ${w.status === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+              </td>
+              <td>${escapeHtml(w.referredBy || '—')}</td>
+              <td class="row-actions"><button data-add-note="${w.id}">Case Notes</button></td>
+            </tr>
+          `).join('') || '<tr><td colspan="6">No welfare requests right now.</td></tr>'}
+        </tbody>
+      </table>
+    `;
+    el.querySelectorAll('[data-status-for]').forEach(sel => sel.addEventListener('change', async () => {
+      await fetchJSON(`/api/welfare/requests/${sel.dataset.statusFor}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: sel.value })
+      });
+      showToast('Status updated.', 'success');
+    }));
+    el.querySelectorAll('[data-add-note]').forEach(btn => btn.addEventListener('click', () => {
+      const item = items.find(w => w.id === btn.dataset.addNote);
+      showModal(`
+        <h3>Case Notes — ${escapeHtml(item.memberName || 'Unknown')}</h3>
+        <p style="font-size:0.85rem; color:#8a7595; margin-bottom:12px;">${escapeHtml(item.description)}</p>
+        <form id="noteForm">
+          <div class="field"><label>Internal Notes (never shown to the member)</label><textarea id="wNotes">${escapeHtml(item.notes || '')}</textarea></div>
+          <div style="display:flex; gap:10px;">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+          </div>
+        </form>
+      `);
+      document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+      document.getElementById('noteForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await fetchJSON(`/api/welfare/requests/${item.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: document.getElementById('wNotes').value })
+        });
+        closeModal();
+        showToast('Notes saved.', 'success');
+        renderWelfareAdmin();
+      });
+    }));
+  } catch (e) {
+    el.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load welfare requests — you may not have access to this office.')}</p>`;
+  }
+}
+
+// ---------- Community Chat moderation (section 19) ----------
+async function renderChatModeration() {
+  const el = document.getElementById('panel-chatModeration');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  const topics = await fetchJSON('/api/chat/topics');
+  el.innerHTML = `
+    <h2 style="margin-bottom:8px;">Community Chat Moderation</h2>
+    <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Lock a discussion, hide a message (never destroyed, just stops showing), or restrict a member from posting further from the Members tab.</p>
+    <table>
+      <thead><tr><th>Discussion</th><th>Started By</th><th>Messages</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${topics.map(t => `
+          <tr>
+            <td>${escapeHtml(t.title)}</td>
+            <td>${escapeHtml(t.createdByName || 'Unknown')}</td>
+            <td>${t.messageCount}</td>
+            <td class="row-actions">
+              <button data-view-topic="${t.id}">View Messages</button>
+              <button data-lock-topic="${t.id}" data-locked="${t.locked}">${t.locked ? 'Unlock' : 'Lock'}</button>
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="4">No discussions started yet.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  el.querySelectorAll('[data-lock-topic]').forEach(btn => btn.addEventListener('click', async () => {
+    await fetchJSON(`/api/chat/topics/${btn.dataset.lockTopic}/lock`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locked: btn.dataset.locked !== 'true' })
+    });
+    renderChatModeration();
+  }));
+  el.querySelectorAll('[data-view-topic]').forEach(btn => btn.addEventListener('click', async () => {
+    const messages = await fetchJSON(`/api/chat/topics/${btn.dataset.viewTopic}/messages`);
+    showModal(`
+      <h3>Messages</h3>
+      <div class="media-grid" style="grid-template-columns:1fr;">
+        ${messages.map(m => `
+          <div style="border:1px solid var(--line); border-radius:8px; padding:10px 12px;">
+            <strong>${escapeHtml(m.authorName || 'Unknown')}</strong>
+            <p style="margin:4px 0;">${escapeHtml(m.body)}</p>
+            ${m.reportCount ? `<span class="status-pill" style="background:#FBDFDA; color:#A93226;">${m.reportCount} report(s)</span>` : ''}
+            <button data-hide-msg="${m.id}" style="margin-top:6px;">Hide This Message</button>
+          </div>
+        `).join('') || '<p class="empty-state">No messages yet.</p>'}
+      </div>
+      <button type="button" class="btn btn-outline" id="cancelModalBtn" style="margin-top:14px;">Close</button>
+    `, true);
+    document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+    document.querySelectorAll('[data-hide-msg]').forEach(hideBtn => hideBtn.addEventListener('click', async () => {
+      await fetchJSON(`/api/chat/messages/${hideBtn.dataset.hideMsg}/moderate`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hidden: true })
+      });
+      showToast('Message hidden.', 'success');
+      closeModal();
+      renderChatModeration();
+    }));
+  }));
+}
+
 let membersPage = 1;
 const MEMBERS_PER_PAGE = 15;
 
@@ -966,6 +1191,10 @@ function openMemberEditForm(member) {
         <div class="field"><label>Programme</label><input type="text" id="editMemberProgramme" value="${escapeHtml(member.programme || '')}"></div>
       </div>
       <div class="field"><label>Hostel / Residence</label><input type="text" id="editMemberHostel" value="${escapeHtml(member.hostel || '')}"></div>
+      <div class="field checkbox-field">
+        <input type="checkbox" id="editMemberChatRestricted" ${member.chatRestricted ? 'checked' : ''}>
+        <label for="editMemberChatRestricted" style="margin:0;">Restrict from Community Chat (can still read, can't post)</label>
+      </div>
       <div style="display:flex; gap:10px;">
         <button type="submit" class="btn btn-primary">Save</button>
         <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
@@ -987,6 +1216,12 @@ function openMemberEditForm(member) {
           hostel: document.getElementById('editMemberHostel').value
         })
       });
+      const chatRestricted = document.getElementById('editMemberChatRestricted').checked;
+      if (chatRestricted !== !!member.chatRestricted) {
+        await fetchJSON(`/api/admin/members/${member.id}/chat-restriction`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatRestricted })
+        });
+      }
       closeModal();
       showToast('Member updated.', 'success');
       renderMembers();

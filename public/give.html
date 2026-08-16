@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Give — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .pay-details { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:24px; }
+  .pay-details dt { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; color:#8a7595; margin-top:12px; }
+  .pay-details dt:first-child { margin-top:0; }
+  .pay-details dd { margin:2px 0 0; font-weight:700; font-size:1.05rem; color:var(--purple-deep); }
+  .give-history-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:0.88rem; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:36px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Sow &amp; Support</p>
+    <h1>Give</h1>
+    <p class="lede">Support your chapter's tithes, offerings and welfare fund.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:640px;">
+    <div id="payInfo"><p class="empty-state">Loading...</p></div>
+
+    <form class="form-card" id="giveForm" style="display:none;">
+      <h3 style="margin-bottom:6px;">Log Your Gift</h3>
+      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">After sending via MoMo/bank using the details above, tell us here — Finance confirms it against the books.</p>
+      <div class="field"><label for="amount">Amount (GH₵)</label><input type="number" id="amount" min="0.01" step="0.01" required></div>
+      <div class="field"><label for="purpose">Purpose</label>
+        <select id="purpose">
+          <option value="tithe">Tithe</option><option value="offertory">Offertory</option>
+          <option value="harvest">Harvest</option><option value="momo">General (MoMo)</option><option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field"><label for="method">How did you send it?</label>
+        <select id="method"><option value="momo">Mobile Money</option><option value="bank">Bank Transfer</option><option value="cash">Cash</option><option value="other">Other</option></select>
+      </div>
+      <div class="field"><label for="reference">Transaction reference (optional)</label><input type="text" id="reference" placeholder="MoMo transaction ID, if you have it"></div>
+      <button type="submit" class="btn btn-flame btn-block" id="giveSubmitBtn">Submit</button>
+      <div class="form-msg" id="giveMsg"></div>
+    </form>
+
+    <div class="section-head" style="margin-top:40px;">
+      <p class="eyebrow">Your Giving</p>
+      <h2>History</h2>
+    </div>
+    <div id="giveHistory"><p class="empty-state">Loading...</p></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+async function loadHistory() {
+  const wrap = document.getElementById('giveHistory');
+  try {
+    const items = await fetchJSON('/api/giving/mine');
+    wrap.innerHTML = items.map(g => `
+      <div class="give-history-row">
+        <span>${escapeHtml(g.purpose)} — GH₵ ${Number(g.amount).toFixed(2)}</span>
+        <span class="badge">${escapeHtml(g.status)}</span>
+      </div>
+    `).join('') || '<p class="empty-state">No giving history yet.</p>';
+  } catch (e) {
+    wrap.innerHTML = '<p class="empty-state">Log in to see your giving history.</p>';
+  }
+}
+
+(async function () {
+  await initLayout('/give.html');
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  if (!authRes.member) {
+    document.getElementById('payInfo').innerHTML = '<p class="empty-state">Please <a href="/login.html">log in</a> to give.</p>';
+    document.getElementById('giveHistory').innerHTML = '';
+    return;
+  }
+  try {
+    const info = await fetchJSON('/api/giving/chapter-info');
+    if (!info.configured) {
+      document.getElementById('payInfo').innerHTML = '<p class="empty-state">Your chapter hasn\'t set up giving details yet — check back soon.</p>';
+    } else {
+      const p = info.payment;
+      document.getElementById('payInfo').innerHTML = `
+        <div class="pay-details">
+          <h3 style="margin-bottom:4px;">${escapeHtml(info.chapterName)}</h3>
+          ${p.momoNumber ? `<dt>Mobile Money</dt><dd>${escapeHtml(p.momoNumber)}${p.momoName ? ' — ' + escapeHtml(p.momoName) : ''}</dd>` : ''}
+          ${p.bankName ? `<dt>Bank</dt><dd>${escapeHtml(p.bankName)}</dd>` : ''}
+          ${p.bankAccountNumber ? `<dt>Account</dt><dd>${escapeHtml(p.bankAccountName || '')} ${escapeHtml(p.bankAccountNumber)}</dd>` : ''}
+          <p style="font-size:0.8rem; color:#8a7595; margin-top:14px;">Sent via your own MoMo/bank app — this page doesn't process payments directly.</p>
+        </div>
+      `;
+      document.getElementById('giveForm').style.display = 'block';
+    }
+  } catch (e) {
+    document.getElementById('payInfo').innerHTML = '<p class="empty-state">Could not load giving details right now.</p>';
+  }
+  loadHistory();
+})();
+
+document.getElementById('giveForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('giveSubmitBtn');
+  const msg = document.getElementById('giveMsg');
+  btn.disabled = true;
+  try {
+    await fetchJSON('/api/giving/intents', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amount: document.getElementById('amount').value,
+        purpose: document.getElementById('purpose').value,
+        method: document.getElementById('method').value,
+        reference: document.getElementById('reference').value
+      })
+    });
+    msg.textContent = 'Thank you! Finance will confirm this against the books.';
+    msg.className = 'form-msg success';
+    showToast('Giving recorded — thank you!', 'success');
+    document.getElementById('giveForm').reset();
+    loadHistory();
+  } catch (err) {
+    msg.textContent = err.message || 'Could not record this.';
+    msg.className = 'form-msg error';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

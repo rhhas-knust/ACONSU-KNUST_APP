@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welfare — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .welfare-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-bottom:12px; }
+  .welfare-card .status-pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.72rem; font-weight:800; background:var(--lilac-mid); color:var(--purple-rich); text-transform:capitalize; }
+  .welfare-card .status-pill.fulfilled, .welfare-card .status-pill.approved { background:#D9F0DE; color:#2E7D4F; }
+  .welfare-card .status-pill.declined { background:#FBDFDA; color:#A93226; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:40px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">We Care</p>
+    <h1>Welfare</h1>
+    <p class="lede">Going through something? Let us know how we can help — this is kept confidential.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:640px;">
+    <form class="form-card" id="welfareForm">
+      <div class="field">
+        <label for="category">What kind of support do you need?</label>
+        <select id="category">
+          <option value="financial">Financial</option>
+          <option value="medical">Medical</option>
+          <option value="bereavement">Bereavement</option>
+          <option value="academic">Academic</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="description">Tell us more</label>
+        <textarea id="description" required placeholder="Share as much as you're comfortable with — only the Welfare team sees this."></textarea>
+      </div>
+      <div class="field">
+        <label for="amountRequested">Amount, if financial (optional)</label>
+        <input type="number" id="amountRequested" min="0" step="0.01" placeholder="GH₵">
+      </div>
+      <button type="submit" class="btn btn-flame btn-block" id="welfareSubmitBtn">Submit Request</button>
+      <div class="form-msg" id="welfareMsg"></div>
+    </form>
+
+    <div class="section-head" style="margin-top:48px;">
+      <p class="eyebrow">Your Requests</p>
+      <h2>Status</h2>
+    </div>
+    <div id="myRequests"><p class="empty-state">Loading...</p></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+async function loadMyRequests() {
+  const wrap = document.getElementById('myRequests');
+  try {
+    const items = await fetchJSON('/api/welfare/requests/mine');
+    wrap.innerHTML = items.map(w => `
+      <div class="welfare-card">
+        <span class="status-pill ${w.status}">${w.status.replace('_', ' ')}</span>
+        <p style="margin:8px 0 4px; font-weight:700;">${escapeHtml(w.category)}</p>
+        <p style="color:#5a4468; font-size:0.9rem;">${escapeHtml(w.description)}</p>
+      </div>
+    `).join('') || '<p class="empty-state">No requests submitted yet.</p>';
+  } catch (e) {
+    wrap.innerHTML = '<p class="empty-state">Log in to see your welfare requests.</p>';
+  }
+}
+
+(async function () {
+  await initLayout('/welfare.html');
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  if (!authRes.member) {
+    document.getElementById('welfareForm').innerHTML = '<p class="empty-state">Please <a href="/login.html">log in</a> to submit a welfare request.</p>';
+  }
+  loadMyRequests();
+})();
+
+document.getElementById('welfareForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('welfareSubmitBtn');
+  const msg = document.getElementById('welfareMsg');
+  btn.disabled = true;
+  try {
+    await fetchJSON('/api/welfare/requests', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category: document.getElementById('category').value,
+        description: document.getElementById('description').value,
+        amountRequested: document.getElementById('amountRequested').value
+      })
+    });
+    msg.textContent = 'Your request has been received — the Welfare team will follow up.';
+    msg.className = 'form-msg success';
+    showToast('Welfare request submitted.', 'success');
+    document.getElementById('welfareForm').reset();
+    loadMyRequests();
+  } catch (err) {
+    msg.textContent = err.message || 'Could not submit your request.';
+    msg.className = 'form-msg error';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

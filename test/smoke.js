@@ -446,6 +446,118 @@ require('./harness.js');
   r = await call('anon', 'GET', '/api/prayer-wall');
   check('the answered testimony shows on the public wall', r.data.find(p => p.id === wallItem.id).testimony === 'God answered!', r.data);
 
+  console.log('\n== Groups (section 20) ==');
+  r = await call('pub', 'POST', '/api/admin/groups', { name: 'Young Adults Bible Study', type: 'bible_study', meetingDay: 'Wednesday' });
+  check('a group is created', r.status === 200, r.data);
+  const groupId = r.data.item.id;
+  r = await call('anon', 'GET', '/api/groups');
+  check('groups are publicly listable', r.data.some(g => g.id === groupId), r.data);
+  r = await call('member', 'GET', `/api/groups/${groupId}/posts`);
+  check('a non-member cannot read a group\'s posts', r.status === 403, r.data);
+  r = await call('member', 'POST', `/api/groups/${groupId}/join`);
+  check('a member joins the group', r.status === 200, r.data);
+  r = await call('member', 'GET', `/api/groups/${groupId}`);
+  check('membership is reflected on the group', r.data.isMember === true && r.data.memberCount === 1, r.data);
+  r = await call('member', 'POST', `/api/groups/${groupId}/posts`, { body: 'Excited for this study!', isAnnouncement: true });
+  check('a member can post, but cannot post as an announcement (leader-only)', r.status === 200 && r.data.item.isAnnouncement === false, r.data);
+  r = await call('member', 'GET', `/api/groups/${groupId}/posts`);
+  check('the post is visible to group members', r.data.length === 1, r.data);
+  r = await call('member', 'POST', `/api/groups/${groupId}/meetings`, { date: '2026-09-02', topic: 'Intro' });
+  check('a plain member cannot log a meeting (leader-only)', r.status === 403, r.data);
+  r = await call('member', 'POST', `/api/groups/${groupId}/leave`);
+  check('a member leaves the group', r.status === 200, r.data);
+  r = await call('member', 'GET', `/api/groups/${groupId}`);
+  check('membership count drops after leaving', r.data.memberCount === 0, r.data);
+
+  console.log('\n== Community Chat (section 19) ==');
+  r = await call('member', 'POST', '/api/chat/topics', { title: 'What blessed you this week?' });
+  check('a member starts a discussion', r.status === 200, r.data);
+  const topicId = r.data.item.id;
+  r = await call('member', 'POST', `/api/chat/topics/${topicId}/messages`, { body: 'Grace abounding!' });
+  check('a member posts a message', r.status === 200, r.data);
+  const chatMsgId = r.data.item.id;
+  r = await call('member', 'POST', `/api/chat/messages/${chatMsgId}/report`);
+  check('a member reports a message', r.status === 200, r.data);
+  r = await call('fin', 'PATCH', `/api/chat/messages/${chatMsgId}/moderate`, { hidden: true });
+  check('a non-admin role cannot moderate chat', r.status === 401, r.data);
+  r = await call('admin', 'PATCH', `/api/chat/messages/${chatMsgId}/moderate`, { hidden: true });
+  check('an admin/chapter-admin hides a reported message', r.status === 200 && r.data.item.hidden === true, r.data);
+  r = await call('member', 'GET', `/api/chat/topics/${topicId}/messages`);
+  check('a hidden message no longer shows, but is not destroyed', r.data.length === 0, r.data);
+  r = await call('admin', 'PATCH', `/api/chat/topics/${topicId}/lock`, { locked: true });
+  check('an admin locks the discussion', r.status === 200, r.data);
+  r = await call('member', 'POST', `/api/chat/topics/${topicId}/messages`, { body: 'Late reply' });
+  check('posting to a locked discussion is rejected', r.status === 400, r.data);
+  r = await call('admin', 'PATCH', `/api/admin/members/${memberId}/chat-restriction`, { chatRestricted: true });
+  check('a member is restricted from chat', r.status === 200, r.data);
+  r = await call('member', 'POST', '/api/chat/topics', { title: 'Should not be allowed' });
+  check('a restricted member cannot start a new discussion', r.status === 403, r.data);
+  await call('admin', 'PATCH', `/api/admin/members/${memberId}/chat-restriction`, { chatRestricted: false });
+
+  console.log('\n== Volunteer / Service Scheduling (section 23) ==');
+  r = await call('pub', 'POST', `/api/events/${eventId}/volunteers`, { role: 'usher', memberId });
+  check('publicity assigns a volunteer role', r.status === 200 && r.data.item.status === 'assigned', r.data);
+  const volAssignmentId = r.data.item.id;
+  r = await call('member', 'GET', '/api/member/volunteer-assignments');
+  check('the member sees their own assignment, with the event attached', r.data.length === 1 && r.data[0].event && r.data[0].event.id === eventId, r.data);
+  r = await call('member', 'PATCH', `/api/member/volunteer-assignments/${volAssignmentId}`, { status: 'confirmed' });
+  check('the member confirms their assignment', r.status === 200 && r.data.item.status === 'confirmed', r.data);
+
+  console.log('\n== Member Milestones (section 36) ==');
+  r = await call('shep', 'POST', '/api/shepherd/milestones', { memberId, type: 'membership_anniversary', note: '1 year!' });
+  check('shepherding logs a milestone', r.status === 200, r.data);
+  r = await call('shep', 'GET', '/api/shepherd/milestones');
+  check('the milestone is listed', r.data.some(m => m.type === 'membership_anniversary'), r.data);
+  check('an executive-appointment milestone was auto-logged earlier when Ama Executive set up her profile', r.data.some(m => m.type === 'executive_appointment'), r.data);
+
+  console.log('\n== Welfare (section 33) ==');
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'welf.efua', name: 'Efua Welfare', role: 'welfare', password: 'password123' });
+  check('welfare officer account created', r.status === 200, r.data);
+  r = await call('welf', 'POST', '/api/portal/login', { username: 'welf.efua', password: 'password123' });
+  check('welfare officer signs in', r.status === 200, r.data);
+
+  r = await call('member', 'POST', '/api/welfare/requests', { category: 'financial', description: 'Struggling with hostel fees this semester' });
+  check('a member submits their own welfare request', r.status === 200, r.data);
+  const ownWelfareId = r.data.item.id;
+  r = await call('member', 'GET', '/api/welfare/requests/mine');
+  check('the member sees their own request, without internal notes', r.data.length === 1 && r.data[0].notes === undefined, r.data);
+  r = await call('fin', 'GET', '/api/welfare/requests');
+  check('finance cannot see the welfare queue', r.status === 401, r.data);
+  r = await call('shep', 'GET', '/api/welfare/requests');
+  check('shepherding can refer, but cannot browse the full welfare queue', r.status === 401, r.data);
+  r = await call('shep', 'POST', '/api/shepherd/welfare-referrals', { memberId, category: 'medical', description: 'Mentioned they have been unwell' });
+  check('shepherding raises a referral on behalf of a member', r.status === 200 && r.data.item.referredBy, r.data);
+  r = await call('welf', 'GET', '/api/welfare/requests');
+  check('the welfare officer sees both the self-submitted request and the referral', r.data.length === 2, r.data);
+  r = await call('welf', 'PATCH', `/api/welfare/requests/${ownWelfareId}`, { status: 'approved', notes: 'Approved for GHS200 support' });
+  check('the welfare officer updates status and case notes', r.status === 200 && r.data.item.status === 'approved', r.data);
+  r = await call('member', 'GET', '/api/welfare/requests/mine');
+  check('the member sees the updated status but still no notes', r.data.find(w => w.id === ownWelfareId).status === 'approved' && r.data.find(w => w.id === ownWelfareId).notes === undefined, r.data);
+
+  console.log('\n== Giving (section 32) — manual/reference-based, not a live payment gateway ==');
+  r = await call('member', 'GET', '/api/giving/chapter-info');
+  check('giving is not configured until the chapter sets payment details', r.data.configured === false, r.data);
+  r = await call('admin', 'PUT', `/api/national/chapters/${chapterId}`, {
+    payment: { momoNumber: '0244000000', momoName: 'ACONSU Test Chapter', provider: 'Manual MoMo' }
+  });
+  check('national coordinator sets the chapter\'s payment details', r.status === 200, r.data);
+  r = await call('member', 'GET', '/api/giving/chapter-info');
+  check('giving now shows the chapter\'s real MoMo details', r.data.configured === true && r.data.payment.momoNumber === '0244000000', r.data);
+
+  r = await call('member', 'POST', '/api/giving/intents', { amount: 50, purpose: 'tithe', method: 'momo', reference: 'MM998877' });
+  check('a member logs a gift they sent', r.status === 200 && r.data.item.status === 'pending', r.data);
+  const givingIntentId = r.data.item.id;
+  r = await call('fin', 'GET', '/api/finance/giving-queue');
+  check('finance sees the pending claim', r.data.some(g => g.id === givingIntentId), r.data);
+  r = await call('fin', 'GET', '/api/finance/summary');
+  const incomeBeforeGiving = r.data.totalIncome;
+  r = await call('fin', 'PATCH', `/api/finance/giving/${givingIntentId}/confirm`, {});
+  check('finance confirms the claim into a real ledger entry', r.status === 200 && r.data.item.status === 'confirmed' && !!r.data.entry.id, r.data);
+  r = await call('fin', 'GET', '/api/finance/summary');
+  check('the confirmed gift actually moved the books by GHS 50', r.data.totalIncome === incomeBeforeGiving + 50, r.data);
+  r = await call('member', 'GET', '/api/giving/mine');
+  check('the member sees it as confirmed in their own history', r.data.find(g => g.id === givingIntentId).status === 'confirmed', r.data);
+
   console.log('\n== chapter isolation (section 1, 43, 44) — the whole point of this phase ==');
   r = await call('admin', 'POST', '/api/national/chapters', { id: 'test-chapter-2', name: 'ACONSU-Test-2', institution: 'Second University' });
   check('a second chapter is created', r.status === 200, r.data);
@@ -507,7 +619,8 @@ require('./harness.js');
     '/more.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',
     '/register.html', '/executive.html', '/card.html', '/bible-study.html', '/sermon-notes.html', '/prayer.html',
     '/events.html', '/index.html',
-    '/js/portal.js', '/js/national.js', '/js/executive.js', '/css/portal.css'
+    '/groups.html', '/group.html', '/chat.html', '/welfare.html', '/welfare-portal.html', '/give.html',
+    '/js/portal.js', '/js/national.js', '/js/executive.js', '/js/welfare-portal.js', '/css/portal.css'
   ]) {
     const res = await fetch(BASE + page);
     check(`${page} served`, res.status === 200);

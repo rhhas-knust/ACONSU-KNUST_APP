@@ -506,3 +506,21 @@ Built directly on the Phase 2 foundation — every new piece below is chapter-is
 ### New dependencies
 
 `qrcode` and `pdfkit` — both pure-JS, no native compilation, same class of dependency as the ones already here. `npm audit` flagged 4 pre-existing high/critical advisories in **nodemailer, sharp, and Capacitor's `tar`** dependency (none from these two new packages) — all three fixes are breaking-change major-version bumps to libraries real features depend on (email delivery, image compression), so I left them for a dedicated, tested pass rather than bundling a risky upgrade into this one. Worth prioritizing soon.
+
+## 22. Community, care and giving (Phases 5–6 of the platform spec)
+
+**Social platform icons** — the footer (and anywhere else `socialLinksHtml()` is used) now renders real Facebook/Instagram/YouTube/WhatsApp icons instead of "IG/FB/YT/WA" text, matching the app's existing icon style. Only ever shows a platform a chapter/settings record actually has a link for.
+
+**Groups** (`/groups.html`, `/group.html`, section 20) — Bible Study, Prayer, Fellowship, Cell and other groups, distinct from Departments (a group can optionally sit under one). Each group has a leader — who is very often just a member with no portal login at all, so leader permissions are checked against the member session directly, not the staff-only role system. A group's own leader can update its meeting details, resources, post announcements and log meetings (with attendance) without needing Chapter Admin access; Chapter Admin/Coordinator/Publicity create groups and (re)assign leadership from the admin dashboard's new Groups tab.
+
+**Community Chat** (`/chat.html`, section 19) — chapter-wide discussion topics and replies. Moderation is deliberately simple: hide a message (soft-delete — nothing is destroyed, it just stops showing, from the admin dashboard's Chat Moderation tab), lock a topic, restrict a member from posting further (toggle on the Members tab — they can still read, just not post), and members can report a message to flag it for review.
+
+**Volunteer / Service Scheduling** (section 23) — Publicity assigns ushers/prayer team/media/musicians/protocol/transport/other roles per event (Events tab → Volunteers); a member sees what they've been asked to serve on their Profile page and confirms or declines.
+
+**Member Milestones** (section 36) — birthdays already ran their own daily check; this adds the ones a human has to notice. An executive-appointment notification fires automatically the first time someone sets up their Executive profile. Shepherding can log a graduation, membership anniversary, or anything else worth celebrating from a new Pastoral Care tab, which posts a congratulatory notification to the chapter.
+
+**Welfare** (`/welfare.html`, `/welfare-portal.html`, section 33) — a member submits their own request and tracks its status (never their internal case notes); Shepherding can raise a referral on someone's behalf during pastoral care without seeing the full welfare queue themselves — that stays confidential to Welfare Officers and Chapter Admin/Coordinator, the same boundary a real welfare team keeps. Welfare Officers get their own portal (`/welfare-portal.html`) rather than the full admin dashboard.
+
+**Giving** (`/give.html`, section 32) — deliberately **not** a live payment gateway; nothing in this codebase charges a card or moves money on its own. A member is shown their chapter's real MoMo/bank details (set by National/Chapter Admin under chapter payment config) and logs what they sent — Finance then reconciles each claim from a "Giving Claims" tab into a real ledger entry (or rejects it). This is the same honest, manual-first pattern already used for SMS/email: real, working, and upgradeable to a real gateway later without needing to be torn out.
+
+All of the above is chapter-isolated the same way as everything else in this app, and `test/smoke.js` proves it end-to-end (a member can't read a group they haven't joined, a hidden chat message stays hidden, Finance can't browse the welfare queue, a confirmed gift actually moves the ledger by the right amount, and so on).

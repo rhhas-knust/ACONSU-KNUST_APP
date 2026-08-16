@@ -342,7 +342,7 @@ async function renderPublicityEvents(el) {
                 <td>${shortDate(e.date)}<br><small class="muted">${escapeHtml(e.time || '')}</small></td>
                 <td>${escapeHtml(e.location || '—')}</td>
                 <td>${pill(e.status === 'published' ? (upcoming ? 'upcoming' : 'past') : e.status, statusTone)}</td>
-                ${PORTAL.canEdit ? `<td class="row-actions"><button data-edit-event="${e.id}">Edit &amp; Announce</button></td>` : ''}
+                ${PORTAL.canEdit ? `<td class="row-actions"><button data-edit-event="${e.id}">Edit &amp; Announce</button><button data-volunteers="${e.id}">Volunteers</button></td>` : ''}
               </tr>
             `;
           }).join('') || emptyRow(PORTAL.canEdit ? 5 : 4, 'No events on the calendar.')}
@@ -356,6 +356,66 @@ async function renderPublicityEvents(el) {
   el.querySelectorAll('[data-edit-event]').forEach(btn => {
     btn.addEventListener('click', () => openEventForm(events.find(e => e.id === btn.dataset.editEvent)));
   });
+  el.querySelectorAll('[data-volunteers]').forEach(btn => {
+    btn.addEventListener('click', () => openVolunteersModal(events.find(e => e.id === btn.dataset.volunteers)));
+  });
+}
+
+// ---------- volunteer / service scheduling (section 23) ----------
+const VOLUNTEER_ROLE_LABELS = { usher: 'Usher', prayer_team: 'Prayer Team', media: 'Media', musician: 'Musician', protocol: 'Protocol', publicity: 'Publicity', transport: 'Transport', other: 'Other' };
+
+async function openVolunteersModal(event) {
+  const [assignments, members] = await Promise.all([
+    fetchJSON(`/api/events/${event.id}/volunteers`),
+    fetchJSON('/api/admin/members')
+  ]);
+  showModal(`
+    <h3>Volunteers — ${escapeHtml(event.title)}</h3>
+    <form id="assignForm" class="inline-form">
+      <div class="field"><label>Member</label>
+        <select id="volMember">${members.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Role</label>
+        <select id="volRole">${Object.entries(VOLUNTEER_ROLE_LABELS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Assign</button>
+    </form>
+    <div class="table-wrap">
+      <table class="portal-table" style="min-width:0;">
+        <thead><tr><th>Member</th><th>Role</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          ${assignments.map(a => `
+            <tr>
+              <td>${escapeHtml(a.memberName)}</td>
+              <td>${VOLUNTEER_ROLE_LABELS[a.role] || a.role}</td>
+              <td>${pill(a.status, a.status === 'confirmed' ? 'green' : a.status === 'declined' ? 'red' : 'amber')}</td>
+              <td><button data-remove-vol="${a.id}" class="danger">Remove</button></td>
+            </tr>
+          `).join('') || emptyRow(4, 'No one assigned yet.')}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:14px;"><button type="button" class="btn btn-outline" id="cancelModalBtn">Close</button></div>
+    <div class="form-msg" id="volMsg"></div>
+  `, true);
+
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+  document.getElementById('assignForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await fetchJSON(`/api/events/${event.id}/volunteers`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId: document.getElementById('volMember').value, role: document.getElementById('volRole').value })
+      });
+      openVolunteersModal(event);
+    } catch (err) {
+      setFormMsg('volMsg', err.message || 'Could not assign this volunteer.', 'error');
+    }
+  });
+  document.querySelectorAll('[data-remove-vol]').forEach(btn => btn.addEventListener('click', async () => {
+    await fetchJSON(`/api/events/${event.id}/volunteers/${btn.dataset.removeVol}`, { method: 'DELETE' });
+    openVolunteersModal(event);
+  }));
 }
 
 // ---------- event review queue (section 9) ----------

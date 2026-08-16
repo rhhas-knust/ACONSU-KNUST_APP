@@ -41,6 +41,11 @@ function applyUpdate(doc, update) {
       doc[k].push(v);
     });
   }
+  if (update.$pull) {
+    Object.entries(update.$pull).forEach(([k, v]) => {
+      if (Array.isArray(doc[k])) doc[k] = doc[k].filter((item) => item !== v);
+    });
+  }
   const direct = Object.fromEntries(Object.entries(update).filter(([k]) => !k.startsWith('$')));
   Object.assign(doc, direct);
   doc.updatedAt = new Date().toISOString();
@@ -133,10 +138,28 @@ const fakeModels = {
   FormSubmission: makeModel({ chapterId: '', memberId: '', submitterName: '', submitterEmail: '', answers: {} }),
   BibleStudy: makeModel({ chapterId: '', date: '', scriptureReference: '', studyMaterial: '', questions: [], notes: '', resources: [], createdBy: '' }),
   SermonNote: makeModel({ chapterId: '', sermonTitle: '', preacher: '', date: '', scripture: '', notes: '', summary: '', keyLessons: '', reflections: '' }),
+  Group: makeModel({
+    chapterId: '', type: 'other', description: '', linkedDepartmentId: '', leaderMemberId: '', leaderName: '',
+    meetingDay: '', meetingTime: '', meetingLocation: '', memberIds: [], resources: [], createdBy: ''
+  }),
+  GroupPost: makeModel({ chapterId: '', authorMemberId: '', authorName: '', isAnnouncement: false }),
+  GroupMeeting: makeModel({ chapterId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
+  ChatTopic: makeModel({ chapterId: '', createdByMemberId: '', createdByName: '', locked: false }),
+  ChatMessage: makeModel({ chapterId: '', authorMemberId: '', authorName: '', reportCount: 0, hidden: false, hiddenBy: '' }),
+  VolunteerAssignment: makeModel({ chapterId: '', memberName: '', status: 'assigned', notes: '', assignedBy: '' }),
+  Milestone: makeModel({ chapterId: '', memberId: '', memberName: '', type: 'other', note: '', loggedBy: '' }),
+  WelfareRequest: makeModel({
+    chapterId: '', memberId: '', memberName: '', category: 'other', description: '', amountRequested: 0,
+    status: 'submitted', notes: '', referredBy: '', handledBy: ''
+  }),
+  GivingIntent: makeModel({
+    chapterId: '', memberId: '', memberName: '', purpose: 'other', method: 'momo', reference: '',
+    status: 'pending', matchedFinanceEntryId: '', reviewNotes: '', reviewedBy: ''
+  }),
   Member: makeModel({
     chapterId: '', phone: '', level: '', programme: '', hostel: '', academicHistory: [], department: '',
     profileImageFileId: '', membershipStage: 'visitor', membershipNumber: '', qrToken: '',
-    shepherdStaffId: '', shepherdName: '',
+    shepherdStaffId: '', shepherdName: '', graduationYear: '', chatRestricted: false,
     currentStreak: 0, longestStreak: 0, bibleChaptersRead: 0, birthdayMonth: null, birthdayDay: null
   }),
   Notification: makeModel({ chapterId: '', source: 'admin' }),

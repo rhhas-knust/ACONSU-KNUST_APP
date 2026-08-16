@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Community — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .topic-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .topic-card:hover { box-shadow:0 8px 20px rgba(58,27,84,0.1); }
+  .chat-message { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
+  .chat-message .who { font-weight:700; font-size:0.85rem; color:var(--purple-deep); }
+  .chat-message .when { font-size:0.74rem; color:#8a7595; }
+  .chat-message .actions { margin-top:6px; }
+  .chat-message .actions button { background:none; border:none; color:#8a7595; font-size:0.75rem; cursor:pointer; text-decoration:underline; padding:0; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:36px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Talk It Out</p>
+    <h1>Community</h1>
+    <p class="lede">Ask questions, share opinions, discuss respectfully.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:700px;">
+    <div id="topicListView">
+      <button class="btn btn-primary btn-sm" id="newTopicBtn" style="margin-bottom:18px;">+ Start a Discussion</button>
+      <div id="topicList"><p class="empty-state">Loading...</p></div>
+    </div>
+    <div id="topicDetailView" style="display:none;">
+      <button class="btn btn-outline btn-sm" id="backToTopicsBtn" style="margin-bottom:16px;">&larr; All Discussions</button>
+      <h2 id="topicTitle"></h2>
+      <div id="messagesList" style="margin:16px 0;"></div>
+      <form id="messageForm">
+        <textarea id="messageBody" rows="2" placeholder="Add to the discussion..." style="width:100%; padding:10px; border:1px solid var(--line); border-radius:10px; font-family:inherit;"></textarea>
+        <button type="submit" class="btn btn-primary btn-sm" style="margin-top:8px;">Send</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+let currentMember = null;
+let currentTopicId = null;
+
+function fmtWhen(v) { try { return new Date(v).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+
+async function loadTopics() {
+  const list = document.getElementById('topicList');
+  try {
+    const topics = await fetchJSON('/api/chat/topics');
+    list.innerHTML = topics.map(t => `
+      <div class="topic-card" data-open="${t.id}">
+        <div>
+          <strong>${escapeHtml(t.title)}${t.locked ? ' 🔒' : ''}</strong>
+          <div class="tiny muted">Started by ${escapeHtml(t.createdByName || 'Someone')} · ${fmtWhen(t.lastActivity)}</div>
+        </div>
+        <span class="badge">${t.messageCount} repl${t.messageCount === 1 ? 'y' : 'ies'}</span>
+      </div>
+    `).join('') || '<p class="empty-state">No discussions yet — start the first one!</p>';
+    list.querySelectorAll('[data-open]').forEach(card => card.addEventListener('click', () => openTopic(card.dataset.open, topics.find(t => t.id === card.dataset.open).title)));
+  } catch (e) {
+    list.innerHTML = '<p class="empty-state">Log in to see community discussions.</p>';
+  }
+}
+
+async function openTopic(id, title) {
+  currentTopicId = id;
+  document.getElementById('topicListView').style.display = 'none';
+  document.getElementById('topicDetailView').style.display = 'block';
+  document.getElementById('topicTitle').textContent = title;
+  await loadMessages();
+}
+
+async function loadMessages() {
+  const list = document.getElementById('messagesList');
+  list.innerHTML = '<p class="empty-state">Loading...</p>';
+  try {
+    const messages = await fetchJSON(`/api/chat/topics/${currentTopicId}/messages`);
+    list.innerHTML = messages.map(m => `
+      <div class="chat-message" data-id="${m.id}">
+        <div class="who">${escapeHtml(m.authorName || 'Someone')}</div>
+        <p style="margin:4px 0;">${escapeHtml(m.body)}</p>
+        <div class="when">${fmtWhen(m.createdAt)}</div>
+        <div class="actions"><button data-report="${m.id}">Report</button></div>
+      </div>
+    `).join('') || '<p class="empty-state">No replies yet — be the first.</p>';
+    list.querySelectorAll('[data-report]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('Report this message to the moderators?')) return;
+      await fetchJSON(`/api/chat/messages/${btn.dataset.report}/report`, { method: 'POST' });
+      showToast('Reported — thank you for flagging this.', 'success');
+    }));
+  } catch (e) {
+    list.innerHTML = '<p class="empty-state">Could not load messages.</p>';
+  }
+}
+
+document.getElementById('backToTopicsBtn').addEventListener('click', () => {
+  document.getElementById('topicDetailView').style.display = 'none';
+  document.getElementById('topicListView').style.display = 'block';
+  loadTopics();
+});
+
+document.getElementById('messageForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = document.getElementById('messageBody').value.trim();
+  if (!text) return;
+  try {
+    await fetchJSON(`/api/chat/topics/${currentTopicId}/messages`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ body: text })
+    });
+    document.getElementById('messageBody').value = '';
+    loadMessages();
+  } catch (err) {
+    showToast(err.message || 'Could not send this message.', 'error');
+  }
+});
+
+document.getElementById('newTopicBtn').addEventListener('click', async () => {
+  if (!currentMember) { window.location.href = '/login.html'; return; }
+  const title = prompt('What do you want to discuss?');
+  if (!title || !title.trim()) return;
+  try {
+    const { item } = await fetchJSON('/api/chat/topics', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: title.trim() })
+    });
+    openTopic(item.id, item.title);
+  } catch (err) {
+    showToast(err.message || 'Could not start this discussion.', 'error');
+  }
+});
+
+(async function () {
+  await initLayout('/chat.html');
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  currentMember = authRes.member;
+  if (!currentMember) {
+    document.getElementById('topicList').innerHTML = '<p class="empty-state">Log in to join the community discussion.</p>';
+    document.getElementById('newTopicBtn').textContent = 'Log In to Post';
+  }
+  loadTopics();
+})();
+</script>
+</body>
+</html>

@@ -855,6 +855,111 @@ async function renderVisitors(el) {
   });
 }
 
+// ---------- pastoral care: welfare referrals + milestones (sections 22, 33, 36) ----------
+async function renderCare(el) {
+  const [people, milestones] = await Promise.all([
+    fetchJSON('/api/shepherd/members'),
+    fetchJSON('/api/shepherd/milestones')
+  ]);
+  const memberOptions = people.filter(p => p.source === 'member');
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Pastoral Care</h2>
+        <p class="sub">Raise a welfare referral when you notice someone needs support, or celebrate a milestone.</p>
+      </div>
+    </div>
+    <div class="card-split">
+      <div class="portal-card">
+        <h3>Welfare Referral</h3>
+        <p class="hint">Goes straight to the Welfare team — you won't see the outcome here, that stays confidential to them.</p>
+        <form id="referralForm">
+          <div class="field"><label>Member</label>
+            <select id="refMember" required>${memberOptions.map(p => `<option value="${p.memberId}">${escapeHtml(p.name)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Category</label>
+            <select id="refCategory">
+              <option value="financial">Financial</option><option value="medical">Medical</option>
+              <option value="bereavement">Bereavement</option><option value="academic">Academic</option><option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field"><label>What did you notice?</label><textarea id="refDescription" required></textarea></div>
+          <button type="submit" class="btn btn-primary btn-sm">Submit Referral</button>
+          <div class="form-msg" id="referralMsg"></div>
+        </form>
+      </div>
+      <div class="portal-card">
+        <h3>Log a Milestone</h3>
+        <p class="hint">Graduation, a membership anniversary, or anything else worth a shout-out — posts a celebration to the chapter.</p>
+        <form id="milestoneForm">
+          <div class="field"><label>Member</label>
+            <select id="mstMember" required>${memberOptions.map(p => `<option value="${p.memberId}">${escapeHtml(p.name)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Type</label>
+            <select id="mstType">
+              <option value="graduation">Graduation</option>
+              <option value="membership_anniversary">Membership Anniversary</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field"><label>Note (optional)</label><input type="text" id="mstNote" placeholder="e.g. 3 years as a member!"></div>
+          <button type="submit" class="btn btn-primary btn-sm">Post Celebration</button>
+          <div class="form-msg" id="milestoneMsg"></div>
+        </form>
+      </div>
+    </div>
+    <div class="portal-card">
+      <h3>Recent Milestones</h3>
+      <div class="table-wrap">
+        <table class="portal-table" style="min-width:0;">
+          <tbody>
+            ${milestones.slice(0, 10).map(m => `
+              <tr><td>${escapeHtml(m.memberName)}</td><td>${pill(m.type.replace('_', ' '))}</td><td class="tiny muted">${escapeHtml(m.note || '—')}</td></tr>
+            `).join('') || emptyRow(3, 'No milestones logged yet.')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('referralForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await fetchJSON('/api/shepherd/welfare-referrals', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: document.getElementById('refMember').value,
+          category: document.getElementById('refCategory').value,
+          description: document.getElementById('refDescription').value
+        })
+      });
+      showToast('Referral submitted to the Welfare team.', 'success');
+      document.getElementById('referralForm').reset();
+    } catch (err) {
+      setFormMsg('referralMsg', err.message || 'Could not submit this referral.', 'error');
+    }
+  });
+
+  document.getElementById('milestoneForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await fetchJSON('/api/shepherd/milestones', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: document.getElementById('mstMember').value,
+          type: document.getElementById('mstType').value,
+          note: document.getElementById('mstNote').value
+        })
+      });
+      showToast('Milestone posted!', 'success');
+      openPanel('care');
+    } catch (err) {
+      setFormMsg('milestoneMsg', err.message || 'Could not log this milestone.', 'error');
+    }
+  });
+}
+
 initPortal({
   role: 'shepherding',
   label: 'Shepherding',
@@ -863,6 +968,7 @@ initPortal({
     { key: 'visitors', label: 'Membership Workflow', render: renderVisitors },
     { key: 'attendance', label: 'Attendance', render: renderAttendance },
     { key: 'members', label: 'Members', render: renderShepMembers },
+    { key: 'care', label: 'Pastoral Care', render: renderCare },
     { key: 'messages', label: 'Messages', render: renderMessages }
   ]
 });

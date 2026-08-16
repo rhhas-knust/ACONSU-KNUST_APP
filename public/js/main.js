@@ -103,6 +103,25 @@ const ICON_BELL = '<path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 2 7H4c.5-1 2-2.5 2-7
 const ICON_USERS = '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c2.6.4 4.5 2.6 4.5 5.3"/>';
 const ICON_HEADPHONES = '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="2.5" y="13" width="4" height="6" rx="1.5"/><rect x="17.5" y="13" width="4" height="6" rx="1.5"/>';
 
+// ---------- social platform icons (footer, chapter contact) ----------
+const ICON_FACEBOOK = '<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>';
+const ICON_INSTAGRAM = '<rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>';
+const ICON_YOUTUBE = '<path d="M22.5 6.4a2.8 2.8 0 0 0-2-2C18.9 4 12 4 12 4s-6.9 0-8.6.4a2.8 2.8 0 0 0-2 2A29.4 29.4 0 0 0 1 11.8a29.4 29.4 0 0 0 .4 5.3 2.8 2.8 0 0 0 2 2c1.7.4 8.6.4 8.6.4s6.9 0 8.6-.4a2.8 2.8 0 0 0 2-2 29.4 29.4 0 0 0 .4-5.3 29.4 29.4 0 0 0-.4-5.4z"/><path d="M9.8 15V8.5l5.7 3.3z" fill="currentColor" stroke="none"/>';
+const ICON_WHATSAPP = '<path d="M21 11.5a8.4 8.4 0 0 1-9.9 8.3 8.4 8.4 0 0 1-3.4-.9L3 21l1.9-4.7a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 1 1 17 0z"/><path d="M8.5 9.3c.2-.5.5-.5.8-.5h.5c.2 0 .4 0 .6.4s.6 1.5.7 1.6c.1.1.1.3 0 .5s-.2.3-.4.5-.3.4-.1.7a5.6 5.6 0 0 0 2.4 2.1c.3.1.4.1.6-.1s.7-.8.9-1.1.4-.2.6-.1l1.5.7c.2.1.4.2.4.3.1.3.1.9-.2 1.4s-1.3 1-2.2 1c-1.6.1-4.3-.9-5.8-2.9a6.8 6.8 0 0 1-1.4-3.6c0-.9.3-1.5.4-1.9z"/>';
+
+// Renders the platform icons for whatever links a settings/contact object
+// has set — used by the site footer and, once built, chapter About pages.
+// Only ever shows a platform that actually has a URL/number on file.
+function socialLinksHtml(s) {
+  const links = [
+    s.facebook && { href: s.facebook, icon: ICON_FACEBOOK, label: 'Facebook' },
+    s.instagram && { href: s.instagram, icon: ICON_INSTAGRAM, label: 'Instagram' },
+    s.youtube && { href: s.youtube, icon: ICON_YOUTUBE, label: 'YouTube' },
+    s.whatsapp && { href: `https://wa.me/${String(s.whatsapp).replace(/[^\d]/g, '')}`, icon: ICON_WHATSAPP, label: 'WhatsApp' }
+  ].filter(Boolean);
+  return links.map(l => `<a href="${escapeHtml(l.href)}" target="_blank" rel="noopener" aria-label="${l.label}" class="social-icon-link">${svgIcon(l.icon)}</a>`).join('');
+}
+
 function svgIcon(pathData) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${pathData}</svg>`;
 }
@@ -337,12 +356,7 @@ function renderFooter(settings) {
         <div>
           <h4>ACONSU</h4>
           <p style="color:#C9B3D8; font-size:0.9rem;">${escapeHtml(s.fullName || "The Apostles' Continuation Students Union")}</p>
-          <div class="social-row">
-            ${s.instagram ? `<a href="${s.instagram}" target="_blank" rel="noopener">IG</a>` : ''}
-            ${s.facebook ? `<a href="${s.facebook}" target="_blank" rel="noopener">FB</a>` : ''}
-            ${s.youtube ? `<a href="${s.youtube}" target="_blank" rel="noopener">YT</a>` : ''}
-            ${s.whatsapp ? `<a href="https://wa.me/${s.whatsapp}" target="_blank" rel="noopener">WA</a>` : ''}
-          </div>
+          <div class="social-row">${socialLinksHtml(s)}</div>
         </div>
         <div>
           <h4>Explore</h4>

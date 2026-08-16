@@ -1089,6 +1089,640 @@ app.get('/api/admin/forms/:id/submissions', requireContentManager, async (req, r
   }
 });
 
+// Resolves "which chapter" for a request that might be a member session, a
+// staff session, or anonymous — the community features below (Groups, Chat,
+// Volunteer scheduling, Welfare, Giving) are read/written by both members
+// and staff, unlike most Phase 2 routes which were one or the other.
+async function resolveViewerChapterId(req) {
+  if (req.session && req.session.memberId) {
+    const member = await repo.getById('members', req.session.memberId);
+    return member ? member.chapterId : '';
+  }
+  const scope = rolesLib.getActingScope(req);
+  if (scope.chapterId && scope.chapterId !== '__none__') return scope.chapterId;
+  return publicChapterId(req);
+}
+
+// ============================================================
+// Groups (section 20) — Bible Study / Prayer / Fellowship / Department /
+// Cell / other. A group's leader is very often just a member, not a portal
+// account holder, so leader permission checks compare against the member
+// session directly rather than going through the staff-only chapterFilter.
+// ============================================================
+function isGroupLeaderOrAbove(req, group) {
+  if (isChapterAdminOrAbove(req)) return true;
+  return !!(req.session && req.session.memberId && group.leaderMemberId === req.session.memberId);
+}
+function isGroupMember(req, group) {
+  return !!(req.session && req.session.memberId && group.memberIds.includes(req.session.memberId));
+}
+
+app.get('/api/groups', async (req, res) => {
+  try {
+    const chapterId = await resolveViewerChapterId(req);
+    const groups = await repo.getAll('groups', chapterId ? { chapterId } : {});
+    res.json(groups.map(({ memberIds, ...g }) => ({ ...g, memberCount: memberIds.length })));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load groups' });
+  }
+});
+
+app.get('/api/groups/:id', async (req, res) => {
+  try {
+    const group = await repo.getById('groups', req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    const canSeeRoster = isGroupMember(req, group) || isGroupLeaderOrAbove(req, group);
+    let members = [];
+    if (canSeeRoster && group.memberIds.length) {
+      const all = await repo.getAll('members', { id: { $in: group.memberIds } });
+      members = all.map((m) => ({ id: m.id, name: m.name, profileImageFileId: m.profileImageFileId }));
+    }
+    const { memberIds, ...safe } = group;
+    res.json({ ...safe, memberCount: memberIds.length, members, isMember: isGroupMember(req, group), isLeader: isGroupLeaderOrAbove(req, group) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load this group' });
+  }
+});
+
+app.post('/api/admin/groups', requireContentManager, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'A chapter is required.' });
+    const { name, type, description, linkedDepartmentId, leaderMemberId, meetingDay, meetingTime, meetingLocation } = req.body;
+    if (!name) return res.status(400).json({ error: 'A name is required' });
+    let leaderName = '';
+    if (leaderMemberId) {
+      const leader = await repo.getById('members', leaderMemberId, { chapterId });
+      leaderName = leader ? leader.name : '';
+    }
+    const group = await repo.create('groups', {
+      chapterId,
+      name,
+      type: ['bible_study', 'prayer', 'fellowship', 'department', 'cell', 'other'].includes(type) ? type : 'other',
+      description: description || '', linkedDepartmentId: linkedDepartmentId || '',
+      leaderMemberId: leaderMemberId || '', leaderName,
+      meetingDay: meetingDay || '', meetingTime: meetingTime || '', meetingLocation: meetingLocation || '',
+      memberIds: leaderMemberId ? [leaderMemberId] : [],
+      createdBy: actorName(req)
+    }, 'grp');
+    res.json({ success: true, item: group });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not create this group' });
+  }
+});
+
+app.put('/api/admin/groups/:id', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('groups', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const { chapterId, memberIds, ...body } = req.body;
+    let leaderName = existing.leaderName;
+    if (body.leaderMemberId !== undefined && body.leaderMemberId !== existing.leaderMemberId) {
+      const leader = body.leaderMemberId ? await repo.getById('members', body.leaderMemberId, filter) : null;
+      leaderName = leader ? leader.name : '';
+    }
+    const group = await repo.updateById('groups', req.params.id, { ...existing, ...body, leaderName }, filter);
+    res.json({ success: true, item: group });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this group' });
+  }
+});
+
+app.delete('/api/admin/groups/:id', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    await repo.removeById('groups', req.params.id, filter);
+    await models.GroupPost.deleteMany({ groupId: req.params.id });
+    await models.GroupMeeting.deleteMany({ groupId: req.params.id });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not delete this group' });
+  }
+});
+
+// A group's own leader (who may just be a member, no portal account) can
+// keep the practical details current without needing Chapter Admin access.
+app.put('/api/groups/:id', requireMember, async (req, res) => {
+  try {
+    const existing = await repo.getById('groups', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Group not found' });
+    if (!isGroupLeaderOrAbove(req, existing)) return res.status(403).json({ error: 'Only the group leader can edit this group.' });
+    const { description, meetingDay, meetingTime, meetingLocation, resources } = req.body;
+    const updated = await repo.updateById('groups', req.params.id, {
+      ...existing,
+      description: description !== undefined ? description : existing.description,
+      meetingDay: meetingDay !== undefined ? meetingDay : existing.meetingDay,
+      meetingTime: meetingTime !== undefined ? meetingTime : existing.meetingTime,
+      meetingLocation: meetingLocation !== undefined ? meetingLocation : existing.meetingLocation,
+      resources: Array.isArray(resources) ? resources.filter((r) => r && r.title) : existing.resources
+    });
+    res.json({ success: true, item: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this group' });
+  }
+});
+
+app.post('/api/groups/:id/join', requireMember, async (req, res) => {
+  try {
+    const group = await repo.getById('groups', req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    await models.Group.updateOne({ id: req.params.id }, { $addToSet: { memberIds: req.session.memberId } });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not join this group' });
+  }
+});
+
+app.post('/api/groups/:id/leave', requireMember, async (req, res) => {
+  try {
+    await models.Group.updateOne({ id: req.params.id }, { $pull: { memberIds: req.session.memberId } });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not leave this group' });
+  }
+});
+
+app.get('/api/groups/:id/posts', requireMember, async (req, res) => {
+  try {
+    const group = await repo.getById('groups', req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!isGroupMember(req, group) && !isGroupLeaderOrAbove(req, group)) {
+      return res.status(403).json({ error: 'Join this group to see its posts.' });
+    }
+    const posts = await repo.getAll('groupPosts', { groupId: req.params.id });
+    posts.sort((a, b) => (b.isAnnouncement - a.isAnnouncement) || (new Date(b.createdAt) - new Date(a.createdAt)));
+    res.json(posts);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load posts' });
+  }
+});
+
+app.post('/api/groups/:id/posts', requireMember, async (req, res) => {
+  try {
+    const group = await repo.getById('groups', req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!isGroupMember(req, group) && !isGroupLeaderOrAbove(req, group)) {
+      return res.status(403).json({ error: 'Join this group to post.' });
+    }
+    if (!req.body.body || !req.body.body.trim()) return res.status(400).json({ error: 'A message is required' });
+    const member = await repo.getById('members', req.session.memberId);
+    const post = await repo.create('groupPosts', {
+      chapterId: group.chapterId, groupId: group.id,
+      authorMemberId: req.session.memberId, authorName: member ? member.name : '',
+      body: req.body.body.trim(), isAnnouncement: !!req.body.isAnnouncement && isGroupLeaderOrAbove(req, group)
+    }, 'gpost');
+    res.json({ success: true, item: post });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not post this' });
+  }
+});
+
+app.get('/api/groups/:id/meetings', requireMember, async (req, res) => {
+  try {
+    const group = await repo.getById('groups', req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!isGroupMember(req, group) && !isGroupLeaderOrAbove(req, group)) {
+      return res.status(403).json({ error: 'Join this group to see its meetings.' });
+    }
+    const meetings = await repo.getAll('groupMeetings', { groupId: req.params.id });
+    res.json(meetings.sort((a, b) => (a.date < b.date ? 1 : -1)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load meetings' });
+  }
+});
+
+app.post('/api/groups/:id/meetings', requireMember, async (req, res) => {
+  try {
+    const group = await repo.getById('groups', req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+    if (!isGroupLeaderOrAbove(req, group)) return res.status(403).json({ error: 'Only the group leader can log a meeting.' });
+    const { date, topic, location, attendeeMemberIds, notes } = req.body;
+    if (!date) return res.status(400).json({ error: 'A date is required' });
+    const meeting = await repo.create('groupMeetings', {
+      chapterId: group.chapterId, groupId: group.id, date, topic: topic || '', location: location || '',
+      attendeeMemberIds: Array.isArray(attendeeMemberIds) ? attendeeMemberIds.filter((id) => group.memberIds.includes(id)) : [],
+      notes: notes || '', recordedBy: actorName(req)
+    }, 'gmeet');
+    res.json({ success: true, item: meeting });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not log this meeting' });
+  }
+});
+
+// ============================================================
+// Community Chat (section 19) — chapter-wide discussion, separate from a
+// group's own feed. Moderation stays simple on purpose: hide (soft-delete —
+// nothing is destroyed outright, just stops showing), report, and restrict
+// a member from posting further.
+// ============================================================
+function requireChatModerator(req, res, next) {
+  if (isChapterAdminOrAbove(req)) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
+app.get('/api/chat/topics', requireMember, async (req, res) => {
+  try {
+    const chapterId = await resolveViewerChapterId(req);
+    const topics = await repo.getAll('chatTopics', chapterId ? { chapterId } : {});
+    const withMeta = await Promise.all(topics.map(async (t) => {
+      const msgs = await repo.getAll('chatMessages', { topicId: t.id, hidden: false });
+      const last = [...msgs].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      return { ...t, messageCount: msgs.length, lastActivity: last ? last.createdAt : t.createdAt };
+    }));
+    res.json(withMeta.sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load discussions' });
+  }
+});
+
+app.post('/api/chat/topics', requireMember, async (req, res) => {
+  try {
+    if (!req.body.title || !req.body.title.trim()) return res.status(400).json({ error: 'A title is required' });
+    const chapterId = await resolveViewerChapterId(req);
+    if (!chapterId) return res.status(400).json({ error: 'Could not determine your chapter.' });
+    const member = await repo.getById('members', req.session.memberId);
+    if (member && member.chatRestricted) return res.status(403).json({ error: 'Your posting privileges have been restricted. Contact your Chapter Admin.' });
+    const topic = await repo.create('chatTopics', {
+      chapterId, title: req.body.title.trim(), createdByMemberId: req.session.memberId, createdByName: member ? member.name : ''
+    }, 'topic');
+    res.json({ success: true, item: topic });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not start this discussion' });
+  }
+});
+
+app.get('/api/chat/topics/:id/messages', requireMember, async (req, res) => {
+  try {
+    const messages = await repo.getAll('chatMessages', { topicId: req.params.id, hidden: false });
+    res.json(messages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load messages' });
+  }
+});
+
+app.post('/api/chat/topics/:id/messages', requireMember, async (req, res) => {
+  try {
+    const topic = await repo.getById('chatTopics', req.params.id);
+    if (!topic) return res.status(404).json({ error: 'Discussion not found' });
+    if (topic.locked) return res.status(400).json({ error: 'This discussion has been locked.' });
+    if (!req.body.body || !req.body.body.trim()) return res.status(400).json({ error: 'A message is required' });
+    const member = await repo.getById('members', req.session.memberId);
+    if (member && member.chatRestricted) return res.status(403).json({ error: 'Your posting privileges have been restricted. Contact your Chapter Admin.' });
+    const message = await repo.create('chatMessages', {
+      chapterId: topic.chapterId, topicId: topic.id, authorMemberId: req.session.memberId,
+      authorName: member ? member.name : '', body: req.body.body.trim()
+    }, 'msg');
+    res.json({ success: true, item: message });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not send this message' });
+  }
+});
+
+app.post('/api/chat/messages/:id/report', requireMember, async (req, res) => {
+  try {
+    await models.ChatMessage.updateOne({ id: req.params.id }, { $inc: { reportCount: 1 } });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not report this message' });
+  }
+});
+
+app.patch('/api/chat/messages/:id/moderate', requireChatModerator, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const hidden = req.body.hidden !== false;
+    const item = await repo.patchById('chatMessages', req.params.id, { hidden, hiddenBy: hidden ? actorName(req) : '' }, filter);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not moderate this message' });
+  }
+});
+
+app.patch('/api/chat/topics/:id/lock', requireChatModerator, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const item = await repo.patchById('chatTopics', req.params.id, { locked: req.body.locked !== false }, filter);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this discussion' });
+  }
+});
+
+// Restrict a member from posting further, without touching anything they've
+// already said (section 19: "Restrict users").
+app.patch('/api/admin/members/:id/chat-restriction', requireChapterAdmin, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const item = await repo.patchById('members', req.params.id, { chatRestricted: !!req.body.chatRestricted }, filter);
+    if (!item) return res.status(404).json({ error: 'Member not found' });
+    const { passwordHash, ...safe } = item;
+    res.json({ success: true, item: safe });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this member' });
+  }
+});
+
+// ============================================================
+// Volunteer / Service Scheduling (section 23)
+// ============================================================
+const VOLUNTEER_ROLES = ['usher', 'prayer_team', 'media', 'musician', 'protocol', 'publicity', 'transport', 'other'];
+
+app.get('/api/events/:id/volunteers', requireMember, async (req, res) => {
+  try {
+    const items = await repo.getAll('volunteerAssignments', { eventId: req.params.id });
+    res.json(items);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load volunteer assignments' });
+  }
+});
+
+app.post('/api/events/:id/volunteers', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const event = await repo.getById('events', req.params.id, filter);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+    const { role, memberId } = req.body;
+    if (!VOLUNTEER_ROLES.includes(role) || !memberId) return res.status(400).json({ error: 'A role and a member are required' });
+    const member = await repo.getById('members', memberId, filter);
+    if (!member) return res.status(400).json({ error: 'That member is not in this chapter' });
+    const assignment = await repo.create('volunteerAssignments', {
+      chapterId: event.chapterId, eventId: event.id, role, memberId, memberName: member.name,
+      status: 'assigned', assignedBy: actorName(req)
+    }, 'vol');
+    res.json({ success: true, item: assignment });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not create this assignment' });
+  }
+});
+
+app.delete('/api/events/:eventId/volunteers/:assignmentId', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    await repo.removeById('volunteerAssignments', req.params.assignmentId, filter);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove this assignment' });
+  }
+});
+
+app.get('/api/member/volunteer-assignments', requireMember, async (req, res) => {
+  try {
+    const items = await repo.getAll('volunteerAssignments', { memberId: req.session.memberId });
+    const events = await repo.getAll('events', { id: { $in: items.map((i) => i.eventId) } });
+    const withEvent = items.map((i) => ({ ...i, event: events.find((e) => e.id === i.eventId) || null }));
+    res.json(withEvent.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your assignments' });
+  }
+});
+
+app.patch('/api/member/volunteer-assignments/:id', requireMember, async (req, res) => {
+  try {
+    const existing = await repo.getById('volunteerAssignments', req.params.id);
+    if (!existing || existing.memberId !== req.session.memberId) return res.status(404).json({ error: 'Not found' });
+    const status = req.body.status === 'confirmed' ? 'confirmed' : req.body.status === 'declined' ? 'declined' : null;
+    if (!status) return res.status(400).json({ error: 'status must be "confirmed" or "declined"' });
+    const updated = await repo.updateById('volunteerAssignments', req.params.id, { ...existing, status });
+    res.json({ success: true, item: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this' });
+  }
+});
+
+// ============================================================
+// Member Milestones (section 36) — birthdays already run their own daily
+// check (see checkBirthdaysAndNotify); this is for the ones a human has to
+// notice: graduation, a new executive appointment, membership anniversaries.
+// ============================================================
+const MILESTONE_TYPES = ['graduation', 'executive_appointment', 'membership_anniversary', 'other'];
+const MILESTONE_LABELS = {
+  graduation: 'graduated! 🎓', executive_appointment: 'was appointed to a new executive position! 🎉',
+  membership_anniversary: 'is celebrating a membership milestone! 🎉', other: 'has something to celebrate! 🎉'
+};
+
+async function logMilestone({ chapterId, memberId, memberName, type, note, loggedBy }) {
+  const milestone = await repo.create('milestones', {
+    chapterId, memberId, memberName,
+    type: MILESTONE_TYPES.includes(type) ? type : 'other',
+    note: note || '', loggedBy: loggedBy || ''
+  }, 'mstone');
+  createNotification(
+    `Congratulations, ${memberName}!`,
+    `${memberName} ${MILESTONE_LABELS[milestone.type]}${note ? ' — ' + note : ''}`,
+    '/index.html', 'system', chapterId
+  ).catch(() => {});
+  return milestone;
+}
+
+app.get('/api/shepherd/milestones', requireViewRole('shepherding'), async (req, res) => {
+  try {
+    const items = await repo.getAll('milestones', rolesLib.chapterFilter(req));
+    res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load milestones' });
+  }
+});
+
+app.post('/api/shepherd/milestones', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const { memberId, type, note } = req.body;
+    if (!memberId || !type) return res.status(400).json({ error: 'A member and a type are required' });
+    const member = await repo.getById('members', memberId, filter);
+    if (!member) return res.status(404).json({ error: 'Member not found in this chapter' });
+    const milestone = await logMilestone({ chapterId: filter.chapterId, memberId, memberName: member.name, type, note, loggedBy: actorName(req) });
+    res.json({ success: true, item: milestone });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not log this milestone' });
+  }
+});
+
+// ============================================================
+// Welfare (section 33) — a member's own request, or a referral Shepherding
+// raises during pastoral care (sections 7, 22). Deliberately strict: only
+// welfare officers and Chapter Admin/Coordinator ever see the full request
+// queue and case notes — Shepherding can refer, but the welfare office owns
+// case management, the same confidentiality boundary a real welfare team keeps.
+// ============================================================
+const WELFARE_CATEGORIES = ['financial', 'medical', 'bereavement', 'academic', 'other'];
+const WELFARE_STATUSES = ['submitted', 'under_review', 'approved', 'declined', 'fulfilled'];
+
+function requireWelfareAccess(req, res, next) {
+  if (isChapterAdminOrAbove(req) || hasRole(req, 'welfare')) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
+app.post('/api/welfare/requests', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Account not found' });
+    const { category, description, amountRequested } = req.body;
+    if (!description) return res.status(400).json({ error: 'Please describe your request' });
+    const request = await repo.create('welfareRequests', {
+      chapterId: member.chapterId, memberId: member.id, memberName: member.name,
+      category: WELFARE_CATEGORIES.includes(category) ? category : 'other',
+      description, amountRequested: Number(amountRequested) || 0, status: 'submitted'
+    }, 'welf');
+    res.json({ success: true, item: request });
+    notifyAdminByEmail(
+      'New Welfare Request — ACONSU',
+      '<p>A new welfare request has been submitted. Log in to the Welfare portal to review it.</p>'
+    );
+  } catch (e) {
+    res.status(500).json({ error: 'Could not submit your request' });
+  }
+});
+
+app.get('/api/welfare/requests/mine', requireMember, async (req, res) => {
+  try {
+    const items = await repo.getAll('welfareRequests', { memberId: req.session.memberId });
+    res.json(items.map(({ notes, ...safe }) => safe).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your requests' });
+  }
+});
+
+app.post('/api/shepherd/welfare-referrals', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const { memberId, category, description } = req.body;
+    if (!memberId || !description) return res.status(400).json({ error: 'A member and description are required' });
+    const member = await repo.getById('members', memberId, filter);
+    if (!member) return res.status(404).json({ error: 'Member not found in this chapter' });
+    const request = await repo.create('welfareRequests', {
+      chapterId: filter.chapterId, memberId: member.id, memberName: member.name,
+      category: WELFARE_CATEGORIES.includes(category) ? category : 'other',
+      description, status: 'submitted', referredBy: actorName(req)
+    }, 'welf');
+    res.json({ success: true, item: request });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not submit this referral' });
+  }
+});
+
+app.get('/api/welfare/requests', requireWelfareAccess, async (req, res) => {
+  try {
+    const items = await repo.getAll('welfareRequests', rolesLib.chapterFilter(req));
+    res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load welfare requests' });
+  }
+});
+
+app.patch('/api/welfare/requests/:id', requireWelfareAccess, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('welfareRequests', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const { status, notes } = req.body;
+    const updated = await repo.updateById('welfareRequests', req.params.id, {
+      ...existing,
+      status: WELFARE_STATUSES.includes(status) ? status : existing.status,
+      notes: notes !== undefined ? notes : existing.notes,
+      handledBy: actorName(req)
+    }, filter);
+    res.json({ success: true, item: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update this request' });
+  }
+});
+
+// ============================================================
+// Giving (section 32) — deliberately NOT a live payment gateway; see the
+// note on the GivingIntent schema. A member is shown their chapter's real
+// MoMo/bank details and logs what they sent; Finance reconciles each claim
+// into a real ledger entry or rejects it.
+// ============================================================
+app.get('/api/giving/chapter-info', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member || !member.chapterId) return res.json({ configured: false });
+    const chapter = await repo.getById('chapters', member.chapterId);
+    if (!chapter || !chapter.payment || !(chapter.payment.momoNumber || chapter.payment.bankAccountNumber)) {
+      return res.json({ configured: false });
+    }
+    res.json({ configured: true, payment: chapter.payment, chapterName: chapter.name });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load giving details' });
+  }
+});
+
+app.post('/api/giving/intents', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Account not found' });
+    const { amount, purpose, method, reference } = req.body;
+    if (!amount || Number(amount) <= 0) return res.status(400).json({ error: 'A valid amount is required' });
+    const intent = await repo.create('givingIntents', {
+      chapterId: member.chapterId, memberId: member.id, memberName: member.name,
+      amount: Number(amount),
+      purpose: ['momo', 'tithe', 'harvest', 'offertory', 'other'].includes(purpose) ? purpose : 'other',
+      method: ['momo', 'bank', 'cash', 'other'].includes(method) ? method : 'momo',
+      reference: reference || '', status: 'pending'
+    }, 'give');
+    res.json({ success: true, item: intent });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not record this' });
+  }
+});
+
+app.get('/api/giving/mine', requireMember, async (req, res) => {
+  try {
+    const items = await repo.getAll('givingIntents', { memberId: req.session.memberId });
+    res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your giving history' });
+  }
+});
+
+app.get('/api/finance/giving-queue', requireViewRole('finance'), async (req, res) => {
+  try {
+    const items = await repo.getAll('givingIntents', { ...rolesLib.chapterFilter(req), status: 'pending' });
+    res.json(items.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the giving queue' });
+  }
+});
+
+app.patch('/api/finance/giving/:id/confirm', requireFinance, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const intent = await repo.getById('givingIntents', req.params.id, filter);
+    if (!intent) return res.status(404).json({ error: 'Not found' });
+    if (intent.status !== 'pending') return res.status(400).json({ error: 'This has already been reviewed.' });
+    // The moment a claimed gift actually becomes part of the books — never before.
+    const entry = await repo.create('financeEntries', {
+      chapterId: intent.chapterId, entryType: 'income', category: intent.purpose, amount: intent.amount,
+      date: new Date().toISOString().slice(0, 10), description: `Giving confirmed — ${intent.memberName}`,
+      method: intent.method, reference: intent.reference, payee: intent.memberName,
+      approvalStatus: 'approved', approvedBy: actorName(req), recordedBy: actorName(req)
+    }, 'fin');
+    const updated = await repo.updateById('givingIntents', req.params.id, {
+      ...intent, status: 'confirmed', matchedFinanceEntryId: entry.id, reviewedBy: actorName(req)
+    }, filter);
+    res.json({ success: true, item: updated, entry });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not confirm this' });
+  }
+});
+
+app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const intent = await repo.getById('givingIntents', req.params.id, filter);
+    if (!intent) return res.status(404).json({ error: 'Not found' });
+    const updated = await repo.updateById('givingIntents', req.params.id, {
+      ...intent, status: 'rejected', reviewNotes: req.body.notes || '', reviewedBy: actorName(req)
+    }, filter);
+    res.json({ success: true, item: updated });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not reject this' });
+  }
+});
+
 ['departments', 'sermons', 'testimonies'].forEach((resource) => {
   app.get(`/api/${resource}`, async (req, res) => {
     try {
@@ -2628,6 +3262,13 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
       ? await repo.updateById('executives', existing.id, { ...existing, ...fields })
       : await repo.create('executives', fields, 'exec');
     res.json({ success: true, item: record });
+    // First time this executive has set up their profile — a genuine new
+    // appointment worth celebrating (section 36), not just a form save.
+    // memberId is left blank unless this StaffUser is linked to a Member
+    // profile — the celebration still posts either way.
+    if (!existing) {
+      logMilestone({ chapterId: staff.chapterId, memberId: staff.memberId || '', memberName: fields.name, type: 'executive_appointment', note: fields.role, loggedBy: 'System' }).catch(() => {});
+    }
   } catch (e) {
     res.status(500).json({ error: 'Could not save your executive profile' });
   }
