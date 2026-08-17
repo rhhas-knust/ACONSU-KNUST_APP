@@ -17,6 +17,9 @@ const sms = require('./lib/sms');
 const mailer = require('./lib/mailer');
 const { compressIfImage } = require('./lib/imageProcess');
 const { renderTableReport } = require('./lib/pdf');
+const { registerGroupRoutes } = require('./routes/groups');
+const { registerChatRoutes } = require('./routes/chat');
+const { registerMemberServiceRoutes } = require('./routes/member-services');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
@@ -1103,6 +1106,22 @@ async function resolveViewerChapterId(req) {
   return publicChapterId(req);
 }
 
+// Community routes live in focused modules. Dependencies are injected rather
+// than imported there so authentication and chapter scoping remain the single
+// source of truth in this application entry point.
+const communityRouteDeps = {
+  repo, models, rolesLib, requireMember, requireContentManager, requireShepherd,
+  requireViewRole, requireFinance, requireChapterAdmin, isChapterAdminOrAbove,
+  hasRole, resolveViewerChapterId, resolveChapterIdForWrite, actorName,
+  createNotification, notifyAdminByEmail
+};
+registerGroupRoutes(app, communityRouteDeps);
+registerChatRoutes(app, communityRouteDeps);
+const { logMilestone } = registerMemberServiceRoutes(app, communityRouteDeps);
+
+/* Legacy in-place versions of the community routes moved to routes/.
+ * Kept temporarily in this comment only to make the extraction reviewable;
+ * the live registrations above are the sole active implementations.
 // ============================================================
 // Groups (section 20) — Bible Study / Prayer / Fellowship / Department /
 // Cell / other. A group's leader is very often just a member, not a portal
@@ -1722,6 +1741,7 @@ app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => 
     res.status(500).json({ error: 'Could not reject this' });
   }
 });
+*/
 
 ['departments', 'sermons', 'testimonies'].forEach((resource) => {
   app.get(`/api/${resource}`, async (req, res) => {

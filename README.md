@@ -524,3 +524,11 @@ Built directly on the Phase 2 foundation — every new piece below is chapter-is
 **Giving** (`/give.html`, section 32) — deliberately **not** a live payment gateway; nothing in this codebase charges a card or moves money on its own. A member is shown their chapter's real MoMo/bank details (set by National/Chapter Admin under chapter payment config) and logs what they sent — Finance then reconciles each claim from a "Giving Claims" tab into a real ledger entry (or rejects it). This is the same honest, manual-first pattern already used for SMS/email: real, working, and upgradeable to a real gateway later without needing to be torn out.
 
 All of the above is chapter-isolated the same way as everything else in this app, and `test/smoke.js` proves it end-to-end (a member can't read a group they haven't joined, a hidden chat message stays hidden, Finance can't browse the welfare queue, a confirmed gift actually moves the ledger by the right amount, and so on).
+
+## 23. Reliability and security maintenance
+
+The Phase 5–6 community routes now live in focused modules under `routes/` (`groups.js`, `chat.js`, and `member-services.js`). They are registered by `server.js` with the existing authentication and chapter-scoping helpers injected, so the app retains one authoritative session and permission model rather than creating parallel middleware.
+
+This maintenance pass also closes direct-ID chapter-isolation checks for groups, chat topics/messages, and volunteer assignments. A logged-in member must now belong to the same chapter before any of those records can be read, joined, changed, reported, or responded to.
+
+The dependency upgrade moves Nodemailer to 9.x, Sharp to 0.35.x and Capacitor to 8.x. At the time of the upgrade, `npm audit --omit=dev` reported **0 vulnerabilities** and the complete smoke-test suite passed. Android/iOS builds should be synced and built in their native toolchains after pulling this update (`npm run cap:sync`); no payment, email, image, or app data migration is required.
