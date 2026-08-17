@@ -1858,6 +1858,37 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
+// Public feature configuration. The defaults preserve every existing module
+// until the National Coordinator deliberately turns it off.
+const FEATURE_DEFAULTS = {
+  bible: true, bibleStudy: true, events: true, donations: true, welfare: true,
+  communityChat: true, ebooks: true, liveStreaming: true, attendance: true,
+  seminars: true, prayerWall: true, groups: true, departments: true
+};
+async function featureModules() {
+  const doc = await models.FeatureFlags.findOne({ singleton: 'main' }).lean();
+  return { ...FEATURE_DEFAULTS, ...(doc?.modules || {}) };
+}
+app.get('/api/features', async (req, res) => {
+  try { res.json({ modules: await featureModules() }); }
+  catch (e) { res.status(500).json({ error: 'Could not load feature configuration' }); }
+});
+
+const CONTENT_KINDS = ['live_service', 'seminar', 'weekly_highlight', 'ebook', 'founder', 'church_info', 'aconsu_info'];
+const CONTENT_FEATURES = { live_service: 'liveStreaming', seminar: 'seminars', ebook: 'ebooks' };
+app.get('/api/content/:kind', async (req, res) => {
+  try {
+    const { kind } = req.params;
+    if (!CONTENT_KINDS.includes(kind)) return res.status(404).json({ error: 'Unknown content type' });
+    const modules = await featureModules();
+    if (CONTENT_FEATURES[kind] && !modules[CONTENT_FEATURES[kind]]) return res.json([]);
+    const scope = contentChapterFilter(req);
+    const chapterPart = scope.chapterId ? { $or: [{ chapterId: scope.chapterId }, { chapterId: '' }] } : {};
+    const items = await repo.getAll('contentItems', { ...chapterPart, kind, published: true });
+    res.json(items.sort((a, b) => (b.featured - a.featured) || (b.sortOrder - a.sortOrder) || (new Date(b.eventDate || b.createdAt) - new Date(a.eventDate || a.createdAt))));
+  } catch (e) { res.status(500).json({ error: 'Could not load content' }); }
+});
+
 // Public chapter directory — powers the registration chapter dropdown and
 // the "choose your chapter" picker on the public site (see main.js). Only
 // active chapters are offered; payment/contact/about detail isn't needed
@@ -3631,6 +3662,46 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
   }
 });
 
+// National feature management (section 39). Only recognised boolean keys are
+// accepted, so a crafted request cannot add arbitrary configuration fields.
+app.get('/api/national/features', rolesLib.requireNational, async (req, res) => {
+  try { res.json({ modules: await featureModules() }); }
+  catch (e) { res.status(500).json({ error: 'Could not load feature configuration' }); }
+});
+app.put('/api/national/features', rolesLib.requireNational, async (req, res) => {
+  try {
+    const current = await featureModules();
+    const requested = req.body.modules || {};
+    const modules = { ...current };
+    Object.keys(FEATURE_DEFAULTS).forEach((key) => {
+      if (typeof requested[key] === 'boolean') modules[key] = requested[key];
+    });
+    const doc = await models.FeatureFlags.findOneAndUpdate(
+      { singleton: 'main' }, { $set: { modules } }, { new: true, upsert: true }
+    ).lean();
+    res.json({ success: true, modules: { ...FEATURE_DEFAULTS, ...(doc.modules || {}) } });
+  } catch (e) { res.status(500).json({ error: 'Could not update feature configuration' }); }
+});
+
+// Export-safe national comparison report: chapter aggregates only, never a
+// list of individual members, donations, or welfare cases.
+app.get('/api/national/reports/overview', rolesLib.requireNational, async (req, res) => {
+  try {
+    const [chapters, members, events, attendance, welfare] = await Promise.all([
+      repo.getAll('chapters'), repo.getAll('members'), repo.getAll('events'),
+      repo.getAll('attendanceRecords'), repo.getAll('welfareRequests')
+    ]);
+    res.json(chapters.map((chapter) => ({
+      chapterId: chapter.id, chapterName: chapter.name, status: chapter.status,
+      activeMembers: members.filter(m => m.chapterId === chapter.id && m.membershipStage === 'active').length,
+      visitors: members.filter(m => m.chapterId === chapter.id && ['visitor', 'under_review'].includes(m.membershipStage)).length,
+      events: events.filter(e => e.chapterId === chapter.id).length,
+      servicesRecorded: attendance.filter(a => a.chapterId === chapter.id).length,
+      openWelfareRequests: welfare.filter(w => w.chapterId === chapter.id && !['declined', 'fulfilled'].includes(w.status)).length
+    })));
+  } catch (e) { res.status(500).json({ error: 'Could not generate national report' }); }
+});
+
 // National announcement — reaches every chapter (blank chapterId).
 app.post('/api/national/announcements', rolesLib.requireNational, async (req, res) => {
   const { title, body, url, channels } = req.body;
@@ -4080,6 +4151,51 @@ async function resolveChapterIdForWrite(req, explicitChapterId) {
   const chapters = await repo.getAll('chapters', { status: 'active' });
   return chapters.length === 1 ? chapters[0].id : '';
 }
+
+// Phase 7 content management. Public-facing pages share this one persisted
+// resource; it is still chapter-scoped unless a National Coordinator marks a
+// church/ACONSU/founder item national.
+app.get('/api/admin/content', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const items = await repo.getAll('contentItems', filter);
+    res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+  } catch (e) { res.status(500).json({ error: 'Could not load content' }); }
+});
+app.post('/api/admin/content', requireContentManager, async (req, res) => {
+  try {
+    const { kind, title } = req.body;
+    if (!CONTENT_KINDS.includes(kind) || !title) return res.status(400).json({ error: 'A content type and title are required' });
+    const national = !!req.body.isNational && rolesLib.getActingScope(req).isNational;
+    const chapterId = national ? '' : await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!national && !chapterId) return res.status(400).json({ error: 'A chapter is required.' });
+    const item = await repo.create('contentItems', {
+      chapterId, kind, title: String(title).trim(), summary: req.body.summary || '', body: req.body.body || '',
+      imageFileId: req.body.imageFileId || '', previewUrl: req.body.previewUrl || '', resourceUrl: req.body.resourceUrl || '',
+      resourceFileId: req.body.resourceFileId || '', category: req.body.category || '', eventDate: req.body.eventDate || '',
+      published: req.body.published !== false, featured: !!req.body.featured, sortOrder: Number(req.body.sortOrder) || 0,
+      createdBy: actorName(req)
+    }, 'content');
+    res.json({ success: true, item });
+  } catch (e) { res.status(500).json({ error: 'Could not create content' }); }
+});
+app.put('/api/admin/content/:id', requireContentManager, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('contentItems', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    const { id, chapterId, kind, createdBy, ...editable } = req.body;
+    const item = await repo.updateById('contentItems', req.params.id, { ...existing, ...editable }, filter);
+    res.json({ success: true, item });
+  } catch (e) { res.status(500).json({ error: 'Could not update content' }); }
+});
+app.delete('/api/admin/content/:id', requireContentManager, async (req, res) => {
+  try {
+    const removed = await repo.removeById('contentItems', req.params.id, rolesLib.chapterFilter(req, { required: false }));
+    if (!removed) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: 'Could not delete content' }); }
+});
 
 // generic CRUD for departments / events / sermons / pages (Chapter Admin and above)
 ['departments', 'events', 'sermons', 'pages'].forEach((resource) => {

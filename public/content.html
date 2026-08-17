@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACONSU Content</title><link rel="icon" href="/images/logo.jpg"><link rel="manifest" href="/manifest.json"><meta name="theme-color" content="#5B2C82"><link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<header id="site-header"></header>
+<section class="hero" style="padding-bottom:44px;"><div class="hero-flame"></div><div class="hero-content"><p class="eyebrow" id="contentEyebrow">ACONSU</p><h1 id="contentTitle">ACONSU</h1><p class="lede" id="contentLede"></p></div></section>
+<section style="padding-top:0"><div class="container"><div class="grid" id="contentGrid"></div></div></section>
+<footer class="site-footer" id="site-footer"></footer>
+<script src="/js/main.js"></script>
+<script>
+const type = new URLSearchParams(location.search).get('kind') || 'weekly_highlight';
+const config = {
+  live_service: ['Live Service', 'Join ACONSU online wherever you are.', 'Live'],
+  seminar: ['Seminars', 'Short previews, practical insight and full sessions.', 'Seminar'],
+  weekly_highlight: ['This Week at ACONSU', 'Moments, outreach and life across your chapter.', 'Weekly highlight'],
+  ebook: ['E-Book Library', 'Christian growth, Bible study and leadership resources.', 'E-book'],
+  founder: ['Founders', 'Honouring the people whose faith and service shaped this work.', 'Founder'],
+  church_info: ['The Apostles Continuation Church', 'Our church history, vision, mission and values.', 'Church'],
+  aconsu_info: ['About ACONSU', 'Our story, purpose, vision and national family.', 'ACONSU']
+}[type] || ['ACONSU', '', 'Content'];
+(async () => {
+  await initLayout('/content.html');
+  document.title = config[0] + ' — ACONSU';
+  document.getElementById('contentTitle').textContent = config[0]; document.getElementById('contentLede').textContent = config[1]; document.getElementById('contentEyebrow').textContent = config[2];
+  try {
+    const items = await fetchJSON('/api/content/' + encodeURIComponent(type));
+    document.getElementById('contentGrid').innerHTML = items.map(item => `
+      <article class="card">
+        ${item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;margin-bottom:14px">` : ''}
+        <span class="badge">${escapeHtml(item.category || config[2])}</span><h3 style="margin:10px 0 6px">${escapeHtml(item.title)}</h3>
+        ${item.eventDate ? `<p class="muted" style="font-size:.88rem">${formatDate(item.eventDate)}</p>` : ''}
+        ${item.summary ? `<p style="color:#5a4468">${escapeHtml(item.summary)}</p>` : ''}
+        ${item.body ? `<p style="white-space:pre-line;color:#5a4468">${escapeHtml(item.body)}</p>` : ''}
+        <div style="display:flex;gap:8px;flex-wrap:wrap">${item.previewUrl ? `<a class="btn btn-outline btn-sm" href="${escapeHtml(item.previewUrl)}" target="_blank" rel="noopener">Preview</a>` : ''}${item.resourceUrl ? `<a class="btn btn-primary btn-sm" href="${escapeHtml(item.resourceUrl)}" target="_blank" rel="noopener">Open Resource</a>` : ''}${item.resourceFileId ? `<a class="btn btn-primary btn-sm" href="/api/files/${item.resourceFileId}" target="_blank">Open Resource</a>` : ''}</div>
+      </article>`).join('') || '<p class="empty-state">Nothing has been published here yet. Please check back soon.</p>';
+  } catch (e) { document.getElementById('contentGrid').innerHTML = '<p class="empty-state">Could not load this content right now.</p>'; }
+})();
+</script></body></html>

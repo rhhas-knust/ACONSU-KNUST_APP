@@ -120,6 +120,7 @@ const fakeModels = {
     status: 'published', submittedBy: '', submittedByStaffId: '', reviewedBy: '', reviewNotes: ''
   }),
   Sermon: makeModel({ chapterId: '' }),
+  ContentItem: makeModel({ chapterId: '', published: true, featured: false, sortOrder: 0 }),
   JoinRequest: makeModel({ chapterId: '', status: 'new' }),
   PrayerRequest: makeModel({
     chapterId: '', status: 'new', visibility: 'private', memberId: '',

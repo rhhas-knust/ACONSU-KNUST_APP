@@ -276,12 +276,33 @@ async function renderNationalAnnouncements(el) {
   });
 }
 
+async function renderNationalReports(el) {
+  const rows = await fetchJSON('/api/national/reports/overview');
+  el.innerHTML = `<div class="panel-head"><div><h2>National Reports</h2><p class="sub">Chapter-level comparison only — sensitive personal records stay in the local chapter.</p></div></div>
+  <div class="portal-card"><div class="table-wrap"><table class="portal-table"><thead><tr><th>Chapter</th><th>Status</th><th class="num">Active members</th><th class="num">Visitors</th><th class="num">Events</th><th class="num">Services</th><th class="num">Open welfare</th></tr></thead><tbody>${rows.map(r=>`<tr><td><strong>${escapeHtml(r.chapterName)}</strong></td><td>${pill(r.status,r.status==='active'?'green':'grey')}</td><td class="num">${r.activeMembers}</td><td class="num">${r.visitors}</td><td class="num">${r.events}</td><td class="num">${r.servicesRecorded}</td><td class="num">${r.openWelfareRequests}</td></tr>`).join('')||emptyRow(7,'No chapters yet.')}</tbody></table></div></div>`;
+}
+
+const FEATURE_LABELS = {
+  bible: 'Bible', bibleStudy: 'Bible Study', events: 'Events', donations: 'Donations', welfare: 'Welfare',
+  communityChat: 'Community Chat', ebooks: 'E-Books', liveStreaming: 'Live Streaming', attendance: 'Attendance',
+  seminars: 'Seminars', prayerWall: 'Prayer Wall', groups: 'Groups', departments: 'Departments'
+};
+async function renderFeatures(el) {
+  const data = await fetchJSON('/api/national/features');
+  el.innerHTML = `<div class="panel-head"><div><h2>Feature Configuration</h2><p class="sub">Control which optional modules are available across ACONSU. A disabled module remains safely stored; it is simply not offered publicly.</p></div></div>
+  <form class="portal-card" id="featuresForm"><div class="choice-grid">${Object.keys(FEATURE_LABELS).map(key=>`<label class="choice ${data.modules[key]?'selected':''}"><input type="checkbox" name="${key}" ${data.modules[key]?'checked':''}><span><strong>${FEATURE_LABELS[key]}</strong><br><small>${data.modules[key]?'Enabled':'Disabled'}</small></span></label>`).join('')}</div><div style="margin-top:20px"><button class="btn btn-primary">Save Feature Configuration</button><span class="form-msg" id="featuresMsg"></span></div></form>`;
+  document.querySelectorAll('#featuresForm input').forEach(input=>input.addEventListener('change',()=>input.closest('.choice').classList.toggle('selected',input.checked)));
+  document.getElementById('featuresForm').addEventListener('submit',async e=>{e.preventDefault();const modules={};Object.keys(FEATURE_LABELS).forEach(k=>modules[k]=document.querySelector(`#featuresForm [name="${k}"]`).checked);try{await fetchJSON('/api/national/features',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({modules})});setFormMsg('featuresMsg','Saved.','success');showToast('Feature configuration saved','success')}catch(err){setFormMsg('featuresMsg',err.message||'Could not save.','error')}});
+}
+
 initPortal({
   role: 'nationalCoordinator',
   label: 'National Coordinator',
   panels: [
     { key: 'dashboard', label: 'National Dashboard', render: renderNationalDashboard },
     { key: 'chapters', label: 'Chapters', render: renderChapters },
+    { key: 'reports', label: 'National Reports', render: renderNationalReports },
+    { key: 'features', label: 'Feature Configuration', render: renderFeatures },
     { key: 'announcements', label: 'National Announcements', render: renderNationalAnnouncements }
   ]
 });

@@ -91,6 +91,25 @@ require('./harness.js');
   r = await call('fin', 'POST', '/api/admin/staff', { username: 'sneaky', name: 'sneaky', role: 'coordinator', password: 'password123' });
   check('a non-national role cannot self-elevate a new account to coordinator', r.status === 403 || r.status === 401, r.data);
 
+  console.log('\n== Phase 7–8 content and national management ==');
+  r = await call('pub', 'POST', '/api/admin/content', { kind: 'live_service', title: 'Sunday Service', previewUrl: 'https://youtube.com/example', featured: true });
+  check('publicity publishes chapter live-service content', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
+  r = await call('anon', 'GET', '/api/content/live_service');
+  check('public live-service content is chapter-scoped and visible', r.status === 200 && r.data.some(i => i.title === 'Sunday Service'), r.data);
+  r = await call('fin', 'POST', '/api/admin/content', { kind: 'ebook', title: 'No access' });
+  check('finance cannot manage public content', r.status === 401, r.data);
+  r = await call('admin', 'GET', '/api/national/features');
+  check('national feature configuration loads', r.status === 200 && r.data.modules.liveStreaming === true, r.data);
+  r = await call('fin', 'PUT', '/api/national/features', { modules: { liveStreaming: false } });
+  check('chapter-level staff cannot change national features', r.status === 401, r.data);
+  r = await call('admin', 'PUT', '/api/national/features', { modules: { liveStreaming: false } });
+  check('national coordinator can disable a module', r.status === 200 && r.data.modules.liveStreaming === false, r.data);
+  r = await call('anon', 'GET', '/api/content/live_service');
+  check('disabled live-streaming hides public live content', r.status === 200 && r.data.length === 0, r.data);
+  r = await call('admin', 'PUT', '/api/national/features', { modules: { liveStreaming: true } });
+  r = await call('admin', 'GET', '/api/national/reports/overview');
+  check('national report returns aggregates only', r.status === 200 && r.data[0].activeMembers !== undefined && r.data[0].email === undefined, r.data);
+
   console.log('\n== role boundaries ==');
   r = await call('pub', 'GET', '/api/finance/summary');
   check('publicity cannot read finance', r.status === 401, r.data);
@@ -620,6 +639,7 @@ require('./harness.js');
     '/register.html', '/executive.html', '/card.html', '/bible-study.html', '/sermon-notes.html', '/prayer.html',
     '/events.html', '/index.html',
     '/groups.html', '/group.html', '/chat.html', '/welfare.html', '/welfare-portal.html', '/give.html',
+    '/content.html', '/content-manager.html',
     '/js/portal.js', '/js/national.js', '/js/executive.js', '/js/welfare-portal.js', '/css/portal.css'
   ]) {
     const res = await fetch(BASE + page);
