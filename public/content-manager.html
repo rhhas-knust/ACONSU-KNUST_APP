@@ -1,4 +1,421 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Content Manager — ACONSU</title><meta name="robots" content="noindex"><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/portal.css"></head><body>
-<main class="container" style="max-width:900px;padding-top:40px"><a href="/admin.html" class="btn btn-outline btn-sm">← Admin Dashboard</a><div class="panel-head"><div><p class="eyebrow">Publicity &amp; Chapter Content</p><h1>Content Manager</h1><p class="sub">Publish live services, seminars, highlights, e-books and public history content for your chapter.</p></div></div>
-<section class="portal-card"><form id="contentForm"><div class="field-row"><div class="field"><label>Content type</label><select id="kind"><option value="live_service">Live service</option><option value="seminar">Seminar</option><option value="weekly_highlight">Weekly highlight</option><option value="ebook">E-book</option><option value="founder">Founder</option><option value="church_info">Church information</option><option value="aconsu_info">ACONSU information</option></select></div><div class="field"><label>Title</label><input id="title" required></div></div><div class="field"><label>Summary</label><input id="summary"></div><div class="field"><label>Full text / description</label><textarea id="body" rows="4"></textarea></div><div class="field-row"><div class="field"><label>Preview / live link</label><input id="previewUrl" type="url" placeholder="https://youtube.com/..."></div><div class="field"><label>Resource / full link</label><input id="resourceUrl" type="url" placeholder="https://..."></div></div><div class="field-row"><div class="field"><label>Category</label><input id="category" placeholder="Leadership, devotional, etc."></div><div class="field"><label>Date</label><input id="eventDate" type="date"></div></div><label><input id="featured" type="checkbox" style="width:auto;margin-right:7px"> Feature this item</label><div style="margin-top:18px"><button class="btn btn-primary">Publish Content</button><span class="form-msg" id="message"></span></div></form></section><section class="portal-card"><h2>Your published content</h2><div class="table-wrap"><table class="portal-table"><thead><tr><th>Type</th><th>Title</th><th>Status</th><th></th></tr></thead><tbody id="items"></tbody></table></div></section></main><script src="/js/main.js"></script><script>
-const q=id=>document.getElementById(id); async function load(){try{const items=await fetchJSON('/api/admin/content');q('items').innerHTML=items.map(i=>`<tr><td>${escapeHtml(i.kind.replace('_',' '))}</td><td><strong>${escapeHtml(i.title)}</strong></td><td>${i.published?'Published':'Draft'}</td><td><button data-del="${i.id}" class="danger">Delete</button></td></tr>`).join('')||'<tr><td colspan="4">No content yet.</td></tr>';document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(confirm('Delete this content item?')){await fetchJSON('/api/admin/content/'+b.dataset.del,{method:'DELETE'});load();}})}catch(e){q('items').innerHTML='<tr><td colspan="4">You need an authorised staff login to manage content.</td></tr>'}}q('contentForm').onsubmit=async e=>{e.preventDefault();try{await fetchJSON('/api/admin/content',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:q('kind').value,title:q('title').value,summary:q('summary').value,body:q('body').value,previewUrl:q('previewUrl').value,resourceUrl:q('resourceUrl').value,category:q('category').value,eventDate:q('eventDate').value,featured:q('featured').checked})});q('contentForm').reset();q('message').textContent='Published.';load()}catch(err){q('message').textContent=err.message||'Could not publish.'}};load();</script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content Manager — ACONSU</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/images/logo.jpg">
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/portal.css">
+<style>
+  .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0; }
+  .filter-btn { padding:6px 14px; border-radius:999px; border:1px solid var(--line); background:#fff; font-size:0.85rem; font-weight:600; cursor:pointer; color:var(--purple-ink); transition:all 0.15s ease; }
+  .filter-btn.active, .filter-btn:hover { background:var(--purple-deep); color:#fff; border-color:var(--purple-deep); }
+  .preview-box { display:flex; align-items:center; gap:12px; margin-top:8px; padding:10px; background:#f9f6fc; border-radius:8px; border:1px dashed var(--line); }
+  .preview-box img { width:60px; height:60px; object-fit:cover; border-radius:6px; }
+</style>
+</head>
+<body>
+
+<main class="container" style="max-width:960px; padding:32px 16px 60px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+    <div style="display:flex; gap:10px;">
+      <a href="/admin.html" class="btn btn-outline btn-sm">&larr; Admin Dashboard</a>
+      <a href="/publicity.html" class="btn btn-outline btn-sm">&larr; Publicity Portal</a>
+    </div>
+    <a href="/content.html" target="_blank" class="btn btn-outline btn-sm" style="color:var(--purple-deep);">View Public Content &nearr;</a>
+  </div>
+
+  <div class="panel-head">
+    <div>
+      <p class="eyebrow">Publicity &amp; Media Platform</p>
+      <h1>Content Manager</h1>
+      <p class="sub">Publish and manage livestreams, seminars, e-books, weekly highlights, founder profiles, and church history.</p>
+    </div>
+  </div>
+
+  <!-- Create / Edit Form Card -->
+  <section class="portal-card" id="formCard">
+    <h2 id="formTitle">Create New Content</h2>
+    <form id="contentForm" enctype="multipart/form-data">
+      <input type="hidden" id="editItemId" value="">
+
+      <div class="field-row">
+        <div class="field">
+          <label for="kind">Content Type *</label>
+          <select id="kind" required>
+            <option value="live_service">Live Service &amp; Stream</option>
+            <option value="seminar">Seminar &amp; Workshop</option>
+            <option value="ebook">E-Book &amp; Publication</option>
+            <option value="weekly_highlight">Weekly Highlight (This Week at ACONSU)</option>
+            <option value="founder">Founder Profile</option>
+            <option value="church_info">Church Information (About The Apostles Continuation Church)</option>
+            <option value="aconsu_info">ACONSU Information (About ACONSU)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="title">Title *</label>
+          <input type="text" id="title" placeholder="e.g. Sunday Miracle Service / Christian Leadership Manual" required>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="category">Category</label>
+          <input type="text" id="category" list="categorySuggestions" placeholder="e.g. Bible Study, Leadership, Devotional, Sunday Service">
+          <datalist id="categorySuggestions">
+            <option value="Bible Studies">
+            <option value="Christian Growth">
+            <option value="Devotionals">
+            <option value="Leadership">
+            <option value="Church History">
+            <option value="ACONSU Publications">
+            <option value="Sunday Service">
+            <option value="Midweek Fellowship">
+            <option value="Youth &amp; Campus">
+          </datalist>
+        </div>
+        <div class="field">
+          <label for="eventDate">Date / Scheduled Time</label>
+          <input type="date" id="eventDate">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="summary">Short Summary / Teaser</label>
+        <input type="text" id="summary" placeholder="Brief 1-2 sentence description shown on card previews">
+      </div>
+
+      <div class="field">
+        <label for="body">Full Text / Biography / Description</label>
+        <textarea id="body" rows="5" placeholder="Detailed content, notes, speaker bio, or scripture references..."></textarea>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="previewUrl">Preview Video / Livestream Link (YouTube / Facebook)</label>
+          <input type="url" id="previewUrl" placeholder="https://youtube.com/watch?v=... or https://fb.watch/...">
+          <small class="muted" style="font-size:0.78rem;">For Live Services &amp; Seminars: embedded directly on the page.</small>
+        </div>
+        <div class="field">
+          <label for="resourceUrl">External Resource URL</label>
+          <input type="url" id="resourceUrl" placeholder="https://drive.google.com/... or full website link">
+          <small class="muted" style="font-size:0.78rem;">Optional external link for full watch or external reading.</small>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="imageFile">Cover / Flyer Photo</label>
+          <input type="file" id="imageFile" accept="image/*">
+          <div id="imagePreviewBox" class="preview-box" style="display:none;">
+            <img id="currentImageThumb" src="" alt="Thumbnail">
+            <div>
+              <span id="imageFileName" style="font-weight:600; font-size:0.85rem;">Attached image</span>
+              <br><small class="muted">Upload a new file above to replace.</small>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="resourceFile">Resource File / E-Book PDF</label>
+          <input type="file" id="resourceFile" accept=".pdf,.doc,.docx,.epub">
+          <div id="resourcePreviewBox" class="preview-box" style="display:none;">
+            <span style="font-size:1.4rem;">📄</span>
+            <div>
+              <span id="resourceFileName" style="font-weight:600; font-size:0.85rem;">Attached document</span>
+              <br><small class="muted">Upload a new file above to replace.</small>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-row" style="margin-top:14px; align-items:center;">
+        <div class="field" style="max-width:140px;">
+          <label for="sortOrder">Sort Order</label>
+          <input type="number" id="sortOrder" value="0" placeholder="0">
+        </div>
+        <div style="display:flex; gap:18px; flex-wrap:wrap; padding-top:14px;">
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; font-size:0.9rem;">
+            <input type="checkbox" id="published" checked style="width:auto; margin:0;"> Published
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; font-size:0.9rem;">
+            <input type="checkbox" id="featured" style="width:auto; margin:0;"> Featured
+          </label>
+          <label id="nationalWrap" style="display:none; align-items:center; gap:6px; cursor:pointer; font-weight:600; font-size:0.9rem; color:var(--purple-deep);">
+            <input type="checkbox" id="isNational" style="width:auto; margin:0;"> National (All Chapters)
+          </label>
+        </div>
+      </div>
+
+      <div style="margin-top:24px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <button type="submit" class="btn btn-primary" id="saveBtn">Publish Content</button>
+        <button type="button" class="btn btn-outline" id="cancelBtn" style="display:none;">Cancel Edit</button>
+        <span class="form-msg" id="formMsg"></span>
+      </div>
+    </form>
+  </section>
+
+  <!-- Published Items Section -->
+  <section class="portal-card" style="margin-top:28px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+      <h2>Content Library (<span id="totalCount">0</span>)</h2>
+      <input type="text" id="filterSearch" placeholder="Search by title or category..." style="max-width:260px; padding:6px 12px; font-size:0.85rem; border-radius:999px; border:1px solid var(--line);">
+    </div>
+
+    <!-- Filter Buttons -->
+    <div class="filter-bar">
+      <button type="button" class="filter-btn active" data-filter="all">All Content</button>
+      <button type="button" class="filter-btn" data-filter="live_service">Live Services</button>
+      <button type="button" class="filter-btn" data-filter="seminar">Seminars</button>
+      <button type="button" class="filter-btn" data-filter="ebook">E-Books</button>
+      <button type="button" class="filter-btn" data-filter="weekly_highlight">Weekly Highlights</button>
+      <button type="button" class="filter-btn" data-filter="founder">Founders</button>
+      <button type="button" class="filter-btn" data-filter="church_info">Church Info</button>
+      <button type="button" class="filter-btn" data-filter="aconsu_info">ACONSU Info</button>
+    </div>
+
+    <div class="table-wrap">
+      <table class="portal-table">
+        <thead>
+          <tr>
+            <th style="width:50px;">Media</th>
+            <th>Type</th>
+            <th>Title &amp; Category</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="itemsTableBody">
+          <tr><td colspan="5" style="text-align:center; padding:30px;" class="muted">Loading content items...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="/js/main.js"></script>
+<script>
+const KIND_LABELS = {
+  live_service: 'Live Service',
+  seminar: 'Seminar',
+  ebook: 'E-Book',
+  weekly_highlight: 'Weekly Highlight',
+  founder: 'Founder',
+  church_info: 'Church Info',
+  aconsu_info: 'ACONSU Info'
+};
+
+let allItems = [];
+let currentFilter = 'all';
+let isNationalUser = false;
+
+const q = id => document.getElementById(id);
+
+async function init() {
+  try {
+    const authRes = await fetchJSON('/api/portal/me').catch(() => null);
+    if (authRes && authRes.user && authRes.user.role === 'nationalCoordinator') {
+      isNationalUser = true;
+      q('nationalWrap').style.display = 'flex';
+    }
+  } catch (e) {}
+
+  loadContent();
+}
+
+async function loadContent() {
+  try {
+    allItems = await fetchJSON('/api/admin/content');
+    renderTable();
+  } catch (e) {
+    q('itemsTableBody').innerHTML = '<tr><td colspan="5" class="danger" style="text-align:center;">Could not load content. Please ensure you are logged in with admin or publicity privileges.</td></tr>';
+  }
+}
+
+function renderTable() {
+  const query = (q('filterSearch').value || '').trim().toLowerCase();
+  const filtered = allItems.filter(item => {
+    if (currentFilter !== 'all' && item.kind !== currentFilter) return false;
+    if (query) {
+      const matchTitle = (item.title || '').toLowerCase().includes(query);
+      const matchCat = (item.category || '').toLowerCase().includes(query);
+      const matchSummary = (item.summary || '').toLowerCase().includes(query);
+      return matchTitle || matchCat || matchSummary;
+    }
+    return true;
+  });
+
+  q('totalCount').textContent = filtered.length;
+
+  if (!filtered.length) {
+    q('itemsTableBody').innerHTML = '<tr><td colspan="5" class="empty-state" style="text-align:center; padding:30px;">No content items found matching your filters.</td></tr>';
+    return;
+  }
+
+  q('itemsTableBody').innerHTML = filtered.map(i => `
+    <tr>
+      <td>
+        ${i.imageFileId 
+          ? `<img src="/api/files/${i.imageFileId}" alt="" style="width:44px; height:44px; object-fit:cover; border-radius:6px;">`
+          : `<div style="width:44px; height:44px; background:#eee; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:1.1rem;">📄</div>`
+        }
+      </td>
+      <td>
+        <span class="badge" style="font-size:0.75rem;">${escapeHtml(KIND_LABELS[i.kind] || i.kind)}</span>
+        ${i.isNational || !i.chapterId ? '<span class="badge" style="background:#5B2C82; color:#fff; font-size:0.7rem; margin-top:2px;">National</span>' : ''}
+      </td>
+      <td>
+        <strong>${escapeHtml(i.title)}</strong>
+        ${i.category ? `<br><small class="muted">${escapeHtml(i.category)}</small>` : ''}
+        ${i.eventDate ? `<br><small class="muted">${formatDate(i.eventDate)}</small>` : ''}
+      </td>
+      <td>
+        <span class="pill ${i.published ? 'pill-green' : 'pill-grey'}">${i.published ? 'Published' : 'Draft'}</span>
+        ${i.featured ? '<span class="pill pill-gold" style="margin-left:4px;">★ Featured</span>' : ''}
+      </td>
+      <td class="row-actions">
+        <button type="button" class="btn btn-outline btn-sm" onclick="editItem('${i.id}')">Edit</button>
+        <a href="/content.html?kind=${encodeURIComponent(i.kind)}" target="_blank" class="btn btn-outline btn-sm" style="text-decoration:none;">View &nearr;</a>
+        <button type="button" class="btn btn-outline btn-sm danger" onclick="deleteItem('${i.id}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function editItem(id) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+
+  q('editItemId').value = item.id;
+  q('formTitle').textContent = 'Edit Content: ' + item.title;
+  q('saveBtn').textContent = 'Update Content';
+  q('cancelBtn').style.display = 'inline-block';
+
+  q('kind').value = item.kind;
+  q('title').value = item.title || '';
+  q('category').value = item.category || '';
+  q('eventDate').value = item.eventDate || '';
+  q('summary').value = item.summary || '';
+  q('body').value = item.body || '';
+  q('previewUrl').value = item.previewUrl || '';
+  q('resourceUrl').value = item.resourceUrl || '';
+  q('sortOrder').value = item.sortOrder || 0;
+  q('published').checked = item.published !== false;
+  q('featured').checked = !!item.featured;
+  if (q('isNational')) q('isNational').checked = !item.chapterId;
+
+  if (item.imageFileId) {
+    q('imagePreviewBox').style.display = 'flex';
+    q('currentImageThumb').src = '/api/files/' + item.imageFileId;
+    q('imageFileName').textContent = 'Current Cover Photo';
+  } else {
+    q('imagePreviewBox').style.display = 'none';
+  }
+
+  if (item.resourceFileId) {
+    q('resourcePreviewBox').style.display = 'flex';
+    q('resourceFileName').textContent = 'Current Resource Attached';
+  } else {
+    q('resourcePreviewBox').style.display = 'none';
+  }
+
+  q('formCard').scrollIntoView({ behavior: 'smooth' });
+}
+
+function resetForm() {
+  q('contentForm').reset();
+  q('editItemId').value = '';
+  q('formTitle').textContent = 'Create New Content';
+  q('saveBtn').textContent = 'Publish Content';
+  q('cancelBtn').style.display = 'none';
+  q('imagePreviewBox').style.display = 'none';
+  q('resourcePreviewBox').style.display = 'none';
+  q('formMsg').textContent = '';
+  q('published').checked = true;
+}
+
+q('cancelBtn').onclick = resetForm;
+
+q('contentForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const editId = q('editItemId').value;
+  const isEditing = Boolean(editId);
+  const saveBtn = q('saveBtn');
+
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
+  q('formMsg').textContent = '';
+
+  try {
+    const formData = new FormData();
+    formData.append('kind', q('kind').value);
+    formData.append('title', q('title').value);
+    formData.append('category', q('category').value);
+    formData.append('eventDate', q('eventDate').value);
+    formData.append('summary', q('summary').value);
+    formData.append('body', q('body').value);
+    formData.append('previewUrl', q('previewUrl').value);
+    formData.append('resourceUrl', q('resourceUrl').value);
+    formData.append('sortOrder', q('sortOrder').value);
+    formData.append('published', q('published').checked ? 'true' : 'false');
+    formData.append('featured', q('featured').checked ? 'true' : 'false');
+    if (isNationalUser) formData.append('isNational', q('isNational').checked ? 'true' : 'false');
+
+    const imgFile = q('imageFile').files[0];
+    if (imgFile) formData.append('imageFile', imgFile);
+
+    const resFile = q('resourceFile').files[0];
+    if (resFile) formData.append('resourceFile', resFile);
+
+    const url = isEditing ? `/api/admin/content/${editId}` : '/api/admin/content';
+    const method = isEditing ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method,
+      body: formData
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to save content');
+
+    showToast(isEditing ? 'Content updated successfully.' : 'Content published.', 'success');
+    resetForm();
+    await loadContent();
+  } catch (err) {
+    q('formMsg').textContent = err.message || 'Error saving content';
+    q('formMsg').className = 'form-msg danger';
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = isEditing ? 'Update Content' : 'Publish Content';
+  }
+};
+
+async function deleteItem(id) {
+  if (!confirm('Are you sure you want to delete this content item? Attached images and PDF files will also be removed.')) return;
+  try {
+    await fetchJSON('/api/admin/content/' + id, { method: 'DELETE' });
+    showToast('Content deleted.', 'success');
+    if (q('editItemId').value === id) resetForm();
+    await loadContent();
+  } catch (e) {
+    showToast(e.message || 'Could not delete item.', 'error');
+  }
+}
+
+// Filter listeners
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = btn.dataset.filter;
+    renderTable();
+  };
+});
+
+q('filterSearch').oninput = renderTable;
+
+init();
+</script>
+</body>
+</html>

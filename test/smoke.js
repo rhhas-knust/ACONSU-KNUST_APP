@@ -94,8 +94,29 @@ require('./harness.js');
   console.log('\n== Phase 7–8 content and national management ==');
   r = await call('pub', 'POST', '/api/admin/content', { kind: 'live_service', title: 'Sunday Service', previewUrl: 'https://youtube.com/example', featured: true });
   check('publicity publishes chapter live-service content', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
+  const liveContentId = r.data.item.id;
+
+  r = await call('anon', 'GET', `/api/content/item/${liveContentId}`);
+  check('single content item lookup works publicly', r.status === 200 && r.data.id === liveContentId && r.data.title === 'Sunday Service', r.data);
+
+  r = await call('pub', 'PUT', `/api/admin/content/${liveContentId}`, { title: 'Sunday Miracle Service', summary: 'Live stream of service' });
+  check('publicity edits content item', r.status === 200 && r.data.item.title === 'Sunday Miracle Service' && r.data.item.summary === 'Live stream of service', r.data);
+
+  r = await call('pub', 'POST', '/api/admin/content', { kind: 'ebook', title: 'Draft Manual', published: false, category: 'Leadership' });
+  check('publicity creates draft content item', r.status === 200 && r.data.item.published === false, r.data);
+  const draftEbookId = r.data.item.id;
+
+  r = await call('anon', 'GET', '/api/content/ebook');
+  check('draft content is hidden from public view', r.status === 200 && !r.data.some(i => i.id === draftEbookId), r.data);
+
+  r = await call('pub', 'GET', '/api/admin/content');
+  check('draft content is visible in content manager', r.status === 200 && r.data.some(i => i.id === draftEbookId), r.data);
+
+  r = await call('pub', 'DELETE', `/api/admin/content/${draftEbookId}`);
+  check('publicity deletes content item', r.status === 200, r.data);
+
   r = await call('anon', 'GET', '/api/content/live_service');
-  check('public live-service content is chapter-scoped and visible', r.status === 200 && r.data.some(i => i.title === 'Sunday Service'), r.data);
+  check('public live-service content is chapter-scoped and visible', r.status === 200 && r.data.some(i => i.title === 'Sunday Miracle Service'), r.data);
   r = await call('fin', 'POST', '/api/admin/content', { kind: 'ebook', title: 'No access' });
   check('finance cannot manage public content', r.status === 401, r.data);
   r = await call('admin', 'GET', '/api/national/features');

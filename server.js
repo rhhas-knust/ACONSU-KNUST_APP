@@ -1889,6 +1889,17 @@ app.get('/api/content/:kind', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Could not load content' }); }
 });
 
+app.get('/api/content/item/:id', async (req, res) => {
+  try {
+    const scope = contentChapterFilter(req);
+    const chapterPart = scope.chapterId ? { $or: [{ chapterId: scope.chapterId }, { chapterId: '' }] } : {};
+    const items = await repo.getAll('contentItems', { ...chapterPart, id: req.params.id, published: true });
+    const item = items[0];
+    if (!item) return res.status(404).json({ error: 'Content item not found' });
+    res.json(item);
+  } catch (e) { res.status(500).json({ error: 'Could not load content item' }); }
+});
+
 // Public chapter directory — powers the registration chapter dropdown and
 // the "choose your chapter" picker on the public site (see main.js). Only
 // active chapters are offered; payment/contact/about detail isn't needed
@@ -4155,6 +4166,11 @@ async function resolveChapterIdForWrite(req, explicitChapterId) {
 // Phase 7 content management. Public-facing pages share this one persisted
 // resource; it is still chapter-scoped unless a National Coordinator marks a
 // church/ACONSU/founder item national.
+const contentUpload = upload.fields([
+  { name: 'imageFile', maxCount: 1 },
+  { name: 'resourceFile', maxCount: 1 }
+]);
+
 app.get('/api/admin/content', requireContentManager, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req, { required: false });
@@ -4162,36 +4178,118 @@ app.get('/api/admin/content', requireContentManager, async (req, res) => {
     res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
   } catch (e) { res.status(500).json({ error: 'Could not load content' }); }
 });
-app.post('/api/admin/content', requireContentManager, async (req, res) => {
+
+app.post('/api/admin/content', requireContentManager, contentUpload, async (req, res) => {
   try {
     const { kind, title } = req.body;
     if (!CONTENT_KINDS.includes(kind) || !title) return res.status(400).json({ error: 'A content type and title are required' });
-    const national = !!req.body.isNational && rolesLib.getActingScope(req).isNational;
+    const national = (req.body.isNational === true || req.body.isNational === 'true') && rolesLib.getActingScope(req).isNational;
     const chapterId = national ? '' : await resolveChapterIdForWrite(req, req.body.chapterId);
     if (!national && !chapterId) return res.status(400).json({ error: 'A chapter is required.' });
+
+    let imageFileId = req.body.imageFileId || '';
+    let resourceFileId = req.body.resourceFileId || '';
+
+    if (req.files && req.files.imageFile && req.files.imageFile[0]) {
+      const f = req.files.imageFile[0];
+      const compressed = await compressIfImage(f.buffer, f.mimetype);
+      imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, f.originalname, {
+        category: 'content_image', contentType: compressed.contentType, title: title || f.originalname, chapterId
+      }));
+    }
+
+    if (req.files && req.files.resourceFile && req.files.resourceFile[0]) {
+      const f = req.files.resourceFile[0];
+      resourceFileId = String(await gridfs.uploadBuffer(f.buffer, f.originalname, {
+        category: 'content_resource', contentType: f.mimetype, title: title || f.originalname, chapterId
+      }));
+    }
+
     const item = await repo.create('contentItems', {
-      chapterId, kind, title: String(title).trim(), summary: req.body.summary || '', body: req.body.body || '',
-      imageFileId: req.body.imageFileId || '', previewUrl: req.body.previewUrl || '', resourceUrl: req.body.resourceUrl || '',
-      resourceFileId: req.body.resourceFileId || '', category: req.body.category || '', eventDate: req.body.eventDate || '',
-      published: req.body.published !== false, featured: !!req.body.featured, sortOrder: Number(req.body.sortOrder) || 0,
+      chapterId, kind, title: String(title).trim(),
+      summary: req.body.summary || '',
+      body: req.body.body || '',
+      imageFileId,
+      previewUrl: req.body.previewUrl || '',
+      resourceUrl: req.body.resourceUrl || '',
+      resourceFileId,
+      category: req.body.category || '',
+      eventDate: req.body.eventDate || '',
+      published: req.body.published !== false && req.body.published !== 'false',
+      featured: req.body.featured === true || req.body.featured === 'true',
+      sortOrder: Number(req.body.sortOrder) || 0,
       createdBy: actorName(req)
     }, 'content');
     res.json({ success: true, item });
   } catch (e) { res.status(500).json({ error: 'Could not create content' }); }
 });
-app.put('/api/admin/content/:id', requireContentManager, async (req, res) => {
+
+app.put('/api/admin/content/:id', requireContentManager, contentUpload, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req, { required: false });
     const existing = await repo.getById('contentItems', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+
+    let imageFileId = existing.imageFileId || '';
+    let resourceFileId = existing.resourceFileId || '';
+
+    if (req.files && req.files.imageFile && req.files.imageFile[0]) {
+      const f = req.files.imageFile[0];
+      const compressed = await compressIfImage(f.buffer, f.mimetype);
+      const newImgId = String(await gridfs.uploadBuffer(compressed.buffer, f.originalname, {
+        category: 'content_image', contentType: compressed.contentType, title: req.body.title || existing.title || f.originalname, chapterId: existing.chapterId
+      }));
+      if (existing.imageFileId) {
+        gridfs.deleteFile(existing.imageFileId).catch(() => {});
+      }
+      imageFileId = newImgId;
+    } else if (req.body.imageFileId !== undefined) {
+      imageFileId = req.body.imageFileId;
+    }
+
+    if (req.files && req.files.resourceFile && req.files.resourceFile[0]) {
+      const f = req.files.resourceFile[0];
+      const newResId = String(await gridfs.uploadBuffer(f.buffer, f.originalname, {
+        category: 'content_resource', contentType: f.mimetype, title: req.body.title || existing.title || f.originalname, chapterId: existing.chapterId
+      }));
+      if (existing.resourceFileId) {
+        gridfs.deleteFile(existing.resourceFileId).catch(() => {});
+      }
+      resourceFileId = newResId;
+    } else if (req.body.resourceFileId !== undefined) {
+      resourceFileId = req.body.resourceFileId;
+    }
+
     const { id, chapterId, kind, createdBy, ...editable } = req.body;
-    const item = await repo.updateById('contentItems', req.params.id, { ...existing, ...editable }, filter);
+    const updatedFields = {
+      ...existing,
+      ...editable,
+      imageFileId,
+      resourceFileId,
+      published: req.body.published !== undefined ? (req.body.published === true || req.body.published === 'true') : existing.published,
+      featured: req.body.featured !== undefined ? (req.body.featured === true || req.body.featured === 'true') : existing.featured,
+      sortOrder: req.body.sortOrder !== undefined ? (Number(req.body.sortOrder) || 0) : existing.sortOrder
+    };
+
+    const item = await repo.updateById('contentItems', req.params.id, updatedFields, filter);
     res.json({ success: true, item });
   } catch (e) { res.status(500).json({ error: 'Could not update content' }); }
 });
+
 app.delete('/api/admin/content/:id', requireContentManager, async (req, res) => {
   try {
-    const removed = await repo.removeById('contentItems', req.params.id, rolesLib.chapterFilter(req, { required: false }));
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const existing = await repo.getById('contentItems', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+
+    if (existing.imageFileId) {
+      gridfs.deleteFile(existing.imageFileId).catch(() => {});
+    }
+    if (existing.resourceFileId) {
+      gridfs.deleteFile(existing.resourceFileId).catch(() => {});
+    }
+
+    const removed = await repo.removeById('contentItems', req.params.id, filter);
     if (!removed) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: 'Could not delete content' }); }
