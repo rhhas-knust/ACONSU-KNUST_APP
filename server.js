@@ -1872,6 +1872,68 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
+// Generate verse-of-the-day as a shareable image (PNG)
+app.get('/api/verse-image', async (req, res) => {
+  try {
+    let verseText = req.query.verse || '';
+    if (!verseText) {
+      const settings = await repo.getSettings();
+      if (!settings.verseOfTheWeek) return res.status(400).json({ error: 'No verse configured' });
+      verseText = settings.verseOfTheWeek;
+    }
+
+    // Limit verse length for image generation
+    const shortVerse = verseText.length > 200 ? verseText.substring(0, 197) + '...' : verseText;
+    
+    // Create SVG with the verse text
+    const width = 1080;
+    const height = 1350;
+    const svg = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background gradient -->
+        <defs>
+          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#5B2C82;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#3A1B54;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect width="${width}" height="${height}" fill="url(#grad)"/>
+        
+        <!-- Logo/brand -->
+        <text x="${width / 2}" y="100" font-size="36" font-weight="700" fill="#E8971E" text-anchor="middle" font-family="serif">ACONSU</text>
+        
+        <!-- Verse text -->
+        <foreignObject x="60" y="200" width="${width - 120}" height="900">
+          <div xmlns="http://www.w3.org/1999/xhtml" style="
+            font-family: Georgia, serif;
+            font-size: 32px;
+            color: #FFFFFF;
+            line-height: 1.6;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 40px;
+          ">
+            <p style="margin: 0;">"${shortVerse.replace(/"/g, '&quot;')}"</p>
+          </div>
+        </foreignObject>
+        
+        <!-- Footer -->
+        <text x="${width / 2}" y="${height - 40}" font-size="20" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="sans-serif">Verse of the Day</text>
+      </svg>
+    `;
+
+    // Convert SVG to PNG using sharp
+    const buffer = await require('sharp')(Buffer.from(svg)).png().toBuffer();
+    res.type('image/png').send(buffer);
+  } catch (e) {
+    console.error('Verse image generation error:', e);
+    res.status(500).json({ error: 'Could not generate verse image' });
+  }
+});
+
 // Public feature configuration. The defaults preserve every existing module
 // until the National Coordinator deliberately turns it off.
 const FEATURE_DEFAULTS = {
@@ -1958,6 +2020,134 @@ app.get('/api/executives', async (req, res) => {
     res.json(execs.sort((a, b) => (a.order || 0) - (b.order || 0)));
   } catch (e) {
     res.status(500).json({ error: 'Could not load executives' });
+  }
+});
+
+app.post('/api/member/executive-interest', requireMember, async (req, res) => {
+  try {
+    const role = String(req.body?.role || '').trim();
+    const department = String(req.body?.department || '').trim();
+    const scope = String(req.body?.scope || '').trim();
+    if (!role || !department || !scope) {
+      return res.status(400).json({ error: 'Role, department and scope are required' });
+    }
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const updates = {
+      executiveStatus: 'pending',
+      executiveRole: role,
+      executiveDepartment: department,
+      executiveScope: scope,
+      isExecutive: false
+    };
+    const updated = await repo.updateById('members', member.id, { ...member, ...updates });
+    const item = { id: updated.id, memberId: updated.id, chapterId: updated.chapterId, role: updated.executiveRole, department: updated.executiveDepartment, scope: updated.executiveScope, executiveStatus: updated.executiveStatus };
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not submit executive interest' });
+  }
+});
+
+app.get('/api/admin/executive-applications', requireChapterAdmin, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const members = await repo.getAll('members', filter);
+    const items = members
+      .filter(m => m.executiveStatus && m.executiveStatus !== 'none')
+      .map(m => ({
+        id: m.id,
+        memberId: m.id,
+        name: m.name,
+        email: m.email,
+        chapterId: m.chapterId,
+        role: m.executiveRole,
+        department: m.executiveDepartment,
+        scope: m.executiveScope,
+        executiveStatus: m.executiveStatus,
+        isExecutive: !!m.isExecutive,
+        createdAt: m.updatedAt || new Date().toISOString()
+      }));
+    res.json(items);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load executive applications' });
+  }
+});
+
+app.patch('/api/admin/executive-applications/:memberId', requireChapterAdmin, async (req, res) => {
+  try {
+    const { decision, scope } = req.body || {};
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const member = await repo.getById('members', req.params.memberId, filter);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    if (!['approve', 'reject'].includes(decision)) {
+      return res.status(400).json({ error: 'Decision must be approve or reject' });
+    }
+    const nextStatus = decision === 'approve' ? 'verified' : 'rejected';
+    const updated = await repo.updateById('members', member.id, {
+      ...member,
+      executiveStatus: nextStatus,
+      executiveScope: scope || member.executiveScope || 'chapter',
+      isExecutive: decision === 'approve',
+      executiveVerifiedAt: decision === 'approve' ? new Date() : null
+    }, filter);
+    res.json({ success: true, item: {
+      id: updated.id,
+      memberId: updated.id,
+      name: updated.name,
+      executiveStatus: updated.executiveStatus,
+      isExecutive: !!updated.isExecutive,
+      scope: updated.executiveScope,
+      role: updated.executiveRole,
+      department: updated.executiveDepartment
+    }});
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update executive application' });
+  }
+});
+
+// Public leadership roster: chapter coordinators and the National Coordinator,
+// enriched with their member profile image/contact details for the visitors page.
+app.get('/api/public/leadership', async (req, res) => {
+  try {
+    const staffUsers = await repo.getAll('staffUsers', {});
+    const members = await repo.getAll('members', {});
+    const memberMap = new Map(members.map(m => [m.id, m]));
+    const leadership = [];
+
+    const national = staffUsers.find(u => u.role === 'nationalCoordinator' && u.active !== false);
+    if (national) {
+      const member = memberMap.get(national.memberId) || null;
+      leadership.push({
+        id: national.id,
+        name: national.name || member?.name || 'National Coordinator',
+        role: 'National Coordinator',
+        chapterId: '',
+        chapterName: 'National',
+        phone: member?.phone || '',
+        email: member?.email || '',
+        imageFileId: member?.profileImageFileId || ''
+      });
+    }
+
+    const coordinators = staffUsers.filter(u => u.role === 'coordinator' && u.active !== false);
+    for (const user of coordinators) {
+      const chapter = await repo.getById('chapters', user.chapterId || '');
+      const member = memberMap.get(user.memberId) || null;
+      leadership.push({
+        id: user.id,
+        name: user.name || member?.name || chapter?.name || 'Chapter Coordinator',
+        role: 'Chapter Coordinator',
+        chapterId: user.chapterId || '',
+        chapterName: chapter?.name || user.chapterId || 'Chapter',
+        phone: member?.phone || '',
+        email: member?.email || chapter?.contact?.email || '',
+        imageFileId: member?.profileImageFileId || ''
+      });
+    }
+
+    res.json(leadership.sort((a, b) => a.chapterName.localeCompare(b.chapterName)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load leadership roster' });
   }
 });
 
@@ -3312,7 +3502,16 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
       }));
       if (existing && existing.imageFileId) gridfs.deleteFile(existing.imageFileId).catch(() => {});
     }
-    const { name, role, department, bio, phone, email } = req.body;
+    const name = String(req.body?.name || '').trim();
+    const role = String(req.body?.role || '').trim();
+    const department = String(req.body?.department || '').trim();
+    const bio = String(req.body?.bio || '');
+    const phone = String(req.body?.phone || '');
+    const email = String(req.body?.email || '');
+    if (!department) {
+      return res.status(400).json({ error: 'Please choose a department for your executive office.' });
+    }
+
     // A real position/department change gets snapshotted into history first
     // (section 9: "updated every academic year"), same pattern as a
     // member's academicHistory.
@@ -3324,12 +3523,12 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
       chapterId: staff.chapterId,
       staffId: staff.id,
       name: name || (existing ? existing.name : staff.name),
-      role: role !== undefined ? role : (existing ? existing.role : ''),
-      department: department !== undefined ? department : (existing ? existing.department : ''),
-      bio: bio !== undefined ? bio : (existing ? existing.bio : ''),
+      role: role || (existing ? existing.role : ''),
+      department: department || (existing ? existing.department : ''),
+      bio: bio || (existing ? existing.bio : ''),
       contact: {
-        phone: phone !== undefined ? phone : (existing ? existing.contact.phone : ''),
-        email: email !== undefined ? email : (existing ? existing.contact.email : '')
+        phone: phone || (existing ? existing.contact.phone : ''),
+        email: email || (existing ? existing.contact.email : '')
       },
       imageFileId,
       history
@@ -3337,14 +3536,26 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
     const record = existing
       ? await repo.updateById('executives', existing.id, { ...existing, ...fields })
       : await repo.create('executives', fields, 'exec');
-    res.json({ success: true, item: record });
+    const member = await models.Member.findOne({ id: staff.memberId || req.session.memberId || '' }).lean();
+    if (member) {
+      await repo.updateById('members', member.id, {
+        ...member,
+        isExecutive: true,
+        executiveStatus: member.executiveStatus === 'verified' ? 'verified' : 'pending',
+        executiveRole: fields.role,
+        executiveDepartment: fields.department,
+        executiveScope: member.executiveScope || 'chapter',
+        executiveVerifiedAt: member.executiveVerifiedAt || new Date()
+      });
+    }
     // First time this executive has set up their profile — a genuine new
     // appointment worth celebrating (section 36), not just a form save.
     // memberId is left blank unless this StaffUser is linked to a Member
     // profile — the celebration still posts either way.
     if (!existing) {
-      logMilestone({ chapterId: staff.chapterId, memberId: staff.memberId || '', memberName: fields.name, type: 'executive_appointment', note: fields.role, loggedBy: 'System' }).catch(() => {});
+      await logMilestone({ chapterId: staff.chapterId, memberId: staff.memberId || '', memberName: fields.name, type: 'executive_appointment', note: fields.role, loggedBy: 'System' });
     }
+    res.json({ success: true, item: record });
   } catch (e) {
     res.status(500).json({ error: 'Could not save your executive profile' });
   }

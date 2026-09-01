@@ -400,6 +400,20 @@ require('./harness.js');
   r = await call('exec', 'GET', '/api/executive/me');
   check('no executive record exists yet', r.data.item === null, r.data);
 
+  const badExecRes = await fetch(BASE + '/api/executive/me', {
+    method: 'PUT',
+    headers: { cookie: jars.exec },
+    body: (() => {
+      const form = new FormData();
+      form.append('name', 'Ama Executive');
+      form.append('role', 'Financial Secretary');
+      form.append('department', '');
+      return form;
+    })()
+  });
+  const badExecData = await badExecRes.json();
+  check('executive must choose a valid department', badExecRes.status === 400, badExecData);
+
   const execForm = new FormData();
   execForm.append('name', 'Ama Executive');
   execForm.append('role', 'Financial Secretary');
@@ -407,6 +421,15 @@ require('./harness.js');
   const execRes = await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: execForm });
   const execData = await execRes.json();
   check('executive saves their own profile', execRes.status === 200 && execData.item.role === 'Financial Secretary', execData);
+
+  r = await call('member', 'POST', '/api/member/executive-interest', {
+    role: 'Treasurer', department: 'finance', scope: 'chapter'
+  });
+  check('member submits an executive interest', r.status === 200 && r.data.item.executiveStatus === 'pending', r.data);
+  r = await call('admin', 'GET', '/api/admin/executive-applications');
+  check('executive applications are visible to admin', r.status === 200 && Array.isArray(r.data) && r.data.some(a => a.id === memberId), r.data);
+  r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, { decision: 'approve', scope: 'chapter' });
+  check('chapter executive application is approved', r.status === 200 && r.data.item.executiveStatus === 'verified', r.data);
 
   r = await call('exec', 'POST', '/api/executive/events', { title: 'Campus Outreach', date: '2026-10-10' });
   check('executive submits an event', r.status === 200 && r.data.item.status === 'submitted', r.data);

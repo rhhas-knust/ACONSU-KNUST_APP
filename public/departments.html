@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Departments — ACONSU</title>
+<title>Chapters — ACONSU</title>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -21,9 +21,9 @@
 <section class="hero" style="padding-bottom:48px;" id="deptsHero">
   <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">Serve &amp; Belong</p>
-    <h1>Departments</h1>
-    <p class="lede">Every department is a family within the family — a place to serve, grow and be known. Tap one to see meeting details and join.</p>
+    <p class="eyebrow">Find Your Chapter</p>
+    <h1>Chapters</h1>
+    <p class="lede">Explore the ACONSU chapters serving students across campuses and communities. Each chapter has its own departments and leadership.</p>
   </div>
 </section>
 
@@ -40,22 +40,20 @@
 (async function () {
   await initLayout('/departments.html');
   try {
-    const departments = await fetchJSON('/api/departments');
+    const chapters = await fetchJSON('/api/chapters');
     const wrap = document.getElementById('deptGrid');
-    wrap.innerHTML = departments.map(d => `
-      <a href="/department.html?id=${d.id}" class="card dept-card">
+    wrap.innerHTML = chapters.map(chapter => `
+      <a href="/department.html?chapterId=${encodeURIComponent(chapter.id)}" class="card dept-card">
         <div class="dept-thumb">
-          ${d.headerImageFileId
-            ? `<img src="/api/files/${d.headerImageFileId}" alt="" loading="lazy">`
-            : '<span class="dept-thumb-fallback"></span>'}
+          <span class="dept-thumb-fallback" style="display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#5B2C82,#E8971E); color:#fff; font-weight:800; font-size:1.75rem;">${escapeHtml((chapter.name || 'A').charAt(0))}</span>
         </div>
-        <h3>${escapeHtml(d.name)}</h3>
-        <p style="color:#5a4468; font-size:0.92rem;">${escapeHtml(d.tagline)}</p>
-        <div class="dept-meta">${escapeHtml(d.meetingDay)} · ${escapeHtml(d.meetingTime)}</div>
+        <h3>${escapeHtml(chapter.name)}</h3>
+        <p style="color:#5a4468; font-size:0.92rem;">${escapeHtml(chapter.fullName || chapter.institution || 'Chapter community')}</p>
+        <div class="dept-meta">${escapeHtml(chapter.location || chapter.institution || 'ACONSU Chapter')}</div>
       </a>
-    `).join('') || '<p class="empty-state">Departments coming soon.</p>';
+    `).join('') || '<p class="empty-state">Chapters coming soon.</p>';
   } catch (e) {
-    document.getElementById('deptGrid').innerHTML = '<p class="empty-state">Could not load departments right now.</p>';
+    document.getElementById('deptGrid').innerHTML = '<p class="empty-state">Could not load chapters right now.</p>';
   }
   initScrollReveal('#deptGrid .card');
   try {
