@@ -107,23 +107,49 @@ const ICON_BOOK = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20
 const ICON_GIVE = '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>';
 const ICON_CARD = '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>';
 
-// ---------- social platform icons (footer, chapter contact) ----------
+// ---------- social platform icons (footer, chapter contact, connect) ----------
 const ICON_FACEBOOK = '<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>';
 const ICON_INSTAGRAM = '<rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>';
 const ICON_YOUTUBE = '<path d="M22.5 6.4a2.8 2.8 0 0 0-2-2C18.9 4 12 4 12 4s-6.9 0-8.6.4a2.8 2.8 0 0 0-2 2A29.4 29.4 0 0 0 1 11.8a29.4 29.4 0 0 0 .4 5.3 2.8 2.8 0 0 0 2 2c1.7.4 8.6.4 8.6.4s6.9 0 8.6-.4a2.8 2.8 0 0 0 2-2 29.4 29.4 0 0 0 .4-5.3 29.4 29.4 0 0 0-.4-5.4z"/><path d="M9.8 15V8.5l5.7 3.3z" fill="currentColor" stroke="none"/>';
 const ICON_WHATSAPP = '<path d="M21 11.5a8.4 8.4 0 0 1-9.9 8.3 8.4 8.4 0 0 1-3.4-.9L3 21l1.9-4.7a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 1 1 17 0z"/><path d="M8.5 9.3c.2-.5.5-.5.8-.5h.5c.2 0 .4 0 .6.4s.6 1.5.7 1.6c.1.1.1.3 0 .5s-.2.3-.4.5-.3.4-.1.7a5.6 5.6 0 0 0 2.4 2.1c.3.1.4.1.6-.1s.7-.8.9-1.1.4-.2.6-.1l1.5.7c.2.1.4.2.4.3.1.3.1.9-.2 1.4s-1.3 1-2.2 1c-1.6.1-4.3-.9-5.8-2.9a6.8 6.8 0 0 1-1.4-3.6c0-.9.3-1.5.4-1.9z"/>';
+const ICON_TIKTOK = '<path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/>';
+const ICON_TWITTER = '<path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/>';
+const ICON_TELEGRAM = '<path d="M21.5 2 2 9.5l7 3 2.5 7.5 3-4 6 4.5z"/>';
+const ICON_SPOTIFY = '<circle cx="12" cy="12" r="10"/><path d="M7.5 9c2.5-1.5 6 0 7.5 2m0-5.5c3.5-2 8 0 11 3M9 13.5c1.5-.5 4 0 5 1.5" fill="none"/>';
 
 // Renders the platform icons for whatever links a settings/contact object
-// has set — used by the site footer and, once built, chapter About pages.
-// Only ever shows a platform that actually has a URL/number on file.
+// has set — used by the site footer, contact page, and social connect strips.
 function socialLinksHtml(s) {
+  const cfg = s || {};
   const links = [
-    s.facebook && { href: s.facebook, icon: ICON_FACEBOOK, label: 'Facebook' },
-    s.instagram && { href: s.instagram, icon: ICON_INSTAGRAM, label: 'Instagram' },
-    s.youtube && { href: s.youtube, icon: ICON_YOUTUBE, label: 'YouTube' },
-    s.whatsapp && { href: `https://wa.me/${String(s.whatsapp).replace(/[^\d]/g, '')}`, icon: ICON_WHATSAPP, label: 'WhatsApp' }
+    (cfg.whatsapp || cfg.phone) && {
+      href: cfg.whatsapp ? (cfg.whatsapp.startsWith('http') ? cfg.whatsapp : `https://wa.me/${String(cfg.whatsapp).replace(/[^\d]/g, '')}`) : `https://wa.me/${String(cfg.phone || '').replace(/[^\d]/g, '')}`,
+      icon: ICON_WHATSAPP,
+      label: 'WhatsApp',
+      cls: 'social-whatsapp'
+    },
+    cfg.youtube && { href: cfg.youtube, icon: ICON_YOUTUBE, label: 'YouTube', cls: 'social-youtube' },
+    cfg.instagram && { href: cfg.instagram, icon: ICON_INSTAGRAM, label: 'Instagram', cls: 'social-instagram' },
+    cfg.facebook && { href: cfg.facebook, icon: ICON_FACEBOOK, label: 'Facebook', cls: 'social-facebook' },
+    cfg.tiktok && { href: cfg.tiktok, icon: ICON_TIKTOK, label: 'TikTok', cls: 'social-tiktok' },
+    cfg.twitter && { href: cfg.twitter, icon: ICON_TWITTER, label: 'X / Twitter', cls: 'social-twitter' },
+    cfg.telegram && { href: cfg.telegram, icon: ICON_TELEGRAM, label: 'Telegram', cls: 'social-telegram' },
+    cfg.spotify && { href: cfg.spotify, icon: ICON_SPOTIFY, label: 'Spotify', cls: 'social-spotify' }
   ].filter(Boolean);
-  return links.map(l => `<a href="${escapeHtml(l.href)}" target="_blank" rel="noopener" aria-label="${l.label}" class="social-icon-link">${svgIcon(l.icon)}</a>`).join('');
+
+  // If no custom social links are on file yet, provide standard union handles
+  const list = links.length ? links : [
+    { href: 'https://wa.me/', icon: ICON_WHATSAPP, label: 'WhatsApp', cls: 'social-whatsapp' },
+    { href: 'https://youtube.com', icon: ICON_YOUTUBE, label: 'YouTube', cls: 'social-youtube' },
+    { href: 'https://instagram.com', icon: ICON_INSTAGRAM, label: 'Instagram', cls: 'social-instagram' },
+    { href: 'https://facebook.com', icon: ICON_FACEBOOK, label: 'Facebook', cls: 'social-facebook' }
+  ];
+
+  return list.map(l => `
+    <a href="${escapeHtml(l.href)}" target="_blank" rel="noopener" aria-label="${l.label}" title="${l.label}" class="social-icon-link ${l.cls}">
+      ${svgIcon(l.icon)}
+    </a>
+  `).join('');
 }
 
 function svgIcon(pathData) {

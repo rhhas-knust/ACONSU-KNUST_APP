@@ -69,12 +69,14 @@ require('./harness.js');
     r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123' });
     check(`create ${role} account`, r.status === 200, r.data);
   }
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.bible', name: 'Bible Study Exec', role: 'executive', password: 'password123' });
+  check('create executive account', r.status === 200, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.ama', name: 'dupe', role: 'finance', password: 'password123' });
   check('duplicate username rejected', r.status === 400, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'weak', name: 'weak', role: 'finance', password: 'short' });
   check('short password rejected', r.status === 400, r.data);
 
-  for (const [jar, user] of Object.entries({ fin: 'fin.ama', shep: 'shep.kojo', pub: 'pub.esi', coord: 'coord.yaw' })) {
+  for (const [jar, user] of Object.entries({ fin: 'fin.ama', shep: 'shep.kojo', pub: 'pub.esi', coord: 'coord.yaw', bibleExec: 'exec.bible' })) {
     r = await call(jar, 'POST', '/api/portal/login', { username: user, password: 'password123' });
     check(`${user} signs in`, r.status === 200, r.data);
   }
@@ -82,6 +84,12 @@ require('./harness.js');
   check('wrong password rejected', r.status === 401, r.data);
 
   console.log('\n== national coordinator ==');
+  r = await call('bibleExec', 'POST', '/api/admin/bible-studies', { topic: 'Faith in Action', date: '2026-02-01', scriptureReference: 'James 2:14-26', studyMaterial: 'Test study' });
+  check('executive can manage Bible studies', r.status === 200 && r.data.item.topic === 'Faith in Action', r.data);
+
+  r = await call('admin', 'GET', '/api/admin/image-placements');
+  check('homepage header placement is available to the media library', r.status === 200 && r.data.placements.some(p => p.value === 'home-header'), r.data);
+
   r = await call('admin', 'GET', '/api/national/dashboard');
   check('national dashboard loads', r.status === 200 && r.data.totalChapters === 1 && r.data.activeChapters === 1, r.data);
   r = await call('fin', 'GET', '/api/national/dashboard');

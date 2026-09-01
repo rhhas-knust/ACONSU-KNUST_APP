@@ -28,8 +28,8 @@
 </section>
 
 <section style="padding-top:0;">
-  <div class="container">
-    <form class="form-card" id="contactForm">
+  <div class="container" style="max-width:580px;">
+    <form class="form-card" id="contactForm" style="margin-bottom:28px;">
       <div class="field">
         <label for="name">Full Name</label>
         <input type="text" id="name" required>
@@ -45,6 +45,12 @@
       <button type="submit" class="btn btn-primary btn-block" id="contactSubmitBtn">Send Message</button>
       <div class="form-msg" id="contactMsg"></div>
     </form>
+
+    <div class="card" style="text-align:center; padding:24px; border-radius:18px;">
+      <h3 style="margin:0 0 6px; font-size:1.1rem; color:var(--purple-deep);">Connect With Us Online</h3>
+      <p style="color:#7a6288; font-size:0.88rem; margin:0 0 16px;">Reach out, watch sermons, or join our community discussions on our official platforms.</p>
+      <div id="contactSocialRow" class="social-row" style="justify-content:center; gap:14px;"></div>
+    </div>
   </div>
 </section>
 
@@ -52,7 +58,14 @@
 
 <script src="/js/main.js"></script>
 <script>
-initLayout('/contact.html');
+(async function() {
+  const settings = await initLayout('/contact.html');
+  const socialEl = document.getElementById('contactSocialRow');
+  if (socialEl) {
+    socialEl.innerHTML = socialLinksHtml(settings);
+    socialEl.querySelectorAll('.social-icon-link').forEach(a => a.classList.add('on-light'));
+  }
+})();
 
 document.getElementById('contactForm').addEventListener('submit', async (e) => {
   e.preventDefault();

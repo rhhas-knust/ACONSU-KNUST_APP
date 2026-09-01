@@ -60,6 +60,7 @@ function makeModel(defaults) {
     const p = Promise.resolve(value);
     p.lean = () => Promise.resolve(value);
     p.sort = () => result(value);
+    p.limit = (n) => result(Array.isArray(value) ? value.slice(0, n) : value);
     return p;
   };
 
@@ -172,7 +173,8 @@ const fakeModels = {
   AttendanceRecord: makeModel({ chapterId: '', serviceType: 'sunday', title: '', marks: [], visitorCount: 0, notes: '', recordedBy: '' }),
   ScheduledNotification: makeModel({ chapterId: '', status: 'scheduled', channels: ['app'], audience: 'all', url: '/index.html', sentAt: null, result: '', createdBy: '' }),
   SmsLog: makeModel({ chapterId: '', status: 'sent', detail: '', sourceId: '' }),
-  StaffUser: makeModel({ chapterId: '', memberId: '', active: true, lastLoginAt: null, name: '' })
+  StaffUser: makeModel({ chapterId: '', memberId: '', active: true, lastLoginAt: null, name: '' }),
+  NationalReport: makeModel({ reportDate: '', region: '', continent: '', metrics: {} })
 };
 
 // In-memory GridFS: enough for uploads, listing, streaming and deletion.

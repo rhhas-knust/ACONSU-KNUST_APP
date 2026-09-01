@@ -33,7 +33,7 @@ async function checkAuth() {
   try {
     const me = await fetchJSON('/api/portal/me');
     const role = me.staff && me.staff.role;
-    if (me.isNational || role === 'coordinator' || role === 'chapterAdmin') {
+    if (me.isNational || role === 'coordinator' || role === 'chapterAdmin' || role === 'executive') {
       ADMIN_SCOPE = { isNational: !!me.isNational, chapterId: (me.staff && me.staff.chapterId) || '' };
       return showAdminShell();
     }
@@ -68,9 +68,9 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-    if (!staff || !['coordinator', 'chapterAdmin', 'nationalCoordinator'].includes(staff.role)) {
+    if (!staff || !['coordinator', 'chapterAdmin', 'nationalCoordinator', 'executive'].includes(staff.role)) {
       await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
-      msg.textContent = 'That account does not have Chapter Admin access.';
+      msg.textContent = 'That account does not have the required admin access.';
       msg.className = 'form-msg error';
       return;
     }
@@ -342,13 +342,13 @@ function openResourceForm(resource, fields, singular, item) {
 const PORTAL_ROLES = [
   { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter — dashboard, chapters, announcements.', href: '/national.html' },
   { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority — oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
-  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — this dashboard.', href: '/admin.html' },
-  { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/admin.html' },
+  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — chapter-scoped dashboard.', href: '/chapter.html' },
+  { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/executive.html' },
   { value: 'finance', label: 'Finance', blurb: 'Budgets, ledger, financial reports.', href: '/finance.html' },
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance, member care, contact messages.', href: '/shepherding.html' },
   { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' },
-  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/admin.html' },
-  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department.', href: '/admin.html' }
+  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' },
+  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department.', href: '/department.html' }
 ];
 // Only a National Coordinator may hand out these two — see /api/admin/staff.
 const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];
@@ -1488,13 +1488,14 @@ async function renderMediaLibrary() {
     const messages = {
       'department-header': `This image becomes the banner across the top of the <strong>${escapeHtml(targetName.replace(' (replaces current header)', '') || 'selected')}</strong> department page, and appears on its card in the departments list. Landscape photos work best.`,
       'page-gallery': `This image is added to the <strong>${escapeHtml(targetName || 'selected')}</strong> page, where members will see it in that page's gallery.`,
+      'home-header': 'This image becomes the large weekly header banner at the top of the home page. It is different from the floating decorative photo.',
       'home-floating': 'This image drifts around the hero area on the home page and department pages as a decorative photo. Only the first few uploaded are used, and they are hidden on small phones.',
       'executive-photo': 'This image is kept in the library ready to use as an executive portrait. Attach it to a person from the <strong>Executives</strong> panel.',
       'library': 'Nothing on the public site changes. The image simply sits in the library until you place it somewhere.'
     };
     explain.innerHTML = `<strong>Where this goes:</strong> ${messages[value] || spec.description}`;
     // A department header is always a photo, never a document.
-    if (value === 'department-header' || value === 'home-floating' || value === 'executive-photo') {
+    if (value === 'department-header' || value === 'home-header' || value === 'home-floating' || value === 'executive-photo') {
       document.getElementById('uploadCategory').value = 'photo';
     }
   }
@@ -1550,6 +1551,7 @@ function placementSummary(f) {
   switch (f.placement) {
     case 'department-header': return `Header for ${name(data.departments, f.targetId)}`;
     case 'page-gallery': return `On the ${name(data.pages, f.targetId || f.pageSlug)} page`;
+    case 'home-header': return 'Home page header banner';
     case 'home-floating': return 'Floating photo on the home page';
     case 'executive-photo': return 'Executive portrait';
     default: return f.pageSlug ? `On the ${escapeHtml(f.pageSlug)} page` : 'In the library only';
@@ -1595,7 +1597,8 @@ async function renderSettings() {
     { key: 'whatsapp', label: 'WhatsApp Number (digits only, with country code)' },
     { key: 'instagram', label: 'Instagram URL' },
     { key: 'facebook', label: 'Facebook URL' },
-    { key: 'youtube', label: 'YouTube URL' }
+    { key: 'youtube', label: 'YouTube URL' },
+    { key: 'homeHeaderImageFileId', label: 'Home Header Image File ID (recommended: set via Media Library > Home page header banner)' }
   ];
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Site Settings</h2>
