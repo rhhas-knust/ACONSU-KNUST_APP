@@ -49,6 +49,10 @@
 <header id="site-header"></header>
 
 <div class="container" style="padding-top:20px;">
+  <div id="homeHeaderBanner" class="home-header-banner" style="display:none;"></div>
+</div>
+
+<div class="container" style="padding-top:20px;">
   <div id="liveBannerWrap"></div>
   <div class="greeting-bar" id="greetingBar"></div>
   <div id="birthdayBanner"></div>
@@ -168,6 +172,13 @@
 <script>
 (async function () {
   const settings = await initLayout('/index.html');
+
+  const homeHeaderEl = document.getElementById('homeHeaderBanner');
+  const homeHeaderId = settings.homeHeaderImageFileId || '';
+  if (homeHeaderId) {
+    homeHeaderEl.style.display = 'block';
+    homeHeaderEl.innerHTML = `<img src="/api/files/${homeHeaderId}" alt="Weekly ACONSU header" loading="eager">`;
+  }
 
   // 1. Live stream broadcast alert
   try {

@@ -148,6 +148,21 @@ img { max-width: 100%; display: block; }
 }
 
 /* ---------- hero ---------- */
+.home-header-banner {
+  max-width: 1160px;
+  margin: 0 auto 18px;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(91,44,130,0.12);
+  box-shadow: 0 16px 36px rgba(58,27,84,0.12);
+  background: var(--lilac-light);
+}
+.home-header-banner img {
+  display: block;
+  width: 100%;
+  height: clamp(220px, 33vw, 430px);
+  object-fit: cover;
+}
 .hero {
   position: relative;
   overflow: hidden;

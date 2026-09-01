@@ -902,7 +902,7 @@ app.get('/api/bible-studies/:id', async (req, res) => {
   }
 });
 
-app.post('/api/admin/bible-studies', requireChapterAdmin, async (req, res) => {
+app.post('/api/admin/bible-studies', requireBibleStudyManager, async (req, res) => {
   try {
     const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
     if (!chapterId) return res.status(400).json({ error: 'A chapter is required.' });
@@ -922,7 +922,7 @@ app.post('/api/admin/bible-studies', requireChapterAdmin, async (req, res) => {
   }
 });
 
-app.put('/api/admin/bible-studies/:id', requireChapterAdmin, async (req, res) => {
+app.put('/api/admin/bible-studies/:id', requireBibleStudyManager, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req, { required: false });
     const existing = await repo.getById('bibleStudies', req.params.id, filter);
@@ -939,7 +939,7 @@ app.put('/api/admin/bible-studies/:id', requireChapterAdmin, async (req, res) =>
   }
 });
 
-app.delete('/api/admin/bible-studies/:id', requireChapterAdmin, async (req, res) => {
+app.delete('/api/admin/bible-studies/:id', requireBibleStudyManager, async (req, res) => {
   try {
     await repo.removeById('bibleStudies', req.params.id, rolesLib.chapterFilter(req, { required: false }));
     res.json({ success: true });
@@ -971,6 +971,11 @@ function cleanFormFields(fields) {
 // manage chapter content (forms, uploads, flyers) elsewhere in the app.
 function requireContentManager(req, res, next) {
   if (isChapterAdminOrAbove(req) || hasRole(req, 'publicity')) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
+function requireBibleStudyManager(req, res, next) {
+  if (isChapterAdminOrAbove(req) || hasRole(req, 'executive')) return next();
   return res.status(401).json({ error: 'Not authenticated' });
 }
 
@@ -4018,6 +4023,11 @@ const IMAGE_PLACEMENTS = {
     needsTarget: 'page',
     describe: (name) => `Added to the ${name || 'selected'} page's gallery or resource shelf.`
   },
+  'home-header': {
+    label: 'Home page header banner',
+    needsTarget: '',
+    describe: () => 'Sets the large hero image at the top of the home page for the current week. This is different from the floating decorative photo.'
+  },
   'home-floating': {
     label: 'Floating home-page photo',
     needsTarget: '',
@@ -4104,6 +4114,11 @@ app.post('/api/admin/uploads', requireContentManager, upload.single('file'), asy
         await repo.patchById('events', targetId, { flyerFileId: String(fileId) }, filter);
         placedOn = event.title;
       }
+    } else if (placement === 'home-header') {
+      const current = (await repo.getSettings()).homeHeaderImageFileId || '';
+      if (current) gridfs.deleteFile(current).catch(() => {});
+      await repo.setSettings({ ...(await repo.getSettings()), homeHeaderImageFileId: String(fileId) });
+      placedOn = 'Home page header';
     }
     res.json({ success: true, id: fileId, placement, placedOn, message: spec.describe(placedOn) });
   } catch (e) {
