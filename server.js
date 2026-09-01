@@ -3729,6 +3729,65 @@ app.post('/api/national/announcements', rolesLib.requireNational, async (req, re
   }
 });
 
+// National report snapshots — persist a point-in-time snapshot of the live
+// national dashboard numbers into a NationalReport document. Useful for
+// tracking growth trends over weeks/months without having to reconstruct
+// from raw collections every time. The snapshot captures per-chapter
+// member/visitor/event/finance counts at the time it's taken.
+app.post('/api/national/reports/snapshot', rolesLib.requireNational, async (req, res) => {
+  try {
+    const [chapters, members, events, financeEntries] = await Promise.all([
+      repo.getAll('chapters'), repo.getAll('members'), repo.getAll('events'),
+      repo.getAll('financeEntries')
+    ]);
+    const chapterMetrics = chapters.map((c) => {
+      const chMembers = members.filter(m => m.chapterId === c.id);
+      const chFinance = financeEntries.filter(f => f.chapterId === c.id);
+      return {
+        chapterId: c.id, chapterName: c.name, status: c.status,
+        activeMembers: chMembers.filter(m => m.membershipStage === 'active').length,
+        visitors: chMembers.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length,
+        events: events.filter(e => e.chapterId === c.id).length,
+        balance: financeTotals(chFinance).balance
+      };
+    });
+    const report = await models.NationalReport.create({
+      reportDate: new Date(),
+      region: req.body.region || '',
+      continent: req.body.continent || '',
+      metrics: {
+        totalChapters: chapters.length,
+        activeChapters: chapters.filter(c => c.status === 'active').length,
+        totalMembers: chapterMetrics.reduce((s, c) => s + c.activeMembers, 0),
+        totalVisitors: chapterMetrics.reduce((s, c) => s + c.visitors, 0),
+        nationalBalance: financeTotals(financeEntries).balance,
+        chapters: chapterMetrics
+      }
+    });
+    res.json({ success: true, item: report });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not create report snapshot' });
+  }
+});
+
+// Retrieve historical national report snapshots — most recent first, capped
+// at 100. Use query params ?from=YYYY-MM-DD&to=YYYY-MM-DD to filter by date.
+app.get('/api/national/reports/history', rolesLib.requireNational, async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.from || req.query.to) {
+      filter.reportDate = {};
+      if (req.query.from) filter.reportDate.$gte = new Date(req.query.from);
+      if (req.query.to) filter.reportDate.$lte = new Date(req.query.to);
+    }
+    const reports = await models.NationalReport.find(filter)
+      .sort({ reportDate: -1 }).limit(100).lean();
+    res.json(reports);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load report history' });
+  }
+});
+
 // ---------- admin protected routes ----------
 // Leadership accounts. The admin creates one account per leader and assigns the
 // office it belongs to; passwords are hashed and never readable afterwards.

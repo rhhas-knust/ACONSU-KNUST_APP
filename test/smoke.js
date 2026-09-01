@@ -130,6 +130,14 @@ require('./harness.js');
   r = await call('admin', 'PUT', '/api/national/features', { modules: { liveStreaming: true } });
   r = await call('admin', 'GET', '/api/national/reports/overview');
   check('national report returns aggregates only', r.status === 200 && r.data[0].activeMembers !== undefined && r.data[0].email === undefined, r.data);
+  r = await call('admin', 'POST', '/api/national/reports/snapshot', { region: 'Ashanti' });
+  check('national coordinator takes a report snapshot', r.status === 200 && r.data.item.metrics.totalChapters >= 1 && r.data.item.region === 'Ashanti', r.data);
+  r = await call('fin', 'POST', '/api/national/reports/snapshot');
+  check('chapter-level staff cannot take a report snapshot', r.status === 401, r.data);
+  r = await call('admin', 'GET', '/api/national/reports/history');
+  check('national report history returns stored snapshots', r.status === 200 && r.data.length >= 1 && r.data[0].metrics.totalChapters >= 1, r.data);
+  r = await call('fin', 'GET', '/api/national/reports/history');
+  check('chapter-level staff cannot read report history', r.status === 401, r.data);
 
   console.log('\n== role boundaries ==');
   r = await call('pub', 'GET', '/api/finance/summary');

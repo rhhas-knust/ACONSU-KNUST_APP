@@ -532,3 +532,103 @@ The Phase 5–6 community routes now live in focused modules under `routes/` (`g
 This maintenance pass also closes direct-ID chapter-isolation checks for groups, chat topics/messages, and volunteer assignments. A logged-in member must now belong to the same chapter before any of those records can be read, joined, changed, reported, or responded to.
 
 The dependency upgrade moves Nodemailer to 9.x, Sharp to 0.35.x and Capacitor to 8.x. At the time of the upgrade, `npm audit --omit=dev` reported **0 vulnerabilities** and the complete smoke-test suite passed. Android/iOS builds should be synced and built in their native toolchains after pulling this update (`npm run cap:sync`); no payment, email, image, or app data migration is required.
+
+## 24. Media & Content Hub (Phase 7 of the platform spec)
+
+Phase 7 establishes a comprehensive multimedia and resource platform across all ACONSU chapters, with centralized management and granular chapter/national scoping.
+
+### What's included:
+
+- **Live Services** (`/content.html?kind=live_service`, section 24) — embeds responsive YouTube and Facebook livestreams directly in the app, with real-time live status badges and direct stream links. Administrators and Publicity officers can update stream links dynamically without code modifications.
+- **Seminars & Workshops** (`/content.html?kind=seminar`, section 25) — multi-stage learning cards supporting the *Snapshot Image ➔ Short Video Preview ➔ Watch Full Session* workflow, with downloadable presentation notes.
+- **E-Book Library** (`/content.html?kind=ebook`, section 28) — curated publications library with interactive category filter pills (*Bible Studies, Christian Growth, Devotionals, Leadership, Church History, ACONSU Publications*), in-page search, and direct GridFS PDF downloads.
+- **This Week at ACONSU** (`/content.html?kind=weekly_highlight`, section 27) — high-visual highlight strip featuring chapter outreach, fellowship moments, campus events, and celebrations.
+- **Founders & Church Heritage** (`/content.html?kind=founder`, `/content.html?kind=church_info`, `/content.html?kind=aconsu_info`, sections 29–30) — dedicated historical profiles and documentation celebrating the founders of the union, the history/vision/mission of The Apostles Continuation Church, and the national ACONSU campus network.
+- **Content Manager Portal** (`/content-manager.html`, sections 10, 24–31) — full-featured media management portal with:
+  - Drag-and-drop cover photo and PDF document uploads stored directly in MongoDB Atlas GridFS.
+  - In-place editing (`PUT /api/admin/content/:id`) with pre-filled forms.
+  - Draft vs. Published toggle and category tagging.
+  - Type-filter tabs and live search bar.
+  - National broadcast switch (`isNational`) for the National Coordinator.
+- **Navigation & Discover Integration** (sections 40, 42) — Live Services, Seminars, and E-Books are wired directly into `/more.html` and the Discover page (`/discover.html`), with global search indexing across all published ContentItems.
+- **Publicity Portal Linkage** — a dedicated **Media & Content** management tab embedded directly in the Publicity Portal navigation (`/publicity.html`).
+- **Feature Flag Gating** (section 39) — National Coordinator can globally toggle `liveStreaming`, `seminars`, and `ebooks` on or off via `/api/national/features`.
+- **Automatic Storage Cleanup** — deleting any content item via `DELETE /api/admin/content/:id` automatically deletes its associated cover image and PDF document from GridFS, preventing orphaned storage leaks.
+
+## 25. National Management (Phase 8 of the platform spec)
+
+Phase 8 completes the National Coordinator's toolkit with real-time oversight, historical reporting, feature-flag governance, and cross-chapter announcements — all scoped so that sensitive per-member data never leaves the chapter that owns it (section 38).
+
+### National Dashboard (`/national.html` → Dashboard tab)
+
+A live, aggregated overview across every chapter:
+- Total / active chapters, total members, total visitors, executives, upcoming events, and the national financial balance.
+- Per-chapter comparison table showing member counts, visitor counts, executive counts, upcoming events, last service attendance, and running balance — never individually-identifying data.
+- Generated-at timestamp so the viewer always knows how fresh the numbers are.
+
+API: `GET /api/national/dashboard` (requires `nationalCoordinator` or the env-admin session).
+
+### Chapter Management (Chapters tab)
+
+Create, edit, activate/deactivate chapters, and assign or change each chapter's Chapter Coordinator — all from one screen.
+
+| Action | API |
+| --- | --- |
+| List all chapters | `GET /api/national/chapters` |
+| Create a chapter | `POST /api/national/chapters` (body: `{ id, name, institution?, location?, ... }`) |
+| Edit a chapter | `PUT /api/national/chapters/:id` |
+| Activate / deactivate | `PATCH /api/national/chapters/:id/status` (body: `{ status: "active" \| "inactive" }`) |
+| Assign coordinator | `POST /api/national/chapters/:id/assign-coordinator` (body: `{ username, name, password }` for new, or `{ staffId }` to promote existing) |
+
+Assigning a new coordinator automatically steps down the previous one to Chapter Admin rather than deleting their account.
+
+### Feature Configuration (Features tab)
+
+The National Coordinator controls which optional modules are available platform-wide. A disabled module remains safely stored — it is simply not offered publicly.
+
+Available toggles: Bible, Bible Study, Events, Donations, Welfare, Community Chat, E-Books, Live Streaming, Attendance, Seminars, Prayer Wall, Groups, Departments.
+
+| Action | API |
+| --- | --- |
+| View current flags | `GET /api/national/features` |
+| Update flags | `PUT /api/national/features` (body: `{ modules: { ebooks: false, ... } }`) |
+
+Only recognised boolean keys are accepted — a crafted request cannot add arbitrary configuration fields.
+
+### National Reports
+
+**Live overview** (Reports tab) — chapter-level comparison only, never a list of individual members or finances:
+
+`GET /api/national/reports/overview` → returns per-chapter active members, visitors, event count, services recorded, and open welfare requests.
+
+**Historical snapshots** — persist a point-in-time snapshot of the live dashboard into a `NationalReport` document, useful for tracking growth trends over weeks/months:
+
+| Action | API |
+| --- | --- |
+| Take a snapshot | `POST /api/national/reports/snapshot` (optional body: `{ region, continent }`) |
+| Retrieve history | `GET /api/national/reports/history?from=YYYY-MM-DD&to=YYYY-MM-DD` |
+
+Each snapshot captures total chapters, active chapters, total members, total visitors, national balance, and per-chapter breakdowns at the moment it's taken.
+
+### National Announcements (Announcements tab)
+
+A single composer that reaches every chapter at once — for anything that isn't chapter-specific. Each Chapter Coordinator has their own chapter-wide announcement tool for local news.
+
+`POST /api/national/announcements` (body: `{ title, body, channels: ["app", "sms"] }`)
+
+Channels: `app` posts to the notification feed and fires push alerts; `sms` texts every member with a phone number on file. Blank `chapterId` ensures the notification appears in every chapter's feed.
+
+### Schemas
+
+Two dedicated schemas support this phase:
+
+- **NationalFeature** — `{ key (unique), enabled, description }` with timestamps. Backs the feature-flag toggle UI.
+- **NationalReport** — `{ reportDate, region, continent, metrics (Mixed) }` with timestamps. Stores historical snapshots for trend analysis.
+
+### Security
+
+All national routes require `rolesLib.requireNational`, which accepts either:
+1. A `StaffUser` account with role `nationalCoordinator`.
+2. The legacy env-admin session (`ADMIN_USERNAME` / `ADMIN_PASSWORD`).
+
+A Chapter Coordinator, Chapter Admin, or any chapter-level role receives `401` — `test/smoke.js` verifies this explicitly.
