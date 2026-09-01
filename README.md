@@ -632,3 +632,27 @@ All national routes require `rolesLib.requireNational`, which accepts either:
 2. The legacy env-admin session (`ADMIN_USERNAME` / `ADMIN_PASSWORD`).
 
 A Chapter Coordinator, Chapter Admin, or any chapter-level role receives `401` — `test/smoke.js` verifies this explicitly.
+
+## 26. Mobile UX Overhaul & Native App / PWA Polish (Phase 9 of the platform spec)
+
+Phase 9 polishes the ACONSU platform into a smooth, responsive, native-feeling mobile experience across Progressive Web App (PWA) installs, Capacitor iOS/Android native wraps, and mobile browsers.
+
+### What's included:
+
+- **Enhanced Service Worker & App Shell (`sw.js` — `aconsu-v6`)**:
+  - Expanded `APP_SHELL` pre-caches all public interfaces added across Phases 3–8 (`content.html`, `welfare.html`, `groups.html`, `group.html`, `chat.html`, `bible-study.html`, `sermon-notes.html`, `card.html`, `give.html`, `department.html`, `forgot-password.html`, `reset-password.html`, and all icons).
+  - Explicit `LIVE_ONLY` bypass for all administrative and leadership portals (`admin.html`, `coordinator.html`, `finance.html`, `shepherding.html`, `publicity.html`, `national.html`, `executive.html`, `welfare-portal.html`, `content-manager.html`) ensuring sensitive session states are never served from a stale cache.
+  - Automatic cache cleanup on version change.
+- **Web App Manifest Shortcuts (`manifest.json`)**:
+  - Direct quick-action shortcuts for Events, Bible Reader, Media & Content Hub, Prayer Wall, and Community Groups.
+  - Configured categories (`lifestyle`, `social`, `books`, `education`) and standalone display modes.
+- **Mobile Touch Polish & Bottom Sheets (`style.css`)**:
+  - **Notch & Safe-Area Inset Support**: `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)` integrated into headers, bottom navigation bar, and modals.
+  - **Mobile Bottom Sheets**: Modals on mobile viewports (`<600px`) automatically morph into sliding bottom sheets (`slideUpSheet` animation) anchored to the bottom with touch-friendly padding.
+  - **Touch Active States**: Subtle micro-scaling feedback (`transform: scale(0.97)`) on buttons, tiles, cards, and bottom navigation icons with tap-highlight suppression (`-webkit-tap-highlight-color: transparent`).
+  - **Momentum Scrolling**: `-webkit-overflow-scrolling: touch` and smooth scrolling across all containers.
+- **Native Hardware APIs & Network Status (`main.js`)**:
+  - **Haptic Feedback**: `triggerHaptic()` triggers micro-vibration pulses (`navigator.vibrate`) on tab taps and user confirmations on supported devices.
+  - **Native Web Share API**: `shareContent()` provides one-tap sharing for events, sermons, scriptures, and testimonies with automatic clipboard copy fallback.
+  - **Live Online / Offline Detection**: Real-time listeners automatically notify the user with non-intrusive toast indicators when connectivity drops (`📡 You are currently offline`) and resumes (`⚡ Back online!`).
+

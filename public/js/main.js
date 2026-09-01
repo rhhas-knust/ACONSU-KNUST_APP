@@ -580,3 +580,47 @@ function renderFloatingImages(containerId, fileIds, positions) {
     setTimeout(() => div.classList.add('fade-in'), 50 + i * 120);
   });
 }
+
+// ---------- mobile haptic feedback & share ----------
+function triggerHaptic(duration = 10) {
+  try {
+    if ('vibrate' in navigator) navigator.vibrate(duration);
+  } catch (e) { /* ignore if unsupported */ }
+}
+
+async function shareContent({ title, text, url }) {
+  const shareUrl = url || window.location.href;
+  const shareData = {
+    title: title || document.title,
+    text: text || '',
+    url: shareUrl
+  };
+  triggerHaptic(12);
+  if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+    try {
+      await navigator.share(shareData);
+      return true;
+    } catch (e) {
+      if (e.name !== 'AbortError') showToast('Could not share content', 'error');
+      return false;
+    }
+  }
+  // Fallback: Copy link to clipboard
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareUrl);
+      showToast('Link copied to clipboard!', 'success');
+      return true;
+    }
+  } catch (err) { /* clipboard failure */ }
+  showToast('Sharing is not supported on this browser', 'error');
+  return false;
+}
+
+// ---------- offline / online network connectivity banner ----------
+window.addEventListener('offline', () => {
+  showToast('📡 You are currently offline. Viewing cached content.', 'error');
+});
+window.addEventListener('online', () => {
+  showToast('⚡ Back online! Connection restored.', 'success');
+});

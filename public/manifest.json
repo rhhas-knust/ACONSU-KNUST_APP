@@ -1,13 +1,14 @@
 {
   "name": "ACONSU — The Apostles' Continuation Students Union",
   "short_name": "ACONSU",
-  "description": "Carrying the fire. Continuing the pattern. The official ACONSU app — events, sermons, prayer wall and more.",
+  "description": "Carrying the fire. Continuing the pattern. The official ACONSU app — events, sermons, prayer wall, bible reader and media library.",
   "start_url": "/index.html",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#FDFBFF",
   "theme_color": "#5B2C82",
+  "categories": ["lifestyle", "social", "books", "education"],
   "icons": [
     { "src": "/icons/icon-72.png", "sizes": "72x72", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
@@ -22,17 +23,32 @@
   "shortcuts": [
     {
       "name": "Events",
+      "short_name": "Events",
       "url": "/events.html",
       "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
     },
     {
+      "name": "Bible Reader",
+      "short_name": "Bible",
+      "url": "/bible.html",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Media & Content",
+      "short_name": "Media",
+      "url": "/content.html",
+      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+    },
+    {
       "name": "Prayer Wall",
+      "short_name": "Prayer",
       "url": "/prayer.html",
       "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
     },
     {
-      "name": "Sermons",
-      "url": "/media.html",
+      "name": "Groups",
+      "short_name": "Groups",
+      "url": "/groups.html",
       "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
     }
   ]
