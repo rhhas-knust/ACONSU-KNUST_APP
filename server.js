@@ -237,6 +237,15 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
   try {
+    // The main env-configured admin login doubles as the bootstrap National Coordinator.
+    const adminUser = process.env.ADMIN_USERNAME || 'admin';
+    const adminPass = process.env.ADMIN_PASSWORD || 'changeme';
+    if (username === adminUser && password === adminPass) {
+      req.session.isAdmin = true;
+      req.session.staff = { id: '', username: adminUser, name: 'National Administrator', role: 'nationalCoordinator', chapterId: '' };
+      return res.json({ success: true, staff: req.session.staff });
+    }
+
     // The shepherding portal shipped with an env-file login before leadership
     // accounts existed. Honour it here so whoever is using it today keeps
     // getting in while the admin creates their proper account.

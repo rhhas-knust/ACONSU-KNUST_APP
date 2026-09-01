@@ -102,6 +102,10 @@ const ICON_MORE = '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.
 const ICON_BELL = '<path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 2 7H4c.5-1 2-2.5 2-7Z"/><path d="M10 19a2 2 0 0 0 4 0"/>';
 const ICON_USERS = '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c2.6.4 4.5 2.6 4.5 5.3"/>';
 const ICON_HEADPHONES = '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="2.5" y="13" width="4" height="6" rx="1.5"/><rect x="17.5" y="13" width="4" height="6" rx="1.5"/>';
+const ICON_VIDEO = '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>';
+const ICON_BOOK = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
+const ICON_GIVE = '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>';
+const ICON_CARD = '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>';
 
 // ---------- social platform icons (footer, chapter contact) ----------
 const ICON_FACEBOOK = '<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>';
@@ -314,8 +318,8 @@ function renderHeader(activePath, customPages, member) {
   const allLinks = [...NAV_LINKS.slice(0, -1), ...custom, NAV_LINKS[NAV_LINKS.length - 1]];
   const links = allLinks.map(l => `<li><a href="${l.href}" class="${activePath === l.href ? 'active' : ''}">${l.label}</a></li>`).join('');
   const accountLink = member
-    ? `<a href="/profile.html" class="btn btn-outline btn-sm">${escapeHtml(member.name.split(' ')[0])}</a>`
-    : `<a href="/login.html" class="btn btn-outline btn-sm">Log In</a>`;
+    ? `<a href="/profile.html" class="btn btn-outline btn-sm nav-btn-account">${escapeHtml(member.name.split(' ')[0])}</a>`
+    : `<a href="/login.html" class="btn btn-outline btn-sm nav-btn-account">Log In</a>`;
   el.innerHTML = `
     <nav class="nav">
       <a href="/index.html" class="nav-brand">
@@ -328,20 +332,19 @@ function renderHeader(activePath, customPages, member) {
           ${svgIcon(ICON_BELL)}
         </a>
         ${accountLink}
-        <a href="/prayer.html" class="btn btn-primary btn-sm">Prayer Request</a>
-        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">&#9776;</button>
+        <a href="/prayer.html" class="btn btn-primary btn-sm nav-btn-prayer">Prayer Request</a>
       </div>
     </nav>
   `;
-  document.getElementById('navToggle').addEventListener('click', () => {
-    document.getElementById('navLinks').classList.toggle('open');
-  });
   getUnreadNotificationCount().then((count) => {
     if (count > 0) {
       const bell = document.getElementById('navBellLink');
-      const dot = document.createElement('span');
-      dot.style.cssText = 'position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);';
-      bell.appendChild(dot);
+      if (bell && !bell.querySelector('.notif-dot')) {
+        const dot = document.createElement('span');
+        dot.className = 'notif-dot';
+        dot.style.cssText = 'position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);';
+        bell.appendChild(dot);
+      }
     }
   });
 }

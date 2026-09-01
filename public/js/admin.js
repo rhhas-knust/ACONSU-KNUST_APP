@@ -340,6 +340,7 @@ function openResourceForm(resource, fields, singular, item) {
 // One portal account per leader, so access follows the person holding the office
 // rather than a password everybody knows.
 const PORTAL_ROLES = [
+  { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter — dashboard, chapters, announcements.', href: '/national.html' },
   { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority — oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
   { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — this dashboard.', href: '/admin.html' },
   { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/admin.html' },
