@@ -2023,6 +2023,52 @@ app.get('/api/executives', async (req, res) => {
   }
 });
 
+// Public leadership roster: chapter coordinators and the National Coordinator,
+// enriched with their member profile image/contact details for the visitors page.
+app.get('/api/public/leadership', async (req, res) => {
+  try {
+    const staffUsers = await repo.getAll('staffUsers', {});
+    const members = await repo.getAll('members', {});
+    const memberMap = new Map(members.map(m => [m.id, m]));
+    const leadership = [];
+
+    const national = staffUsers.find(u => u.role === 'nationalCoordinator' && u.active !== false);
+    if (national) {
+      const member = memberMap.get(national.memberId) || null;
+      leadership.push({
+        id: national.id,
+        name: national.name || member?.name || 'National Coordinator',
+        role: 'National Coordinator',
+        chapterId: '',
+        chapterName: 'National',
+        phone: member?.phone || '',
+        email: member?.email || '',
+        imageFileId: member?.profileImageFileId || ''
+      });
+    }
+
+    const coordinators = staffUsers.filter(u => u.role === 'coordinator' && u.active !== false);
+    for (const user of coordinators) {
+      const chapter = await repo.getById('chapters', user.chapterId || '');
+      const member = memberMap.get(user.memberId) || null;
+      leadership.push({
+        id: user.id,
+        name: user.name || member?.name || chapter?.name || 'Chapter Coordinator',
+        role: 'Chapter Coordinator',
+        chapterId: user.chapterId || '',
+        chapterName: chapter?.name || user.chapterId || 'Chapter',
+        phone: member?.phone || '',
+        email: member?.email || chapter?.contact?.email || '',
+        imageFileId: member?.profileImageFileId || ''
+      });
+    }
+
+    res.json(leadership.sort((a, b) => a.chapterName.localeCompare(b.chapterName)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load leadership roster' });
+  }
+});
+
 
 app.post('/api/join-requests', formLimiter, async (req, res) => {
   const { departmentId, name, email, phone, level, message } = req.body;

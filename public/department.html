@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Department — ACONSU</title>
+<title>Chapter — ACONSU</title>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -21,45 +21,11 @@
 <div id="deptBanner"></div>
 
 <section style="padding-top:32px; position:relative;" id="deptDetailHero">
-  <div class="container" style="max-width:760px;">
-    <a href="/departments.html" class="back-link">&larr; All Departments</a>
+  <div class="container" style="max-width:980px;">
+    <a href="/departments.html" class="back-link">&larr; All Chapters</a>
     <div id="deptDetail">
-      <p class="empty-state">Loading department...</p>
+      <p class="empty-state">Loading chapter...</p>
     </div>
-  </div>
-</section>
-
-<section class="alt-bg" id="joinSection" style="display:none;">
-  <div class="container">
-    <div class="section-head">
-      <p class="eyebrow">Join Us</p>
-      <h2 id="joinHeading">Join this Department</h2>
-      <p style="color:#5a4468;">Fill this in and a department leader will reach out to you before the next meeting.</p>
-    </div>
-    <form class="form-card" id="joinForm">
-      <div class="field">
-        <label for="name">Full Name</label>
-        <input type="text" id="name" required>
-      </div>
-      <div class="field">
-        <label for="email">Email Address</label>
-        <input type="email" id="email" required>
-      </div>
-      <div class="field">
-        <label for="phone">Phone Number</label>
-        <input type="tel" id="phone">
-      </div>
-      <div class="field">
-        <label for="level">Level / Year of Study</label>
-        <input type="text" id="level" placeholder="e.g. 200 Level">
-      </div>
-      <div class="field">
-        <label for="message">Anything you'd like the leader to know?</label>
-        <textarea id="message" placeholder="Optional"></textarea>
-      </div>
-      <button type="submit" class="btn btn-primary btn-block" id="joinSubmitBtn">Join Department</button>
-      <div class="form-msg" id="joinMsg"></div>
-    </form>
   </div>
 </section>
 
@@ -70,84 +36,116 @@
 (async function () {
   await initLayout('/departments.html');
   const params = new URLSearchParams(window.location.search);
-  const id = params.get('id');
+  const chapterId = params.get('chapterId');
+  const deptId = params.get('id');
   const detailEl = document.getElementById('deptDetail');
 
-  if (!id) {
-    detailEl.innerHTML = '<p class="empty-state">No department selected.</p>';
-    return;
-  }
-
   try {
-    const dept = await fetchJSON(`/api/departments/${id}`);
-    document.title = `${dept.name} — ACONSU`;
+    if (chapterId) {
+      const [chapter, allDepartments, allExecs] = await Promise.all([
+        fetchJSON(`/api/chapters/${chapterId}`),
+        fetchJSON('/api/departments').catch(() => []),
+        fetchJSON('/api/executives').catch(() => [])
+      ]);
+      const departments = (allDepartments || []).filter(d => d.chapterId === chapterId);
+      const executives = (allExecs || []).filter(e => e.chapterId === chapterId);
+      document.title = `${chapter.name} — ACONSU`;
 
-    // The header photo the admin set for this department, if there is one.
-    if (dept.headerImageFileId) {
-      document.getElementById('deptBanner').innerHTML = `
-        <div class="dept-banner">
-          <img src="/api/files/${dept.headerImageFileId}" alt="${escapeHtml(dept.name)}">
-          <div class="dept-banner-overlay">
-            <p class="eyebrow" style="color:rgba(255,255,255,0.8);">Department</p>
-            <h1>${escapeHtml(dept.name)}</h1>
-            <p>${escapeHtml(dept.tagline || '')}</p>
+      if (chapter.headerImageFileId) {
+        document.getElementById('deptBanner').innerHTML = `
+          <div class="dept-banner">
+            <img src="/api/files/${chapter.headerImageFileId}" alt="${escapeHtml(chapter.name)}">
+            <div class="dept-banner-overlay">
+              <p class="eyebrow" style="color:rgba(255,255,255,0.8);">Chapter</p>
+              <h1>${escapeHtml(chapter.name)}</h1>
+              <p>${escapeHtml(chapter.fullName || chapter.location || '')}</p>
+            </div>
+          </div>
+        `;
+      }
+
+      detailEl.innerHTML = `
+        ${chapter.headerImageFileId ? '' : `
+          <p class="eyebrow">Chapter</p>
+          <h1>${escapeHtml(chapter.name)}</h1>
+          <p style="color:#5a4468; font-size:1.05rem;">${escapeHtml(chapter.fullName || chapter.institution || '')}</p>`}
+        <div class="card" style="margin:28px 0;">
+          <h3 style="margin-bottom:16px;">Chapter Overview</h3>
+          <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
+            <div><div class="eyebrow">Institution</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.institution || 'Not specified')}</p></div>
+            <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.location || 'Not specified')}</p></div>
+            <div><div class="eyebrow">Address</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.address || 'Not specified')}</p></div>
           </div>
         </div>
-      `;
-    }
 
-    detailEl.innerHTML = `
-      ${dept.headerImageFileId ? '' : `
-        <p class="eyebrow">Department</p>
-        <h1>${escapeHtml(dept.name)}</h1>
-        <p style="color:#5a4468; font-size:1.05rem;">${escapeHtml(dept.tagline || '')}</p>`}
-      <div class="card" style="margin:28px 0;">
-        <h3 style="margin-bottom:16px;">Meeting Information</h3>
-        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
-          <div><div class="eyebrow">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
-          <div><div class="eyebrow">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
-          <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
-          ${dept.leader ? `<div><div class="eyebrow">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leader)}</p></div>` : ''}
+        <div class="card" style="margin:28px 0;">
+          <h3 style="margin-bottom:16px;">Departments</h3>
+          ${departments.length ? `<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px,1fr));">
+            ${departments.map(d => `
+              <a href="/department.html?id=${encodeURIComponent(d.id)}" class="card dept-card" style="padding:0; overflow:hidden;">
+                <div class="dept-thumb" style="height:110px;">
+                  ${d.headerImageFileId ? `<img src="/api/files/${d.headerImageFileId}" alt="${escapeHtml(d.name)}">` : '<span class="dept-thumb-fallback"></span>'}
+                </div>
+                <div style="padding:16px;">
+                  <h4 style="margin:0 0 8px;">${escapeHtml(d.name)}</h4>
+                  <p style="margin:0; color:#5a4468; font-size:0.9rem;">${escapeHtml(d.tagline || '')}</p>
+                </div>
+              </a>
+            `).join('')}</div>` : '<p class="empty-state">No departments added for this chapter yet.</p>'}
         </div>
-      </div>
-      <p style="color:#5a4468;">${escapeHtml(dept.description)}</p>
-    `;
 
-    document.getElementById('joinHeading').textContent = `Join ${dept.name}`;
-    document.getElementById('joinSection').style.display = 'block';
-
-    document.getElementById('joinForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('joinSubmitBtn');
-      const msg = document.getElementById('joinMsg');
-      btn.disabled = true;
-      btn.textContent = 'Sending...';
-      try {
-        await fetchJSON('/api/join-requests', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            departmentId: id,
-            name: document.getElementById('name').value,
-            email: document.getElementById('email').value,
-            phone: document.getElementById('phone').value,
-            level: document.getElementById('level').value,
-            message: document.getElementById('message').value
-          })
-        });
-        msg.textContent = "You're in! A department leader will reach out to you soon.";
-        msg.className = 'form-msg success';
-        showToast(`Welcome to ${dept.name}! We'll be in touch soon.`, 'success');
-        document.getElementById('joinForm').reset();
-      } catch (err) {
-        msg.textContent = err.message || 'Something went wrong. Please try again.';
-        msg.className = 'form-msg error';
-        showToast(err.message || 'Something went wrong. Please try again.', 'error');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Join Department';
+        <div class="card" style="margin:28px 0;">
+          <h3 style="margin-bottom:16px;">Executives</h3>
+          ${executives.length ? `<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px,1fr));">
+            ${executives.map(e => `
+              <div class="card exec-card" style="padding:18px;">
+                <div class="exec-photo" style="margin-bottom:12px; width:90px; height:90px;">
+                  ${e.imageFileId ? `<img src="/api/files/${e.imageFileId}" alt="${escapeHtml(e.name)}">` : `<span class="initial">${escapeHtml((e.name || '?').charAt(0))}</span>`}
+                </div>
+                <h4 style="margin:0;">${escapeHtml(e.name)}</h4>
+                <div class="exec-role">${escapeHtml(e.role || '')}</div>
+                ${e.department ? `<p style="margin:8px 0 0; color:#5a4468; font-size:0.82rem; font-weight:700;">${escapeHtml(e.department)}</p>` : ''}
+                ${e.contact && e.contact.phone ? `<p style="margin:8px 0 0; color:#5a4468; font-size:0.82rem;"><a href="tel:${escapeHtml(e.contact.phone)}">${escapeHtml(e.contact.phone)}</a></p>` : ''}
+                ${e.contact && e.contact.email ? `<p style="margin:6px 0 0; color:#5a4468; font-size:0.82rem;"><a href="mailto:${escapeHtml(e.contact.email)}">${escapeHtml(e.contact.email)}</a></p>` : ''}
+              </div>
+            `).join('')}</div>` : '<p class="empty-state">No executive profiles for this chapter yet.</p>'}
+        </div>
+      `;
+    } else if (deptId) {
+      const dept = await fetchJSON(`/api/departments/${deptId}`);
+      document.title = `${dept.name} — ACONSU`;
+      if (dept.headerImageFileId) {
+        document.getElementById('deptBanner').innerHTML = `
+          <div class="dept-banner">
+            <img src="/api/files/${dept.headerImageFileId}" alt="${escapeHtml(dept.name)}">
+            <div class="dept-banner-overlay">
+              <p class="eyebrow" style="color:rgba(255,255,255,0.8);">Department</p>
+              <h1>${escapeHtml(dept.name)}</h1>
+              <p>${escapeHtml(dept.tagline || '')}</p>
+            </div>
+          </div>
+        `;
       }
-    });
+      detailEl.innerHTML = `
+        ${dept.headerImageFileId ? '' : `
+          <p class="eyebrow">Department</p>
+          <h1>${escapeHtml(dept.name)}</h1>
+          <p style="color:#5a4468; font-size:1.05rem;">${escapeHtml(dept.tagline || '')}</p>`}
+        <div class="card" style="margin:28px 0;">
+          <h3 style="margin-bottom:16px;">Meeting Information</h3>
+          <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
+            <div><div class="eyebrow">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
+            <div><div class="eyebrow">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
+            <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
+            ${dept.leader ? `<div><div class="eyebrow">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leader)}</p></div>` : ''}
+          </div>
+        </div>
+        <p style="color:#5a4468;">${escapeHtml(dept.description)}</p>
+      `;
+    } else {
+      detailEl.innerHTML = '<p class="empty-state">No chapter or department selected.</p>';
+      return;
+    }
 
     initScrollReveal('.card, .form-card');
     try {
@@ -163,7 +161,7 @@
       }
     } catch (e) { /* decorative only */ }
   } catch (e) {
-    detailEl.innerHTML = '<p class="empty-state">Department not found.</p>';
+    detailEl.innerHTML = '<p class="empty-state">Chapter not found.</p>';
   }
 })();
 </script>

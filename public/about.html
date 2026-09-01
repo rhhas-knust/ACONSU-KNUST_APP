@@ -70,32 +70,34 @@
   await initLayout('/about.html');
 
   try {
-    const execs = await fetchJSON('/api/executives');
+    const leaders = await fetchJSON('/api/public/leadership');
     const wrap = document.getElementById('execGrid');
-    if (!execs.length) {
-      wrap.innerHTML = '<p class="empty-state">Executive profiles coming soon.</p>';
+    if (!leaders.length) {
+      wrap.innerHTML = '<p class="empty-state">Leadership profiles coming soon.</p>';
     } else {
-      wrap.innerHTML = execs.map(e => `
+      wrap.innerHTML = leaders.map((person) => `
         <div class="card exec-card">
           <div class="exec-photo">
-            ${e.imageFileId ? `<img src="/api/files/${e.imageFileId}" alt="${escapeHtml(e.name)}">` : `<span class="initial">${escapeHtml((e.name || '?').charAt(0))}</span>`}
+            ${person.imageFileId ? `<img src="/api/files/${person.imageFileId}" alt="${escapeHtml(person.name)}">` : `<span class="initial">${escapeHtml((person.name || '?').charAt(0))}</span>`}
           </div>
-          <h3 style="margin-bottom:2px;">${escapeHtml(e.name)}</h3>
-          <div class="exec-role">${escapeHtml(e.role || '')}</div>
-          ${e.bio ? `<p class="exec-bio">${escapeHtml(e.bio)}</p>` : ''}
+          <h3 style="margin-bottom:2px;">${escapeHtml(person.name)}</h3>
+          <div class="exec-role">${escapeHtml(person.role || '')}</div>
+          ${person.chapterName ? `<p style="margin:8px 0 0; color:#5a4468; font-size:0.82rem; font-weight:700;">${escapeHtml(person.chapterName)}</p>` : ''}
+          ${person.phone ? `<p style="margin:8px 0 0; color:#5a4468; font-size:0.82rem;"><a href="tel:${escapeHtml(person.phone)}">${escapeHtml(person.phone)}</a></p>` : ''}
+          ${person.email ? `<p style="margin:6px 0 0; color:#5a4468; font-size:0.82rem;"><a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email)}</a></p>` : ''}
         </div>
       `).join('');
     }
     initScrollReveal('#execGrid .card');
 
-    // sprinkle a few executive photos as floating accents in the hero, if available
-    const withPhotos = execs.filter(e => e.imageFileId).map(e => e.imageFileId);
+    // sprinkle a few leadership photos as floating accents in the hero, if available
+    const withPhotos = leaders.filter(person => person.imageFileId).map(person => person.imageFileId);
     if (withPhotos.length) {
       document.getElementById('aboutHero').style.overflow = 'visible';
       renderFloatingImages('aboutHero', withPhotos.slice(0, 2));
     }
   } catch (e) {
-    document.getElementById('execGrid').innerHTML = '<p class="empty-state">Could not load executives right now.</p>';
+    document.getElementById('execGrid').innerHTML = '<p class="empty-state">Could not load leadership right now.</p>';
   }
 })();
 </script>
