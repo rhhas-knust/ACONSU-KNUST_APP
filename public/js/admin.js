@@ -1,4 +1,9 @@
 let CURRENT_SETTINGS = {};
+// Who's actually driving this dashboard — the legacy env admin (national-
+// equivalent, sees a chapter switcher on resource forms) or a chapter-scoped
+// Chapter Admin/Coordinator account (auto-scoped, no switcher needed). Set
+// by checkAuth() before the shell ever renders.
+let ADMIN_SCOPE = { isNational: true, chapterId: '' };
 
 function showModal(html) {
   document.getElementById('modalContent').innerHTML = html;
@@ -12,31 +17,63 @@ document.getElementById('modalBackdrop').addEventListener('click', (e) => {
 });
 
 // ---------- auth ----------
+// Two accounts can open this dashboard: the original env-based admin login
+// (kept working unchanged — see /api/admin/login), and, going forward, a
+// Chapter Admin or Chapter Coordinator account created under Leadership
+// Accounts (signed in the same way every other portal does). Both are
+// checked here so nothing about the legacy login has to change.
 async function checkAuth() {
-  const { isAdmin } = await fetchJSON('/api/admin/check');
-  if (isAdmin) {
-    document.getElementById('loginWrap').style.display = 'none';
-    document.getElementById('adminShell').style.display = 'block';
-    initAdminNav();
-    loadPanel('overview');
-  } else {
-    document.getElementById('loginWrap').style.display = 'flex';
-    document.getElementById('adminShell').style.display = 'none';
-  }
+  try {
+    const { isAdmin } = await fetchJSON('/api/admin/check');
+    if (isAdmin) {
+      ADMIN_SCOPE = { isNational: true, chapterId: '' };
+      return showAdminShell();
+    }
+  } catch (e) { /* fall through to the portal-login check below */ }
+  try {
+    const me = await fetchJSON('/api/portal/me');
+    const role = me.staff && me.staff.role;
+    if (me.isNational || role === 'coordinator' || role === 'chapterAdmin') {
+      ADMIN_SCOPE = { isNational: !!me.isNational, chapterId: (me.staff && me.staff.chapterId) || '' };
+      return showAdminShell();
+    }
+  } catch (e) { /* not signed in either way */ }
+  document.getElementById('loginWrap').style.display = 'flex';
+  document.getElementById('adminShell').style.display = 'none';
+}
+
+function showAdminShell() {
+  document.getElementById('loginWrap').style.display = 'none';
+  document.getElementById('adminShell').style.display = 'block';
+  initAdminNav();
+  loadPanel('overview');
 }
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = document.getElementById('loginMsg');
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
   try {
     await fetchJSON('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: document.getElementById('username').value,
-        password: document.getElementById('password').value
-      })
+      body: JSON.stringify({ username, password })
     });
+    return checkAuth();
+  } catch (adminErr) { /* not the legacy admin login — try a portal account next */ }
+  try {
+    const { staff } = await fetchJSON('/api/portal/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!staff || !['coordinator', 'chapterAdmin', 'nationalCoordinator'].includes(staff.role)) {
+      await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
+      msg.textContent = 'That account does not have Chapter Admin access.';
+      msg.className = 'form-msg error';
+      return;
+    }
     checkAuth();
   } catch (err) {
     msg.textContent = 'Invalid username or password.';
@@ -45,7 +82,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await fetchJSON('/api/admin/logout', { method: 'POST' });
+  await fetchJSON('/api/admin/logout', { method: 'POST' }).catch(() => {});
+  await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
   checkAuth();
 });
 
@@ -71,6 +109,10 @@ async function loadPanel(name) {
     notifications: renderNotifications,
     events: () => renderResourcePanel('events', EVENT_FIELDS, 'Event'),
     sermons: () => renderResourcePanel('sermons', SERMON_FIELDS, 'Sermon'),
+    bibleStudies: renderBibleStudies,
+    groups: renderGroupsAdmin,
+    welfare: renderWelfareAdmin,
+    chatModeration: renderChatModeration,
     pages: () => renderResourcePanel('pages', PAGE_FIELDS, 'Page'),
     media: renderMediaLibrary,
     staff: renderStaffAccounts,
@@ -298,11 +340,17 @@ function openResourceForm(resource, fields, singular, item) {
 // One portal account per leader, so access follows the person holding the office
 // rather than a password everybody knows.
 const PORTAL_ROLES = [
-  { value: 'coordinator', label: 'Coordinator', blurb: 'Read-only view of every office, plus the union dashboard.', href: '/coordinator.html' },
+  { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority — oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
+  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — this dashboard.', href: '/admin.html' },
+  { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/admin.html' },
   { value: 'finance', label: 'Finance', blurb: 'Budgets, ledger, financial reports.', href: '/finance.html' },
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance, member care, contact messages.', href: '/shepherding.html' },
-  { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' }
+  { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' },
+  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/admin.html' },
+  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department.', href: '/admin.html' }
 ];
+// Only a National Coordinator may hand out these two — see /api/admin/staff.
+const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];
 
 async function renderStaffAccounts() {
   const el = document.getElementById('panel-staff');
@@ -364,8 +412,17 @@ async function renderStaffAccounts() {
   });
 }
 
-function openStaffForm(user) {
+async function openStaffForm(user) {
   const isEdit = !!user;
+  // A chapter-scoped admin can't hand out Chapter Coordinator (only National
+  // can — see NATIONAL_ONLY_STAFF_ROLES) and never needs a chapter picker,
+  // since the server always scopes their accounts to their own chapter.
+  const roleOptions = PORTAL_ROLES.filter(r => ADMIN_SCOPE.isNational || !NATIONAL_ONLY_STAFF_ROLES.includes(r.value));
+  let chapters = [];
+  if (ADMIN_SCOPE.isNational) {
+    chapters = await fetchJSON('/api/national/chapters').catch(() => []);
+  }
+
   showModal(`
     <h3>${isEdit ? 'Edit' : 'New'} Leadership Account</h3>
     <form id="staffForm">
@@ -379,9 +436,17 @@ function openStaffForm(user) {
       </div>
       <div class="field"><label>Which portal does this account open?</label>
         <select id="stRole" ${isEdit ? '' : 'required'}>
-          ${PORTAL_ROLES.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label} — ${r.blurb}</option>`).join('')}
+          ${roleOptions.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label} — ${r.blurb}</option>`).join('')}
         </select>
       </div>
+      ${ADMIN_SCOPE.isNational ? `
+        <div class="field"><label>Chapter</label>
+          <select id="stChapter">
+            ${chapters.map(c => `<option value="${c.id}" ${(user?.chapterId || ADMIN_SCOPE.chapterId) === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+          </select>
+          <small class="hint">Ignored for National Coordinator accounts.</small>
+        </div>
+      ` : ''}
       <div class="field"><label>${isEdit ? 'New Password (leave blank to keep the current one)' : 'Password'}</label>
         <input type="text" id="stPassword" ${isEdit ? '' : 'required'} placeholder="At least 8 characters">
         <small class="hint">Shown in plain text so you can copy it to the leader — it is stored hashed and can never be read back.</small>
@@ -406,6 +471,9 @@ function openStaffForm(user) {
       name: document.getElementById('stName').value,
       role: document.getElementById('stRole').value
     };
+    if (ADMIN_SCOPE.isNational && document.getElementById('stChapter')) {
+      payload.chapterId = document.getElementById('stChapter').value;
+    }
     const password = document.getElementById('stPassword').value;
     if (password) payload.password = password;
     if (isEdit) payload.active = document.getElementById('stActive').checked;
@@ -755,6 +823,305 @@ async function renderNotifications() {
 }
 
 
+// ---------- Bible Study (section 16) ----------
+async function renderBibleStudies() {
+  const el = document.getElementById('panel-bibleStudies');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  const studies = await fetchJSON('/api/bible-studies');
+
+  el.innerHTML = `
+    <h2 style="margin-bottom:20px;">Bible Study</h2>
+    <div class="upload-form">
+      <h3 style="margin-bottom:14px;">New Bible Study</h3>
+      <form id="studyForm">
+        <div class="field-row">
+          <div class="field"><label>Topic</label><input type="text" id="stTopic" required></div>
+          <div class="field"><label>Date</label><input type="date" id="stDate"></div>
+        </div>
+        <div class="field"><label>Scripture Reference</label><input type="text" id="stScripture" placeholder="e.g. John 3:1-21 — links straight into the Bible reader"></div>
+        <div class="field"><label>Study Material</label><textarea id="stMaterial" placeholder="The main teaching content"></textarea></div>
+        <div class="field"><label>Questions (one per line)</label><textarea id="stQuestions"></textarea></div>
+        <div class="field"><label>Notes</label><textarea id="stNotes"></textarea></div>
+        <div class="field"><label>Additional Resources (one per line)</label><textarea id="stResources"></textarea></div>
+        <button type="submit" class="btn btn-primary" id="studySubmitBtn">Save Bible Study</button>
+        <div class="form-msg" id="studyMsg"></div>
+      </form>
+    </div>
+    <table>
+      <thead><tr><th>Topic</th><th>Date</th><th>Scripture</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${studies.map(s => `
+          <tr>
+            <td>${escapeHtml(s.topic)}</td>
+            <td>${escapeHtml(s.date || '—')}</td>
+            <td>${escapeHtml(s.scriptureReference || '—')}</td>
+            <td class="row-actions"><button class="danger" data-delete-study="${s.id}">Delete</button></td>
+          </tr>
+        `).join('') || '<tr><td colspan="4">No Bible studies posted yet.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  document.getElementById('studyForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('studySubmitBtn');
+    const msg = document.getElementById('studyMsg');
+    btn.disabled = true;
+    try {
+      await fetchJSON('/api/admin/bible-studies', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: document.getElementById('stTopic').value,
+          date: document.getElementById('stDate').value,
+          scriptureReference: document.getElementById('stScripture').value,
+          studyMaterial: document.getElementById('stMaterial').value,
+          questions: document.getElementById('stQuestions').value.split('\n').map(s => s.trim()).filter(Boolean),
+          notes: document.getElementById('stNotes').value,
+          resources: document.getElementById('stResources').value.split('\n').map(s => s.trim()).filter(Boolean)
+        })
+      });
+      msg.textContent = 'Bible study saved.';
+      msg.className = 'form-msg success';
+      renderBibleStudies();
+    } catch (err) {
+      msg.textContent = err.message || 'Could not save.';
+      msg.className = 'form-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  el.querySelectorAll('[data-delete-study]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Delete this Bible study?')) return;
+      await fetchJSON(`/api/admin/bible-studies/${btn.dataset.deleteStudy}`, { method: 'DELETE' });
+      renderBibleStudies();
+    });
+  });
+}
+
+// ---------- Groups (section 20) ----------
+const GROUP_TYPE_LABELS = { bible_study: 'Bible Study', prayer: 'Prayer', fellowship: 'Fellowship', department: 'Department', cell: 'Cell', other: 'Other' };
+
+async function renderGroupsAdmin() {
+  const el = document.getElementById('panel-groups');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  const [groups, members] = await Promise.all([fetchJSON('/api/groups'), fetchJSON('/api/admin/members')]);
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <h2 style="margin:0;">Groups (${groups.length})</h2>
+      <button class="btn btn-primary btn-sm" id="newGroupBtn">+ New Group</button>
+    </div>
+    <p style="font-size:0.85rem; color:#8a7595; margin:8px 0 18px;">The group's own leader can update meeting details and resources from the group's page — this is for creating groups and reassigning leadership.</p>
+    <table>
+      <thead><tr><th>Name</th><th>Type</th><th>Leader</th><th>Members</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${groups.map(g => `
+          <tr>
+            <td>${escapeHtml(g.name)}</td>
+            <td>${GROUP_TYPE_LABELS[g.type] || g.type}</td>
+            <td>${escapeHtml(g.leaderName || '—')}</td>
+            <td>${g.memberCount}</td>
+            <td class="row-actions">
+              <button data-edit-group="${g.id}">Edit</button>
+              <button class="danger" data-delete-group="${g.id}">Delete</button>
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="5">No groups yet.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  function openGroupForm(group) {
+    const isEdit = !!group;
+    showModal(`
+      <h3>${isEdit ? 'Edit' : 'New'} Group</h3>
+      <form id="groupForm">
+        <div class="field"><label>Name</label><input type="text" id="gName" value="${escapeHtml(group?.name || '')}" required></div>
+        <div class="field"><label>Type</label>
+          <select id="gType">${Object.entries(GROUP_TYPE_LABELS).map(([v, l]) => `<option value="${v}" ${group?.type === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Description</label><textarea id="gDescription">${escapeHtml(group?.description || '')}</textarea></div>
+        <div class="field"><label>Leader</label>
+          <select id="gLeader">
+            <option value="">No leader assigned</option>
+            ${members.map(m => `<option value="${m.id}" ${group?.leaderMemberId === m.id ? 'selected' : ''}>${escapeHtml(m.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Meeting Day</label><input type="text" id="gDay" value="${escapeHtml(group?.meetingDay || '')}"></div>
+          <div class="field"><label>Meeting Time</label><input type="text" id="gTime" value="${escapeHtml(group?.meetingTime || '')}"></div>
+        </div>
+        <div class="field"><label>Meeting Location</label><input type="text" id="gLocation" value="${escapeHtml(group?.meetingLocation || '')}"></div>
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary">Save Group</button>
+          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+        </div>
+        <div class="form-msg" id="groupFormMsg"></div>
+      </form>
+    `);
+    document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+    document.getElementById('groupForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const payload = {
+        name: document.getElementById('gName').value,
+        type: document.getElementById('gType').value,
+        description: document.getElementById('gDescription').value,
+        leaderMemberId: document.getElementById('gLeader').value,
+        meetingDay: document.getElementById('gDay').value,
+        meetingTime: document.getElementById('gTime').value,
+        meetingLocation: document.getElementById('gLocation').value
+      };
+      try {
+        await fetchJSON(isEdit ? `/api/admin/groups/${group.id}` : '/api/admin/groups', {
+          method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+        });
+        closeModal();
+        showToast('Group saved.', 'success');
+        renderGroupsAdmin();
+      } catch (err) {
+        document.getElementById('groupFormMsg').textContent = err.message || 'Could not save.';
+        document.getElementById('groupFormMsg').className = 'form-msg error';
+      }
+    });
+  }
+
+  document.getElementById('newGroupBtn').addEventListener('click', () => openGroupForm(null));
+  el.querySelectorAll('[data-edit-group]').forEach(btn => btn.addEventListener('click', () => openGroupForm(groups.find(g => g.id === btn.dataset.editGroup))));
+  el.querySelectorAll('[data-delete-group]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Delete this group? Its posts and meeting logs go with it.')) return;
+    await fetchJSON(`/api/admin/groups/${btn.dataset.deleteGroup}`, { method: 'DELETE' });
+    renderGroupsAdmin();
+  }));
+}
+
+// ---------- Welfare (section 33) ----------
+const WELFARE_STATUS_LABELS = { submitted: 'Submitted', under_review: 'Under Review', approved: 'Approved', declined: 'Declined', fulfilled: 'Fulfilled' };
+
+async function renderWelfareAdmin() {
+  const el = document.getElementById('panel-welfare');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  try {
+    const items = await fetchJSON('/api/welfare/requests');
+    el.innerHTML = `
+      <h2 style="margin-bottom:8px;">Welfare Requests (${items.length})</h2>
+      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Sensitive — visible only to Welfare Officers and Chapter Admin/Coordinator.</p>
+      <table>
+        <thead><tr><th>Member</th><th>Category</th><th>Description</th><th>Status</th><th>Referred By</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${items.map(w => `
+            <tr>
+              <td>${escapeHtml(w.memberName || 'Unknown')}</td>
+              <td>${escapeHtml(w.category)}</td>
+              <td style="max-width:220px;">${escapeHtml((w.description || '').slice(0, 100))}</td>
+              <td>
+                <select data-status-for="${w.id}">
+                  ${Object.entries(WELFARE_STATUS_LABELS).map(([v, l]) => `<option value="${v}" ${w.status === v ? 'selected' : ''}>${l}</option>`).join('')}
+                </select>
+              </td>
+              <td>${escapeHtml(w.referredBy || '—')}</td>
+              <td class="row-actions"><button data-add-note="${w.id}">Case Notes</button></td>
+            </tr>
+          `).join('') || '<tr><td colspan="6">No welfare requests right now.</td></tr>'}
+        </tbody>
+      </table>
+    `;
+    el.querySelectorAll('[data-status-for]').forEach(sel => sel.addEventListener('change', async () => {
+      await fetchJSON(`/api/welfare/requests/${sel.dataset.statusFor}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: sel.value })
+      });
+      showToast('Status updated.', 'success');
+    }));
+    el.querySelectorAll('[data-add-note]').forEach(btn => btn.addEventListener('click', () => {
+      const item = items.find(w => w.id === btn.dataset.addNote);
+      showModal(`
+        <h3>Case Notes — ${escapeHtml(item.memberName || 'Unknown')}</h3>
+        <p style="font-size:0.85rem; color:#8a7595; margin-bottom:12px;">${escapeHtml(item.description)}</p>
+        <form id="noteForm">
+          <div class="field"><label>Internal Notes (never shown to the member)</label><textarea id="wNotes">${escapeHtml(item.notes || '')}</textarea></div>
+          <div style="display:flex; gap:10px;">
+            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+          </div>
+        </form>
+      `);
+      document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+      document.getElementById('noteForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await fetchJSON(`/api/welfare/requests/${item.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes: document.getElementById('wNotes').value })
+        });
+        closeModal();
+        showToast('Notes saved.', 'success');
+        renderWelfareAdmin();
+      });
+    }));
+  } catch (e) {
+    el.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load welfare requests — you may not have access to this office.')}</p>`;
+  }
+}
+
+// ---------- Community Chat moderation (section 19) ----------
+async function renderChatModeration() {
+  const el = document.getElementById('panel-chatModeration');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  const topics = await fetchJSON('/api/chat/topics');
+  el.innerHTML = `
+    <h2 style="margin-bottom:8px;">Community Chat Moderation</h2>
+    <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Lock a discussion, hide a message (never destroyed, just stops showing), or restrict a member from posting further from the Members tab.</p>
+    <table>
+      <thead><tr><th>Discussion</th><th>Started By</th><th>Messages</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${topics.map(t => `
+          <tr>
+            <td>${escapeHtml(t.title)}</td>
+            <td>${escapeHtml(t.createdByName || 'Unknown')}</td>
+            <td>${t.messageCount}</td>
+            <td class="row-actions">
+              <button data-view-topic="${t.id}">View Messages</button>
+              <button data-lock-topic="${t.id}" data-locked="${t.locked}">${t.locked ? 'Unlock' : 'Lock'}</button>
+            </td>
+          </tr>
+        `).join('') || '<tr><td colspan="4">No discussions started yet.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+
+  el.querySelectorAll('[data-lock-topic]').forEach(btn => btn.addEventListener('click', async () => {
+    await fetchJSON(`/api/chat/topics/${btn.dataset.lockTopic}/lock`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ locked: btn.dataset.locked !== 'true' })
+    });
+    renderChatModeration();
+  }));
+  el.querySelectorAll('[data-view-topic]').forEach(btn => btn.addEventListener('click', async () => {
+    const messages = await fetchJSON(`/api/chat/topics/${btn.dataset.viewTopic}/messages`);
+    showModal(`
+      <h3>Messages</h3>
+      <div class="media-grid" style="grid-template-columns:1fr;">
+        ${messages.map(m => `
+          <div style="border:1px solid var(--line); border-radius:8px; padding:10px 12px;">
+            <strong>${escapeHtml(m.authorName || 'Unknown')}</strong>
+            <p style="margin:4px 0;">${escapeHtml(m.body)}</p>
+            ${m.reportCount ? `<span class="status-pill" style="background:#FBDFDA; color:#A93226;">${m.reportCount} report(s)</span>` : ''}
+            <button data-hide-msg="${m.id}" style="margin-top:6px;">Hide This Message</button>
+          </div>
+        `).join('') || '<p class="empty-state">No messages yet.</p>'}
+      </div>
+      <button type="button" class="btn btn-outline" id="cancelModalBtn" style="margin-top:14px;">Close</button>
+    `, true);
+    document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+    document.querySelectorAll('[data-hide-msg]').forEach(hideBtn => hideBtn.addEventListener('click', async () => {
+      await fetchJSON(`/api/chat/messages/${hideBtn.dataset.hideMsg}/moderate`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hidden: true })
+      });
+      showToast('Message hidden.', 'success');
+      closeModal();
+      renderChatModeration();
+    }));
+  }));
+}
+
 let membersPage = 1;
 const MEMBERS_PER_PAGE = 15;
 
@@ -768,8 +1135,9 @@ async function renderMembers() {
 
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Members (${members.length})</h2>
+    <p style="font-size:0.85rem; color:#8a7595; margin:-12px 0 18px;">Membership status (visitor → active) is moved forward by Shepherding, not from here.</p>
     <table>
-      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Level</th><th>Birthday</th><th>Joined</th><th>Actions</th></tr></thead>
+      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Level</th><th>Status</th><th>Birthday</th><th>Joined</th><th>Actions</th></tr></thead>
       <tbody>
         ${pageItems.map(m => `
           <tr>
@@ -777,6 +1145,7 @@ async function renderMembers() {
             <td>${escapeHtml(m.email)}</td>
             <td>${escapeHtml(m.phone || '—')}</td>
             <td>${escapeHtml(m.level || '—')}</td>
+            <td><span class="status-pill ${m.membershipStage === 'active' ? 'done' : ''}">${escapeHtml(m.membershipStage || 'visitor')}</span></td>
             <td>${bday(m)}</td>
             <td>${new Date(m.createdAt).toLocaleDateString()}</td>
             <td class="row-actions">
@@ -784,7 +1153,7 @@ async function renderMembers() {
               <button class="danger" data-delete-member="${m.id}">Delete</button>
             </td>
           </tr>
-        `).join('') || '<tr><td colspan="7">No members have signed up yet.</td></tr>'}
+        `).join('') || '<tr><td colspan="8">No members have signed up yet.</td></tr>'}
       </tbody>
     </table>
     <div id="membersPagination"></div>
@@ -817,7 +1186,15 @@ function openMemberEditForm(member) {
     <form id="memberEditForm">
       <div class="field"><label>Full Name</label><input type="text" id="editMemberName" value="${escapeHtml(member.name || '')}" required></div>
       <div class="field"><label>Phone</label><input type="tel" id="editMemberPhone" value="${escapeHtml(member.phone || '')}"></div>
-      <div class="field"><label>Level / Year of Study</label><input type="text" id="editMemberLevel" value="${escapeHtml(member.level || '')}"></div>
+      <div class="field-row">
+        <div class="field"><label>Level / Year of Study</label><input type="text" id="editMemberLevel" value="${escapeHtml(member.level || '')}"></div>
+        <div class="field"><label>Programme</label><input type="text" id="editMemberProgramme" value="${escapeHtml(member.programme || '')}"></div>
+      </div>
+      <div class="field"><label>Hostel / Residence</label><input type="text" id="editMemberHostel" value="${escapeHtml(member.hostel || '')}"></div>
+      <div class="field checkbox-field">
+        <input type="checkbox" id="editMemberChatRestricted" ${member.chatRestricted ? 'checked' : ''}>
+        <label for="editMemberChatRestricted" style="margin:0;">Restrict from Community Chat (can still read, can't post)</label>
+      </div>
       <div style="display:flex; gap:10px;">
         <button type="submit" class="btn btn-primary">Save</button>
         <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
@@ -834,9 +1211,17 @@ function openMemberEditForm(member) {
         body: JSON.stringify({
           name: document.getElementById('editMemberName').value,
           phone: document.getElementById('editMemberPhone').value,
-          level: document.getElementById('editMemberLevel').value
+          level: document.getElementById('editMemberLevel').value,
+          programme: document.getElementById('editMemberProgramme').value,
+          hostel: document.getElementById('editMemberHostel').value
         })
       });
+      const chatRestricted = document.getElementById('editMemberChatRestricted').checked;
+      if (chatRestricted !== !!member.chatRestricted) {
+        await fetchJSON(`/api/admin/members/${member.id}/chat-restriction`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatRestricted })
+        });
+      }
       closeModal();
       showToast('Member updated.', 'success');
       renderMembers();

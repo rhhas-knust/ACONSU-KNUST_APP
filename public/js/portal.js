@@ -152,7 +152,8 @@ function renderPortalChrome() {
   });
 
   const main = document.getElementById('portalMain');
-  main.innerHTML = PORTAL.panels.map(p => `<div class="portal-panel" id="panel-${p.key}"></div>`).join('');
+  main.innerHTML = PORTAL.panels.map(p => `<div class="portal-panel" id="panel-${p.key}"></div>`).join('')
+    + '<div style="text-align:center; padding:24px 12px 8px; font-size:0.75rem; color:#a993b3;">Powered by HasTech Solutions</div>';
 
   // A coordinator (or anyone else read-only) should be told why the buttons
   // they expect are missing, rather than left wondering.

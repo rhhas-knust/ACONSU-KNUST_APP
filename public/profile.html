@@ -54,6 +54,7 @@
 
     <div id="quickPills"></div>
     <div id="streakCardWrap"></div>
+    <div id="volunteerAssignments"></div>
 
     <div class="badges-section">
       <h3>Badges</h3>
@@ -148,7 +149,40 @@ let CURRENT_MEMBER = null;
   renderQuickPills();
   fillDetailsForm();
   loadBadgesAndStreak();
+  loadVolunteerAssignments();
 })();
+
+// ---------- volunteer / service scheduling (section 23) ----------
+async function loadVolunteerAssignments() {
+  const wrap = document.getElementById('volunteerAssignments');
+  try {
+    const items = await fetchJSON('/api/member/volunteer-assignments');
+    const pending = items.filter(i => i.status === 'assigned' && i.event);
+    if (!pending.length) { wrap.innerHTML = ''; return; }
+    const roleLabels = { usher: 'Usher', prayer_team: 'Prayer Team', media: 'Media', musician: 'Musician', protocol: 'Protocol', publicity: 'Publicity', transport: 'Transport', other: 'Other' };
+    wrap.innerHTML = `
+      <div class="card" style="padding:16px 18px; margin-bottom:16px;">
+        <h4 style="margin:0 0 10px;">You've been asked to serve</h4>
+        ${pending.map(a => `
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
+            <span style="font-size:0.9rem;"><strong>${roleLabels[a.role] || a.role}</strong> — ${escapeHtml(a.event.title)} (${a.event.date})</span>
+            <span style="display:flex; gap:6px; flex-shrink:0;">
+              <button type="button" class="btn btn-primary btn-sm" data-vol-respond="${a.id}" data-status="confirmed">Confirm</button>
+              <button type="button" class="btn btn-outline btn-sm" data-vol-respond="${a.id}" data-status="declined">Decline</button>
+            </span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    wrap.querySelectorAll('[data-vol-respond]').forEach(btn => btn.addEventListener('click', async () => {
+      await fetchJSON(`/api/member/volunteer-assignments/${btn.dataset.volRespond}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: btn.dataset.status })
+      });
+      showToast(btn.dataset.status === 'confirmed' ? 'Confirmed — thank you!' : 'Marked as declined.', 'success');
+      loadVolunteerAssignments();
+    }));
+  } catch (e) { /* non-critical — profile page still works without this */ }
+}
 
 function renderProfileTopRow() {
   const el = document.getElementById('profileTopRow');
@@ -172,8 +206,10 @@ function renderProfileTopRow() {
 function renderQuickPills() {
   document.getElementById('quickPills').innerHTML = `
     <div class="quick-pills">
+      <a href="/card.html" class="quick-pill"><span class="qp-icon">🪪</span>Membership Card</a>
       <a href="/events.html" class="quick-pill"><span class="qp-icon">🎟️</span>My Events</a>
       <a href="/prayer.html" class="quick-pill"><span class="qp-icon">🙏</span>Prayer Wall</a>
+      <a href="/sermon-notes.html" class="quick-pill"><span class="qp-icon">📝</span>Sermon Notes</a>
       <a href="/departments.html" class="quick-pill"><span class="qp-icon">🤝</span>Departments</a>
     </div>
   `;

@@ -97,18 +97,22 @@ function canRegister(e) {
       const d = new Date(`${e.date}T00:00:00`);
       return `
       <div class="card event-card">
+        ${e.flyerFileId ? `<img src="/api/files/${e.flyerFileId}" alt="" loading="lazy" style="width:100%; max-width:140px; border-radius:10px; object-fit:cover; align-self:flex-start;">` : `
         <div class="event-date-badge">
           <div class="day">${d.getDate()}</div>
           <div class="mon">${d.toLocaleDateString('en-US', { month: 'short' })}</div>
-        </div>
+        </div>`}
         <div style="flex:1;">
           <h3 style="margin-bottom:6px;">${escapeHtml(e.title)}</h3>
           <p style="font-size:0.9rem; color:#5a4468; margin-bottom:6px;">${formatDate(e.date)} · ${e.time} — ${escapeHtml(e.location)}</p>
           <p style="font-size:0.92rem; color:#5a4468; margin-bottom:8px;">${escapeHtml(e.description || '')}</p>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            ${e.category ? `<span class="badge">${escapeHtml(e.category)}</span>` : ''}
             ${e.recurring ? `<span class="badge">${escapeHtml(e.recurring)}</span>` : ''}
+            ${e.isNational ? `<span class="badge">National</span>` : ''}
             ${spotsBadge(e)}
           </div>
+          ${e.videoUrl ? `<p style="margin-top:8px;"><a href="${escapeHtml(e.videoUrl)}" target="_blank" rel="noopener" style="color:var(--purple-deep); font-weight:700; font-size:0.85rem;">▶ Watch video</a></p>` : ''}
           ${e.registrationEnabled ? `
             <div style="margin-top:12px;">
               <button class="btn btn-flame btn-sm" data-register="${e.id}" ${canRegister(e) ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>

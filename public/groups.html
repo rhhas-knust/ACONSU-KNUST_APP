@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groups — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .group-type-filter { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:24px; }
+  .group-type-filter button { border:2px solid var(--line); background:#fff; color:#5a4468; padding:7px 16px; border-radius:999px; font-weight:700; font-size:0.82rem; cursor:pointer; }
+  .group-type-filter button.active { border-color:var(--purple-deep); background:var(--purple-deep); color:#fff; }
+  .group-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:14px; }
+  .group-card h3 { margin:0 0 4px; }
+  .group-card .meta { font-size:0.82rem; color:#8a7595; margin-bottom:8px; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:40px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Belong</p>
+    <h1>Groups</h1>
+    <p class="lede">Bible Study, Prayer, Fellowship and Cell groups — find one and join in.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:760px;">
+    <div class="group-type-filter" id="typeFilter"></div>
+    <div id="groupList"><p class="empty-state">Loading...</p></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+const GROUP_TYPES = [
+  { value: '', label: 'All' },
+  { value: 'bible_study', label: 'Bible Study' },
+  { value: 'prayer', label: 'Prayer' },
+  { value: 'fellowship', label: 'Fellowship' },
+  { value: 'cell', label: 'Cell' },
+  { value: 'department', label: 'Department' },
+  { value: 'other', label: 'Other' }
+];
+let ALL_GROUPS = [];
+let activeType = '';
+
+function renderGroups() {
+  const shown = activeType ? ALL_GROUPS.filter(g => g.type === activeType) : ALL_GROUPS;
+  document.getElementById('groupList').innerHTML = shown.map(g => `
+    <a href="/group.html?id=${g.id}" class="group-card" style="display:block; text-decoration:none; color:inherit;">
+      <h3>${escapeHtml(g.name)}</h3>
+      <div class="meta">${escapeHtml((GROUP_TYPES.find(t => t.value === g.type) || {}).label || g.type)} · ${g.memberCount} member${g.memberCount === 1 ? '' : 's'}${g.meetingDay ? ' · ' + escapeHtml(g.meetingDay) + (g.meetingTime ? ' ' + escapeHtml(g.meetingTime) : '') : ''}</div>
+      <p style="color:#5a4468; font-size:0.9rem;">${escapeHtml(g.description || '')}</p>
+    </a>
+  `).join('') || '<p class="empty-state">No groups yet in this category.</p>';
+}
+
+(async function () {
+  await initLayout('/groups.html');
+  document.getElementById('typeFilter').innerHTML = GROUP_TYPES.map(t => `<button type="button" data-type="${t.value}" class="${t.value === '' ? 'active' : ''}">${t.label}</button>`).join('');
+  document.querySelectorAll('#typeFilter button').forEach(btn => btn.addEventListener('click', () => {
+    activeType = btn.dataset.type;
+    document.querySelectorAll('#typeFilter button').forEach(b => b.classList.toggle('active', b === btn));
+    renderGroups();
+  }));
+  try {
+    ALL_GROUPS = await fetchJSON('/api/groups');
+    renderGroups();
+  } catch (e) {
+    document.getElementById('groupList').innerHTML = '<p class="empty-state">Could not load groups right now.</p>';
+  }
+})();
+</script>
+</body>
+</html>

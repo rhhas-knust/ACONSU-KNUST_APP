@@ -111,6 +111,91 @@ async function renderShepOverview(el) {
 // ---------- attendance ----------
 const registerState = { date: lastSundayISO(), serviceType: 'sunday', marks: {}, loaded: false };
 
+// Quick Check-In: SCAN QR -> IDENTIFY MEMBER -> VERIFY CHAPTER -> RECORD
+// ATTENDANCE (section 13), with a manual search fallback when scanning isn't
+// available — either browser support (BarcodeDetector isn't universal yet)
+// or simply no camera to hand. Both paths call the same server-side
+// check-in, which is what actually verifies chapter membership.
+function wireQuickCheckIn(people) {
+  const feedback = document.getElementById('checkinFeedback');
+  const showFeedback = (text, type) => { feedback.textContent = text; feedback.className = `form-msg ${type || ''}`; };
+
+  async function checkIn(payload, label) {
+    try {
+      const res = await fetchJSON('/api/attendance/scan', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, date: registerState.date, serviceType: registerState.serviceType })
+      });
+      showFeedback(res.alreadyMarked ? `${res.member.name} was already marked present.` : `✅ ${res.member.name} marked present.`, 'success');
+      showToast(`${res.member.name} checked in`, 'success');
+    } catch (err) {
+      showFeedback(err.message || `Could not check in ${label}.`, 'error');
+    }
+  }
+
+  // ---- manual search fallback (always available) ----
+  const searchInput = document.getElementById('checkinSearch');
+  const resultsHost = document.getElementById('checkinResults');
+  searchInput.addEventListener('input', () => {
+    const term = searchInput.value.trim().toLowerCase();
+    if (!term) { resultsHost.innerHTML = ''; return; }
+    const matches = people.filter(p => p.source === 'member' && (p.name || '').toLowerCase().includes(term)).slice(0, 6);
+    resultsHost.innerHTML = matches.map(p => `
+      <button type="button" class="mark-btn" data-checkin-member="${p.memberId}" style="display:flex; width:100%; justify-content:flex-start; margin-bottom:6px;">${escapeHtml(p.name)}</button>
+    `).join('') || '<p class="tiny muted">No match.</p>';
+    resultsHost.querySelectorAll('[data-checkin-member]').forEach(btn => btn.addEventListener('click', async () => {
+      await checkIn({ memberId: btn.dataset.checkinMember }, btn.textContent);
+      searchInput.value = ''; resultsHost.innerHTML = '';
+    }));
+  });
+
+  // ---- camera QR scan (feature-detected — not every browser supports it yet) ----
+  const startBtn = document.getElementById('startScanBtn');
+  const stopBtn = document.getElementById('stopScanBtn');
+  const scanArea = document.getElementById('scanArea');
+  const video = document.getElementById('scanVideo');
+  let stream = null;
+  let scanTimer = null;
+
+  if (!('BarcodeDetector' in window)) {
+    startBtn.disabled = true;
+    startBtn.textContent = '📷 Scanning not supported on this browser — use search below';
+    return;
+  }
+
+  async function stopScan() {
+    if (scanTimer) clearInterval(scanTimer);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    stream = null;
+    scanArea.style.display = 'none';
+  }
+
+  startBtn.addEventListener('click', async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      await video.play();
+      scanArea.style.display = 'block';
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      let busy = false;
+      scanTimer = setInterval(async () => {
+        if (busy) return;
+        busy = true;
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length) {
+            await checkIn({ qrToken: codes[0].rawValue }, 'this member');
+          }
+        } catch (e) { /* a missed frame isn't an error — just try again next tick */ }
+        busy = false;
+      }, 800);
+    } catch (e) {
+      showFeedback('Could not access the camera. You can still check people in with search below.', 'error');
+    }
+  });
+  stopBtn.addEventListener('click', stopScan);
+}
+
 async function renderAttendance(el) {
   const [people, services, existing] = await Promise.all([
     fetchJSON('/api/shepherd/members'),
@@ -152,6 +237,26 @@ async function renderAttendance(el) {
 
     ${PORTAL.canEdit ? `
       <div class="portal-card">
+        <h3>Quick Check-In (section 13)</h3>
+        <p class="hint">Scan a member's QR code, or search by name if scanning isn't available — either instantly marks them present for the service selected above.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
+          <button type="button" class="btn btn-primary btn-sm" id="startScanBtn">📷 Scan QR Code</button>
+        </div>
+        <div id="scanArea" style="display:none; margin-bottom:14px;">
+          <video id="scanVideo" style="width:100%; max-width:360px; border-radius:12px; background:#000;" playsinline muted></video>
+          <div><button type="button" class="btn btn-outline btn-sm" id="stopScanBtn" style="margin-top:8px;">Stop Scanning</button></div>
+        </div>
+        <div class="field" style="max-width:360px;">
+          <label>Or search by name</label>
+          <input type="search" id="checkinSearch" placeholder="Type a name…" autocomplete="off">
+        </div>
+        <div id="checkinResults" style="max-width:360px;"></div>
+        <div id="checkinFeedback" class="form-msg"></div>
+      </div>
+    ` : ''}
+
+    ${PORTAL.canEdit ? `
+      <div class="portal-card">
         <div class="panel-head" style="margin-bottom:14px;">
           <div>
             <h3 style="margin:0;">Mark the register (${people.length} people)</h3>
@@ -173,7 +278,13 @@ async function renderAttendance(el) {
     ` : ''}
 
     <div class="portal-card">
-      <h3>Past Services (${services.length})</h3>
+      <div class="panel-head" style="margin-bottom:14px;">
+        <h3 style="margin:0;">Past Services (${services.length})</h3>
+        <div class="panel-actions">
+          <a class="btn btn-outline btn-sm" href="/api/shepherd/attendance-summary.pdf" target="_blank" rel="noopener">📄 Attendance % Report (PDF)</a>
+          <a class="btn btn-outline btn-sm" href="/api/shepherd/members/report.pdf" target="_blank" rel="noopener">📄 Membership Report (PDF)</a>
+        </div>
+      </div>
       <div class="table-wrap">
         <table class="portal-table">
           <thead>
@@ -191,6 +302,7 @@ async function renderAttendance(el) {
                 <td class="num"><strong>${s.total}</strong></td>
                 ${PORTAL.canEdit ? `<td class="row-actions">
                   <button data-open-register="${s.date}" data-service="${s.serviceType}">Open</button>
+                  <a href="/api/shepherd/attendance/${s.date}/report.pdf?serviceType=${s.serviceType}" target="_blank" rel="noopener" style="border:none; background:var(--lilac-mid); color:var(--purple-rich); padding:6px 11px; border-radius:7px; font-size:0.77rem; font-weight:700; text-decoration:none;">PDF</a>
                   <button class="danger" data-delete-register="${s.id}">Delete</button>
                 </td>` : ''}
               </tr>
@@ -224,6 +336,8 @@ async function renderAttendance(el) {
   });
 
   if (!PORTAL.canEdit) return;
+
+  wireQuickCheckIn(people);
 
   const listEl = document.getElementById('registerList');
   const tallyEl = document.getElementById('registerTally');
@@ -619,13 +733,242 @@ async function renderMessages(el) {
   });
 }
 
+// ---------- membership workflow (section 7) ----------
+// REGISTERED -> VISITOR -> SHEPHERDING REVIEW -> ACCEPTED -> ASSIGNED
+// SHEPHERD -> ACTIVE. Every registration lands here first; this is the one
+// place that moves someone forward.
+const STAGE_LABELS = { visitor: 'Visitor', under_review: 'Under Review', accepted: 'Accepted', active: 'Active Member' };
+const NEXT_STAGE = { visitor: 'under_review', under_review: 'accepted' };
+const NEXT_ACTION_LABEL = { visitor: 'Begin Review', under_review: 'Accept as Member' };
+
+async function moveStage(memberId, stage, extra) {
+  try {
+    await fetchJSON(`/api/shepherd/members/${memberId}/stage`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stage, ...(extra || {}) })
+    });
+    showToast(`Marked as ${STAGE_LABELS[stage]}.`, 'success');
+    openPanel('visitors');
+  } catch (err) {
+    showToast(err.message || 'Could not update this person.', 'error');
+  }
+}
+
+function assignShepherdForm(person) {
+  showModal(`
+    <h3>Assign Shepherd &amp; Activate</h3>
+    <p class="hint">${escapeHtml(person.name)} becomes an active member once a shepherd is assigned — their digital membership card is issued at the same time.</p>
+    <form id="assignShepherdForm">
+      <div class="field"><label>Shepherd's Name</label>
+        <input type="text" id="shepherdNameInput" placeholder="Who is shepherding this person?" required></div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Activate Membership</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="assignShepherdMsg"></div>
+    </form>
+  `);
+  document.getElementById('assignShepherdForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const shepherdName = document.getElementById('shepherdNameInput').value.trim();
+    if (!shepherdName) return;
+    await moveStage(person.memberId, 'active', { shepherdName });
+    closeModal();
+  });
+}
+
+async function renderVisitors(el) {
+  const people = await fetchJSON('/api/shepherd/members');
+  // Only ACONSU accounts go through this workflow — a manually-added visitor
+  // record with no account isn't a "registration" to review yet.
+  const withAccount = people.filter(p => p.source === 'member');
+  const pipeline = withAccount.filter(p => p.membershipStage !== 'active');
+  const active = withAccount.filter(p => p.membershipStage === 'active');
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Membership Workflow</h2>
+        <p class="sub">Visitor &rarr; Shepherding Review &rarr; Accepted &rarr; Assigned Shepherd &rarr; Active Member.</p>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      ${statCard('New Visitors', withAccount.filter(p => p.membershipStage === 'visitor').length, { tone: 'gold' })}
+      ${statCard('Under Review', withAccount.filter(p => p.membershipStage === 'under_review').length)}
+      ${statCard('Accepted, Awaiting Shepherd', withAccount.filter(p => p.membershipStage === 'accepted').length)}
+      ${statCard('Active Members', active.length, { tone: 'good' })}
+    </div>
+
+    <div class="portal-card">
+      <h3>In Progress</h3>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th></th><th>Name</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+            ${pipeline.map(p => `
+              <tr>
+                <td>${avatar(p)}</td>
+                <td><strong>${escapeHtml(p.name)}</strong></td>
+                <td class="tiny muted">${escapeHtml(p.email || p.phone || '—')}</td>
+                <td>${pill(STAGE_LABELS[p.membershipStage] || p.membershipStage)}</td>
+                <td>
+                  <div class="row-actions">
+                    ${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}
+                    ${p.membershipStage === 'accepted' ? `<button data-assign="${p.memberId}">Assign Shepherd &amp; Activate</button>` : ''}
+                  </div>
+                </td>
+              </tr>
+            `).join('') || emptyRow(5, 'Nobody is in the visitor pipeline right now.')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="portal-card">
+      <h3>Active Members</h3>
+      <p class="hint">${active.length} member${active.length === 1 ? '' : 's'} with an assigned shepherd and a digital membership card.</p>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th></th><th>Name</th><th>Membership No.</th><th>Shepherd</th></tr></thead>
+          <tbody>
+            ${active.slice(0, 20).map(p => `
+              <tr>
+                <td>${avatar(p)}</td>
+                <td>${escapeHtml(p.name)}</td>
+                <td class="tiny muted">${escapeHtml(p.membershipNumber || '—')}</td>
+                <td class="tiny muted">${escapeHtml(p.shepherdName || '—')}</td>
+              </tr>
+            `).join('') || emptyRow(4, 'No active members yet.')}
+          </tbody>
+        </table>
+      </div>
+      ${active.length > 20 ? `<p class="tiny muted" style="margin-top:10px;">Showing the first 20 — see the Members tab for everyone.</p>` : ''}
+    </div>
+  `;
+
+  el.querySelectorAll('[data-advance]').forEach(btn => {
+    btn.addEventListener('click', () => moveStage(btn.dataset.advance, btn.dataset.stage));
+  });
+  el.querySelectorAll('[data-assign]').forEach(btn => {
+    btn.addEventListener('click', () => assignShepherdForm(pipeline.find(p => p.memberId === btn.dataset.assign)));
+  });
+}
+
+// ---------- pastoral care: welfare referrals + milestones (sections 22, 33, 36) ----------
+async function renderCare(el) {
+  const [people, milestones] = await Promise.all([
+    fetchJSON('/api/shepherd/members'),
+    fetchJSON('/api/shepherd/milestones')
+  ]);
+  const memberOptions = people.filter(p => p.source === 'member');
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Pastoral Care</h2>
+        <p class="sub">Raise a welfare referral when you notice someone needs support, or celebrate a milestone.</p>
+      </div>
+    </div>
+    <div class="card-split">
+      <div class="portal-card">
+        <h3>Welfare Referral</h3>
+        <p class="hint">Goes straight to the Welfare team — you won't see the outcome here, that stays confidential to them.</p>
+        <form id="referralForm">
+          <div class="field"><label>Member</label>
+            <select id="refMember" required>${memberOptions.map(p => `<option value="${p.memberId}">${escapeHtml(p.name)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Category</label>
+            <select id="refCategory">
+              <option value="financial">Financial</option><option value="medical">Medical</option>
+              <option value="bereavement">Bereavement</option><option value="academic">Academic</option><option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field"><label>What did you notice?</label><textarea id="refDescription" required></textarea></div>
+          <button type="submit" class="btn btn-primary btn-sm">Submit Referral</button>
+          <div class="form-msg" id="referralMsg"></div>
+        </form>
+      </div>
+      <div class="portal-card">
+        <h3>Log a Milestone</h3>
+        <p class="hint">Graduation, a membership anniversary, or anything else worth a shout-out — posts a celebration to the chapter.</p>
+        <form id="milestoneForm">
+          <div class="field"><label>Member</label>
+            <select id="mstMember" required>${memberOptions.map(p => `<option value="${p.memberId}">${escapeHtml(p.name)}</option>`).join('')}</select>
+          </div>
+          <div class="field"><label>Type</label>
+            <select id="mstType">
+              <option value="graduation">Graduation</option>
+              <option value="membership_anniversary">Membership Anniversary</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field"><label>Note (optional)</label><input type="text" id="mstNote" placeholder="e.g. 3 years as a member!"></div>
+          <button type="submit" class="btn btn-primary btn-sm">Post Celebration</button>
+          <div class="form-msg" id="milestoneMsg"></div>
+        </form>
+      </div>
+    </div>
+    <div class="portal-card">
+      <h3>Recent Milestones</h3>
+      <div class="table-wrap">
+        <table class="portal-table" style="min-width:0;">
+          <tbody>
+            ${milestones.slice(0, 10).map(m => `
+              <tr><td>${escapeHtml(m.memberName)}</td><td>${pill(m.type.replace('_', ' '))}</td><td class="tiny muted">${escapeHtml(m.note || '—')}</td></tr>
+            `).join('') || emptyRow(3, 'No milestones logged yet.')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('referralForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await fetchJSON('/api/shepherd/welfare-referrals', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: document.getElementById('refMember').value,
+          category: document.getElementById('refCategory').value,
+          description: document.getElementById('refDescription').value
+        })
+      });
+      showToast('Referral submitted to the Welfare team.', 'success');
+      document.getElementById('referralForm').reset();
+    } catch (err) {
+      setFormMsg('referralMsg', err.message || 'Could not submit this referral.', 'error');
+    }
+  });
+
+  document.getElementById('milestoneForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await fetchJSON('/api/shepherd/milestones', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          memberId: document.getElementById('mstMember').value,
+          type: document.getElementById('mstType').value,
+          note: document.getElementById('mstNote').value
+        })
+      });
+      showToast('Milestone posted!', 'success');
+      openPanel('care');
+    } catch (err) {
+      setFormMsg('milestoneMsg', err.message || 'Could not log this milestone.', 'error');
+    }
+  });
+}
+
 initPortal({
   role: 'shepherding',
   label: 'Shepherding',
   panels: [
     { key: 'overview', label: 'Overview', render: renderShepOverview },
+    { key: 'visitors', label: 'Membership Workflow', render: renderVisitors },
     { key: 'attendance', label: 'Attendance', render: renderAttendance },
     { key: 'members', label: 'Members', render: renderShepMembers },
+    { key: 'care', label: 'Pastoral Care', render: renderCare },
     { key: 'messages', label: 'Messages', render: renderMessages }
   ]
 });

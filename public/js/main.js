@@ -1,9 +1,84 @@
 // ---------- shared helpers ----------
+// Every request automatically carries whichever chapter is selected (see
+// "chapter selection" below) via a header, so chapter-scoped API routes know
+// which chapter's content to return without every single call site having
+// to remember to pass it.
 async function fetchJSON(url, options) {
-  const res = await fetch(url, options);
+  const opts = { ...(options || {}) };
+  if (typeof url === 'string' && url.startsWith('/api/')) {
+    const chapterId = getSelectedChapterId();
+    if (chapterId) opts.headers = { ...(opts.headers || {}), 'X-Chapter-Id': chapterId };
+  }
+  const res = await fetch(url, opts);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Request failed');
   return data;
+}
+
+// ---------- chapter selection ----------
+// ACONSU is a multi-chapter platform: every chapter-scoped page needs to know
+// which chapter it's showing. With a single active chapter (true for most
+// deployments most of the time) this resolves itself silently on first
+// visit. The moment a second chapter exists, a visitor is asked once and
+// it's remembered on that device from then on — a signed-in member's own
+// account overrides it automatically once they log in (see initLayout).
+const CHAPTER_STORAGE_KEY = 'aconsu_chapter_id';
+
+function getSelectedChapterId() {
+  try { return localStorage.getItem(CHAPTER_STORAGE_KEY) || ''; } catch (e) { return ''; }
+}
+function setSelectedChapterId(id) {
+  try {
+    if (id) localStorage.setItem(CHAPTER_STORAGE_KEY, id);
+    else localStorage.removeItem(CHAPTER_STORAGE_KEY);
+  } catch (e) { /* private-browsing storage errors are non-fatal here */ }
+}
+
+function showChapterPicker(chapters) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px;';
+    backdrop.innerHTML = `
+      <div style="background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:'Manrope',sans-serif;">
+        <h3 style="margin:0 0 6px; font-family:'Fraunces',serif; color:var(--purple-deep,#3A1B54);">Choose your ACONSU chapter</h3>
+        <p style="color:#5a4468; font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters — pick yours to continue. You can change this later from your profile.</p>
+        <div id="chapterPickList" style="display:flex; flex-direction:column; gap:10px;"></div>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+    const list = backdrop.querySelector('#chapterPickList');
+    chapters.forEach((c) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn btn-outline';
+      btn.style.cssText = 'text-align:left; padding:12px 16px;';
+      btn.innerHTML = `<strong>${escapeHtml(c.name)}</strong>${c.institution ? `<br><small style="opacity:0.7;">${escapeHtml(c.institution)}</small>` : ''}`;
+      btn.addEventListener('click', () => {
+        setSelectedChapterId(c.id);
+        backdrop.remove();
+        resolve(c.id);
+      });
+      list.appendChild(btn);
+    });
+  });
+}
+
+// Resolves (and, if needed, asks) which chapter this browser is looking at.
+// Safe to call on every page load — instant once a chapter is already
+// chosen. Called from initLayout, so ordinary pages never need this directly.
+async function ensureChapterSelected() {
+  if (getSelectedChapterId()) return getSelectedChapterId();
+  try {
+    const chapters = await fetch('/api/chapters').then(r => r.json());
+    if (Array.isArray(chapters) && chapters.length === 1) {
+      setSelectedChapterId(chapters[0].id);
+      return chapters[0].id;
+    }
+    if (Array.isArray(chapters) && chapters.length > 1) {
+      return await showChapterPicker(chapters);
+    }
+  } catch (e) { /* chapters not reachable yet — pages fall back to unscoped content */ }
+  return '';
 }
 
 function escapeHtml(str) {
@@ -27,6 +102,25 @@ const ICON_MORE = '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.
 const ICON_BELL = '<path d="M6 8a6 6 0 0 1 12 0c0 4.5 1.5 6 2 7H4c.5-1 2-2.5 2-7Z"/><path d="M10 19a2 2 0 0 0 4 0"/>';
 const ICON_USERS = '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c2.6.4 4.5 2.6 4.5 5.3"/>';
 const ICON_HEADPHONES = '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="2.5" y="13" width="4" height="6" rx="1.5"/><rect x="17.5" y="13" width="4" height="6" rx="1.5"/>';
+
+// ---------- social platform icons (footer, chapter contact) ----------
+const ICON_FACEBOOK = '<path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>';
+const ICON_INSTAGRAM = '<rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>';
+const ICON_YOUTUBE = '<path d="M22.5 6.4a2.8 2.8 0 0 0-2-2C18.9 4 12 4 12 4s-6.9 0-8.6.4a2.8 2.8 0 0 0-2 2A29.4 29.4 0 0 0 1 11.8a29.4 29.4 0 0 0 .4 5.3 2.8 2.8 0 0 0 2 2c1.7.4 8.6.4 8.6.4s6.9 0 8.6-.4a2.8 2.8 0 0 0 2-2 29.4 29.4 0 0 0 .4-5.3 29.4 29.4 0 0 0-.4-5.4z"/><path d="M9.8 15V8.5l5.7 3.3z" fill="currentColor" stroke="none"/>';
+const ICON_WHATSAPP = '<path d="M21 11.5a8.4 8.4 0 0 1-9.9 8.3 8.4 8.4 0 0 1-3.4-.9L3 21l1.9-4.7a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 1 1 17 0z"/><path d="M8.5 9.3c.2-.5.5-.5.8-.5h.5c.2 0 .4 0 .6.4s.6 1.5.7 1.6c.1.1.1.3 0 .5s-.2.3-.4.5-.3.4-.1.7a5.6 5.6 0 0 0 2.4 2.1c.3.1.4.1.6-.1s.7-.8.9-1.1.4-.2.6-.1l1.5.7c.2.1.4.2.4.3.1.3.1.9-.2 1.4s-1.3 1-2.2 1c-1.6.1-4.3-.9-5.8-2.9a6.8 6.8 0 0 1-1.4-3.6c0-.9.3-1.5.4-1.9z"/>';
+
+// Renders the platform icons for whatever links a settings/contact object
+// has set — used by the site footer and, once built, chapter About pages.
+// Only ever shows a platform that actually has a URL/number on file.
+function socialLinksHtml(s) {
+  const links = [
+    s.facebook && { href: s.facebook, icon: ICON_FACEBOOK, label: 'Facebook' },
+    s.instagram && { href: s.instagram, icon: ICON_INSTAGRAM, label: 'Instagram' },
+    s.youtube && { href: s.youtube, icon: ICON_YOUTUBE, label: 'YouTube' },
+    s.whatsapp && { href: `https://wa.me/${String(s.whatsapp).replace(/[^\d]/g, '')}`, icon: ICON_WHATSAPP, label: 'WhatsApp' }
+  ].filter(Boolean);
+  return links.map(l => `<a href="${escapeHtml(l.href)}" target="_blank" rel="noopener" aria-label="${l.label}" class="social-icon-link">${svgIcon(l.icon)}</a>`).join('');
+}
 
 function svgIcon(pathData) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${pathData}</svg>`;
@@ -262,12 +356,7 @@ function renderFooter(settings) {
         <div>
           <h4>ACONSU</h4>
           <p style="color:#C9B3D8; font-size:0.9rem;">${escapeHtml(s.fullName || "The Apostles' Continuation Students Union")}</p>
-          <div class="social-row">
-            ${s.instagram ? `<a href="${s.instagram}" target="_blank" rel="noopener">IG</a>` : ''}
-            ${s.facebook ? `<a href="${s.facebook}" target="_blank" rel="noopener">FB</a>` : ''}
-            ${s.youtube ? `<a href="${s.youtube}" target="_blank" rel="noopener">YT</a>` : ''}
-            ${s.whatsapp ? `<a href="https://wa.me/${s.whatsapp}" target="_blank" rel="noopener">WA</a>` : ''}
-          </div>
+          <div class="social-row">${socialLinksHtml(s)}</div>
         </div>
         <div>
           <h4>Explore</h4>
@@ -293,21 +382,31 @@ function renderFooter(settings) {
         <span>&copy; ${new Date().getFullYear()} ACONSU. All Rights Reserved.</span>
         <span>Built with love, for the union.</span>
       </div>
+      <div style="text-align:center; padding-top:10px; font-size:0.72rem; color:#9b86a9;">Powered by HasTech Solutions</div>
     </div>
   `;
 }
 
 async function initLayout(activePath) {
-  let customPages = [];
-  try {
-    customPages = await fetchJSON('/api/pages');
-  } catch (e) { /* nav still works without custom pages */ }
+  await ensureChapterSelected();
   let member = null;
   try {
     const authRes = await fetchJSON('/api/auth/me');
     member = authRes.member;
-    if (member) dailyCheckin();
+    if (member) {
+      dailyCheckin();
+      // A signed-in member's own chapter is authoritative — keeps this
+      // browser in step even if it last browsed anonymously as another
+      // chapter (a shared/public computer, a link from a friend, etc.).
+      if (member.chapterId && member.chapterId !== getSelectedChapterId()) {
+        setSelectedChapterId(member.chapterId);
+      }
+    }
   } catch (e) { /* nav still works without auth state */ }
+  let customPages = [];
+  try {
+    customPages = await fetchJSON('/api/pages');
+  } catch (e) { /* nav still works without custom pages */ }
   renderHeader(activePath, customPages, member);
   renderBottomNav(activePath, customPages, member);
   try {
@@ -481,3 +580,47 @@ function renderFloatingImages(containerId, fileIds, positions) {
     setTimeout(() => div.classList.add('fade-in'), 50 + i * 120);
   });
 }
+
+// ---------- mobile haptic feedback & share ----------
+function triggerHaptic(duration = 10) {
+  try {
+    if ('vibrate' in navigator) navigator.vibrate(duration);
+  } catch (e) { /* ignore if unsupported */ }
+}
+
+async function shareContent({ title, text, url }) {
+  const shareUrl = url || window.location.href;
+  const shareData = {
+    title: title || document.title,
+    text: text || '',
+    url: shareUrl
+  };
+  triggerHaptic(12);
+  if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+    try {
+      await navigator.share(shareData);
+      return true;
+    } catch (e) {
+      if (e.name !== 'AbortError') showToast('Could not share content', 'error');
+      return false;
+    }
+  }
+  // Fallback: Copy link to clipboard
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareUrl);
+      showToast('Link copied to clipboard!', 'success');
+      return true;
+    }
+  } catch (err) { /* clipboard failure */ }
+  showToast('Sharing is not supported on this browser', 'error');
+  return false;
+}
+
+// ---------- offline / online network connectivity banner ----------
+window.addEventListener('offline', () => {
+  showToast('📡 You are currently offline. Viewing cached content.', 'error');
+});
+window.addEventListener('online', () => {
+  showToast('⚡ Back online! Connection restored.', 'success');
+});

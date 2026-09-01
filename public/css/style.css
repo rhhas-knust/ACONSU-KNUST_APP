@@ -264,8 +264,12 @@ section { padding: 72px 24px; }
 .footer-grid a:hover { color: var(--flame-gold); }
 .footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 20px; font-size: 0.82rem; color: #B79CC7; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .social-row { display: flex; gap: 12px; }
-.social-row a { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; font-size: 0.9rem; }
-.social-row a:hover { background: var(--flame-gold); color: var(--purple-rich); }
+.social-row a, .social-icon-link { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; color: #fff; }
+.social-row a svg, .social-icon-link svg { width: 18px; height: 18px; }
+.social-row a:hover, .social-icon-link:hover { background: var(--flame-gold); color: var(--purple-rich); }
+/* Light-background contexts (e.g. a chapter About page) — override the white default. */
+.social-icon-link.on-light { background: var(--lilac-mid); color: var(--purple-deep); }
+.social-icon-link.on-light:hover { background: var(--flame-gold); color: var(--purple-rich); }
 
 /* ---------- forms ---------- */
 .form-card {
@@ -573,3 +577,55 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   box-shadow: 0 16px 36px rgba(58,27,84,0.25);
 }
 .verse-of-day-text { font-family: var(--font-display); font-size: 1.25rem; line-height: 1.5; margin: 6px 0 0; }
+
+/* ---------- mobile UX & native touch polish (Phase 9) ---------- */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  padding-top: env(safe-area-inset-top, 0px);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Touch active feedback */
+.btn:active,
+.tile:active,
+.bottom-nav-item:active,
+.more-tile:active,
+.choice:active {
+  transform: scale(0.97);
+  transition: transform 0.08s ease;
+}
+
+.bottom-nav-item:active svg {
+  transform: scale(1.12);
+  transition: transform 0.08s ease;
+}
+
+/* Responsive bottom sheet for modals on mobile */
+@media (max-width: 600px) {
+  .modal {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 20px 20px 0 0 !important;
+    padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    animation: slideUpSheet 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes slideUpSheet {
+  from { transform: translateY(100%); opacity: 0.8; }
+  to { transform: translateY(0); opacity: 1; }
+}

@@ -27,6 +27,8 @@
   .admin-panel { display: none; }
   .admin-panel.active { display: block; }
   .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .field-row { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .app-watermark { text-align: center; padding: 18px 12px 28px; font-size: 0.75rem; color: #a993b3; }
   table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; }
   th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 0.88rem; vertical-align: top; }
   th { background: var(--lilac-light); font-family: var(--font-body); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; color: var(--purple-deep); }
@@ -86,6 +88,11 @@
       <button data-panel="notifications">Notifications</button>
       <button data-panel="events">Events</button>
       <button data-panel="sermons">Sermons &amp; Media</button>
+      <button type="button" onclick="location.href='/content-manager.html'">Phase 7 Content</button>
+      <button data-panel="bibleStudies">Bible Study</button>
+      <button data-panel="groups">Groups</button>
+      <button data-panel="welfare">Welfare</button>
+      <button data-panel="chatModeration">Chat Moderation</button>
       <button data-panel="pages">Custom Pages</button>
       <button data-panel="media">Media Library</button>
       <button data-panel="joinRequests">Join Requests</button>
@@ -103,6 +110,10 @@
       <div class="admin-panel" id="panel-notifications"></div>
       <div class="admin-panel" id="panel-events"></div>
       <div class="admin-panel" id="panel-sermons"></div>
+      <div class="admin-panel" id="panel-bibleStudies"></div>
+      <div class="admin-panel" id="panel-groups"></div>
+      <div class="admin-panel" id="panel-welfare"></div>
+      <div class="admin-panel" id="panel-chatModeration"></div>
       <div class="admin-panel" id="panel-pages"></div>
       <div class="admin-panel" id="panel-media"></div>
       <div class="admin-panel" id="panel-joinRequests"></div>
@@ -110,6 +121,7 @@
       <div class="admin-panel" id="panel-testimonies"></div>
       <div class="admin-panel" id="panel-contactMessages"></div>
       <div class="admin-panel" id="panel-settings"></div>
+      <div class="app-watermark">Powered by HasTech Solutions</div>
     </div>
   </div>
 </div>

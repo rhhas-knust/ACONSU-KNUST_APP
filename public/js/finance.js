@@ -578,6 +578,7 @@ async function renderReports(el) {
         <div class="field"><label>To</label><input type="date" id="rTo" value="${reportRange.to}"></div>
         <button type="button" class="btn btn-primary btn-sm" id="runReportBtn">Run Report</button>
         <a class="btn btn-outline btn-sm" id="exportCsvBtn" href="/api/finance/export.csv${query ? `?${query}` : ''}">Download CSV</a>
+        <a class="btn btn-outline btn-sm" href="/api/finance/export.pdf${query ? `?${query}` : ''}" target="_blank" rel="noopener">📄 Download PDF</a>
       </div>
     </div>
 
@@ -631,6 +632,59 @@ async function renderReports(el) {
   });
 }
 
+// ---------- giving claims (section 32) ----------
+// A member logs what they sent via MoMo/bank on /give.html; this is where
+// that claim becomes (or doesn't become) a real ledger entry. Nothing here
+// is a payment gateway — see the note on GivingIntent in lib/models.js.
+async function renderGivingQueue(el) {
+  const items = await fetchJSON('/api/finance/giving-queue');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Giving Claims (${items.length})</h2>
+        <p class="sub">Members log what they sent via MoMo/bank; confirming turns it into a real ledger entry.</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="portal-table">
+        <thead><tr><th>Member</th><th>Purpose</th><th class="num">Amount</th><th>Method</th><th>Reference</th><th></th></tr></thead>
+        <tbody>
+          ${items.map(g => `
+            <tr>
+              <td>${escapeHtml(g.memberName)}</td>
+              <td>${incomeLabel(g.purpose)}</td>
+              <td class="num">${money(g.amount)}</td>
+              <td>${escapeHtml(g.method)}</td>
+              <td class="tiny muted">${escapeHtml(g.reference || '—')}</td>
+              <td class="row-actions">
+                <button data-confirm="${g.id}">Confirm</button>
+                <button data-reject="${g.id}" class="danger">Reject</button>
+              </td>
+            </tr>
+          `).join('') || emptyRow(6, 'No pending giving claims.')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  el.querySelectorAll('[data-confirm]').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+      await fetchJSON(`/api/finance/giving/${btn.dataset.confirm}/confirm`, { method: 'PATCH' });
+      showToast('Confirmed and booked to the ledger.', 'success');
+      openPanel('giving');
+    } catch (err) { showToast(err.message || 'Could not confirm this.', 'error'); }
+  }));
+  el.querySelectorAll('[data-reject]').forEach(btn => btn.addEventListener('click', async () => {
+    const notes = prompt('Optional note for why this was rejected:') || '';
+    try {
+      await fetchJSON(`/api/finance/giving/${btn.dataset.reject}/reject`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ notes })
+      });
+      showToast('Claim rejected.', 'success');
+      openPanel('giving');
+    } catch (err) { showToast(err.message || 'Could not reject this.', 'error'); }
+  }));
+}
+
 initPortal({
   role: 'finance',
   label: 'Finance Office',
@@ -638,6 +692,7 @@ initPortal({
     { key: 'overview', label: 'Overview', render: renderFinanceOverview },
     { key: 'budgets', label: 'Budgets', render: renderBudgets },
     { key: 'ledger', label: 'Ledger', render: renderLedger },
+    { key: 'giving', label: 'Giving Claims', render: renderGivingQueue },
     { key: 'reports', label: 'Reports', render: renderReports }
   ]
 });

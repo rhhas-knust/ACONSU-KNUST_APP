@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Membership Card — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .card-wrap { max-width: 420px; margin: 0 auto; padding: 32px 20px 60px; }
+  .membership-card {
+    background: linear-gradient(135deg, var(--purple-deep,#5B2C82) 0%, var(--purple-rich,#3A1B54) 100%);
+    border-radius: 22px; padding: 26px 24px; color: #fff; position: relative; overflow: hidden;
+    box-shadow: 0 24px 50px rgba(58,27,84,0.35);
+  }
+  .membership-card::after {
+    content:''; position:absolute; right:-40px; top:-40px; width:160px; height:160px; border-radius:50%;
+    background: radial-gradient(circle, rgba(232,151,30,0.35), transparent 70%);
+  }
+  .membership-card .brand-row { display:flex; align-items:center; gap:10px; margin-bottom:18px; position:relative; z-index:1; }
+  .membership-card .brand-row img { width:32px; height:32px; border-radius:50%; }
+  .membership-card .brand-row b { font-family: var(--font-display); letter-spacing:0.03em; }
+  .membership-card .photo-row { display:flex; gap:16px; align-items:center; margin-bottom:18px; position:relative; z-index:1; }
+  .membership-card .photo-row img { width:72px; height:72px; border-radius:16px; object-fit:cover; border:2px solid rgba(255,255,255,0.4); }
+  .membership-card .photo-row .avatar-fallback { width:72px; height:72px; border-radius:16px; background:rgba(255,255,255,0.15); display:flex; align-items:center; justify-content:center; font-size:1.8rem; font-weight:800; }
+  .membership-card .name { font-family: var(--font-display); font-size:1.3rem; margin:0; }
+  .membership-card .chapter { font-size:0.85rem; opacity:0.85; margin-top:2px; }
+  .membership-card .status-row { display:flex; justify-content:space-between; align-items:flex-end; position:relative; z-index:1; }
+  .membership-card .num-label { font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em; opacity:0.75; }
+  .membership-card .num-value { font-family: var(--font-display); font-size:1.05rem; }
+  .membership-card .qr-box { background:#fff; padding:8px; border-radius:12px; }
+  .membership-card .qr-box img { display:block; width:96px; height:96px; }
+  .card-hint { text-align:center; color:#8a7595; font-size:0.85rem; margin-top:18px; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<div class="card-wrap" id="cardWrap">
+  <p class="empty-state">Loading your card...</p>
+</div>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/card.html');
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  if (!authRes.member) { window.location.href = '/login.html'; return; }
+
+  const wrap = document.getElementById('cardWrap');
+  try {
+    const data = await fetchJSON('/api/member/card');
+    if (!data.ready) {
+      wrap.innerHTML = `
+        <div class="empty-state" style="background:#fff; border:1px solid var(--line); border-radius:16px; padding:40px 24px;">
+          <p style="font-size:2rem; margin-bottom:10px;">🪪</p>
+          <p style="font-weight:700; color:var(--purple-deep); margin-bottom:6px;">Card not ready yet</p>
+          <p>${escapeHtml(data.message || 'Your card will be available once Shepherding completes your membership review.')}</p>
+        </div>
+      `;
+      return;
+    }
+    const photo = data.profileImageFileId
+      ? `<img src="/api/files/${data.profileImageFileId}" alt="">`
+      : `<div class="avatar-fallback">${escapeHtml((data.name || '?').charAt(0).toUpperCase())}</div>`;
+    wrap.innerHTML = `
+      <div class="membership-card">
+        <div class="brand-row">
+          <img src="/images/logo.jpg" alt="ACONSU">
+          <b>ACONSU Digital Membership Card</b>
+        </div>
+        <div class="photo-row">
+          ${photo}
+          <div>
+            <p class="name">${escapeHtml(data.name)}</p>
+            <p class="chapter">${escapeHtml(data.chapterName || '')}</p>
+          </div>
+        </div>
+        <div class="status-row">
+          <div>
+            <div class="num-label">Membership No.</div>
+            <div class="num-value">${escapeHtml(data.membershipNumber)}</div>
+            <div class="num-label" style="margin-top:10px;">Status</div>
+            <div class="num-value" style="text-transform:capitalize;">${escapeHtml(data.membershipStatus)}</div>
+          </div>
+          <div class="qr-box"><img src="${data.qrDataUrl}" alt="QR code"></div>
+        </div>
+      </div>
+      <p class="card-hint">Show this QR code at events for quick attendance check-in.</p>
+    `;
+  } catch (e) {
+    wrap.innerHTML = '<p class="empty-state">Could not load your membership card right now.</p>';
+  }
+})();
+</script>
+</body>
+</html>

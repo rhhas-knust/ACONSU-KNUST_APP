@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sermon Notes — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .note-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:14px; }
+  .note-card h4 { margin:0 0 4px; }
+  .note-card .meta { font-size:0.8rem; color:#8a7595; margin-bottom:10px; }
+  .note-card .body-text { white-space:pre-wrap; font-size:0.92rem; line-height:1.55; color:var(--purple-ink); }
+  .note-card .row-actions { margin-top:12px; display:flex; gap:8px; }
+  .note-card .row-actions button { border:none; background:var(--lilac-mid); color:var(--purple-rich); padding:6px 12px; border-radius:7px; font-size:0.78rem; font-weight:700; cursor:pointer; }
+  .note-card .row-actions button.danger { background:#FBDFDA; color:#A93226; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section style="padding-top:48px;">
+  <div class="container" style="max-width:720px;">
+    <div class="section-head">
+      <p class="eyebrow">Keep What You Hear</p>
+      <h1>My Sermon Notes</h1>
+      <p class="lede">Private to you — save what stood out and come back to it anytime.</p>
+    </div>
+    <button class="btn btn-primary" id="newNoteBtn" style="margin-bottom:24px;">+ New Sermon Note</button>
+    <div id="notesList"><p class="empty-state">Loading...</p></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<div class="modal-backdrop" id="modalBackdrop" style="display:none; position:fixed; inset:0; background:rgba(36,21,48,0.55); align-items:center; justify-content:center; padding:20px; z-index:200;">
+  <div class="modal" id="modalContent" style="background:#fff; border-radius:16px; padding:26px; max-width:520px; width:100%; max-height:88vh; overflow-y:auto;"></div>
+</div>
+
+<script src="/js/main.js"></script>
+<script>
+let NOTES = [];
+
+function showModal(html) {
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalBackdrop').style.display = 'flex';
+}
+function closeModal() { document.getElementById('modalBackdrop').style.display = 'none'; }
+document.getElementById('modalBackdrop').addEventListener('click', (e) => { if (e.target.id === 'modalBackdrop') closeModal(); });
+
+function noteForm(note) {
+  const isEdit = !!note;
+  showModal(`
+    <h3>${isEdit ? 'Edit' : 'New'} Sermon Note</h3>
+    <form id="noteForm">
+      <div class="field"><label>Sermon Title</label><input type="text" id="nTitle" value="${escapeHtml(note?.sermonTitle || '')}"></div>
+      <div class="field"><label>Preacher</label><input type="text" id="nPreacher" value="${escapeHtml(note?.preacher || '')}"></div>
+      <div class="field"><label>Date</label><input type="date" id="nDate" value="${note?.date || ''}"></div>
+      <div class="field"><label>Scripture</label><input type="text" id="nScripture" value="${escapeHtml(note?.scripture || '')}" placeholder="e.g. Romans 8:28"></div>
+      <div class="field"><label>Notes</label><textarea id="nNotes" rows="5">${escapeHtml(note?.notes || '')}</textarea></div>
+      <div class="field"><label>Summary</label><textarea id="nSummary" rows="2">${escapeHtml(note?.summary || '')}</textarea></div>
+      <div class="field"><label>Key Lessons</label><textarea id="nKeyLessons" rows="2">${escapeHtml(note?.keyLessons || '')}</textarea></div>
+      <div class="field"><label>Personal Reflections</label><textarea id="nReflections" rows="2">${escapeHtml(note?.reflections || '')}</textarea></div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save Note</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="noteFormMsg"></div>
+    </form>
+  `);
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+  document.getElementById('noteForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      sermonTitle: document.getElementById('nTitle').value,
+      preacher: document.getElementById('nPreacher').value,
+      date: document.getElementById('nDate').value,
+      scripture: document.getElementById('nScripture').value,
+      notes: document.getElementById('nNotes').value,
+      summary: document.getElementById('nSummary').value,
+      keyLessons: document.getElementById('nKeyLessons').value,
+      reflections: document.getElementById('nReflections').value
+    };
+    try {
+      await fetchJSON(isEdit ? `/api/member/sermon-notes/${note.id}` : '/api/member/sermon-notes', {
+        method: isEdit ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      closeModal();
+      showToast('Sermon note saved.', 'success');
+      loadNotes();
+    } catch (err) {
+      const msg = document.getElementById('noteFormMsg');
+      msg.textContent = err.message || 'Could not save this note.';
+      msg.className = 'form-msg error';
+    }
+  });
+}
+
+async function loadNotes() {
+  const list = document.getElementById('notesList');
+  try {
+    NOTES = await fetchJSON('/api/member/sermon-notes');
+    if (!NOTES.length) {
+      list.innerHTML = '<p class="empty-state">No sermon notes yet — add your first one above.</p>';
+      return;
+    }
+    list.innerHTML = NOTES.map(n => `
+      <div class="note-card">
+        <h4>${escapeHtml(n.sermonTitle || 'Untitled sermon')}</h4>
+        <div class="meta">${[n.preacher, n.date, n.scripture].filter(Boolean).map(escapeHtml).join(' · ') || 'No details added'}</div>
+        ${n.summary ? `<p class="body-text">${escapeHtml(n.summary)}</p>` : ''}
+        <div class="row-actions">
+          <button data-edit="${n.id}">Edit</button>
+          <button class="danger" data-delete="${n.id}">Delete</button>
+        </div>
+      </div>
+    `).join('');
+    list.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => noteForm(NOTES.find(n => n.id === btn.dataset.edit))));
+    list.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', async () => {
+      if (!confirm('Delete this sermon note?')) return;
+      await fetchJSON(`/api/member/sermon-notes/${btn.dataset.delete}`, { method: 'DELETE' });
+      loadNotes();
+    }));
+  } catch (e) {
+    list.innerHTML = '<p class="empty-state">Could not load your sermon notes.</p>';
+  }
+}
+
+document.getElementById('newNoteBtn').addEventListener('click', () => noteForm(null));
+
+(async function () {
+  await initLayout('/sermon-notes.html');
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  if (!authRes.member) { window.location.href = '/login.html'; return; }
+  loadNotes();
+})();
+</script>
+</body>
+</html>

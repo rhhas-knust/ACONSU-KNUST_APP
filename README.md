@@ -125,6 +125,7 @@ aconsu-app/
     db.js                 MongoDB Atlas connection
     models.js              Mongoose schemas
     repo.js                Generic CRUD used by server.js
+    roles.js                Multi-chapter role hierarchy + chapter-scope resolution (section 20)
     gridfs.js              File storage (photos, ebooks, profile/exec photos)
     bibleBooks.js          Static book/chapter list for the Bible reader
     push.js                Web push notification sending + cleanup
@@ -132,6 +133,7 @@ aconsu-app/
     mailer.js              SMTP email sending (password reset, office alerts)
     imageProcess.js        Automatic image resize/compression on upload
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
+  migrate-multichapter.js One-time migration to the multi-chapter model — see section 20
   capacitor.config.json    Native app (iOS/Android) wrapper config
   test/
     smoke.js               End-to-end test of the portals (`npm test`)
@@ -142,19 +144,20 @@ aconsu-app/
     events.html, media.html, bible.html, prayer.html, contact.html,
     login.html, register.html, forgot-password.html, reset-password.html,
     profile.html, notifications.html, discover.html, more.html,
-    page.html, admin.html
-    coordinator.html, finance.html, shepherding.html, publicity.html
+    page.html, admin.html (also the Chapter Admin portal — section 20)
+    national.html, coordinator.html, finance.html, shepherding.html, publicity.html
     manifest.json           PWA app manifest
     sw.js                   Service worker (offline support)
     icons/                  Generated app icons, all sizes
     css/style.css           Design system (colors, type, components)
-    css/portal.css          Shared styling for the four leadership portals
-    js/main.js              Shared header/footer, countdown, auth state, PWA install, toasts
-    js/admin.js             Admin dashboard logic
+    css/portal.css          Shared styling for the leadership portals
+    js/main.js              Shared header/footer, chapter selection, auth state, PWA install, toasts
+    js/admin.js             Admin / Chapter Admin dashboard logic
     js/portal.js            Shared portal shell — sign-in, nav, modals, formatting
-    js/coordinator.js       Coordinator dashboard
+    js/national.js          National Coordinator portal (chapters, national dashboard/announcements)
+    js/coordinator.js       Chapter Coordinator dashboard (approvals, chapter-wide announcements)
     js/finance.js           Finance office (budgets, ledger, reports)
-    js/shepherd.js          Shepherding portal (attendance, members, messages)
+    js/shepherd.js          Shepherding portal (attendance, members, messages, membership workflow)
     js/publicity.js         Publicity portal (announcements, SMS, testimonies)
     images/logo.jpg         ACONSU logo
 ```
@@ -426,3 +429,230 @@ Works with any standard SMTP provider — Gmail (using an [App Password](https:/
 ## 19. Design
 
 Palette pulled from the ACONSU crest: deep purple (`#5B2C82`) and rich plum (`#3A1B54`) as primary, a light lilac background, with the crest's flame rendered as a gold-to-red gradient accent on key call-to-action buttons and the homepage hero. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
+
+## 20. Multi-chapter platform (Phase 2 of the ACONSU platform spec)
+
+What used to be a single-chapter app (one ACONSU-KNUST) is now built to run **many ACONSU chapters from one deployment**, each with its own members, events, finances, attendance and content, with a National Coordinator overseeing all of them. This section covers what changed and how to switch a live install over.
+
+### Hierarchy
+
+```
+National Coordinator          — every chapter (env admin login doubles as this — see below)
+      ↓
+Chapter Coordinator           — role 'coordinator' — top authority in ONE chapter
+      ↓
+Chapter Admin                 — role 'chapterAdmin' — day-to-day admin (this is admin.html)
+      ↓
+Executive / Finance / Shepherding / Publicity / Welfare / Department Leader
+      ↓
+Members  →  Visitors
+```
+
+`coordinator` keeps its original database value on purpose (nothing that already exists had to be renamed) — its *meaning* changed from "read-only rollup" to "highest local authority," gaining approval powers (finance entry approval) and a chapter-wide announcement tool on top of the read access it already had.
+
+### How chapter isolation actually works
+
+Every chapter-owned collection (members, events, departments, finance entries, attendance, shepherding records, join/prayer/testimony/contact submissions, custom pages, sermons, executives, scheduled notifications, SMS logs) carries a `chapterId`. This is enforced **server-side**, not just hidden in the UI (section 43):
+
+- `lib/roles.js` → `getActingScope(req)` decides, from the session alone, which chapter (if any) a request may touch.
+- Every chapter-scoped route filters reads and stamps writes through `chapterFilter(req)` / `chapterIdForWrite(req)` — a chapter-scoped account can never read or write another chapter's row even by guessing its id in the URL.
+- A `chapterId` in a request **body** is never trusted for who-owns-this — it's always derived from the session server-side.
+- National-level accounts (the env admin login, or a real `nationalCoordinator` account) can act across every chapter, and must explicitly pick one (`?chapterId=`) for anything that only makes sense for a single chapter (like the Chapter Coordinator dashboard).
+- Notifications and events can be marked national (blank `chapterId` / `isNational: true`) to broadcast to every chapter — everything else defaults to exactly one chapter, never "all of them," unless a route is explicitly a national one.
+
+`test/smoke.js` has a dedicated "chapter isolation" section that spins up a second chapter with its own Finance/Shepherding/Coordinator accounts and asserts none of it is reachable from the first chapter's accounts, including by guessing a document id directly.
+
+### What's new
+
+- **National Coordinator portal** (`/national.html`) — create/edit/activate/deactivate chapters, assign or change a Chapter Coordinator (the outgoing one steps down to Chapter Admin rather than losing their account), a national dashboard with aggregated (never individually-identifying) per-chapter comparison, and national announcements.
+- **Chapter Coordinator** (`/coordinator.html`, upgraded) — same dashboard as before, now genuinely scoped to one chapter, plus an Approvals tab (finance entries flagged pending) and a chapter-wide announcement composer.
+- **Chapter Admin** — `/admin.html` now accepts sign-in from a `chapterAdmin` or `coordinator` portal account, not only the legacy env admin login. A national/env-admin session gets a chapter picker on the Leadership Accounts form; a chapter-scoped account is auto-confined to its own chapter with no picker shown.
+- **Registration** (`/register.html`) — now asks for a chapter, a profile photo (compulsory, section 6), programme and hostel, and a new account starts as a **visitor**, not a full member.
+- **Membership workflow** (Shepherding → Membership Workflow tab) — visitor → under review → accepted → assigned shepherd + active, matching section 7. Activating a member issues their membership number and a QR token (the digital membership card and QR attendance scanning that consume these are Phase 3 work — the data is ready for them).
+- Public pages pick up which chapter they're showing via a small chapter-selector (`main.js`: `ensureChapterSelected`) — invisible with one active chapter, asks once a second chapter exists, and a signed-in member's own chapter always wins.
+
+### Migrating an existing (single-chapter) install
+
+```bash
+node migrate-multichapter.js
+```
+
+Safe to re-run — it only ever fills in a **missing** `chapterId`, never overwrites one that's already set. It creates one `Chapter` document from whatever is already in Site Settings, backfills that chapter's id onto every existing document, and grandfathers existing member accounts straight to **active** membership (they already went through the old direct-registration flow, so demoting them to "visitor" would be wrong). Existing admin/member logins are completely unaffected — nothing about how they sign in changed.
+
+### Deliberately not in this pass
+
+Matching the spec's own phased rollout, this pass was the *foundation* (chapter model, isolation, hierarchy, registration, membership workflow, national/chapter portals). Phase 3–4 (below) built directly on it. Community Chat, Groups, Welfare portal, Volunteer scheduling, Live Services, Seminars, E-Book Library, per-chapter payment/donation integration, and the full mobile UX overhaul are still ahead (Phases 5–9 of the spec).
+
+## 21. Core features + spiritual life (Phases 3–4 of the platform spec)
+
+Built directly on the Phase 2 foundation — every new piece below is chapter-isolated the same way (server-side, not just hidden in the UI) and covered by `test/smoke.js`.
+
+**Executive Portal** (`/executive.html`) — an executive signs in with their own portal account (role `executive`) and can only ever edit the one Executive record tied to that account, never anyone else's. Position/department changes are snapshotted into history automatically, the same pattern as a member's academic history. Executives submit events from here, which land in Publicity's review queue rather than publishing directly.
+
+**Event workflow** (section 9) — `Event.status` now runs `draft → submitted → approved/rejected → published`. Events created directly by Admin/Coordinator/Publicity still publish immediately (status defaults to `published`, so nothing existing changed behaviour). Only an executive's submission enters the pipeline: Publicity reviews it (`/api/publicity/events/:id/review`), then publishes it separately (`/api/publicity/events/:id/publish`) once any flyer is attached — the public `/api/events` endpoint only ever returns `published` events to anonymous visitors. Flyers upload through the same placement system as department headers and show on the event's card, on `events.html`, and in a flyer strip on the homepage once published.
+
+**Form Builder** (section 11, `/api/forms`, Publicity portal → Forms) — one generic engine (short text, long text, multiple choice, checkboxes, dropdown, date, time, phone, email, file) reused for event registration, travelling-event sign-ups, executive info, department activities and welfare, so a new kind of form never needs a new schema. Chapter Admin/Coordinator or Publicity can build one; anyone can fill one in; submissions are viewable per-form.
+
+**QR digital membership card + attendance** (sections 13–14) — every active member's card (`/card.html`, linked from Profile) shows a real, scannable QR code (generated server-side via the `qrcode` package, encoding an unguessable token — never the member's id or email). Shepherding's Attendance tab gained a Quick Check-In card: camera scanning via the browser's `BarcodeDetector` API where supported, with a manual name-search fallback everywhere else (section 13 requires this fallback explicitly). Both paths call the same server-side check that identifies the member *and verifies their chapter* before recording anything — a chapter's shepherd can never check in another chapter's member, even with a valid code.
+
+**PDF reports** (section 37, via the new `pdfkit`-based `lib/pdf.js`) — Finance gained a PDF sibling to its existing CSV export; Shepherding gained a per-service attendance report, an attendance-percentage report across a date range, and a membership roster, all downloadable straight from the portal.
+
+**Bible Study** (`/bible-study.html`, section 16) — chapter-scoped entries (topic, date, scripture reference, study material, questions, notes, resources) that link straight into the existing Bible reader (`bible.html` now accepts `?book=&chapter=` for exactly this). Managed from the admin dashboard's new Bible Study tab.
+
+**Sermon Notes** (`/sermon-notes.html`, section 17) — private, member-owned notes (title, preacher, date, scripture, notes, summary, key lessons, reflections). No admin or shepherding view of these exists on purpose — they're personal.
+
+**Prayer Wall** (`/prayer.html`, section 18) — prayer requests now carry a `visibility` (public / private / shepherd-only / anonymous) instead of a plain private flag. Public and anonymous requests appear on a real wall where members can tap "I'm praying for you" (tracked per-member, only a count is ever shown publicly) and the original submitter — or Shepherding, for anonymous ones — can mark a request answered with an optional testimony that then shows on the wall.
+
+### New dependencies
+
+`qrcode` and `pdfkit` — both pure-JS, no native compilation, same class of dependency as the ones already here. `npm audit` flagged 4 pre-existing high/critical advisories in **nodemailer, sharp, and Capacitor's `tar`** dependency (none from these two new packages) — all three fixes are breaking-change major-version bumps to libraries real features depend on (email delivery, image compression), so I left them for a dedicated, tested pass rather than bundling a risky upgrade into this one. Worth prioritizing soon.
+
+## 22. Community, care and giving (Phases 5–6 of the platform spec)
+
+**Social platform icons** — the footer (and anywhere else `socialLinksHtml()` is used) now renders real Facebook/Instagram/YouTube/WhatsApp icons instead of "IG/FB/YT/WA" text, matching the app's existing icon style. Only ever shows a platform a chapter/settings record actually has a link for.
+
+**Groups** (`/groups.html`, `/group.html`, section 20) — Bible Study, Prayer, Fellowship, Cell and other groups, distinct from Departments (a group can optionally sit under one). Each group has a leader — who is very often just a member with no portal login at all, so leader permissions are checked against the member session directly, not the staff-only role system. A group's own leader can update its meeting details, resources, post announcements and log meetings (with attendance) without needing Chapter Admin access; Chapter Admin/Coordinator/Publicity create groups and (re)assign leadership from the admin dashboard's new Groups tab.
+
+**Community Chat** (`/chat.html`, section 19) — chapter-wide discussion topics and replies. Moderation is deliberately simple: hide a message (soft-delete — nothing is destroyed, it just stops showing, from the admin dashboard's Chat Moderation tab), lock a topic, restrict a member from posting further (toggle on the Members tab — they can still read, just not post), and members can report a message to flag it for review.
+
+**Volunteer / Service Scheduling** (section 23) — Publicity assigns ushers/prayer team/media/musicians/protocol/transport/other roles per event (Events tab → Volunteers); a member sees what they've been asked to serve on their Profile page and confirms or declines.
+
+**Member Milestones** (section 36) — birthdays already ran their own daily check; this adds the ones a human has to notice. An executive-appointment notification fires automatically the first time someone sets up their Executive profile. Shepherding can log a graduation, membership anniversary, or anything else worth celebrating from a new Pastoral Care tab, which posts a congratulatory notification to the chapter.
+
+**Welfare** (`/welfare.html`, `/welfare-portal.html`, section 33) — a member submits their own request and tracks its status (never their internal case notes); Shepherding can raise a referral on someone's behalf during pastoral care without seeing the full welfare queue themselves — that stays confidential to Welfare Officers and Chapter Admin/Coordinator, the same boundary a real welfare team keeps. Welfare Officers get their own portal (`/welfare-portal.html`) rather than the full admin dashboard.
+
+**Giving** (`/give.html`, section 32) — deliberately **not** a live payment gateway; nothing in this codebase charges a card or moves money on its own. A member is shown their chapter's real MoMo/bank details (set by National/Chapter Admin under chapter payment config) and logs what they sent — Finance then reconciles each claim from a "Giving Claims" tab into a real ledger entry (or rejects it). This is the same honest, manual-first pattern already used for SMS/email: real, working, and upgradeable to a real gateway later without needing to be torn out.
+
+All of the above is chapter-isolated the same way as everything else in this app, and `test/smoke.js` proves it end-to-end (a member can't read a group they haven't joined, a hidden chat message stays hidden, Finance can't browse the welfare queue, a confirmed gift actually moves the ledger by the right amount, and so on).
+
+## 23. Reliability and security maintenance
+
+The Phase 5–6 community routes now live in focused modules under `routes/` (`groups.js`, `chat.js`, and `member-services.js`). They are registered by `server.js` with the existing authentication and chapter-scoping helpers injected, so the app retains one authoritative session and permission model rather than creating parallel middleware.
+
+This maintenance pass also closes direct-ID chapter-isolation checks for groups, chat topics/messages, and volunteer assignments. A logged-in member must now belong to the same chapter before any of those records can be read, joined, changed, reported, or responded to.
+
+The dependency upgrade moves Nodemailer to 9.x, Sharp to 0.35.x and Capacitor to 8.x. At the time of the upgrade, `npm audit --omit=dev` reported **0 vulnerabilities** and the complete smoke-test suite passed. Android/iOS builds should be synced and built in their native toolchains after pulling this update (`npm run cap:sync`); no payment, email, image, or app data migration is required.
+
+## 24. Media & Content Hub (Phase 7 of the platform spec)
+
+Phase 7 establishes a comprehensive multimedia and resource platform across all ACONSU chapters, with centralized management and granular chapter/national scoping.
+
+### What's included:
+
+- **Live Services** (`/content.html?kind=live_service`, section 24) — embeds responsive YouTube and Facebook livestreams directly in the app, with real-time live status badges and direct stream links. Administrators and Publicity officers can update stream links dynamically without code modifications.
+- **Seminars & Workshops** (`/content.html?kind=seminar`, section 25) — multi-stage learning cards supporting the *Snapshot Image ➔ Short Video Preview ➔ Watch Full Session* workflow, with downloadable presentation notes.
+- **E-Book Library** (`/content.html?kind=ebook`, section 28) — curated publications library with interactive category filter pills (*Bible Studies, Christian Growth, Devotionals, Leadership, Church History, ACONSU Publications*), in-page search, and direct GridFS PDF downloads.
+- **This Week at ACONSU** (`/content.html?kind=weekly_highlight`, section 27) — high-visual highlight strip featuring chapter outreach, fellowship moments, campus events, and celebrations.
+- **Founders & Church Heritage** (`/content.html?kind=founder`, `/content.html?kind=church_info`, `/content.html?kind=aconsu_info`, sections 29–30) — dedicated historical profiles and documentation celebrating the founders of the union, the history/vision/mission of The Apostles Continuation Church, and the national ACONSU campus network.
+- **Content Manager Portal** (`/content-manager.html`, sections 10, 24–31) — full-featured media management portal with:
+  - Drag-and-drop cover photo and PDF document uploads stored directly in MongoDB Atlas GridFS.
+  - In-place editing (`PUT /api/admin/content/:id`) with pre-filled forms.
+  - Draft vs. Published toggle and category tagging.
+  - Type-filter tabs and live search bar.
+  - National broadcast switch (`isNational`) for the National Coordinator.
+- **Navigation & Discover Integration** (sections 40, 42) — Live Services, Seminars, and E-Books are wired directly into `/more.html` and the Discover page (`/discover.html`), with global search indexing across all published ContentItems.
+- **Publicity Portal Linkage** — a dedicated **Media & Content** management tab embedded directly in the Publicity Portal navigation (`/publicity.html`).
+- **Feature Flag Gating** (section 39) — National Coordinator can globally toggle `liveStreaming`, `seminars`, and `ebooks` on or off via `/api/national/features`.
+- **Automatic Storage Cleanup** — deleting any content item via `DELETE /api/admin/content/:id` automatically deletes its associated cover image and PDF document from GridFS, preventing orphaned storage leaks.
+
+## 25. National Management (Phase 8 of the platform spec)
+
+Phase 8 completes the National Coordinator's toolkit with real-time oversight, historical reporting, feature-flag governance, and cross-chapter announcements — all scoped so that sensitive per-member data never leaves the chapter that owns it (section 38).
+
+### National Dashboard (`/national.html` → Dashboard tab)
+
+A live, aggregated overview across every chapter:
+- Total / active chapters, total members, total visitors, executives, upcoming events, and the national financial balance.
+- Per-chapter comparison table showing member counts, visitor counts, executive counts, upcoming events, last service attendance, and running balance — never individually-identifying data.
+- Generated-at timestamp so the viewer always knows how fresh the numbers are.
+
+API: `GET /api/national/dashboard` (requires `nationalCoordinator` or the env-admin session).
+
+### Chapter Management (Chapters tab)
+
+Create, edit, activate/deactivate chapters, and assign or change each chapter's Chapter Coordinator — all from one screen.
+
+| Action | API |
+| --- | --- |
+| List all chapters | `GET /api/national/chapters` |
+| Create a chapter | `POST /api/national/chapters` (body: `{ id, name, institution?, location?, ... }`) |
+| Edit a chapter | `PUT /api/national/chapters/:id` |
+| Activate / deactivate | `PATCH /api/national/chapters/:id/status` (body: `{ status: "active" \| "inactive" }`) |
+| Assign coordinator | `POST /api/national/chapters/:id/assign-coordinator` (body: `{ username, name, password }` for new, or `{ staffId }` to promote existing) |
+
+Assigning a new coordinator automatically steps down the previous one to Chapter Admin rather than deleting their account.
+
+### Feature Configuration (Features tab)
+
+The National Coordinator controls which optional modules are available platform-wide. A disabled module remains safely stored — it is simply not offered publicly.
+
+Available toggles: Bible, Bible Study, Events, Donations, Welfare, Community Chat, E-Books, Live Streaming, Attendance, Seminars, Prayer Wall, Groups, Departments.
+
+| Action | API |
+| --- | --- |
+| View current flags | `GET /api/national/features` |
+| Update flags | `PUT /api/national/features` (body: `{ modules: { ebooks: false, ... } }`) |
+
+Only recognised boolean keys are accepted — a crafted request cannot add arbitrary configuration fields.
+
+### National Reports
+
+**Live overview** (Reports tab) — chapter-level comparison only, never a list of individual members or finances:
+
+`GET /api/national/reports/overview` → returns per-chapter active members, visitors, event count, services recorded, and open welfare requests.
+
+**Historical snapshots** — persist a point-in-time snapshot of the live dashboard into a `NationalReport` document, useful for tracking growth trends over weeks/months:
+
+| Action | API |
+| --- | --- |
+| Take a snapshot | `POST /api/national/reports/snapshot` (optional body: `{ region, continent }`) |
+| Retrieve history | `GET /api/national/reports/history?from=YYYY-MM-DD&to=YYYY-MM-DD` |
+
+Each snapshot captures total chapters, active chapters, total members, total visitors, national balance, and per-chapter breakdowns at the moment it's taken.
+
+### National Announcements (Announcements tab)
+
+A single composer that reaches every chapter at once — for anything that isn't chapter-specific. Each Chapter Coordinator has their own chapter-wide announcement tool for local news.
+
+`POST /api/national/announcements` (body: `{ title, body, channels: ["app", "sms"] }`)
+
+Channels: `app` posts to the notification feed and fires push alerts; `sms` texts every member with a phone number on file. Blank `chapterId` ensures the notification appears in every chapter's feed.
+
+### Schemas
+
+Two dedicated schemas support this phase:
+
+- **NationalFeature** — `{ key (unique), enabled, description }` with timestamps. Backs the feature-flag toggle UI.
+- **NationalReport** — `{ reportDate, region, continent, metrics (Mixed) }` with timestamps. Stores historical snapshots for trend analysis.
+
+### Security
+
+All national routes require `rolesLib.requireNational`, which accepts either:
+1. A `StaffUser` account with role `nationalCoordinator`.
+2. The legacy env-admin session (`ADMIN_USERNAME` / `ADMIN_PASSWORD`).
+
+A Chapter Coordinator, Chapter Admin, or any chapter-level role receives `401` — `test/smoke.js` verifies this explicitly.
+
+## 26. Mobile UX Overhaul & Native App / PWA Polish (Phase 9 of the platform spec)
+
+Phase 9 polishes the ACONSU platform into a smooth, responsive, native-feeling mobile experience across Progressive Web App (PWA) installs, Capacitor iOS/Android native wraps, and mobile browsers.
+
+### What's included:
+
+- **Enhanced Service Worker & App Shell (`sw.js` — `aconsu-v6`)**:
+  - Expanded `APP_SHELL` pre-caches all public interfaces added across Phases 3–8 (`content.html`, `welfare.html`, `groups.html`, `group.html`, `chat.html`, `bible-study.html`, `sermon-notes.html`, `card.html`, `give.html`, `department.html`, `forgot-password.html`, `reset-password.html`, and all icons).
+  - Explicit `LIVE_ONLY` bypass for all administrative and leadership portals (`admin.html`, `coordinator.html`, `finance.html`, `shepherding.html`, `publicity.html`, `national.html`, `executive.html`, `welfare-portal.html`, `content-manager.html`) ensuring sensitive session states are never served from a stale cache.
+  - Automatic cache cleanup on version change.
+- **Web App Manifest Shortcuts (`manifest.json`)**:
+  - Direct quick-action shortcuts for Events, Bible Reader, Media & Content Hub, Prayer Wall, and Community Groups.
+  - Configured categories (`lifestyle`, `social`, `books`, `education`) and standalone display modes.
+- **Mobile Touch Polish & Bottom Sheets (`style.css`)**:
+  - **Notch & Safe-Area Inset Support**: `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)` integrated into headers, bottom navigation bar, and modals.
+  - **Mobile Bottom Sheets**: Modals on mobile viewports (`<600px`) automatically morph into sliding bottom sheets (`slideUpSheet` animation) anchored to the bottom with touch-friendly padding.
+  - **Touch Active States**: Subtle micro-scaling feedback (`transform: scale(0.97)`) on buttons, tiles, cards, and bottom navigation icons with tap-highlight suppression (`-webkit-tap-highlight-color: transparent`).
+  - **Momentum Scrolling**: `-webkit-overflow-scrolling: touch` and smooth scrolling across all containers.
+- **Native Hardware APIs & Network Status (`main.js`)**:
+  - **Haptic Feedback**: `triggerHaptic()` triggers micro-vibration pulses (`navigator.vibrate`) on tab taps and user confirmations on supported devices.
+  - **Native Web Share API**: `shareContent()` provides one-tap sharing for events, sermons, scriptures, and testimonies with automatic clipboard copy fallback.
+  - **Live Online / Offline Detection**: Real-time listeners automatically notify the user with non-intrusive toast indicators when connectivity drops (`📡 You are currently offline`) and resumes (`⚡ Back online!`).
+

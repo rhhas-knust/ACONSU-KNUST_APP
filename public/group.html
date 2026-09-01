@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Group — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .group-tabs { display:flex; gap:8px; border-bottom:1px solid var(--line); margin:20px 0; overflow-x:auto; }
+  .group-tabs button { border:none; background:none; padding:10px 6px; font-weight:700; font-size:0.88rem; color:#8a7595; cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; }
+  .group-tabs button.active { color:var(--purple-deep); border-color:var(--purple-deep); }
+  .post-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+  .post-card.announcement { border-color:var(--flame-gold); background:#FFF8EC; }
+  .post-card .who { font-weight:700; font-size:0.85rem; color:var(--purple-deep); }
+  .post-card .when { font-size:0.75rem; color:#8a7595; }
+  .member-chip { display:inline-flex; align-items:center; gap:8px; background:var(--lilac-light); border-radius:999px; padding:4px 12px 4px 4px; font-size:0.82rem; margin:0 6px 6px 0; }
+  .member-chip img, .member-chip .fallback { width:26px; height:26px; border-radius:50%; object-fit:cover; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--purple-deep); font-size:0.75rem; }
+  .meeting-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:32px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content" id="groupHero">
+    <p class="eyebrow">Group</p>
+    <h1>Loading...</h1>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:760px;">
+    <div id="groupBody"><p class="empty-state">Loading...</p></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+let GROUP = null;
+let currentMember = null;
+const groupId = new URLSearchParams(location.search).get('id');
+
+async function reloadGroup() {
+  GROUP = await fetchJSON(`/api/groups/${groupId}`);
+  document.getElementById('groupHero').innerHTML = `
+    <p class="eyebrow">${escapeHtml(GROUP.type.replace('_', ' '))}</p>
+    <h1>${escapeHtml(GROUP.name)}</h1>
+    <p class="lede">${escapeHtml(GROUP.description || '')}</p>
+  `;
+  renderTab(activeTab);
+}
+
+let activeTab = 'about';
+function renderTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.group-tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const body = document.getElementById('groupBody');
+  if (tab === 'about') return renderAbout(body);
+  if (tab === 'posts') return renderPosts(body);
+  if (tab === 'meetings') return renderMeetings(body);
+}
+
+function renderAbout(body) {
+  const joinBtn = !currentMember ? `<a href="/login.html" class="btn btn-primary">Log In to Join</a>`
+    : GROUP.isMember ? `<button class="btn btn-outline" id="leaveBtn">Leave Group</button>`
+    : `<button class="btn btn-primary" id="joinBtn">Join Group</button>`;
+
+  body.innerHTML = `
+    <div class="portal-card" style="background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px;">
+      <p><strong>Leader:</strong> ${escapeHtml(GROUP.leaderName || 'Not yet assigned')}</p>
+      ${GROUP.meetingDay ? `<p><strong>Meets:</strong> ${escapeHtml(GROUP.meetingDay)} ${escapeHtml(GROUP.meetingTime || '')} ${GROUP.meetingLocation ? '— ' + escapeHtml(GROUP.meetingLocation) : ''}</p>` : ''}
+      <div style="margin-top:14px;">${joinBtn}</div>
+    </div>
+    ${GROUP.resources.length ? `
+      <h3>Resources</h3>
+      <ul>${GROUP.resources.map(r => `<li><a href="${escapeHtml(r.url || '#')}" target="_blank" rel="noopener">${escapeHtml(r.title)}</a></li>`).join('')}</ul>
+    ` : ''}
+    ${GROUP.members.length ? `
+      <h3 style="margin-top:18px;">Members (${GROUP.memberCount})</h3>
+      <div>${GROUP.members.map(m => `
+        <span class="member-chip">${m.profileImageFileId ? `<img src="/api/files/${m.profileImageFileId}" alt="">` : `<span class="fallback">${escapeHtml((m.name || '?').charAt(0).toUpperCase())}</span>`} ${escapeHtml(m.name)}</span>
+      `).join('')}</div>
+    ` : ''}
+    ${GROUP.isLeader ? `
+      <div style="margin-top:20px;">
+        <button class="btn btn-outline btn-sm" id="editGroupBtn">Edit Group Details</button>
+      </div>
+    ` : ''}
+  `;
+  const joinBtnEl = document.getElementById('joinBtn');
+  if (joinBtnEl) joinBtnEl.addEventListener('click', async () => {
+    await fetchJSON(`/api/groups/${groupId}/join`, { method: 'POST' });
+    showToast('You joined the group!', 'success');
+    reloadGroup();
+  });
+  const leaveBtnEl = document.getElementById('leaveBtn');
+  if (leaveBtnEl) leaveBtnEl.addEventListener('click', async () => {
+    if (!confirm('Leave this group?')) return;
+    await fetchJSON(`/api/groups/${groupId}/leave`, { method: 'POST' });
+    showToast('You left the group.', 'success');
+    reloadGroup();
+  });
+  const editBtn = document.getElementById('editGroupBtn');
+  if (editBtn) editBtn.addEventListener('click', openEditGroupForm);
+}
+
+function openEditGroupForm() {
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;';
+  backdrop.innerHTML = `
+    <form class="form-card" id="editGroupForm" style="max-width:420px; width:100%; max-height:88vh; overflow-y:auto;">
+      <h3>Edit Group</h3>
+      <div class="field"><label>Description</label><textarea id="egDesc">${escapeHtml(GROUP.description || '')}</textarea></div>
+      <div class="field"><label>Meeting Day</label><input type="text" id="egDay" value="${escapeHtml(GROUP.meetingDay || '')}"></div>
+      <div class="field"><label>Meeting Time</label><input type="text" id="egTime" value="${escapeHtml(GROUP.meetingTime || '')}"></div>
+      <div class="field"><label>Meeting Location</label><input type="text" id="egLoc" value="${escapeHtml(GROUP.meetingLocation || '')}"></div>
+      <div class="field"><label>Resources (one "Title | URL" per line)</label><textarea id="egResources">${GROUP.resources.map(r => `${r.title} | ${r.url}`).join('\n')}</textarea></div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-outline" id="egCancel">Cancel</button>
+      </div>
+      <div class="form-msg" id="egMsg"></div>
+    </form>
+  `;
+  document.body.appendChild(backdrop);
+  document.getElementById('egCancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('editGroupForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const resources = document.getElementById('egResources').value.split('\n').map(line => {
+      const [title, url] = line.split('|').map(s => (s || '').trim());
+      return title ? { title, url: url || '' } : null;
+    }).filter(Boolean);
+    try {
+      await fetchJSON(`/api/groups/${groupId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: document.getElementById('egDesc').value,
+          meetingDay: document.getElementById('egDay').value,
+          meetingTime: document.getElementById('egTime').value,
+          meetingLocation: document.getElementById('egLoc').value,
+          resources
+        })
+      });
+      backdrop.remove();
+      showToast('Group updated.', 'success');
+      reloadGroup();
+    } catch (err) {
+      document.getElementById('egMsg').textContent = err.message || 'Could not save.';
+      document.getElementById('egMsg').className = 'form-msg error';
+    }
+  });
+}
+
+async function renderPosts(body) {
+  if (!currentMember) { body.innerHTML = '<p class="empty-state">Log in and join this group to see its discussion.</p>'; return; }
+  body.innerHTML = '<p class="empty-state">Loading...</p>';
+  try {
+    const posts = await fetchJSON(`/api/groups/${groupId}/posts`);
+    body.innerHTML = `
+      ${GROUP.isMember || GROUP.isLeader ? `
+        <form id="postForm" style="margin-bottom:18px;">
+          <textarea id="postBody" placeholder="Share something with the group..." rows="2" style="width:100%; padding:10px; border:1px solid var(--line); border-radius:10px; font-family:inherit;"></textarea>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            ${GROUP.isLeader ? `<label style="font-size:0.82rem;"><input type="checkbox" id="postAnnouncement" style="width:auto;"> Post as announcement</label>` : '<span></span>'}
+            <button type="submit" class="btn btn-primary btn-sm">Post</button>
+          </div>
+        </form>
+      ` : ''}
+      <div id="postsList">
+        ${posts.map(p => `
+          <div class="post-card ${p.isAnnouncement ? 'announcement' : ''}">
+            ${p.isAnnouncement ? '<span class="badge">📌 Announcement</span>' : ''}
+            <p style="margin:6px 0;">${escapeHtml(p.body)}</p>
+            <div class="who">${escapeHtml(p.authorName || 'Someone')}</div>
+            <div class="when">${dateTimeLabelSafe(p.createdAt)}</div>
+          </div>
+        `).join('') || '<p class="empty-state">No posts yet — say hello!</p>'}
+      </div>
+    `;
+    const form = document.getElementById('postForm');
+    if (form) form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = document.getElementById('postBody').value.trim();
+      if (!text) return;
+      await fetchJSON(`/api/groups/${groupId}/posts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: text, isAnnouncement: document.getElementById('postAnnouncement')?.checked })
+      });
+      renderPosts(body);
+    });
+  } catch (e) {
+    body.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load posts.')}</p>`;
+  }
+}
+
+async function renderMeetings(body) {
+  if (!currentMember) { body.innerHTML = '<p class="empty-state">Log in and join this group to see its meetings.</p>'; return; }
+  body.innerHTML = '<p class="empty-state">Loading...</p>';
+  try {
+    const meetings = await fetchJSON(`/api/groups/${groupId}/meetings`);
+    body.innerHTML = `
+      ${GROUP.isLeader ? `<button class="btn btn-primary btn-sm" id="logMeetingBtn" style="margin-bottom:16px;">+ Log a Meeting</button>` : ''}
+      ${meetings.map(m => `
+        <div class="meeting-card">
+          <strong>${shortDateSafe(m.date)}</strong>${m.topic ? ` — ${escapeHtml(m.topic)}` : ''}
+          <div class="tiny muted">${escapeHtml(m.location || '')} · ${m.attendeeMemberIds.length} attended</div>
+          ${m.notes ? `<p style="margin-top:6px; font-size:0.88rem;">${escapeHtml(m.notes)}</p>` : ''}
+        </div>
+      `).join('') || '<p class="empty-state">No meetings logged yet.</p>'}
+    `;
+    const btn = document.getElementById('logMeetingBtn');
+    if (btn) btn.addEventListener('click', () => openLogMeetingForm(body));
+  } catch (e) {
+    body.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load meetings.')}</p>`;
+  }
+}
+
+function openLogMeetingForm(body) {
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;';
+  backdrop.innerHTML = `
+    <form class="form-card" id="meetingForm" style="max-width:420px; width:100%; max-height:88vh; overflow-y:auto;">
+      <h3>Log a Meeting</h3>
+      <div class="field"><label>Date</label><input type="date" id="mDate" required></div>
+      <div class="field"><label>Topic</label><input type="text" id="mTopic"></div>
+      <div class="field"><label>Location</label><input type="text" id="mLocation"></div>
+      <div class="field"><label>Who attended?</label>
+        <div>${GROUP.members.map(m => `<label style="display:block; font-size:0.85rem; margin-bottom:4px;"><input type="checkbox" value="${m.id}" class="attendeeBox" style="width:auto;"> ${escapeHtml(m.name)}</label>`).join('')}</div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="mNotes"></textarea></div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save Meeting</button>
+        <button type="button" class="btn btn-outline" id="mCancel">Cancel</button>
+      </div>
+      <div class="form-msg" id="mMsg"></div>
+    </form>
+  `;
+  document.body.appendChild(backdrop);
+  document.getElementById('mCancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('meetingForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const attendeeMemberIds = [...document.querySelectorAll('.attendeeBox:checked')].map(el => el.value);
+    try {
+      await fetchJSON(`/api/groups/${groupId}/meetings`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: document.getElementById('mDate').value, topic: document.getElementById('mTopic').value,
+          location: document.getElementById('mLocation').value, notes: document.getElementById('mNotes').value,
+          attendeeMemberIds
+        })
+      });
+      backdrop.remove();
+      showToast('Meeting logged.', 'success');
+      renderMeetings(document.getElementById('groupBody'));
+    } catch (err) {
+      document.getElementById('mMsg').textContent = err.message || 'Could not save.';
+      document.getElementById('mMsg').className = 'form-msg error';
+    }
+  });
+}
+
+function dateTimeLabelSafe(v) { try { return new Date(v).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+function shortDateSafe(v) { try { return new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return v; } }
+
+(async function () {
+  if (!groupId) { document.getElementById('groupBody').innerHTML = '<p class="empty-state">No group specified.</p>'; return; }
+  await initLayout('/groups.html');
+  const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
+  currentMember = authRes.member;
+
+  const tabsWrap = document.createElement('div');
+  tabsWrap.className = 'group-tabs';
+  tabsWrap.innerHTML = `
+    <button data-tab="about" class="active">About</button>
+    <button data-tab="posts">Discussion</button>
+    <button data-tab="meetings">Meetings</button>
+  `;
+  document.querySelector('.container').insertBefore(tabsWrap, document.getElementById('groupBody'));
+  tabsWrap.querySelectorAll('button').forEach(b => b.addEventListener('click', () => renderTab(b.dataset.tab)));
+
+  try {
+    await reloadGroup();
+  } catch (e) {
+    document.getElementById('groupBody').innerHTML = '<p class="empty-state">Could not load this group.</p>';
+  }
+})();
+</script>
+</body>
+</html>

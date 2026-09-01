@@ -90,7 +90,11 @@
       title: 'Grow',
       links: [
         { href: '/bible.html', label: 'Bible', desc: 'Read a chapter, keep your streak', icon: ICON_BIBLE },
+        { href: '/bible-study.html', label: 'Bible Study', desc: 'Structured studies, linked to scripture', icon: ICON_BIBLE },
+        { href: '/content.html?kind=live_service', label: 'Live Services', desc: 'Join services and streams online', icon: ICON_HEADPHONES },
         { href: '/media.html', label: 'Sermons & Media', desc: 'Catch up on the word', icon: ICON_HEADPHONES },
+        { href: '/content.html?kind=ebook', label: 'E-Book Library', desc: 'Read and download approved resources', icon: ICON_BIBLE },
+        { href: '/content.html?kind=seminar', label: 'Seminars', desc: 'Watch previews and full sessions', icon: ICON_HEADPHONES },
         { href: '/prayer.html', label: 'Prayer Wall', desc: 'Send a request, pray for others', icon: ICON_PRAYER }
       ]
     },
@@ -98,8 +102,20 @@
       title: 'Belong',
       links: [
         { href: '/departments.html', label: 'Departments', desc: 'Find where you fit and serve', icon: ICON_USERS },
+        { href: '/groups.html', label: 'Groups', desc: 'Bible study, prayer, fellowship and cell groups', icon: ICON_USERS },
+        { href: '/chat.html', label: 'Community', desc: 'Ask questions, share, discuss respectfully', icon: ICON_MORE },
         { href: '/about.html', label: 'About ACONSU', desc: 'Who we are and what we believe', icon: ICON_HOME },
+        { href: '/content.html?kind=church_info', label: 'Our Church', desc: 'About The Apostles Continuation Church', icon: ICON_HOME },
+        { href: '/content.html?kind=founder', label: 'Founders', desc: 'The people who shaped this work', icon: ICON_USERS },
+        { href: '/content.html?kind=weekly_highlight', label: 'This Week at ACONSU', desc: 'Activities, outreach and moments', icon: ICON_EVENTS },
         { href: '/contact.html', label: 'Contact Us', desc: 'Reach the leadership directly', icon: ICON_MORE }
+      ]
+    },
+    {
+      title: 'Give & Care',
+      links: [
+        { href: '/give.html', label: 'Give', desc: 'Support your chapter — tithes, offerings, welfare', icon: ICON_HOME },
+        { href: '/welfare.html', label: 'Welfare', desc: 'Need support? Let us know, confidentially', icon: ICON_PRAYER }
       ]
     }
   ];
@@ -129,6 +145,16 @@
           <a href="/profile.html" class="more-tile">
             <span class="more-tile-icon">${svgIcon(ICON_USERS)}</span>
             <span class="more-tile-text"><strong>My Profile</strong><small>Details, badges and alert settings</small></span>
+            <span class="more-chevron">&rsaquo;</span>
+          </a>
+          <a href="/card.html" class="more-tile">
+            <span class="more-tile-icon">${svgIcon(ICON_USERS)}</span>
+            <span class="more-tile-text"><strong>Membership Card</strong><small>Your digital ACONSU ID + QR code</small></span>
+            <span class="more-chevron">&rsaquo;</span>
+          </a>
+          <a href="/sermon-notes.html" class="more-tile">
+            <span class="more-tile-icon">${svgIcon(ICON_HEADPHONES)}</span>
+            <span class="more-tile-text"><strong>Sermon Notes</strong><small>Private notes only you can see</small></span>
             <span class="more-chevron">&rsaquo;</span>
           </a>
           <button type="button" class="more-tile" id="moreLogoutBtn" style="text-align:left; border:none; font-family:inherit;">

@@ -50,22 +50,29 @@
 
 <script src="/js/main.js"></script>
 <script>
-let ALL_SERMONS = [], ALL_DEPARTMENTS = [], ALL_EVENTS = [], ALL_PAGES = [];
+let ALL_SERMONS = [], ALL_DEPARTMENTS = [], ALL_EVENTS = [], ALL_PAGES = [], ALL_CONTENT = [];
 
 (async function () {
   await initLayout('/discover.html');
 
-  const [sermons, departments, events, pages] = await Promise.all([
+  const [sermons, departments, events, pages, ebooks, seminars, live, highlights] = await Promise.all([
     fetchJSON('/api/sermons').catch(() => []),
     fetchJSON('/api/departments').catch(() => []),
     fetchJSON('/api/events').catch(() => []),
-    fetchJSON('/api/pages').catch(() => [])
+    fetchJSON('/api/pages').catch(() => []),
+    fetchJSON('/api/content/ebook').catch(() => []),
+    fetchJSON('/api/content/seminar').catch(() => []),
+    fetchJSON('/api/content/live_service').catch(() => []),
+    fetchJSON('/api/content/weekly_highlight').catch(() => [])
   ]);
   ALL_SERMONS = sermons; ALL_DEPARTMENTS = departments; ALL_EVENTS = events; ALL_PAGES = pages;
+  ALL_CONTENT = [...ebooks, ...seminars, ...live, ...highlights];
 
   const coreTiles = [
     { href: '/media.html', label: 'Sermons & Media', icon: ICON_HEADPHONES },
     { href: '/bible.html', label: 'Bible', icon: ICON_BIBLE },
+    { href: '/content.html?kind=ebook', label: 'E-Book Library', icon: ICON_BIBLE },
+    { href: '/content.html?kind=seminar', label: 'Seminars & Workshops', icon: ICON_HEADPHONES },
     { href: '/departments.html', label: 'Departments', icon: ICON_USERS },
     { href: '/events.html', label: 'Events', icon: ICON_EVENTS }
   ];
@@ -107,6 +114,12 @@ function runSearch(query) {
     ...ALL_SERMONS.filter(s => (s.title + s.speaker).toLowerCase().includes(q)).map(s => ({ type: 'Sermon', title: s.title, sub: s.speaker, href: '/media.html' })),
     ...ALL_DEPARTMENTS.filter(d => d.name.toLowerCase().includes(q)).map(d => ({ type: 'Department', title: d.name, sub: d.tagline, href: `/department.html?id=${d.id}` })),
     ...ALL_EVENTS.filter(e => e.title.toLowerCase().includes(q)).map(e => ({ type: 'Event', title: e.title, sub: e.date, href: '/events.html' })),
+    ...ALL_CONTENT.filter(c => (c.title + ' ' + (c.category || '') + ' ' + (c.summary || '')).toLowerCase().includes(q)).map(c => ({
+      type: c.kind === 'ebook' ? 'E-Book' : c.kind === 'seminar' ? 'Seminar' : c.kind === 'live_service' ? 'Live Stream' : 'Media',
+      title: c.title,
+      sub: c.category || c.summary || '',
+      href: `/content.html?kind=${encodeURIComponent(c.kind)}`
+    })),
     ...ALL_PAGES.filter(p => p.title.toLowerCase().includes(q)).map(p => ({ type: 'Page', title: p.title, sub: p.description, href: `/page.html?slug=${encodeURIComponent(p.slug)}` }))
   ];
 

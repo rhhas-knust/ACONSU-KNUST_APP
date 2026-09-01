@@ -1,15 +1,25 @@
 // ACONSU service worker — enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v5';
+const CACHE_NAME = 'aconsu-v6';
 
 const APP_SHELL = [
   '/index.html',
   '/about.html',
   '/departments.html',
+  '/department.html',
   '/events.html',
   '/media.html',
   '/bible.html',
+  '/bible-study.html',
+  '/content.html',
+  '/groups.html',
+  '/group.html',
+  '/chat.html',
+  '/welfare.html',
+  '/give.html',
+  '/card.html',
+  '/sermon-notes.html',
   '/notifications.html',
   '/discover.html',
   '/more.html',
@@ -17,13 +27,24 @@ const APP_SHELL = [
   '/contact.html',
   '/login.html',
   '/register.html',
+  '/forgot-password.html',
+  '/reset-password.html',
+  '/profile.html',
+  '/page.html',
   '/404.html',
   '/css/style.css',
   '/js/main.js',
   '/images/logo.jpg',
   '/manifest.json',
+  '/icons/icon-72.png',
+  '/icons/icon-96.png',
+  '/icons/icon-128.png',
+  '/icons/icon-144.png',
+  '/icons/icon-152.png',
   '/icons/icon-192.png',
-  '/icons/icon-512.png'
+  '/icons/icon-384.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -68,7 +89,17 @@ self.addEventListener('fetch', (event) => {
 
   // Admin and the leadership portals are never cached — they must always
   // reflect live session/auth state, never a stale signed-in-looking shell.
-  const LIVE_ONLY = ['/admin.html', '/coordinator.html', '/finance.html', '/shepherding.html', '/publicity.html'];
+  const LIVE_ONLY = [
+    '/admin.html',
+    '/coordinator.html',
+    '/finance.html',
+    '/shepherding.html',
+    '/publicity.html',
+    '/national.html',
+    '/executive.html',
+    '/welfare-portal.html',
+    '/content-manager.html'
+  ];
   if (LIVE_ONLY.some((p) => url.pathname.startsWith(p)) || url.pathname.startsWith('/js/portal.js') || url.pathname.startsWith('/css/portal.css')) {
     event.respondWith(fetch(request));
     return;
