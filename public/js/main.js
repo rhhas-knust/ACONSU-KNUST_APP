@@ -318,8 +318,8 @@ function renderHeader(activePath, customPages, member) {
   const allLinks = [...NAV_LINKS.slice(0, -1), ...custom, NAV_LINKS[NAV_LINKS.length - 1]];
   const links = allLinks.map(l => `<li><a href="${l.href}" class="${activePath === l.href ? 'active' : ''}">${l.label}</a></li>`).join('');
   const accountLink = member
-    ? `<a href="/profile.html" class="btn btn-outline btn-sm">${escapeHtml(member.name.split(' ')[0])}</a>`
-    : `<a href="/login.html" class="btn btn-outline btn-sm">Log In</a>`;
+    ? `<a href="/profile.html" class="btn btn-outline btn-sm nav-btn-account">${escapeHtml(member.name.split(' ')[0])}</a>`
+    : `<a href="/login.html" class="btn btn-outline btn-sm nav-btn-account">Log In</a>`;
   el.innerHTML = `
     <nav class="nav">
       <a href="/index.html" class="nav-brand">
@@ -332,20 +332,19 @@ function renderHeader(activePath, customPages, member) {
           ${svgIcon(ICON_BELL)}
         </a>
         ${accountLink}
-        <a href="/prayer.html" class="btn btn-primary btn-sm">Prayer Request</a>
-        <button class="nav-toggle" id="navToggle" aria-label="Toggle menu">&#9776;</button>
+        <a href="/prayer.html" class="btn btn-primary btn-sm nav-btn-prayer">Prayer Request</a>
       </div>
     </nav>
   `;
-  document.getElementById('navToggle').addEventListener('click', () => {
-    document.getElementById('navLinks').classList.toggle('open');
-  });
   getUnreadNotificationCount().then((count) => {
     if (count > 0) {
       const bell = document.getElementById('navBellLink');
-      const dot = document.createElement('span');
-      dot.style.cssText = 'position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);';
-      bell.appendChild(dot);
+      if (bell && !bell.querySelector('.notif-dot')) {
+        const dot = document.createElement('span');
+        dot.className = 'notif-dot';
+        dot.style.cssText = 'position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);';
+        bell.appendChild(dot);
+      }
     }
   });
 }
