@@ -269,13 +269,28 @@ section { padding: 72px 24px; }
 .footer-grid a { display: block; margin-bottom: 8px; color: #C9B3D8; font-size: 0.9rem; }
 .footer-grid a:hover { color: var(--flame-gold); }
 .footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 20px; font-size: 0.82rem; color: #B79CC7; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-.social-row { display: flex; gap: 12px; }
-.social-row a, .social-icon-link { width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,0.08); display: flex; align-items: center; justify-content: center; color: #fff; }
-.social-row a svg, .social-icon-link svg { width: 18px; height: 18px; }
-.social-row a:hover, .social-icon-link:hover { background: var(--flame-gold); color: var(--purple-rich); }
-/* Light-background contexts (e.g. a chapter About page) — override the white default. */
-.social-icon-link.on-light { background: var(--lilac-mid); color: var(--purple-deep); }
-.social-icon-link.on-light:hover { background: var(--flame-gold); color: var(--purple-rich); }
+.social-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.social-icon-link {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: rgba(255,255,255,0.12); display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; text-decoration: none; transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+.social-icon-link svg { width: 19px; height: 19px; }
+.social-icon-link:hover { transform: translateY(-3px) scale(1.06); box-shadow: 0 6px 16px rgba(0,0,0,0.25); color: #fff; }
+
+.social-icon-link.social-whatsapp:hover { background: #25D366 !important; }
+.social-icon-link.social-youtube:hover { background: #FF0000 !important; }
+.social-icon-link.social-instagram:hover { background: linear-gradient(45deg, #f09433, #dc2743, #bc1888) !important; }
+.social-icon-link.social-facebook:hover { background: #1877F2 !important; }
+.social-icon-link.social-tiktok:hover { background: #000000 !important; color: #25F4EE !important; }
+.social-icon-link.social-twitter:hover { background: #000000 !important; }
+.social-icon-link.social-telegram:hover { background: #229ED9 !important; }
+
+/* Light-background contexts (e.g. contact page, about page) */
+.social-icon-link.on-light {
+  background: var(--lilac-light); color: var(--purple-deep); border: 1px solid var(--lilac-mid);
+}
+.social-icon-link.on-light:hover { color: #fff; }
 
 /* ---------- forms ---------- */
 .form-card {
