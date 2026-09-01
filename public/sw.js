@@ -1,7 +1,7 @@
 // ACONSU service worker — enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v6';
+const CACHE_NAME = 'aconsu-v7';
 
 const APP_SHELL = [
   '/index.html',
@@ -106,7 +106,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets and pages: cache-first for speed, refreshing the cache in the background.
+  // Public pages and frontend assets are network-first so a deployment is
+  // visible immediately; the previous cache remains an offline fallback.
+  if (request.destination === 'document' || request.destination === 'script' || request.destination === 'style') {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
+          return res;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('/404.html')))
+    );
+    return;
+  }
+
+  // Images and other static files stay cache-first for fast repeat visits.
   event.respondWith(
     caches.match(request).then((cached) => {
       const networkFetch = fetch(request)
