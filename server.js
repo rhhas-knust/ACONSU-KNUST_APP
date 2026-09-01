@@ -1872,6 +1872,68 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
+// Generate verse-of-the-day as a shareable image (PNG)
+app.get('/api/verse-image', async (req, res) => {
+  try {
+    let verseText = req.query.verse || '';
+    if (!verseText) {
+      const settings = await repo.getSettings();
+      if (!settings.verseOfTheWeek) return res.status(400).json({ error: 'No verse configured' });
+      verseText = settings.verseOfTheWeek;
+    }
+
+    // Limit verse length for image generation
+    const shortVerse = verseText.length > 200 ? verseText.substring(0, 197) + '...' : verseText;
+    
+    // Create SVG with the verse text
+    const width = 1080;
+    const height = 1350;
+    const svg = `
+      <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+        <!-- Background gradient -->
+        <defs>
+          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#5B2C82;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#3A1B54;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect width="${width}" height="${height}" fill="url(#grad)"/>
+        
+        <!-- Logo/brand -->
+        <text x="${width / 2}" y="100" font-size="36" font-weight="700" fill="#E8971E" text-anchor="middle" font-family="serif">ACONSU</text>
+        
+        <!-- Verse text -->
+        <foreignObject x="60" y="200" width="${width - 120}" height="900">
+          <div xmlns="http://www.w3.org/1999/xhtml" style="
+            font-family: Georgia, serif;
+            font-size: 32px;
+            color: #FFFFFF;
+            line-height: 1.6;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding: 40px;
+          ">
+            <p style="margin: 0;">"${shortVerse.replace(/"/g, '&quot;')}"</p>
+          </div>
+        </foreignObject>
+        
+        <!-- Footer -->
+        <text x="${width / 2}" y="${height - 40}" font-size="20" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="sans-serif">Verse of the Day</text>
+      </svg>
+    `;
+
+    // Convert SVG to PNG using sharp
+    const buffer = await require('sharp')(Buffer.from(svg)).png().toBuffer();
+    res.type('image/png').send(buffer);
+  } catch (e) {
+    console.error('Verse image generation error:', e);
+    res.status(500).json({ error: 'Could not generate verse image' });
+  }
+});
+
 // Public feature configuration. The defaults preserve every existing module
 // until the National Coordinator deliberately turns it off.
 const FEATURE_DEFAULTS = {

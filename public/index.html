@@ -191,7 +191,7 @@
     const socialHtml = socialLinksHtml(settings);
     heroSocialEl.innerHTML = `
       <div style="margin-bottom:20px;">
-        <p style="color:rgba(255,255,255,0.85); font-size:0.85rem; font-weight:600; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.05em;">Connect With Us</p>
+        <p style="font-family:var(--font-body); color:rgba(255,255,255,0.85); font-size:0.85rem; font-weight:600; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.05em;">Connect With Us</p>
         <div class="social-row" style="justify-content:center; gap:18px;">
           ${socialHtml}
         </div>
@@ -272,13 +272,69 @@
   } catch (e) { /* non-critical */ }
 
   // 4. Verse of the Day Share button
-  document.getElementById('shareVerseBtn').addEventListener('click', () => {
+  document.getElementById('shareVerseBtn').addEventListener('click', async () => {
     const verseText = document.getElementById('verseStrip').textContent;
-    shareContent({
-      title: 'Verse of the Day — ACONSU',
-      text: `${verseText}\n\nRead more on the ACONSU App`,
-      url: window.location.origin + '/bible.html'
+    
+    // Show a small menu with share options
+    const menu = document.createElement('div');
+    menu.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+      z-index: 9999;
+      padding: 12px 0;
+      min-width: 200px;
+    `;
+    
+    menu.innerHTML = `
+      <button style="width:100%; padding:12px 16px; text-align:left; border:none; background:none; cursor:pointer; font-size:1rem; transition:background 0.2s;" class="share-menu-btn">📱 Share as Text</button>
+      <button style="width:100%; padding:12px 16px; text-align:left; border:none; background:none; cursor:pointer; font-size:1rem; transition:background 0.2s;" class="share-menu-btn">🖼️ Download as Image</button>
+    `;
+    
+    document.body.appendChild(menu);
+    
+    // Add hover effect
+    menu.querySelectorAll('.share-menu-btn').forEach(btn => {
+      btn.addEventListener('mouseenter', () => btn.style.background = '#f5f5f5');
+      btn.addEventListener('mouseleave', () => btn.style.background = 'none');
     });
+    
+    // Share as text
+    menu.querySelector('.share-menu-btn:nth-child(1)').addEventListener('click', () => {
+      shareContent({
+        title: 'Verse of the Day — ACONSU',
+        text: \`\${verseText}\n\nRead more on the ACONSU App\`,
+        url: window.location.origin + '/bible.html'
+      });
+      menu.remove();
+    });
+    
+    // Download as image
+    menu.querySelector('.share-menu-btn:nth-child(2)').addEventListener('click', async () => {
+      try {
+        const encodedVerse = encodeURIComponent(verseText);
+        const link = document.createElement('a');
+        link.href = \`/api/verse-image?verse=\${encodedVerse}\`;
+        link.download = 'verse-of-the-day.png';
+        link.click();
+      } catch (e) {
+        alert('Could not download verse image');
+      }
+      menu.remove();
+    });
+    
+    // Close menu on outside click
+    const closeHandler = (e) => {
+      if (!menu.contains(e.target) && e.target.id !== 'shareVerseBtn') {
+        menu.remove();
+        document.removeEventListener('click', closeHandler);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeHandler), 0);
   });
 
   // 5. Quick Access Tiles (connected to all Union services)

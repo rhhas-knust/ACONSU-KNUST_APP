@@ -1598,6 +1598,10 @@ async function renderSettings() {
     { key: 'instagram', label: 'Instagram URL' },
     { key: 'facebook', label: 'Facebook URL' },
     { key: 'youtube', label: 'YouTube URL' },
+    { key: 'twitter', label: 'X / Twitter URL' },
+    { key: 'tiktok', label: 'TikTok URL' },
+    { key: 'telegram', label: 'Telegram URL' },
+    { key: 'spotify', label: 'Spotify Playlist or Profile URL' },
     { key: 'homeHeaderImageFileId', label: 'Home Header Image File ID (recommended: set via Media Library > Home page header banner)' }
   ];
   el.innerHTML = `
