@@ -67,7 +67,7 @@
     <p class="lede">A campus family devoted to the Word, to fellowship, to prayer — continuing steadfastly in the pattern the apostles left us. Come as you are.</p>
     <div class="hero-actions">
       <a href="/events.html" class="btn btn-primary">See What's Coming Up</a>
-      <a href="/departments.html" class="btn btn-outline">Explore Chapters</a>
+      <a href="/departments.html" class="btn btn-outline">Explore Departments</a>
       <a href="/content.html?kind=live_service" class="btn btn-outline" style="border-color:var(--flame-gold); color:var(--flame-gold);">📺 Live Streams</a>
     </div>
     <div id="heroSocialIcons" style="margin-top:2.5em;"></div>
@@ -307,7 +307,7 @@
     menu.querySelector('.share-menu-btn:nth-child(1)').addEventListener('click', () => {
       shareContent({
         title: 'Verse of the Day — ACONSU',
-        text: \`\${verseText}\n\nRead more on the ACONSU App\`,
+        text: `${verseText}\n\nRead more on the ACONSU App`,
         url: window.location.origin + '/bible.html'
       });
       menu.remove();
@@ -318,7 +318,7 @@
       try {
         const encodedVerse = encodeURIComponent(verseText);
         const link = document.createElement('a');
-        link.href = \`/api/verse-image?verse=\${encodedVerse}\`;
+        link.href = `/api/verse-image?verse=${encodedVerse}`;
         link.download = 'verse-of-the-day.png';
         link.click();
       } catch (e) {
