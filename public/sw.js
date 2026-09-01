@@ -91,6 +91,7 @@ self.addEventListener('fetch', (event) => {
   // reflect live session/auth state, never a stale signed-in-looking shell.
   const LIVE_ONLY = [
     '/admin.html',
+    '/chapter.html',
     '/coordinator.html',
     '/finance.html',
     '/shepherding.html',

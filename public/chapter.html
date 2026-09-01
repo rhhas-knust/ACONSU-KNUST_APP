@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chapter Admin — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  body { background: var(--lilac-light); }
+  .admin-shell { display: none; }
+  .admin-topbar { background: var(--purple-rich); color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+  .admin-topbar strong { font-family: var(--font-display); }
+  .admin-layout { display: flex; min-height: calc(100vh - 64px); }
+  .admin-side { width: 220px; background: #fff; border-right: 1px solid var(--line); padding: 20px 0; flex: none; }
+  .admin-side button { display: block; width: 100%; text-align: left; padding: 12px 24px; background: none; border: none; font-weight: 700; font-size: 0.92rem; color: var(--purple-ink); cursor: pointer; border-left: 3px solid transparent; }
+  .admin-side button:hover { background: var(--lilac-light); }
+  .admin-side button.active { border-left-color: var(--flame-gold); color: var(--purple-deep); background: var(--lilac-light); }
+  .admin-main { flex: 1; padding: 32px; overflow-x: auto; }
+  .admin-panel { display: none; }
+  .admin-panel.active { display: block; }
+  .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .field-row { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .app-watermark { text-align: center; padding: 18px 12px 28px; font-size: 0.75rem; color: #a993b3; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 0.88rem; vertical-align: top; }
+  th { background: var(--lilac-light); font-family: var(--font-body); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; color: var(--purple-deep); }
+  .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  .row-actions { display: flex; gap: 8px; }
+  .row-actions button { border: none; background: var(--lilac-mid); color: var(--purple-rich); padding: 6px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+  .row-actions button.danger { background: #FBDFDA; color: var(--flame-red); }
+  .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(36,21,48,0.5); align-items: center; justify-content: center; padding: 20px; z-index: 200; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: #fff; border-radius: 14px; padding: 28px; max-width: 480px; width: 100%; max-height: 88vh; overflow-y: auto; }
+  .status-pill { padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; background: var(--lilac-mid); color: var(--purple-rich); }
+  .status-pill.done { background: #D9F0DE; color: #2E7D4F; }
+  small.hint { color: #8a7595; display:block; margin-top: 4px; }
+  .media-grid { display:grid; gap:16px; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); margin-top:20px; }
+  .media-card { background:#fff; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .media-card .thumb { aspect-ratio:4/3; background: var(--lilac-light); display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .media-card .thumb img { width:100%; height:100%; object-fit:cover; }
+  .media-card .thumb.doc { font-family: var(--font-display); font-weight:700; color: var(--purple-deep); font-size:1.3rem; }
+  .media-card .info { padding: 10px 12px; }
+  .media-card .info h4 { margin:0 0 2px; font-size:0.85rem; }
+  .media-card .info small { color:#8a7595; }
+  .upload-form { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:24px; }
+  .upload-form .field-row { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); }
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginWrap">
+  <form class="form-card" id="loginForm">
+    <img src="/images/logo.jpg" alt="ACONSU" style="width:64px; height:64px; border-radius:50%; margin:0 auto 16px; display:block;">
+    <h2 style="text-align:center;">Chapter Admin Login</h2>
+    <div class="field">
+      <label for="username">Username</label>
+      <input type="text" id="username" required>
+    </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Log In</button>
+    <div class="form-msg" id="loginMsg"></div>
+  </form>
+</div>
+
+<div class="admin-shell" id="adminShell">
+  <div class="admin-topbar">
+    <strong>ACONSU Chapter Admin</strong>
+    <button class="btn btn-outline btn-sm" id="logoutBtn" style="color:#fff; border-color:rgba(255,255,255,0.4);">Log Out</button>
+  </div>
+  <div class="admin-layout">
+    <div class="admin-side" id="adminNav">
+      <button data-panel="overview" class="active">Overview</button>
+      <button data-panel="departments">Departments</button>
+      <button data-panel="staff">Leadership Accounts</button>
+      <button data-panel="executives">Executives</button>
+      <button data-panel="members">Members</button>
+      <button data-panel="notifications">Notifications</button>
+      <button data-panel="events">Events</button>
+      <button data-panel="sermons">Sermons &amp; Media</button>
+      <button type="button" onclick="location.href='/content-manager.html'">Phase 7 Content</button>
+      <button data-panel="bibleStudies">Bible Study</button>
+      <button data-panel="groups">Groups</button>
+      <button data-panel="welfare">Welfare</button>
+      <button data-panel="chatModeration">Chat Moderation</button>
+      <button data-panel="pages">Custom Pages</button>
+      <button data-panel="media">Media Library</button>
+      <button data-panel="joinRequests">Join Requests</button>
+      <button data-panel="prayerRequests">Prayer Requests</button>
+      <button data-panel="testimonies">Testimonies</button>
+      <button data-panel="contactMessages">Contact Messages</button>
+      <button data-panel="settings">Site Settings</button>
+    </div>
+    <div class="admin-main" id="adminMain">
+      <div class="admin-panel active" id="panel-overview"></div>
+      <div class="admin-panel" id="panel-departments"></div>
+      <div class="admin-panel" id="panel-staff"></div>
+      <div class="admin-panel" id="panel-executives"></div>
+      <div class="admin-panel" id="panel-members"></div>
+      <div class="admin-panel" id="panel-notifications"></div>
+      <div class="admin-panel" id="panel-events"></div>
+      <div class="admin-panel" id="panel-sermons"></div>
+      <div class="admin-panel" id="panel-bibleStudies"></div>
+      <div class="admin-panel" id="panel-groups"></div>
+      <div class="admin-panel" id="panel-welfare"></div>
+      <div class="admin-panel" id="panel-chatModeration"></div>
+      <div class="admin-panel" id="panel-pages"></div>
+      <div class="admin-panel" id="panel-media"></div>
+      <div class="admin-panel" id="panel-joinRequests"></div>
+      <div class="admin-panel" id="panel-prayerRequests"></div>
+      <div class="admin-panel" id="panel-testimonies"></div>
+      <div class="admin-panel" id="panel-contactMessages"></div>
+      <div class="admin-panel" id="panel-settings"></div>
+      <div class="app-watermark">Powered by HasTech Solutions</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script src="/js/main.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

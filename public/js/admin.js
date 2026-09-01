@@ -342,13 +342,13 @@ function openResourceForm(resource, fields, singular, item) {
 const PORTAL_ROLES = [
   { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter — dashboard, chapters, announcements.', href: '/national.html' },
   { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority — oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
-  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — this dashboard.', href: '/admin.html' },
-  { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/admin.html' },
+  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — chapter-scoped dashboard.', href: '/chapter.html' },
+  { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/executive.html' },
   { value: 'finance', label: 'Finance', blurb: 'Budgets, ledger, financial reports.', href: '/finance.html' },
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance, member care, contact messages.', href: '/shepherding.html' },
   { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' },
-  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/admin.html' },
-  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department.', href: '/admin.html' }
+  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' },
+  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department.', href: '/department.html' }
 ];
 // Only a National Coordinator may hand out these two — see /api/admin/staff.
 const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];

@@ -7,7 +7,7 @@
    ============================================================ */
 
 const OFFICE_LINKS = [
-  { role: 'chapterAdmin', href: '/admin.html', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration' },
+  { role: 'chapterAdmin', href: '/chapter.html', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration' },
   { role: 'finance', href: '/finance.html', label: 'Finance Office', blurb: 'Budgets, ledger and reports' },
   { role: 'shepherding', href: '/shepherding.html', label: 'Shepherding', blurb: 'Attendance, member care, messages' },
   { role: 'publicity', href: '/publicity.html', label: 'Publicity', blurb: 'Announcements, SMS, testimonies' }
