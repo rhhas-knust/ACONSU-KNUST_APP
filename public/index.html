@@ -14,12 +14,42 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<style>
+  .live-stream-banner {
+    background: linear-gradient(135deg, #A93226, #C0392B);
+    color: #fff; border-radius: 16px; padding: 14px 20px; margin-bottom: 20px;
+    display: flex; align-items: center; justify-content: space-between; gap: 14px;
+    box-shadow: 0 8px 24px rgba(192, 57, 43, 0.35); flex-wrap: wrap;
+    animation: pulseLive 2.2s infinite ease-in-out;
+  }
+  @keyframes pulseLive {
+    0%, 100% { box-shadow: 0 8px 24px rgba(192, 57, 43, 0.35); }
+    50% { box-shadow: 0 8px 32px rgba(192, 57, 43, 0.6); }
+  }
+  .live-pill {
+    background: #fff; color: #C0392B; font-weight: 900; font-size: 0.72rem;
+    padding: 3px 9px; border-radius: 999px; letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #C0392B; animation: blink 1.2s infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .verse-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; flex-wrap: wrap; gap: 10px; }
+  .highlight-card {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    flex: none; width: 260px; box-shadow: 0 6px 18px rgba(58,27,84,0.06); text-decoration: none; color: inherit;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .highlight-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+  .highlight-thumb { height: 160px; background: var(--lilac-light); overflow: hidden; position: relative; }
+  .highlight-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .highlight-body { padding: 14px 16px; }
+</style>
 </head>
 <body>
 
 <header id="site-header"></header>
 
 <div class="container" style="padding-top:20px;">
+  <div id="liveBannerWrap"></div>
   <div class="greeting-bar" id="greetingBar"></div>
   <div id="birthdayBanner"></div>
 </div>
@@ -33,6 +63,7 @@
     <div class="hero-actions">
       <a href="/events.html" class="btn btn-primary">See What's Coming Up</a>
       <a href="/departments.html" class="btn btn-outline">Join a Department</a>
+      <a href="/content.html?kind=live_service" class="btn btn-outline" style="border-color:var(--flame-gold); color:var(--flame-gold);">📺 Live Streams</a>
     </div>
     <div id="countdownWrap"></div>
   </div>
@@ -41,8 +72,11 @@
 <section style="padding-bottom:8px;">
   <div class="container">
     <div class="verse-of-day-card" id="verseOfDayCard">
-      <p class="eyebrow" style="color:rgba(255,255,255,0.75);">Verse of the Day</p>
-      <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship..." — Acts 2:42</p>
+      <div class="verse-actions">
+        <p class="eyebrow" style="color:rgba(255,255,255,0.75); margin:0;">Verse of the Day</p>
+        <button type="button" class="btn btn-sm" id="shareVerseBtn" style="background:rgba(255,255,255,0.2); color:#fff; border:none; padding:5px 12px; font-size:0.78rem; border-radius:999px; cursor:pointer;">📤 Share Verse</button>
+      </div>
+      <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship, in the breaking of bread, and in prayers." — Acts 2:42</p>
     </div>
   </div>
 </section>
@@ -54,6 +88,40 @@
       <h2>Everything in one place</h2>
     </div>
     <div class="tile-grid" id="dashboardTiles"></div>
+  </div>
+</section>
+
+<section id="highlightsSection" style="display:none; padding-bottom:12px;">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Moments &amp; Memories</p>
+      <h2>This Week at ACONSU</h2>
+      <p style="color:#5a4468;">Catch up on life across our fellowship, outreaches, and campus gatherings.</p>
+    </div>
+    <div id="highlightsStrip" style="display:flex; gap:16px; overflow-x:auto; padding-bottom:14px; -webkit-overflow-scrolling:touch;"></div>
+  </div>
+</section>
+
+<section id="flyerSection" style="display:none; padding-bottom:12px;">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">Don't Miss This</p>
+      <h2>Event Flyers</h2>
+    </div>
+    <div id="flyerStrip" style="display:flex; gap:16px; overflow-x:auto; padding-bottom:12px; -webkit-overflow-scrolling:touch;"></div>
+  </div>
+</section>
+
+<section class="alt-bg">
+  <div class="container">
+    <div class="section-head">
+      <p class="eyebrow">What's Next</p>
+      <h2>Upcoming Gatherings</h2>
+    </div>
+    <div class="grid" id="eventPreview"></div>
+    <div style="text-align:center; margin-top:32px;">
+      <a href="/events.html" class="btn btn-outline">View Full Calendar</a>
+    </div>
   </div>
 </section>
 
@@ -71,25 +139,16 @@
   </div>
 </section>
 
-<section id="flyerSection" style="display:none; padding-bottom:0;">
+<section class="alt-bg" id="groupsSection" style="display:none;">
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">Don't Miss This</p>
-      <h2>Event Flyers</h2>
+      <p class="eyebrow">Small Groups &amp; Fellowships</p>
+      <h2>Grow in a Small Circle</h2>
+      <p style="color:#5a4468;">Connect with Bible study cells, prayer groups, and campus fellowships.</p>
     </div>
-    <div id="flyerStrip" style="display:flex; gap:16px; overflow-x:auto; padding-bottom:12px;"></div>
-  </div>
-</section>
-
-<section class="alt-bg">
-  <div class="container">
-    <div class="section-head">
-      <p class="eyebrow">What's Next</p>
-      <h2>Upcoming Gatherings</h2>
-    </div>
-    <div class="grid" id="eventPreview"></div>
+    <div class="grid" id="groupsPreview"></div>
     <div style="text-align:center; margin-top:32px;">
-      <a href="/events.html" class="btn btn-outline">View Full Calendar</a>
+      <a href="/groups.html" class="btn btn-outline">Browse All Groups</a>
     </div>
   </div>
 </section>
@@ -110,10 +169,28 @@
 (async function () {
   const settings = await initLayout('/index.html');
 
-  // greeting bar — matches header auth state, shows streak for logged-in members
+  // 1. Live stream broadcast alert
+  try {
+    const liveItems = await fetchJSON('/api/content/live_service').catch(() => []);
+    const activeStream = liveItems.find(i => i.isLive || i.featured) || liveItems[0];
+    if (activeStream) {
+      document.getElementById('liveBannerWrap').innerHTML = `
+        <div class="live-stream-banner">
+          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span class="live-pill"><span class="live-dot"></span>LIVE SERVICE</span>
+            <strong style="font-size:0.96rem;">${escapeHtml(activeStream.title)}</strong>
+          </div>
+          <a href="/content.html?kind=live_service" class="btn btn-sm" style="background:#fff; color:#C0392B; font-weight:800; border:none; text-decoration:none; padding:6px 14px; border-radius:999px; white-space:nowrap;">Watch Stream &rarr;</a>
+        </div>
+      `;
+    }
+  } catch (e) { /* non-critical */ }
+
+  // 2. Greeting bar & member streak
+  let member = null;
   try {
     const authRes = await fetchJSON('/api/auth/me');
-    const member = authRes.member;
+    member = authRes.member;
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const firstName = member ? member.name.split(' ')[0] : '';
@@ -126,7 +203,7 @@
         if (badgeData.currentStreak > 0) {
           streakHtml = `<span class="streak-pill">🔥 ${badgeData.currentStreak}</span>`;
         }
-      } catch (e) { /* streak is a nice-to-have, fine to skip if it fails */ }
+      } catch (e) { /* non-critical */ }
     }
 
     document.getElementById('greetingBar').innerHTML = `
@@ -139,8 +216,9 @@
         </a>
       </div>
     `;
-  } catch (e) { /* greeting bar is decorative — page still works without it */ }
+  } catch (e) { /* non-critical */ }
 
+  // 3. Birthday Celebrations
   try {
     const celebrants = await fetchJSON('/api/birthdays/today');
     if (celebrants.length) {
@@ -148,7 +226,7 @@
         <div class="birthday-banner">
           <span class="bday-emoji">🎉</span>
           <div>
-            <strong style="display:block; margin-bottom:6px;">Happy Birthday${celebrants.length > 1 ? '' : ''}!</strong>
+            <strong style="display:block; margin-bottom:6px;">Happy Birthday!</strong>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               ${celebrants.map(c => `
                 <span class="bday-pill">
@@ -161,8 +239,19 @@
         </div>
       `;
     }
-  } catch (e) { /* banner is optional — fine to skip silently if it fails */ }
+  } catch (e) { /* non-critical */ }
 
+  // 4. Verse of the Day Share button
+  document.getElementById('shareVerseBtn').addEventListener('click', () => {
+    const verseText = document.getElementById('verseStrip').textContent;
+    shareContent({
+      title: 'Verse of the Day — ACONSU',
+      text: `${verseText}\n\nRead more on the ACONSU App`,
+      url: window.location.origin + '/bible.html'
+    });
+  });
+
+  // 5. Quick Access Tiles (connected to all Union services)
   try {
     const [customPages, unreadCount] = await Promise.all([
       fetchJSON('/api/pages').catch(() => []),
@@ -170,12 +259,20 @@
     ]);
     const coreTiles = [
       { href: '/bible.html', label: 'Bible', icon: ICON_BIBLE },
+      { href: '/content.html?kind=live_service', label: 'Live Service', icon: ICON_VIDEO },
       { href: '/events.html', label: 'Events', icon: ICON_EVENTS },
-      { href: '/departments.html', label: 'Departments', icon: ICON_USERS },
-      { href: '/media.html', label: 'Sermons', icon: ICON_HEADPHONES },
+      { href: '/groups.html', label: 'Groups', icon: ICON_USERS },
+      { href: '/bible-study.html', label: 'Bible Study', icon: ICON_BOOK },
       { href: '/prayer.html', label: 'Prayer Wall', icon: ICON_PRAYER },
-      { href: '/notifications.html', label: 'Notifications', icon: ICON_BELL, badge: unreadCount }
+      { href: '/media.html', label: 'Sermons', icon: ICON_HEADPHONES },
+      { href: '/give.html', label: 'Giving', icon: ICON_GIVE },
+      { href: '/content.html?kind=ebook', label: 'E-Books', icon: ICON_BOOK }
     ];
+    if (member) {
+      coreTiles.push({ href: '/card.html', label: 'Digital Card', icon: ICON_CARD });
+    }
+    coreTiles.push({ href: '/notifications.html', label: 'Notifications', icon: ICON_BELL, badge: unreadCount });
+
     const customTiles = customPages.filter(p => p.showInNav).map(p => ({
       href: `/page.html?slug=${encodeURIComponent(p.slug)}`,
       label: p.navLabel || p.title,
@@ -190,15 +287,38 @@
         <span class="tile-label">${escapeHtml(t.label)}</span>
       </a>
     `).join('');
-  } catch (e) { /* tiles are the core nav, but page still works via header/bottom nav if this fails */ }
+  } catch (e) { /* non-critical */ }
 
+  // 6. Weekly Highlights (Moments)
   try {
-    const [departments, events] = await Promise.all([
-      fetchJSON('/api/departments'),
-      fetchJSON('/api/events')
+    const highlights = await fetchJSON('/api/content/weekly_highlight').catch(() => []);
+    if (highlights.length) {
+      document.getElementById('highlightsSection').style.display = 'block';
+      document.getElementById('highlightsStrip').innerHTML = highlights.map(h => `
+        <a href="/content.html?kind=weekly_highlight" class="highlight-card">
+          <div class="highlight-thumb">
+            ${h.coverImageFileId
+              ? `<img src="/api/files/${h.coverImageFileId}" alt="${escapeHtml(h.title)}" loading="lazy">`
+              : '<span class="dept-thumb-fallback"></span>'}
+          </div>
+          <div class="highlight-body">
+            <h4 style="margin:0 0 4px; font-size:0.95rem; color:var(--purple-deep);">${escapeHtml(h.title)}</h4>
+            <p style="margin:0; font-size:0.84rem; color:#6b527b; line-height:1.4;">${escapeHtml(h.summary || '')}</p>
+          </div>
+        </a>
+      `).join('');
+    }
+  } catch (e) { /* non-critical */ }
+
+  // 7. Departments, Upcoming Events & Flyers
+  try {
+    const [departments, events, groups] = await Promise.all([
+      fetchJSON('/api/departments').catch(() => []),
+      fetchJSON('/api/events').catch(() => []),
+      fetchJSON('/api/groups').catch(() => [])
     ]);
 
-    // department preview (first 4)
+    // Departments preview (first 4)
     const deptWrap = document.getElementById('deptPreview');
     deptWrap.innerHTML = departments.slice(0, 4).map(d => `
       <a href="/department.html?id=${d.id}" class="card dept-card">
@@ -213,7 +333,7 @@
       </a>
     `).join('') || '<p class="empty-state">Departments coming soon.</p>';
 
-    // event preview (next 3 upcoming)
+    // Events preview (next 3 upcoming)
     const now = new Date();
     const upcoming = events
       .filter(e => new Date(`${e.date}T${e.time || '00:00'}:00`) >= now)
@@ -236,21 +356,38 @@
       </div>`;
     }).join('') || '<p class="empty-state">No upcoming events yet — check back soon.</p>';
 
-    // Approved, published event flyers (section 12) — only ever events that
-    // have actually cleared the executive->publicity review workflow, since
-    // /api/events already only returns 'published' ones to anonymous visitors.
+    // Event Flyers Strip
     const flyerEvents = upcoming.filter(e => e.flyerFileId);
     if (flyerEvents.length) {
       document.getElementById('flyerSection').style.display = 'block';
       document.getElementById('flyerStrip').innerHTML = flyerEvents.map(e => `
-        <a href="/events.html" style="flex:none; width:220px; display:block;">
+        <a href="/events.html" style="flex:none; width:220px; display:block; text-decoration:none;">
           <img src="/api/files/${e.flyerFileId}" alt="${escapeHtml(e.title)}" loading="lazy" style="width:100%; height:280px; object-fit:cover; border-radius:14px; box-shadow:0 12px 28px rgba(58,27,84,0.18);">
           <p style="margin-top:8px; font-weight:700; font-size:0.88rem; color:var(--purple-deep);">${escapeHtml(e.title)}</p>
         </a>
       `).join('');
     }
 
-    // countdown to next service
+    // Small Groups Preview (first 3)
+    if (groups.length) {
+      document.getElementById('groupsSection').style.display = 'block';
+      document.getElementById('groupsPreview').innerHTML = groups.slice(0, 3).map(g => `
+        <a href="/group.html?id=${g.id}" class="card" style="text-decoration:none; color:inherit;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <h3 style="margin:0; font-size:1.1rem; color:var(--purple-deep);">${escapeHtml(g.name)}</h3>
+            <span class="badge" style="background:var(--lilac-light); color:var(--purple-deep);">${escapeHtml(g.type || 'Fellowship')}</span>
+          </div>
+          <p style="color:#5a4468; font-size:0.9rem; margin-bottom:12px;">${escapeHtml(g.description || 'Join this group for fellowship and spiritual growth.')}</p>
+          <div style="font-size:0.82rem; color:#8a7595; display:flex; gap:12px; flex-wrap:wrap;">
+            ${g.meetingDay ? `<span>🗓️ ${escapeHtml(g.meetingDay)}</span>` : ''}
+            ${g.meetingTime ? `<span>⏰ ${escapeHtml(g.meetingTime)}</span>` : ''}
+            <span>👥 ${g.memberCount || 0} members</span>
+          </div>
+        </a>
+      `).join('');
+    }
+
+    // Countdown to next gathering
     const next = nextUpcomingEvent(events);
     const wrap = document.getElementById('countdownWrap');
     if (next) {
@@ -269,9 +406,9 @@
     console.error(e);
   }
 
-  initScrollReveal('.card, .tile');
+  initScrollReveal('.card, .tile, .highlight-card');
 
-  // floating decorative photos, pulled from whatever the admin has uploaded as general photos
+  // Floating background photos
   try {
     const photos = await fetchJSON('/api/files?category=photo');
     const general = photos.filter(p => !p.pageSlug).slice(0, 4);
@@ -279,7 +416,7 @@
       document.getElementById('homeHero').style.overflow = 'visible';
       renderFloatingImages('homeHero', general.map(p => p.id));
     }
-  } catch (e) { /* decorative only — safe to skip if it fails */ }
+  } catch (e) { /* non-critical */ }
 })();
 </script>
 </body>
