@@ -3490,6 +3490,27 @@ app.get('/api/executive/me', requireRole('executive'), async (req, res) => {
   }
 });
 
+app.post('/api/executive/department-header', requireRole('executive'), upload.single('file'), async (req, res) => {
+  try {
+    const staff = currentStaff(req);
+    const record = await findOwnExecutiveRecord(req);
+    if (!record || !record.department) return res.status(400).json({ error: 'Set your department before uploading its header.' });
+    if (!req.file) return res.status(400).json({ error: 'No image provided' });
+    const department = await repo.getById('departments', record.department, { chapterId: staff.chapterId });
+    if (!department) return res.status(404).json({ error: 'Your assigned department was not found in this chapter.' });
+    const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+    const fileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+      category: 'photo', placement: 'department-header', targetId: department.id,
+      title: `${department.name} header`, contentType: compressed.contentType, chapterId: staff.chapterId
+    }));
+    if (department.headerImageFileId) gridfs.deleteFile(department.headerImageFileId).catch(() => {});
+    await repo.patchById('departments', department.id, { headerImageFileId: fileId }, { chapterId: staff.chapterId });
+    res.json({ success: true, headerImageFileId: fileId, department: department.name });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not upload the department header' });
+  }
+});
+
 app.put('/api/executive/me', requireRole('executive'), upload.single('image'), async (req, res) => {
   try {
     const staff = currentStaff(req);

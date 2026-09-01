@@ -1237,10 +1237,33 @@ function openMemberEditForm(member) {
 async function renderExecutives() {
   const el = document.getElementById('panel-executives');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
-  const execs = await fetchJSON('/api/executives');
+  const [execs, applications] = await Promise.all([
+    fetchJSON('/api/executives'),
+    fetchJSON('/api/admin/executive-applications').catch(() => [])
+  ]);
 
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Executives</h2>
+    <div class="portal-card" style="margin-bottom:22px;">
+      <h3>Executive Applications (${applications.length})</h3>
+      <p class="hint">Review these the same way you review members. Approving verifies the member and activates their executive identity.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Contact</th><th>Role</th><th>Department</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${applications.map(a => `
+          <tr>
+            <td>${escapeHtml(a.name || '—')}</td>
+            <td>${escapeHtml(a.email || '—')}</td>
+            <td>${escapeHtml(a.role || '—')}</td>
+            <td>${escapeHtml(a.department || '—')}</td>
+            <td>${escapeHtml(a.scope || '—')}</td>
+            <td><span class="status-pill ${a.executiveStatus === 'verified' ? 'done' : ''}">${escapeHtml(a.executiveStatus || 'pending')}</span></td>
+            <td class="row-actions">${a.executiveStatus === 'pending' ? `
+              <button data-verify-exec="${a.memberId}">Verify</button>
+              <button class="danger" data-reject-exec="${a.memberId}">Reject</button>` : '—'}</td>
+          </tr>`).join('') || '<tr><td colspan="7">No executive applications yet.</td></tr>'}
+        </tbody>
+      </table></div>
+    </div>
     <div class="upload-form">
       <h3 style="margin-bottom:14px;">Add an Executive</h3>
       <form id="execForm">
@@ -1261,6 +1284,18 @@ async function renderExecutives() {
       ${execs.map(e => execCardHtml(e)).join('') || '<p class="empty-state">No executives added yet.</p>'}
     </div>
   `;
+
+  el.querySelectorAll('[data-verify-exec], [data-reject-exec]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const decision = btn.dataset.verifyExec ? 'approve' : 'reject';
+      if (decision === 'reject' && !confirm('Reject this executive application?')) return;
+      await fetchJSON(`/api/admin/executive-applications/${btn.dataset.verifyExec || btn.dataset.rejectExec}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision })
+      });
+      showToast(decision === 'approve' ? 'Executive verified.' : 'Application rejected.', 'success');
+      renderExecutives();
+    });
+  });
 
   document.getElementById('execForm').addEventListener('submit', async (e) => {
     e.preventDefault();
