@@ -115,6 +115,7 @@ const ICON_WHATSAPP = '<path d="M21 11.5a8.4 8.4 0 0 1-9.9 8.3 8.4 8.4 0 0 1-3.4
 const ICON_TIKTOK = '<path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5"/>';
 const ICON_TWITTER = '<path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/>';
 const ICON_TELEGRAM = '<path d="M21.5 2 2 9.5l7 3 2.5 7.5 3-4 6 4.5z"/>';
+const ICON_SPOTIFY = '<circle cx="12" cy="12" r="10"/><path d="M7.5 9c2.5-1.5 6 0 7.5 2m0-5.5c3.5-2 8 0 11 3M9 13.5c1.5-.5 4 0 5 1.5" fill="none"/>';
 
 // Renders the platform icons for whatever links a settings/contact object
 // has set — used by the site footer, contact page, and social connect strips.
@@ -132,7 +133,8 @@ function socialLinksHtml(s) {
     cfg.facebook && { href: cfg.facebook, icon: ICON_FACEBOOK, label: 'Facebook', cls: 'social-facebook' },
     cfg.tiktok && { href: cfg.tiktok, icon: ICON_TIKTOK, label: 'TikTok', cls: 'social-tiktok' },
     cfg.twitter && { href: cfg.twitter, icon: ICON_TWITTER, label: 'X / Twitter', cls: 'social-twitter' },
-    cfg.telegram && { href: cfg.telegram, icon: ICON_TELEGRAM, label: 'Telegram', cls: 'social-telegram' }
+    cfg.telegram && { href: cfg.telegram, icon: ICON_TELEGRAM, label: 'Telegram', cls: 'social-telegram' },
+    cfg.spotify && { href: cfg.spotify, icon: ICON_SPOTIFY, label: 'Spotify', cls: 'social-spotify' }
   ].filter(Boolean);
 
   // If no custom social links are on file yet, provide standard union handles

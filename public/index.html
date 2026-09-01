@@ -59,6 +59,7 @@
 </div>
 
 <section class="hero" id="homeHero">
+  <div id="heroBackgroundImage" style="position:absolute; inset:0; background-size:cover; background-position:center; filter:brightness(0.45) saturate(0.7); z-index:0;"></div>
   <div class="hero-flame"></div>
   <div class="hero-content">
     <p class="eyebrow">Welcome to ACONSU</p>
@@ -69,6 +70,7 @@
       <a href="/departments.html" class="btn btn-outline">Join a Department</a>
       <a href="/content.html?kind=live_service" class="btn btn-outline" style="border-color:var(--flame-gold); color:var(--flame-gold);">📺 Live Streams</a>
     </div>
+    <div id="heroSocialIcons" style="margin-top:2.5em;"></div>
     <div id="countdownWrap"></div>
   </div>
 </section>
@@ -173,11 +175,28 @@
 (async function () {
   const settings = await initLayout('/index.html');
 
-  const homeHeaderEl = document.getElementById('homeHeaderBanner');
+  // Merge header image into hero section as background with low contrast overlay
+  const heroBackgroundEl = document.getElementById('heroBackgroundImage');
   const homeHeaderId = settings.homeHeaderImageFileId || '';
   if (homeHeaderId) {
-    homeHeaderEl.style.display = 'block';
-    homeHeaderEl.innerHTML = `<img src="/api/files/${homeHeaderId}" alt="Weekly ACONSU header" loading="eager">`;
+    heroBackgroundEl.style.backgroundImage = `url('/api/files/${homeHeaderId}')`;
+  }
+  // Hide the separate banner since it's now merged into hero
+  const homeHeaderEl = document.getElementById('homeHeaderBanner');
+  if (homeHeaderEl) homeHeaderEl.style.display = 'none';
+
+  // Add social icons prominently to the hero section
+  const heroSocialEl = document.getElementById('heroSocialIcons');
+  if (heroSocialEl && settings) {
+    const socialHtml = socialLinksHtml(settings);
+    heroSocialEl.innerHTML = `
+      <div style="margin-bottom:20px;">
+        <p style="color:rgba(255,255,255,0.85); font-size:0.85rem; font-weight:600; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.05em;">Connect With Us</p>
+        <div class="social-row" style="justify-content:center; gap:18px;">
+          ${socialHtml}
+        </div>
+      </div>
+    `;
   }
 
   // 1. Live stream broadcast alert

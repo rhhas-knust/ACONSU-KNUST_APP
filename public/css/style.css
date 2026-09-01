@@ -169,6 +169,10 @@ img { max-width: 100%; display: block; }
   background: radial-gradient(120% 140% at 50% -10%, var(--lilac-light) 0%, var(--paper) 55%);
   padding: 96px 24px 72px;
   text-align: center;
+  min-height: 640px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .hero-flame {
   position: absolute;
@@ -300,12 +304,36 @@ section { padding: 72px 24px; }
 .social-icon-link.social-tiktok:hover { background: #000000 !important; color: #25F4EE !important; }
 .social-icon-link.social-twitter:hover { background: #000000 !important; }
 .social-icon-link.social-telegram:hover { background: #229ED9 !important; }
+.social-icon-link.social-spotify:hover { background: #1DB954 !important; }
 
 /* Light-background contexts (e.g. contact page, about page) */
 .social-icon-link.on-light {
   background: var(--lilac-light); color: var(--purple-deep); border: 1px solid var(--lilac-mid);
 }
 .social-icon-link.on-light:hover { color: #fff; }
+
+/* Dark/hero contexts with image background */
+.social-row .social-icon-link {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+.social-row .social-icon-link:hover {
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  transform: translateY(-4px) scale(1.1);
+}
+.social-row .social-icon-link svg { width: 20px; height: 20px; }
+
+/* Override brand colors on hover for brand-colored experience */
+.social-row .social-icon-link.social-whatsapp:hover { background: #25D366 !important; }
+.social-row .social-icon-link.social-youtube:hover { background: #FF0000 !important; }
+.social-row .social-icon-link.social-instagram:hover { background: linear-gradient(45deg, #f09433, #dc2743, #bc1888) !important; }
+.social-row .social-icon-link.social-facebook:hover { background: #1877F2 !important; }
+.social-row .social-icon-link.social-tiktok:hover { background: #000000 !important; color: #25F4EE !important; }
+.social-row .social-icon-link.social-twitter:hover { background: #000000 !important; }
+.social-row .social-icon-link.social-telegram:hover { background: #229ED9 !important; }
+.social-row .social-icon-link.social-spotify:hover { background: #1DB954 !important; }
 
 /* ---------- forms ---------- */
 .form-card {
