@@ -6,7 +6,10 @@
    ============================================================ */
 
 async function renderExecProfile(el) {
-  const { item } = await fetchJSON('/api/executive/me');
+  const [{ item }, departments] = await Promise.all([
+    fetchJSON('/api/executive/me'),
+    fetchJSON('/api/departments')
+  ]);
   el.innerHTML = `
     <div class="panel-head">
       <div>
@@ -23,7 +26,12 @@ async function renderExecProfile(el) {
         </div>
         <div class="field"><label>Full Name</label><input type="text" id="eName" value="${escapeHtml(item?.name || '')}" required></div>
         <div class="field"><label>Position</label><input type="text" id="eRole" value="${escapeHtml(item?.role || '')}" placeholder="e.g. Financial Secretary" required></div>
-        <div class="field"><label>Department (optional)</label><input type="text" id="eDept" value="${escapeHtml(item?.department || '')}"></div>
+        <div class="field"><label>Department (required)</label><select id="eDept" required>
+          <option value="">Choose your department</option>
+          ${departments.map(d => `<option value="${escapeHtml(d.id)}" ${item?.department === d.id ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Department Header</label><input type="file" id="eDeptHeader" accept="image/*">
+          <small class="hint">Upload the banner for your assigned department. It will replace the current header.</small></div>
         <div class="field"><label>Bio</label><textarea id="eBio" rows="4">${escapeHtml(item?.bio || '')}</textarea></div>
         <div class="field-row">
           <div class="field"><label>Phone</label><input type="tel" id="ePhone" value="${escapeHtml(item?.contact?.phone || '')}"></div>
@@ -55,6 +63,12 @@ async function renderExecProfile(el) {
       formData.append('phone', document.getElementById('ePhone').value);
       formData.append('email', document.getElementById('eEmail').value);
       await fetchJSON('/api/executive/me', { method: 'PUT', body: formData });
+      const headerFile = document.getElementById('eDeptHeader').files[0];
+      if (headerFile) {
+        const headerData = new FormData();
+        headerData.append('file', headerFile);
+        await fetchJSON('/api/executive/department-header', { method: 'POST', body: headerData });
+      }
       showToast('Profile saved.', 'success');
       openPanel('profile');
     } catch (err) {

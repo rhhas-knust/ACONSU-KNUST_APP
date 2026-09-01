@@ -30,7 +30,7 @@
     "web-push": "^3.6.7"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.9.0"
   },
   "devDependencies": {
     "@capacitor/android": "^8.5.0",
