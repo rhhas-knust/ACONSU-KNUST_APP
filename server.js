@@ -4204,7 +4204,7 @@ app.get('/api/admin/contact-messages', requireChapterAdmin, async (req, res) => 
 // National settings only — a chapter's own About/contact/payment info lives
 // on its Chapter record instead (edited via the National/Chapter Coordinator
 // portals), so this stays a National Coordinator action.
-app.put('/api/admin/settings', requireAdmin, async (req, res) => {
+app.put('/api/admin/settings', requireChapterAdmin, async (req, res) => {
   await repo.setSettings(req.body);
   res.json({ success: true });
 });
