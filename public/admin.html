@@ -26,7 +26,13 @@
   
   .admin-layout { display: flex; min-height: calc(100vh - 64px); }
   .admin-side { width: 250px; background: #fff; border-right: 1px solid var(--line); padding: 16px 0 40px; flex: none; overflow-y: auto; max-height: calc(100vh - 64px); position: sticky; top: 64px; }
-  .nav-group-label { font-size: 0.68rem; text-transform: uppercase; font-weight: 800; letter-spacing: 0.08em; color: #9b86a8; padding: 16px 20px 6px; display: block; }
+  .nav-group { border-bottom: 1px solid rgba(91,44,130,0.06); }
+  .nav-group-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; background: none; border: none; padding: 14px 20px 10px; cursor: pointer; font-size: 0.72rem; text-transform: uppercase; font-weight: 800; letter-spacing: 0.08em; color: #9b86a8; }
+  .nav-group-toggle:hover { color: var(--purple-deep); }
+  .nav-group-toggle .chev { font-size: 0.9rem; transition: transform 0.15s ease; }
+  .nav-group.open .nav-group-toggle .chev { transform: rotate(90deg); }
+  .nav-group-body { display: none; padding-bottom: 8px; }
+  .nav-group.open .nav-group-body { display: block; }
   .admin-side button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 20px; background: none; border: none; font-weight: 700; font-size: 0.88rem; color: var(--purple-ink); cursor: pointer; border-left: 3px solid transparent; transition: background 0.15s ease, border-color 0.15s ease; }
   .admin-side button:hover { background: var(--lilac-light); color: var(--purple-deep); }
   .admin-side button.active { border-left-color: var(--flame-gold); color: var(--purple-deep); background: var(--lilac-light); font-weight: 800; }
@@ -113,39 +119,65 @@
 
   <div class="admin-layout">
     <div class="admin-side" id="adminNav">
-      <span class="nav-group-label">Overview</span>
-      <button data-panel="overview" class="active"><span class="nav-icon">📊</span> Overview</button>
+      <div class="nav-group open" data-nav-group="overview">
+        <button type="button" class="nav-group-toggle" data-toggle-group="overview"><span>📊 Overview</span><span class="chev">›</span></button>
+        <div class="nav-group-body">
+          <button data-panel="overview" class="active"><span class="nav-icon">📊</span> Overview</button>
+        </div>
+      </div>
 
-      <span class="nav-group-label">People &amp; Leadership</span>
-      <button data-panel="members"><span class="nav-icon">👥</span> Members Roster</button>
-      <button data-panel="executives"><span class="nav-icon">🎓</span> Executives &amp; Verification</button>
-      <button data-panel="staff"><span class="nav-icon">🔑</span> Leadership Accounts</button>
-      <button data-panel="joinRequests"><span class="nav-icon">📥</span> Join Requests</button>
+      <div class="nav-group open" data-nav-group="people">
+        <button type="button" class="nav-group-toggle" data-toggle-group="people"><span>👥 People &amp; Leadership</span><span class="chev">›</span></button>
+        <div class="nav-group-body">
+          <button data-panel="members"><span class="nav-icon">👥</span> Members Roster</button>
+          <button data-panel="executives"><span class="nav-icon">🎓</span> Executives &amp; Verification</button>
+          <button data-panel="staff"><span class="nav-icon">🔑</span> Leadership Accounts</button>
+          <button data-panel="joinRequests"><span class="nav-icon">📥</span> Join Requests</button>
+        </div>
+      </div>
 
-      <span class="nav-group-label">Ministry &amp; Discipleship</span>
-      <button data-panel="bibleStudies"><span class="nav-icon">📖</span> Bible Study</button>
-      <button data-panel="groups"><span class="nav-icon">👨‍👩‍👦</span> Small Groups &amp; Cells</button>
-      <button data-panel="prayerRequests"><span class="nav-icon">🙏</span> Prayer Requests</button>
-      <button data-panel="testimonies"><span class="nav-icon">✨</span> Testimonies</button>
-      <button data-panel="sermons"><span class="nav-icon">🎧</span> Sermons &amp; Media</button>
-      <button type="button" onclick="location.href='/content-manager.html'"><span class="nav-icon">📺</span> Media &amp; Content Hub</button>
+      <div class="nav-group open" data-nav-group="ministry">
+        <button type="button" class="nav-group-toggle" data-toggle-group="ministry"><span>📖 Ministry &amp; Discipleship</span><span class="chev">›</span></button>
+        <div class="nav-group-body">
+          <button data-panel="bibleStudies"><span class="nav-icon">📖</span> Bible Study</button>
+          <button data-panel="groups"><span class="nav-icon">👨‍👩‍👦</span> Small Groups &amp; Cells</button>
+          <button data-panel="prayerRequests"><span class="nav-icon">🙏</span> Prayer Requests</button>
+          <button data-panel="testimonies"><span class="nav-icon">✨</span> Testimonies</button>
+          <button data-panel="sermons"><span class="nav-icon">🎧</span> Sermons &amp; Media</button>
+          <button type="button" onclick="location.href='/content-manager.html'"><span class="nav-icon">📺</span> Media &amp; Content Hub</button>
+        </div>
+      </div>
 
-      <span class="nav-group-label">Operations &amp; Events</span>
-      <button data-panel="events"><span class="nav-icon">🗓️</span> Events &amp; Calendar</button>
-      <button data-panel="departments"><span class="nav-icon">🚪</span> Departments</button>
-      <button data-panel="notifications"><span class="nav-icon">🔔</span> Push Notifications</button>
+      <div class="nav-group open" data-nav-group="operations">
+        <button type="button" class="nav-group-toggle" data-toggle-group="operations"><span>🗓️ Operations &amp; Gatherings</span><span class="chev">›</span></button>
+        <div class="nav-group-body">
+          <button data-panel="events"><span class="nav-icon">🗓️</span> Events &amp; Calendar</button>
+          <button data-panel="departments"><span class="nav-icon">🚪</span> Departments</button>
+          <button data-panel="notifications"><span class="nav-icon">🔔</span> Push Notifications</button>
+          <button data-panel="forms"><span class="nav-icon">🧩</span> Dynamic Form Builder</button>
+        </div>
+      </div>
 
-      <span class="nav-group-label">Care &amp; Community</span>
-      <button data-panel="welfare"><span class="nav-icon">❤️</span> Welfare Requests</button>
-      <button data-panel="chatModeration"><span class="nav-icon">💬</span> Chat Moderation</button>
-      <button data-panel="contactMessages"><span class="nav-icon">✉️</span> Contact Messages</button>
+      <div class="nav-group open" data-nav-group="care">
+        <button type="button" class="nav-group-toggle" data-toggle-group="care"><span>🤝 Care &amp; Community</span><span class="chev">›</span></button>
+        <div class="nav-group-body">
+          <button data-panel="welfare"><span class="nav-icon">❤️</span> Welfare Requests</button>
+          <button data-panel="chatModeration"><span class="nav-icon">💬</span> Chat Moderation</button>
+          <button data-panel="contactMessages"><span class="nav-icon">✉️</span> Contact Messages</button>
+        </div>
+      </div>
 
-      <span class="nav-group-label">Settings &amp; Administration</span>
-      <button data-panel="chapterSettings"><span class="nav-icon">🏢</span> Chapter Site Settings</button>
-      <button data-panel="pages"><span class="nav-icon">📄</span> Custom Pages</button>
-      <button data-panel="media"><span class="nav-icon">📁</span> Media Library</button>
-      <button type="button" id="navNationalBtn" onclick="location.href='/national.html'" style="color:var(--purple-deep); background:var(--lilac-light); font-weight:800; display:none;"><span class="nav-icon">🌐</span> National Portal</button>
-      <button data-panel="settings" id="navGlobalSettingsBtn" style="display:none;"><span class="nav-icon">⚙️</span> Global Settings</button>
+      <div class="nav-group open" data-nav-group="settings">
+        <button type="button" class="nav-group-toggle" data-toggle-group="settings"><span>⚙️ System &amp; Chapter Settings</span><span class="chev">›</span></button>
+        <div class="nav-group-body">
+          <button data-panel="chapterSettings"><span class="nav-icon">🏢</span> Chapter Site Settings</button>
+          <button data-panel="pages"><span class="nav-icon">📄</span> Custom Pages</button>
+          <button data-panel="media"><span class="nav-icon">📁</span> Media Library</button>
+          <button data-panel="reports"><span class="nav-icon">📑</span> Reports &amp; PDF Export</button>
+          <button type="button" id="navNationalBtn" onclick="location.href='/national.html'" style="color:var(--purple-deep); background:var(--lilac-light); font-weight:800; display:none;"><span class="nav-icon">🌐</span> National Portal</button>
+          <button data-panel="settings" id="navGlobalSettingsBtn" style="display:none;"><span class="nav-icon">⚙️</span> Global Settings</button>
+        </div>
+      </div>
     </div>
 
     <div class="admin-main" id="adminMain">
@@ -162,12 +194,14 @@
       <div class="admin-panel" id="panel-events"></div>
       <div class="admin-panel" id="panel-departments"></div>
       <div class="admin-panel" id="panel-notifications"></div>
+      <div class="admin-panel" id="panel-forms"></div>
       <div class="admin-panel" id="panel-welfare"></div>
       <div class="admin-panel" id="panel-chatModeration"></div>
       <div class="admin-panel" id="panel-contactMessages"></div>
       <div class="admin-panel" id="panel-chapterSettings"></div>
       <div class="admin-panel" id="panel-pages"></div>
       <div class="admin-panel" id="panel-media"></div>
+      <div class="admin-panel" id="panel-reports"></div>
       <div class="admin-panel" id="panel-settings"></div>
       <div class="app-watermark">Powered by HasTech Solutions</div>
     </div>

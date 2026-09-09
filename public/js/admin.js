@@ -3,7 +3,8 @@ let CURRENT_SETTINGS = {};
 // equivalent, sees a chapter switcher on resource forms) or a chapter-scoped
 // Chapter Admin/Coordinator account (auto-scoped, no switcher needed). Set
 // by checkAuth() before the shell ever renders.
-let ADMIN_SCOPE = { isNational: true, chapterId: '' };
+let ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
+const ADMIN_NAV_STATE_KEY = 'aconsu_admin_nav_state';
 
 function showModal(html) {
   document.getElementById('modalContent').innerHTML = html;
@@ -26,7 +27,7 @@ async function checkAuth() {
   try {
     const { isAdmin } = await fetchJSON('/api/admin/check');
     if (isAdmin) {
-      ADMIN_SCOPE = { isNational: true, chapterId: '' };
+      ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
       return showAdminShell();
     }
   } catch (e) { /* fall through to the portal-login check below */ }
@@ -34,7 +35,12 @@ async function checkAuth() {
     const me = await fetchJSON('/api/portal/me');
     const role = me.staff && me.staff.role;
     if (me.isNational || role === 'coordinator' || role === 'chapterAdmin' || role === 'executive') {
-      ADMIN_SCOPE = { isNational: !!me.isNational, chapterId: (me.staff && me.staff.chapterId) || '' };
+      ADMIN_SCOPE = {
+        isNational: !!me.isNational,
+        chapterId: (me.staff && me.staff.chapterId) || '',
+        role: role || '',
+        access: me.access || {}
+      };
       return showAdminShell();
     }
   } catch (e) { /* not signed in either way */ }
@@ -67,11 +73,35 @@ function showAdminShell() {
   loadPanel('overview');
 }
 
+function readAdminNavState() {
+  try { return JSON.parse(localStorage.getItem(ADMIN_NAV_STATE_KEY) || '{}'); } catch (e) { return {}; }
+}
+
+function writeAdminNavState(state) {
+  try { localStorage.setItem(ADMIN_NAV_STATE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+}
+
+function setNavGroupOpen(groupName, isOpen) {
+  const group = document.querySelector(`.nav-group[data-nav-group="${groupName}"]`);
+  if (!group) return;
+  group.classList.toggle('open', isOpen);
+  const state = readAdminNavState();
+  state[groupName] = !!isOpen;
+  writeAdminNavState(state);
+}
+
+function expandGroupForPanel(name) {
+  const btn = document.querySelector(`#adminNav button[data-panel="${name}"]`);
+  const group = btn && btn.closest('.nav-group');
+  if (group && group.dataset.navGroup) setNavGroupOpen(group.dataset.navGroup, true);
+}
+
 function openAdminPanel(name) {
   const btn = document.querySelector(`#adminNav button[data-panel="${name}"]`);
   if (btn) {
-    document.getElementById('adminNav').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    document.getElementById('adminNav').querySelectorAll('button[data-panel]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    expandGroupForPanel(name);
     document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
     const panel = document.getElementById(`panel-${name}`);
     if (panel) panel.classList.add('active');
@@ -81,6 +111,14 @@ function openAdminPanel(name) {
 
 // ---------- nav ----------
 function initAdminNav() {
+  const navState = readAdminNavState();
+  document.getElementById('adminNav').querySelectorAll('[data-toggle-group]').forEach(btn => {
+    const groupName = btn.dataset.toggleGroup;
+    const group = btn.closest('.nav-group');
+    const initialOpen = navState[groupName] !== undefined ? !!navState[groupName] : group.classList.contains('open');
+    group.classList.toggle('open', initialOpen);
+    btn.addEventListener('click', () => setNavGroupOpen(groupName, !group.classList.contains('open')));
+  });
   document.getElementById('adminNav').querySelectorAll('button[data-panel]').forEach(btn => {
     btn.addEventListener('click', () => {
       openAdminPanel(btn.dataset.panel);
@@ -101,8 +139,10 @@ async function loadPanel(name) {
     groups: renderGroupsAdmin,
     welfare: renderWelfareAdmin,
     chatModeration: renderChatModeration,
+    forms: renderFormsAdmin,
     pages: () => renderResourcePanel('pages', PAGE_FIELDS, 'Page'),
     media: renderMediaLibrary,
+    reports: renderReportsPanel,
     staff: renderStaffAccounts,
     joinRequests: renderJoinRequests,
     prayerRequests: renderPrayerRequests,
@@ -1601,6 +1641,245 @@ function mediaCardHtml(f) {
   `;
 }
 
+// ---------- form builder ----------
+const FORM_FIELD_TYPE_LABELS = {
+  short_text: 'Short text', long_text: 'Long text', multiple_choice: 'Multiple choice',
+  checkboxes: 'Checkboxes', dropdown: 'Dropdown', date: 'Date', time: 'Time',
+  phone: 'Phone', email: 'Email', file: 'File upload'
+};
+const FORM_CATEGORY_LABELS = {
+  event_registration: 'Event Registration', travelling_event: 'Travelling Event',
+  executive: 'Executive Info', department: 'Department Activity', welfare: 'Welfare', custom: 'Custom'
+};
+
+function formFieldRow(field) {
+  const f = field || { id: '', label: '', type: 'short_text', required: false, options: [] };
+  const needsOptions = ['multiple_choice', 'checkboxes', 'dropdown'].includes(f.type);
+  return `
+    <div class="media-card" data-field-row style="padding:14px; margin-bottom:10px;">
+      <input type="hidden" data-field-id value="${escapeHtml(f.id || '')}">
+      <div class="field-row">
+        <div class="field"><label>Question</label><input type="text" data-field-label value="${escapeHtml(f.label || '')}" required></div>
+        <div class="field"><label>Type</label>
+          <select data-field-type>
+            ${Object.entries(FORM_FIELD_TYPE_LABELS).map(([value, label]) => `<option value="${value}" ${f.type === value ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field" data-options-field style="${needsOptions ? '' : 'display:none;'}">
+        <label>Options (one per line)</label>
+        <textarea data-field-options rows="3">${escapeHtml((f.options || []).join('\n'))}</textarea>
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:700; color:var(--purple-rich);">
+        <input type="checkbox" data-field-required style="width:auto;" ${f.required ? 'checked' : ''}> Required
+      </label>
+      <button type="button" class="btn btn-outline btn-sm" data-remove-field style="margin-top:8px;">Remove Question</button>
+    </div>
+  `;
+}
+
+function wireFormFieldRows(host) {
+  host.querySelectorAll('[data-field-type]').forEach((select) => {
+    select.onchange = () => {
+      const row = select.closest('[data-field-row]');
+      row.querySelector('[data-options-field]').style.display = ['multiple_choice', 'checkboxes', 'dropdown'].includes(select.value) ? '' : 'none';
+    };
+  });
+  host.querySelectorAll('[data-remove-field]').forEach((btn) => {
+    btn.onclick = () => {
+      if (host.querySelectorAll('[data-field-row]').length === 1) return;
+      btn.closest('[data-field-row]').remove();
+    };
+  });
+}
+
+function collectFormFields(host) {
+  return [...host.querySelectorAll('[data-field-row]')].map((row, i) => ({
+    id: row.querySelector('[data-field-id]').value || undefined,
+    label: row.querySelector('[data-field-label]').value.trim(),
+    type: row.querySelector('[data-field-type]').value,
+    required: row.querySelector('[data-field-required]').checked,
+    options: row.querySelector('[data-field-options]').value.split('\n').map(s => s.trim()).filter(Boolean),
+    order: i
+  })).filter(field => field.label);
+}
+
+async function openFormBuilder(form) {
+  const isEdit = !!form;
+  const fields = form ? form.fields : [{}];
+  const chapters = ADMIN_SCOPE.isNational ? await fetchJSON('/api/national/chapters').catch(() => []) : [];
+  const defaultChapterId = form?.chapterId || ADMIN_SCOPE.chapterId || (chapters[0] && chapters[0].id) || '';
+  showModal(`
+    <h3>${isEdit ? 'Edit' : 'New'} Form</h3>
+    <form id="formBuilderForm">
+      <div class="field"><label>Title</label><input type="text" id="fTitle" value="${escapeHtml(form?.title || '')}" required></div>
+      <div class="field"><label>Description</label><textarea id="fDescription" rows="2">${escapeHtml(form?.description || '')}</textarea></div>
+      <div class="field-row">
+        <div class="field"><label>Category</label>
+          <select id="fCategory">${Object.entries(FORM_CATEGORY_LABELS).map(([value, label]) => `<option value="${value}" ${form?.category === value ? 'selected' : ''}>${label}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label>Closes At (optional)</label><input type="datetime-local" id="fClosesAt" value="${escapeHtml((form?.closesAt || '').slice(0, 16))}"></div>
+      </div>
+      ${ADMIN_SCOPE.isNational ? `
+        <div class="field"><label>Chapter</label>
+          <select id="fChapterId" ${chapters.length ? '' : 'disabled'}>
+            ${chapters.map(c => `<option value="${c.id}" ${defaultChapterId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
+          </select>
+        </div>
+      ` : ''}
+      <label style="display:block; font-weight:700; font-size:0.85rem; margin:14px 0 8px; color:var(--purple-rich);">Questions</label>
+      <div id="fieldRows">${fields.map((field) => formFieldRow(field)).join('')}</div>
+      <button type="button" class="btn btn-outline btn-sm" id="addFieldBtn">+ Add Question</button>
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button type="submit" class="btn btn-primary">Save Form</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="formBuilderMsg"></div>
+    </form>
+  `);
+  const rowsHost = document.getElementById('fieldRows');
+  wireFormFieldRows(rowsHost);
+  document.getElementById('addFieldBtn').addEventListener('click', () => {
+    rowsHost.insertAdjacentHTML('beforeend', formFieldRow(null));
+    wireFormFieldRows(rowsHost);
+  });
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+  document.getElementById('formBuilderForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      title: document.getElementById('fTitle').value,
+      description: document.getElementById('fDescription').value,
+      category: document.getElementById('fCategory').value,
+      closesAt: document.getElementById('fClosesAt').value || '',
+      fields: collectFormFields(rowsHost)
+    };
+    const chapterField = document.getElementById('fChapterId');
+    if (chapterField && chapterField.value) payload.chapterId = chapterField.value;
+    try {
+      await fetchJSON(isEdit ? `/api/admin/forms/${form.id}` : '/api/admin/forms', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      closeModal();
+      showToast('Form saved.', 'success');
+      renderFormsAdmin();
+    } catch (err) {
+      document.getElementById('formBuilderMsg').textContent = err.message || 'Could not save this form.';
+      document.getElementById('formBuilderMsg').className = 'form-msg error';
+    }
+  });
+}
+
+async function viewFormSubmissions(formId) {
+  const { form, submissions } = await fetchJSON(`/api/admin/forms/${formId}/submissions`);
+  showModal(`
+    <h3>${escapeHtml(form.title)} — Submissions (${submissions.length})</h3>
+    <div style="overflow:auto; max-height:60vh;">
+      <table>
+        <thead><tr><th>Submitted By</th><th>When</th>${form.fields.map(field => `<th>${escapeHtml(field.label)}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${submissions.map(item => `
+            <tr>
+              <td>${escapeHtml(item.submitterName || 'Anonymous')}${item.submitterEmail ? `<br><small class="hint">${escapeHtml(item.submitterEmail)}</small>` : ''}</td>
+              <td>${new Date(item.createdAt).toLocaleString()}</td>
+              ${form.fields.map(field => `<td>${escapeHtml(String(item.answers?.[field.id] ?? '—'))}</td>`).join('')}
+            </tr>
+          `).join('') || `<tr><td colspan="${form.fields.length + 2}">No submissions yet.</td></tr>`}
+        </tbody>
+      </table>
+    </div>
+    <div style="margin-top:18px;"><button type="button" class="btn btn-outline" id="cancelModalBtn">Close</button></div>
+  `);
+  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+}
+
+async function renderFormsAdmin() {
+  const el = document.getElementById('panel-forms');
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  try {
+    const forms = await fetchJSON('/api/admin/forms');
+    el.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <h2 style="margin:0 0 4px;">Dynamic Form Builder</h2>
+          <p style="color:#7a6288; font-size:0.88rem; margin:0;">Create reusable forms for registrations, executive info, department workflows, and welfare follow-up.</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="newFormBtn">+ New Form</button>
+      </div>
+      <table>
+        <thead><tr><th>Title</th><th>Category</th><th>Questions</th><th>Status</th><th>Submissions</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${forms.map(form => `
+            <tr>
+              <td><strong>${escapeHtml(form.title)}</strong>${form.description ? `<br><small class="hint">${escapeHtml(form.description)}</small>` : ''}</td>
+              <td>${escapeHtml(FORM_CATEGORY_LABELS[form.category] || form.category || 'Custom')}</td>
+              <td>${Array.isArray(form.fields) ? form.fields.length : (form.fieldCount || 0)}</td>
+              <td><span class="status-pill ${form.isOpen ? 'done' : ''}">${form.isOpen ? 'open' : 'closed'}</span></td>
+              <td><button type="button" data-view-form-subs="${form.id}">View</button></td>
+              <td class="row-actions">
+                <button type="button" data-edit-form="${form.id}">Edit</button>
+                <button type="button" data-toggle-form="${form.id}">${form.isOpen ? 'Close' : 'Reopen'}</button>
+                <button type="button" class="danger" data-delete-form="${form.id}">Delete</button>
+              </td>
+            </tr>
+          `).join('') || '<tr><td colspan="6">No forms created yet.</td></tr>'}
+        </tbody>
+      </table>
+    `;
+    document.getElementById('newFormBtn').addEventListener('click', () => openFormBuilder(null));
+    el.querySelectorAll('[data-edit-form]').forEach((btn) => btn.addEventListener('click', () => openFormBuilder(forms.find(form => form.id === btn.dataset.editForm))));
+    el.querySelectorAll('[data-view-form-subs]').forEach((btn) => btn.addEventListener('click', () => viewFormSubmissions(btn.dataset.viewFormSubs)));
+    el.querySelectorAll('[data-toggle-form]').forEach((btn) => btn.addEventListener('click', async () => {
+      const form = forms.find(item => item.id === btn.dataset.toggleForm);
+      await fetchJSON(`/api/admin/forms/${form.id}/toggle`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isOpen: !form.isOpen })
+      });
+      showToast(form.isOpen ? 'Form closed.' : 'Form reopened.', 'success');
+      renderFormsAdmin();
+    }));
+    el.querySelectorAll('[data-delete-form]').forEach((btn) => btn.addEventListener('click', async () => {
+      if (!confirm('Delete this form and its submissions? This cannot be undone.')) return;
+      await fetchJSON(`/api/admin/forms/${btn.dataset.deleteForm}`, { method: 'DELETE' });
+      showToast('Form deleted.', 'success');
+      renderFormsAdmin();
+    }));
+  } catch (err) {
+    el.innerHTML = `<p class="empty-state">${escapeHtml(err.message || 'Could not load forms.')}</p>`;
+  }
+}
+
+async function renderReportsPanel() {
+  const el = document.getElementById('panel-reports');
+  const cards = [
+    { title: 'Membership Report', desc: 'Download the latest membership PDF from the shepherding tools.', href: '/api/shepherd/members/report.pdf', cta: 'Download PDF' },
+    { title: 'Attendance Summary', desc: 'Export chapter attendance percentage summaries as PDF.', href: '/api/shepherd/attendance-summary.pdf', cta: 'Download PDF' },
+    { title: 'Finance Ledger PDF', desc: 'Generate a printable PDF version of the finance ledger.', href: '/api/finance/export.pdf', cta: 'Download PDF' },
+    { title: 'Finance Ledger CSV', desc: 'Download the finance ledger as CSV for spreadsheets and reporting.', href: '/api/finance/export.csv', cta: 'Download CSV' },
+    { title: 'Open Shepherding Portal', desc: 'Use the shepherding portal for attendance registers and pastoral care workflows.', href: '/shepherding.html', cta: 'Open Portal' },
+    { title: 'Open Finance Portal', desc: 'Use the finance portal for budgets, entries, and ledger filtering before export.', href: '/finance.html', cta: 'Open Portal' }
+  ];
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2 style="margin:0 0 4px;">Reports &amp; PDF Export</h2>
+        <p style="color:#7a6288; font-size:0.88rem; margin:0;">Quick access to the existing membership, attendance, and finance exports. Some links require coordinator or office-level permissions.</p>
+      </div>
+    </div>
+    <div class="media-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px,1fr));">
+      ${cards.map(card => `
+        <div class="media-card" style="padding:18px;">
+          <h4 style="margin:0 0 8px;">${escapeHtml(card.title)}</h4>
+          <p style="font-size:0.84rem; color:#7a6288; margin:0 0 14px;">${escapeHtml(card.desc)}</p>
+          <a class="btn btn-outline btn-sm" href="${card.href}" ${card.href.endsWith('.html') ? '' : 'target="_blank" rel="noopener"'}>${escapeHtml(card.cta)}</a>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
 
 async function renderSettings() {
   const el = document.getElementById('panel-settings');
@@ -1957,6 +2236,13 @@ async function renderChapterSettings() {
   }
 }
 
+function whenElementReady(selector, callback, tries = 20) {
+  const el = document.querySelector(selector);
+  if (el) return callback(el);
+  if (tries <= 0) return null;
+  return setTimeout(() => whenElementReady(selector, callback, tries - 1), 120);
+}
+
 // ---------- Universal Command Palette (Ctrl + K) ----------
 function initCommandPalette() {
   const backdrop = document.getElementById('cmdPaletteBackdrop');
@@ -1967,26 +2253,39 @@ function initCommandPalette() {
   if (!backdrop || !input || !list) return;
 
   const COMMANDS = [
-    { title: 'Overview Dashboard', group: 'Dashboard', panel: 'overview', icon: '📊' },
-    { title: 'Chapter Site Settings (Branding & Banner)', group: 'Settings', panel: 'chapterSettings', icon: '🏢' },
-    { title: 'Members Roster & Profiles', group: 'People & Leadership', panel: 'members', icon: '👥' },
-    { title: 'Executive Applications & Verification', group: 'People & Leadership', panel: 'executives', icon: '🎓' },
-    { title: 'Leadership Accounts & Roles', group: 'People & Leadership', panel: 'staff', icon: '🔑' },
-    { title: 'Join Requests (New Visitors)', group: 'People & Leadership', panel: 'joinRequests', icon: '📥' },
-    { title: 'Bible Studies & Outlines', group: 'Ministry & Discipleship', panel: 'bibleStudies', icon: '📖' },
-    { title: 'Small Groups & Fellowship Cells', group: 'Ministry & Discipleship', panel: 'groups', icon: '👨‍👩‍👦' },
-    { title: 'Prayer Requests Wall', group: 'Ministry & Discipleship', panel: 'prayerRequests', icon: '🙏' },
-    { title: 'Testimonies Moderation', group: 'Ministry & Discipleship', panel: 'testimonies', icon: '✨' },
-    { title: 'Sermons & Audio/Video Media', group: 'Ministry & Discipleship', panel: 'sermons', icon: '🎧' },
-    { title: 'Events & Gathering Calendar', group: 'Operations & Events', panel: 'events', icon: '🗓️' },
-    { title: 'Departments & Ministries', group: 'Operations & Events', panel: 'departments', icon: '🚪' },
-    { title: 'Push Notifications Broadcast', group: 'Operations & Events', panel: 'notifications', icon: '🔔' },
-    { title: 'Welfare Requests & Support Cases', group: 'Care & Community', panel: 'welfare', icon: '❤️' },
-    { title: 'Community Chat Moderation', group: 'Care & Community', panel: 'chatModeration', icon: '💬' },
-    { title: 'Contact Form Inquiries', group: 'Care & Community', panel: 'contactMessages', icon: '✉️' },
-    { title: 'Custom Pages Builder', group: 'Settings & System', panel: 'pages', icon: '📄' },
-    { title: 'Media Library & Uploads', group: 'Settings & System', panel: 'media', icon: '📁' }
+    { title: '+ New Member', group: 'Quick Actions', icon: '➕', keywords: 'register member sign up', action: () => window.open('/register.html', '_blank', 'noopener') },
+    { title: '+ Create Event', group: 'Quick Actions', icon: '➕', keywords: 'new event calendar', action: () => { openAdminPanel('events'); whenElementReady('#addBtn-events', (el) => el.click()); } },
+    { title: '+ Send Notification', group: 'Quick Actions', icon: '➕', keywords: 'announcement broadcast push', action: () => { openAdminPanel('notifications'); whenElementReady('#notifTitle', (el) => el.focus()); } },
+    { title: '+ Upload Banner', group: 'Quick Actions', icon: '➕', keywords: 'chapter banner hero image', action: () => { openAdminPanel('chapterSettings'); whenElementReady('#chapterBannerFile', (el) => el.focus()); } },
+    { title: '+ New Form', group: 'Quick Actions', icon: '➕', keywords: 'dynamic form builder', action: () => { openAdminPanel('forms'); whenElementReady('#newFormBtn', (el) => el.click()); } },
+    { title: 'Overview Dashboard', group: 'Dashboard', panel: 'overview', icon: '📊', keywords: 'home summary' },
+    { title: 'Chapter Site Settings (Branding & Banner)', group: 'Settings', panel: 'chapterSettings', icon: '🏢', keywords: 'settings banner branding' },
+    { title: 'Members Roster & Profiles', group: 'People & Leadership', panel: 'members', icon: '👥', keywords: 'directory people' },
+    { title: 'Executive Applications & Verification', group: 'People & Leadership', panel: 'executives', icon: '🎓', keywords: 'executives roster approvals' },
+    { title: 'Leadership Accounts & Roles', group: 'People & Leadership', panel: 'staff', icon: '🔑', keywords: 'staff roles portal accounts' },
+    { title: 'Join Requests (New Visitors)', group: 'People & Leadership', panel: 'joinRequests', icon: '📥', keywords: 'new converts visitors' },
+    { title: 'Bible Studies & Outlines', group: 'Ministry & Discipleship', panel: 'bibleStudies', icon: '📖', keywords: 'study scripture' },
+    { title: 'Small Groups & Fellowship Cells', group: 'Ministry & Discipleship', panel: 'groups', icon: '👨‍👩‍👦', keywords: 'cells groups' },
+    { title: 'Prayer Requests Wall', group: 'Ministry & Discipleship', panel: 'prayerRequests', icon: '🙏', keywords: 'prayer wall' },
+    { title: 'Testimonies Moderation', group: 'Ministry & Discipleship', panel: 'testimonies', icon: '✨', keywords: 'testimony review' },
+    { title: 'Sermons & Audio/Video Media', group: 'Ministry & Discipleship', panel: 'sermons', icon: '🎧', keywords: 'media sermons' },
+    { title: 'Events & Gathering Calendar', group: 'Operations & Gatherings', panel: 'events', icon: '🗓️', keywords: 'events calendar service schedules' },
+    { title: 'Departments & Ministries', group: 'Operations & Gatherings', panel: 'departments', icon: '🚪', keywords: 'departments ministries' },
+    { title: 'Push Notifications Broadcast', group: 'Operations & Gatherings', panel: 'notifications', icon: '🔔', keywords: 'notifications broadcast' },
+    { title: 'Dynamic Form Builder', group: 'Operations & Gatherings', panel: 'forms', icon: '🧩', keywords: 'forms builder registrations' },
+    { title: 'Welfare Requests & Support Cases', group: 'Care & Community', panel: 'welfare', icon: '❤️', keywords: 'welfare care' },
+    { title: 'Community Chat Moderation', group: 'Care & Community', panel: 'chatModeration', icon: '💬', keywords: 'chat moderation community' },
+    { title: 'Contact Form Inquiries', group: 'Care & Community', panel: 'contactMessages', icon: '✉️', keywords: 'contact messages' },
+    { title: 'Custom Pages Builder', group: 'System & Chapter Settings', panel: 'pages', icon: '📄', keywords: 'pages custom' },
+    { title: 'Media Library & Uploads', group: 'System & Chapter Settings', panel: 'media', icon: '📁', keywords: 'files uploads gridfs' },
+    { title: 'Reports & PDF Export', group: 'System & Chapter Settings', panel: 'reports', icon: '📑', keywords: 'reports pdf export' }
   ];
+
+  function executeCommand(command) {
+    if (command.action) command.action();
+    else if (command.panel) openAdminPanel(command.panel);
+    closePalette();
+  }
 
   function openPalette() {
     backdrop.classList.add('open');
@@ -2013,17 +2312,16 @@ function initCommandPalette() {
       }
       return `
         ${groupHeader}
-        <div class="cmd-item ${idx === 0 ? 'selected' : ''}" data-panel="${cmd.panel}">
+        <div class="cmd-item ${idx === 0 ? 'selected' : ''}" data-index="${idx}">
           <span>${cmd.icon} &nbsp;${escapeHtml(cmd.title)}</span>
-          <span style="font-size:0.75rem; color:#9b86a8;">Jump &rsaquo;</span>
+          <span style="font-size:0.75rem; color:#9b86a8;">${cmd.action ? 'Run' : 'Jump'} &rsaquo;</span>
         </div>
       `;
     }).join('');
 
     list.querySelectorAll('.cmd-item').forEach(item => {
       item.addEventListener('click', () => {
-        openAdminPanel(item.dataset.panel);
-        closePalette();
+        executeCommand(items[Number(item.dataset.index)]);
       });
     });
   }
@@ -2031,7 +2329,10 @@ function initCommandPalette() {
   input.addEventListener('input', () => {
     const q = input.value.toLowerCase().trim();
     const filtered = COMMANDS.filter(c =>
-      c.title.toLowerCase().includes(q) || c.group.toLowerCase().includes(q) || c.panel.toLowerCase().includes(q)
+      c.title.toLowerCase().includes(q) ||
+      c.group.toLowerCase().includes(q) ||
+      (c.panel || '').toLowerCase().includes(q) ||
+      (c.keywords || '').toLowerCase().includes(q)
     );
     renderList(filtered);
   });
@@ -2055,8 +2356,15 @@ function initCommandPalette() {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (currentIdx >= 0 && items[currentIdx]) {
-        openAdminPanel(items[currentIdx].dataset.panel);
-        closePalette();
+        const commands = input.value.toLowerCase().trim()
+          ? COMMANDS.filter(c =>
+            c.title.toLowerCase().includes(input.value.toLowerCase().trim()) ||
+            c.group.toLowerCase().includes(input.value.toLowerCase().trim()) ||
+            (c.panel || '').toLowerCase().includes(input.value.toLowerCase().trim()) ||
+            (c.keywords || '').toLowerCase().includes(input.value.toLowerCase().trim())
+          )
+          : COMMANDS;
+        executeCommand(commands[currentIdx]);
       }
     } else if (e.key === 'Escape') {
       closePalette();

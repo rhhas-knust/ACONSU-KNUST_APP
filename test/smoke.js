@@ -753,7 +753,7 @@ require('./harness.js');
 
   console.log('\n== static pages ==');
   for (const page of [
-    '/more.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',
+    '/more.html', '/admin.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',
     '/register.html', '/executive.html', '/card.html', '/bible-study.html', '/sermon-notes.html', '/prayer.html',
     '/events.html', '/index.html',
     '/groups.html', '/group.html', '/chat.html', '/welfare.html', '/welfare-portal.html', '/give.html',
