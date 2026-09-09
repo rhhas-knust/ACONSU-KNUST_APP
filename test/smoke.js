@@ -693,6 +693,30 @@ require('./harness.js');
   r = await call('coord', 'GET', '/api/finance/summary');
   check("chapter 1's coordinator still reads only chapter 1's finances, unaffected by any of the above", r.data.totalIncome === chapter1IncomeBefore, r.data);
 
+  console.log('\n== chapter-scoped site settings (Phase 1) ==');
+  r = await call('admin', 'GET', '/api/admin/chapter-settings?chapterId=' + chapterId);
+  check('admin reads chapter 1 settings', r.status === 200 && r.data.chapterId === chapterId, r.data);
+
+  r = await call('coord', 'PUT', '/api/admin/chapter-settings', {
+    name: 'ACONSU-KNUST Updated',
+    tagline: 'Empowered for Impact',
+    verseOfTheWeek: 'Romans 12:1-2',
+    serviceTimes: ['Sundays 8:00 AM', 'Wednesdays 6:30 PM'],
+    contact: { whatsapp: '233240000000', email: 'knust@aconsu.org' }
+  });
+  check('chapter 1 coordinator updates chapter settings', r.status === 200 && r.data.item.tagline === 'Empowered for Impact', r.data);
+
+  r = await call('coord2', 'GET', '/api/admin/chapter-settings');
+  check('chapter 2 coordinator reads chapter 2 settings', r.status === 200 && r.data.chapterId === 'test-chapter-2', r.data);
+  check('chapter 2 settings do not have chapter 1 tagline', r.data.tagline !== 'Empowered for Impact', r.data);
+
+  const pubRes = await fetch(BASE + '/api/settings', {
+    headers: { 'X-Chapter-Id': chapterId }
+  });
+  const pubSettings = await pubRes.json();
+  check('public settings reflect chapter 1 verse of the week', pubRes.status === 200 && pubSettings.verseOfTheWeek === 'Romans 12:1-2', pubSettings);
+  check('public settings reflect chapter 1 service times', Array.isArray(pubSettings.serviceTimes) && pubSettings.serviceTimes.includes('Sundays 8:00 AM'), pubSettings);
+
   console.log('\n== static pages ==');
   for (const page of [
     '/more.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',

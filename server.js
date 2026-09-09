@@ -1866,7 +1866,40 @@ app.get('/api/files/:id', async (req, res) => {
 
 app.get('/api/settings', async (req, res) => {
   try {
-    res.json(await repo.getSettings());
+    const globalSettings = await repo.getSettings();
+    const chapterId = (req.headers['x-chapter-id'] || req.query.chapterId || '').toString().trim();
+    if (!chapterId) {
+      return res.json(globalSettings);
+    }
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) {
+      return res.json(globalSettings);
+    }
+    const merged = {
+      ...globalSettings,
+      chapterId: chapter.id,
+      chapterName: chapter.name,
+      fellowshipName: chapter.name || globalSettings.fellowshipName,
+      fullName: chapter.fullName || globalSettings.fullName,
+      tagline: chapter.tagline || globalSettings.tagline,
+      verseOfTheWeek: chapter.verseOfTheWeek || globalSettings.verseOfTheWeek,
+      address: chapter.address || chapter.location || globalSettings.address,
+      homeHeaderImageFileId: chapter.homeHeaderImageFileId || globalSettings.homeHeaderImageFileId,
+      serviceTimes: (chapter.serviceTimes && chapter.serviceTimes.length) ? chapter.serviceTimes : globalSettings.serviceTimes,
+      email: chapter.contact?.email || globalSettings.email,
+      phone: chapter.contact?.phone || globalSettings.phone,
+      whatsapp: chapter.contact?.whatsapp || globalSettings.whatsapp,
+      facebook: chapter.contact?.facebook || globalSettings.facebook,
+      instagram: chapter.contact?.instagram || globalSettings.instagram,
+      youtube: chapter.contact?.youtube || globalSettings.youtube,
+      tiktok: chapter.contact?.tiktok || globalSettings.tiktok,
+      twitter: chapter.contact?.twitter || globalSettings.twitter,
+      telegram: chapter.contact?.telegram || globalSettings.telegram,
+      momoNumber: chapter.payment?.momoNumber || globalSettings.momoNumber,
+      momoName: chapter.payment?.momoName || globalSettings.momoName,
+      about: chapter.about || globalSettings.about
+    };
+    res.json(merged);
   } catch (e) {
     res.status(500).json({ error: 'Could not load settings' });
   }

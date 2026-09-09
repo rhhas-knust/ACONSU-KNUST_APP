@@ -45,57 +45,45 @@ async function checkAuth() {
 function showAdminShell() {
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('adminShell').style.display = 'block';
+  
+  // Chapter badge display in topbar
+  const badge = document.getElementById('adminChapterBadge');
+  if (badge) {
+    if (ADMIN_SCOPE.isNational) {
+      badge.textContent = '🌐 National Admin';
+      const natBtn = document.getElementById('navNationalBtn');
+      const globBtn = document.getElementById('navGlobalSettingsBtn');
+      if (natBtn) natBtn.style.display = 'flex';
+      if (globBtn) globBtn.style.display = 'flex';
+    } else if (ADMIN_SCOPE.chapterId) {
+      fetchJSON('/api/admin/chapter-settings')
+        .then(cs => { badge.textContent = `📍 ${cs.name || ADMIN_SCOPE.chapterId}`; })
+        .catch(() => { badge.textContent = `📍 ${ADMIN_SCOPE.chapterId}`; });
+    }
+  }
+
   initAdminNav();
+  initCommandPalette();
   loadPanel('overview');
 }
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const msg = document.getElementById('loginMsg');
-  const username = document.getElementById('username').value;
-  const password = document.getElementById('password').value;
-  try {
-    await fetchJSON('/api/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    return checkAuth();
-  } catch (adminErr) { /* not the legacy admin login — try a portal account next */ }
-  try {
-    const { staff } = await fetchJSON('/api/portal/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
-    });
-    if (!staff || !['coordinator', 'chapterAdmin', 'nationalCoordinator', 'executive'].includes(staff.role)) {
-      await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
-      msg.textContent = 'That account does not have the required admin access.';
-      msg.className = 'form-msg error';
-      return;
-    }
-    checkAuth();
-  } catch (err) {
-    msg.textContent = 'Invalid username or password.';
-    msg.className = 'form-msg error';
+function openAdminPanel(name) {
+  const btn = document.querySelector(`#adminNav button[data-panel="${name}"]`);
+  if (btn) {
+    document.getElementById('adminNav').querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById(`panel-${name}`);
+    if (panel) panel.classList.add('active');
+    loadPanel(name);
   }
-});
-
-document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await fetchJSON('/api/admin/logout', { method: 'POST' }).catch(() => {});
-  await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
-  checkAuth();
-});
+}
 
 // ---------- nav ----------
 function initAdminNav() {
-  document.getElementById('adminNav').querySelectorAll('button').forEach(btn => {
+  document.getElementById('adminNav').querySelectorAll('button[data-panel]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.getElementById('adminNav').querySelectorAll('button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
-      document.getElementById(`panel-${btn.dataset.panel}`).classList.add('active');
-      loadPanel(btn.dataset.panel);
+      openAdminPanel(btn.dataset.panel);
     });
   });
 }
@@ -120,6 +108,7 @@ async function loadPanel(name) {
     prayerRequests: renderPrayerRequests,
     testimonies: renderTestimonies,
     contactMessages: renderContactMessages,
+    chapterSettings: renderChapterSettings,
     settings: renderSettings
   };
   if (handlers[name]) handlers[name]();
@@ -1665,6 +1654,390 @@ async function renderSettings() {
     } catch (err) {
       document.getElementById('settingsMsg').textContent = err.message || 'Could not save.';
       document.getElementById('settingsMsg').className = 'form-msg error';
+    }
+  });
+}
+
+// ---------- Chapter-Scoped Site Settings (Phase 1) ----------
+async function renderChapterSettings() {
+  const el = document.getElementById('panel-chapterSettings');
+  el.innerHTML = '<p class="empty-state">Loading Chapter Settings...</p>';
+  try {
+    const data = await fetchJSON('/api/admin/chapter-settings');
+    const contact = data.contact || {};
+    const payment = data.payment || {};
+    const about = data.about || {};
+    const serviceTimesStr = (data.serviceTimes || []).join('\n');
+
+    el.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <h2 style="margin:0 0 4px;">Chapter Site Settings</h2>
+          <p style="color:#7a6288; font-size:0.88rem; margin:0;">
+            Manage your chapter's site branding, scripture theme, service times, contacts, and home banner.
+          </p>
+        </div>
+      </div>
+
+      <div class="portal-card" style="margin-bottom:24px; background:#fff; border-radius:12px; padding:20px; border:1px solid var(--line);">
+        <h3 style="margin-bottom:8px;">Chapter Homepage Banner</h3>
+        <p class="hint">Upload a high-resolution hero photo for your chapter's homepage. It will be compressed and displayed across the app and web.</p>
+        <div style="display:flex; gap:20px; align-items:center; flex-wrap:wrap; margin-top:14px;">
+          <div style="width:260px; height:120px; border-radius:10px; overflow:hidden; background:#eee; display:flex; align-items:center; justify-content:center; border:1px solid var(--line);">
+            ${data.homeHeaderImageFileId ? `<img src="/api/files/${data.homeHeaderImageFileId}" style="width:100%; height:100%; object-fit:cover;" alt="Chapter Banner">` : '<span style="color:#888; font-size:0.85rem;">No banner set</span>'}
+          </div>
+          <div>
+            <input type="file" id="chapterBannerFile" accept="image/*" style="margin-bottom:10px; display:block;">
+            <button type="button" class="btn btn-outline btn-sm" id="uploadChapterBannerBtn">Upload New Banner</button>
+            <span id="bannerUploadMsg" style="margin-left:10px; font-size:0.85rem; font-weight:700;"></span>
+          </div>
+        </div>
+      </div>
+
+      <form class="form-card" id="chapterSettingsForm" style="max-width:780px; margin:0;">
+        <h3 style="margin-bottom:16px;">General &amp; Branding</h3>
+        <div class="field-row">
+          <div class="field">
+            <label>Chapter Display Name</label>
+            <input type="text" id="csName" value="${escapeHtml(data.name || '')}" required>
+            <small class="hint">e.g. ACONSU-KNUST</small>
+          </div>
+          <div class="field">
+            <label>Full Name</label>
+            <input type="text" id="csFullName" value="${escapeHtml(data.fullName || '')}">
+            <small class="hint">e.g. Apostles' Continuation Students Union — KNUST</small>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Institution / University</label>
+            <input type="text" id="csInstitution" value="${escapeHtml(data.institution || '')}">
+          </div>
+          <div class="field">
+            <label>Meeting Venue / Location</label>
+            <input type="text" id="csLocation" value="${escapeHtml(data.location || '')}">
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Campus Address / Directions</label>
+          <input type="text" id="csAddress" value="${escapeHtml(data.address || '')}">
+        </div>
+
+        <div class="field">
+          <label>Chapter Tagline / Annual Theme</label>
+          <input type="text" id="csTagline" value="${escapeHtml(data.tagline || '')}" placeholder="e.g. Carrying the fire. Continuing the pattern.">
+        </div>
+
+        <div class="field">
+          <label>Verse of the Week / Scripture Theme</label>
+          <textarea id="csVerse" rows="2" placeholder="e.g. Acts 2:42 — And they continued steadfastly...">${escapeHtml(data.verseOfTheWeek || '')}</textarea>
+          <small class="hint">Powers the homepage daily scripture banner and the downloadable PNG card generator.</small>
+        </div>
+
+        <div class="field">
+          <label>Weekly Fellowship &amp; Service Times (one schedule per line)</label>
+          <textarea id="csServiceTimes" rows="3" placeholder="Sundays 8:00 AM - 11:00 AM (Main Fellowship Auditorium)&#10;Wednesdays 6:30 PM - 8:00 PM (Midweek Service)">${escapeHtml(serviceTimesStr)}</textarea>
+        </div>
+
+        <h3 style="margin:24px 0 16px;">Official Contacts &amp; Social Channels</h3>
+        <div class="field-row">
+          <div class="field">
+            <label>Chapter Email</label>
+            <input type="email" id="csEmail" value="${escapeHtml(contact.email || '')}">
+          </div>
+          <div class="field">
+            <label>Chapter Phone</label>
+            <input type="tel" id="csPhone" value="${escapeHtml(contact.phone || '')}">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>WhatsApp Group Link or Number</label>
+            <input type="text" id="csWhatsapp" value="${escapeHtml(contact.whatsapp || '')}" placeholder="https://chat.whatsapp.com/... or 233...">
+          </div>
+          <div class="field">
+            <label>YouTube Channel URL</label>
+            <input type="text" id="csYoutube" value="${escapeHtml(contact.youtube || '')}">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Instagram URL</label>
+            <input type="text" id="csInstagram" value="${escapeHtml(contact.instagram || '')}">
+          </div>
+          <div class="field">
+            <label>Facebook URL</label>
+            <input type="text" id="csFacebook" value="${escapeHtml(contact.facebook || '')}">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>TikTok URL</label>
+            <input type="text" id="csTiktok" value="${escapeHtml(contact.tiktok || '')}">
+          </div>
+          <div class="field">
+            <label>X / Twitter URL</label>
+            <input type="text" id="csTwitter" value="${escapeHtml(contact.twitter || '')}">
+          </div>
+        </div>
+
+        <h3 style="margin:24px 0 16px;">Giving &amp; Mobile Money (For Member Claims)</h3>
+        <div class="field-row">
+          <div class="field">
+            <label>Mobile Money (MoMo) Number</label>
+            <input type="text" id="csMomoNumber" value="${escapeHtml(payment.momoNumber || '')}">
+          </div>
+          <div class="field">
+            <label>MoMo Account Name / Merchant Name</label>
+            <input type="text" id="csMomoName" value="${escapeHtml(payment.momoName || '')}">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Bank Name</label>
+            <input type="text" id="csBankName" value="${escapeHtml(payment.bankName || '')}">
+          </div>
+          <div class="field">
+            <label>Bank Account Number</label>
+            <input type="text" id="csBankAccountNumber" value="${escapeHtml(payment.bankAccountNumber || '')}">
+          </div>
+        </div>
+
+        <h3 style="margin:24px 0 16px;">About, Vision &amp; History</h3>
+        <div class="field">
+          <label>Chapter Vision</label>
+          <textarea id="csVision" rows="2">${escapeHtml(about.vision || '')}</textarea>
+        </div>
+        <div class="field">
+          <label>Chapter Mission</label>
+          <textarea id="csMission" rows="2">${escapeHtml(about.mission || '')}</textarea>
+        </div>
+        <div class="field">
+          <label>Chapter History</label>
+          <textarea id="csHistory" rows="3">${escapeHtml(about.history || '')}</textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="saveChapterSettingsBtn" style="margin-top:20px;">Save Chapter Settings</button>
+        <div class="form-msg" id="chapterSettingsMsg"></div>
+      </form>
+    `;
+
+    // Banner upload handler
+    document.getElementById('uploadChapterBannerBtn').addEventListener('click', async () => {
+      const fileInput = document.getElementById('chapterBannerFile');
+      const file = fileInput.files[0];
+      const msg = document.getElementById('bannerUploadMsg');
+      if (!file) {
+        msg.textContent = 'Please choose an image file first.';
+        msg.style.color = 'var(--flame-red)';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('image', file);
+      msg.textContent = 'Uploading banner...';
+      msg.style.color = 'var(--purple-deep)';
+      try {
+        await fetchJSON('/api/admin/chapter-settings/banner', {
+          method: 'POST',
+          body: formData
+        });
+        showToast('Banner uploaded successfully.', 'success');
+        renderChapterSettings();
+      } catch (err) {
+        msg.textContent = err.message || 'Upload failed.';
+        msg.style.color = 'var(--flame-red)';
+      }
+    });
+
+    // Chapter settings save handler
+    document.getElementById('chapterSettingsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('saveChapterSettingsBtn');
+      const msg = document.getElementById('chapterSettingsMsg');
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      msg.textContent = '';
+      msg.className = 'form-msg';
+
+      const payload = {
+        name: document.getElementById('csName').value,
+        fullName: document.getElementById('csFullName').value,
+        institution: document.getElementById('csInstitution').value,
+        location: document.getElementById('csLocation').value,
+        address: document.getElementById('csAddress').value,
+        tagline: document.getElementById('csTagline').value,
+        verseOfTheWeek: document.getElementById('csVerse').value,
+        serviceTimes: document.getElementById('csServiceTimes').value.split('\n').map(s => s.trim()).filter(Boolean),
+        contact: {
+          email: document.getElementById('csEmail').value,
+          phone: document.getElementById('csPhone').value,
+          whatsapp: document.getElementById('csWhatsapp').value,
+          youtube: document.getElementById('csYoutube').value,
+          instagram: document.getElementById('csInstagram').value,
+          facebook: document.getElementById('csFacebook').value,
+          tiktok: document.getElementById('csTiktok').value,
+          twitter: document.getElementById('csTwitter').value
+        },
+        payment: {
+          momoNumber: document.getElementById('csMomoNumber').value,
+          momoName: document.getElementById('csMomoName').value,
+          bankName: document.getElementById('csBankName').value,
+          bankAccountNumber: document.getElementById('csBankAccountNumber').value
+        },
+        about: {
+          vision: document.getElementById('csVision').value,
+          mission: document.getElementById('csMission').value,
+          history: document.getElementById('csHistory').value
+        }
+      };
+
+      try {
+        await fetchJSON('/api/admin/chapter-settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        msg.textContent = 'Chapter site settings saved successfully.';
+        msg.className = 'form-msg success';
+        showToast('Chapter settings saved.', 'success');
+      } catch (err) {
+        msg.textContent = err.message || 'Could not save chapter settings.';
+        msg.className = 'form-msg error';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Chapter Settings';
+      }
+    });
+
+  } catch (err) {
+    el.innerHTML = `<p class="empty-state">Could not load chapter settings: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+// ---------- Universal Command Palette (Ctrl + K) ----------
+function initCommandPalette() {
+  const backdrop = document.getElementById('cmdPaletteBackdrop');
+  const input = document.getElementById('cmdInput');
+  const list = document.getElementById('cmdList');
+  const trigger = document.getElementById('cmdPaletteBtn');
+
+  if (!backdrop || !input || !list) return;
+
+  const COMMANDS = [
+    { title: 'Overview Dashboard', group: 'Dashboard', panel: 'overview', icon: '📊' },
+    { title: 'Chapter Site Settings (Branding & Banner)', group: 'Settings', panel: 'chapterSettings', icon: '🏢' },
+    { title: 'Members Roster & Profiles', group: 'People & Leadership', panel: 'members', icon: '👥' },
+    { title: 'Executive Applications & Verification', group: 'People & Leadership', panel: 'executives', icon: '🎓' },
+    { title: 'Leadership Accounts & Roles', group: 'People & Leadership', panel: 'staff', icon: '🔑' },
+    { title: 'Join Requests (New Visitors)', group: 'People & Leadership', panel: 'joinRequests', icon: '📥' },
+    { title: 'Bible Studies & Outlines', group: 'Ministry & Discipleship', panel: 'bibleStudies', icon: '📖' },
+    { title: 'Small Groups & Fellowship Cells', group: 'Ministry & Discipleship', panel: 'groups', icon: '👨‍👩‍👦' },
+    { title: 'Prayer Requests Wall', group: 'Ministry & Discipleship', panel: 'prayerRequests', icon: '🙏' },
+    { title: 'Testimonies Moderation', group: 'Ministry & Discipleship', panel: 'testimonies', icon: '✨' },
+    { title: 'Sermons & Audio/Video Media', group: 'Ministry & Discipleship', panel: 'sermons', icon: '🎧' },
+    { title: 'Events & Gathering Calendar', group: 'Operations & Events', panel: 'events', icon: '🗓️' },
+    { title: 'Departments & Ministries', group: 'Operations & Events', panel: 'departments', icon: '🚪' },
+    { title: 'Push Notifications Broadcast', group: 'Operations & Events', panel: 'notifications', icon: '🔔' },
+    { title: 'Welfare Requests & Support Cases', group: 'Care & Community', panel: 'welfare', icon: '❤️' },
+    { title: 'Community Chat Moderation', group: 'Care & Community', panel: 'chatModeration', icon: '💬' },
+    { title: 'Contact Form Inquiries', group: 'Care & Community', panel: 'contactMessages', icon: '✉️' },
+    { title: 'Custom Pages Builder', group: 'Settings & System', panel: 'pages', icon: '📄' },
+    { title: 'Media Library & Uploads', group: 'Settings & System', panel: 'media', icon: '📁' }
+  ];
+
+  function openPalette() {
+    backdrop.classList.add('open');
+    input.value = '';
+    renderList(COMMANDS);
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function closePalette() {
+    backdrop.classList.remove('open');
+  }
+
+  function renderList(items) {
+    if (!items.length) {
+      list.innerHTML = '<div style="padding:18px; text-align:center; color:#888;">No matching panels found</div>';
+      return;
+    }
+    let lastGroup = '';
+    list.innerHTML = items.map((cmd, idx) => {
+      let groupHeader = '';
+      if (cmd.group !== lastGroup) {
+        lastGroup = cmd.group;
+        groupHeader = `<div class="cmd-item-group">${escapeHtml(cmd.group)}</div>`;
+      }
+      return `
+        ${groupHeader}
+        <div class="cmd-item ${idx === 0 ? 'selected' : ''}" data-panel="${cmd.panel}">
+          <span>${cmd.icon} &nbsp;${escapeHtml(cmd.title)}</span>
+          <span style="font-size:0.75rem; color:#9b86a8;">Jump &rsaquo;</span>
+        </div>
+      `;
+    }).join('');
+
+    list.querySelectorAll('.cmd-item').forEach(item => {
+      item.addEventListener('click', () => {
+        openAdminPanel(item.dataset.panel);
+        closePalette();
+      });
+    });
+  }
+
+  input.addEventListener('input', () => {
+    const q = input.value.toLowerCase().trim();
+    const filtered = COMMANDS.filter(c =>
+      c.title.toLowerCase().includes(q) || c.group.toLowerCase().includes(q) || c.panel.toLowerCase().includes(q)
+    );
+    renderList(filtered);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const items = Array.from(list.querySelectorAll('.cmd-item'));
+    if (!items.length) return;
+    const currentIdx = items.findIndex(i => i.classList.contains('selected'));
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIdx = (currentIdx + 1) % items.length;
+      items.forEach(i => i.classList.remove('selected'));
+      items[nextIdx].classList.add('selected');
+      items[nextIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIdx = (currentIdx - 1 + items.length) % items.length;
+      items.forEach(i => i.classList.remove('selected'));
+      items[prevIdx].classList.add('selected');
+      items[prevIdx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (currentIdx >= 0 && items[currentIdx]) {
+        openAdminPanel(items[currentIdx].dataset.panel);
+        closePalette();
+      }
+    } else if (e.key === 'Escape') {
+      closePalette();
+    }
+  });
+
+  if (trigger) trigger.addEventListener('click', openPalette);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) closePalette();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      if (backdrop.classList.contains('open')) {
+        closePalette();
+      } else {
+        openPalette();
+      }
     }
   });
 }
