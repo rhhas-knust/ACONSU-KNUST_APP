@@ -181,6 +181,14 @@
   if (homeHeaderId) {
     heroBackgroundEl.style.backgroundImage = `url('/api/files/${homeHeaderId}')`;
   }
+  if (settings.verseOfTheWeek) {
+    const verseStripEl = document.getElementById('verseStrip');
+    if (verseStripEl) verseStripEl.textContent = settings.verseOfTheWeek;
+  }
+  if (settings.tagline) {
+    const ledeEl = document.querySelector('#homeHero .lede');
+    if (ledeEl && settings.tagline.trim()) ledeEl.textContent = settings.tagline;
+  }
   // Hide the separate banner since it's now merged into hero
   const homeHeaderEl = document.getElementById('homeHeaderBanner');
   if (homeHeaderEl) homeHeaderEl.style.display = 'none';
