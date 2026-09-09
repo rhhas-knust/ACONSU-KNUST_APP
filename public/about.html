@@ -22,17 +22,29 @@
   <div class="hero-flame"></div>
   <div class="hero-content">
     <p class="eyebrow">Who We Are</p>
-    <h1>About ACONSU</h1>
-    <p class="lede">The Apostles' Continuation Students Union — a family of students, on campus for a purpose bigger than a degree.</p>
+    <h1 id="aboutTitle">About ACONSU</h1>
+    <p class="lede" id="aboutLede">The Apostles' Continuation Students Union — a family of students, on campus for a purpose bigger than a degree.</p>
   </div>
 </section>
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
     <h2>Our Story</h2>
-    <p style="color:#5a4468;">ACONSU exists to see students encounter God and continue steadfastly in the pattern the apostles left the early church: the Word, fellowship, prayer, and one another. We believe campus life is fertile ground for a generation to be raised — not just academically, but spiritually.</p>
+    <p style="color:#5a4468;" id="aboutHistory">ACONSU exists to see students encounter God and continue steadfastly in the pattern the apostles left the early church: the Word, fellowship, prayer, and one another. We believe campus life is fertile ground for a generation to be raised — not just academically, but spiritually.</p>
     <h2 style="margin-top:2em;">What We Believe</h2>
-    <p style="color:#5a4468;">We hold to the Scriptures as the final authority for faith and living, and we exist to help every student grow in Christ, discover their gifts, and carry that fire into every hostel, lecture hall and city they go on to.</p>
+    <p style="color:#5a4468;" id="aboutMission">We hold to the Scriptures as the final authority for faith and living, and we exist to help every student grow in Christ, discover their gifts, and carry that fire into every hostel, lecture hall and city they go on to.</p>
+    <div class="grid" style="margin-top:32px;">
+      <div class="card">
+        <p class="eyebrow">Vision</p>
+        <h3 style="margin-bottom:8px;">Our Vision</h3>
+        <p style="color:#5a4468; margin:0;" id="aboutVision">Raising students who continue steadfastly in Christ and carry His life into every campus and city.</p>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Values</p>
+        <h3 style="margin-bottom:8px;">What Shapes Us</h3>
+        <p style="color:#5a4468; margin:0;" id="aboutValues">Scripture, prayer, fellowship, service, and holy living remain central to our chapter life.</p>
+      </div>
+    </div>
   </div>
 </section>
 
@@ -40,8 +52,8 @@
   <div class="container">
     <div class="section-head">
       <p class="eyebrow">Leadership</p>
-      <h2>Meet the Executives</h2>
-      <p style="color:#5a4468;">The team serving and leading ACONSU this session.</p>
+      <h2 id="leadershipHeading">Meet the Executives</h2>
+      <p style="color:#5a4468;" id="leadershipBlurb">The team serving and leading ACONSU this session.</p>
     </div>
     <div class="grid" id="execGrid">
       <div class="skeleton-grid">
@@ -67,7 +79,37 @@
 <script src="/js/main.js"></script>
 <script>
 (async function () {
-  await initLayout('/about.html');
+  const settings = await initLayout('/about.html');
+  const about = settings.about || {};
+  const chapterName = settings.chapterName || settings.fellowshipName || 'ACONSU';
+  const socialEl = document.getElementById('aboutSocialRow');
+  if (socialEl) {
+    socialEl.innerHTML = socialLinksHtml(settings);
+    socialEl.querySelectorAll('.social-icon-link').forEach(a => a.classList.add('on-light'));
+  }
+  if (settings.fullName || settings.chapterName) {
+    document.getElementById('aboutTitle').textContent = `About ${chapterName}`;
+  }
+  if (settings.tagline) {
+    document.getElementById('aboutLede').textContent = settings.tagline;
+  }
+  if (about.history) {
+    document.getElementById('aboutHistory').textContent = about.history;
+  }
+  if (about.mission) {
+    document.getElementById('aboutMission').textContent = about.mission;
+  }
+  if (about.vision) {
+    document.getElementById('aboutVision').textContent = about.vision;
+  }
+  if (about.values) {
+    document.getElementById('aboutValues').textContent = about.values;
+  }
+  if (about.leadership) {
+    document.getElementById('leadershipBlurb').textContent = about.leadership;
+  } else if (settings.chapterName) {
+    document.getElementById('leadershipBlurb').textContent = `The team serving and leading ${chapterName} this session.`;
+  }
 
   try {
     const leaders = await fetchJSON('/api/public/leadership');
@@ -89,8 +131,6 @@
       `).join('');
     }
     initScrollReveal('#execGrid .card');
-
-    // sprinkle a few leadership photos as floating accents in the hero, if available
     const withPhotos = leaders.filter(person => person.imageFileId).map(person => person.imageFileId);
     if (withPhotos.length) {
       document.getElementById('aboutHero').style.overflow = 'visible';

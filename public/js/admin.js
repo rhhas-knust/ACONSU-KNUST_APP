@@ -1777,6 +1777,10 @@ async function renderChapterSettings() {
 
         <div class="field-row">
           <div class="field">
+            <label>Telegram URL</label>
+            <input type="text" id="csTelegram" value="${escapeHtml(contact.telegram || '')}">
+          </div>
+          <div class="field">
             <label>TikTok URL</label>
             <input type="text" id="csTiktok" value="${escapeHtml(contact.tiktok || '')}">
           </div>
@@ -1788,6 +1792,10 @@ async function renderChapterSettings() {
 
         <h3 style="margin:24px 0 16px;">Giving &amp; Mobile Money (For Member Claims)</h3>
         <div class="field-row">
+          <div class="field">
+            <label>Payment Method Label</label>
+            <input type="text" id="csProvider" value="${escapeHtml(payment.provider || '')}" placeholder="e.g. Manual MoMo, Paystack, Bank Transfer">
+          </div>
           <div class="field">
             <label>Mobile Money (MoMo) Number</label>
             <input type="text" id="csMomoNumber" value="${escapeHtml(payment.momoNumber || '')}">
@@ -1803,8 +1811,23 @@ async function renderChapterSettings() {
             <input type="text" id="csBankName" value="${escapeHtml(payment.bankName || '')}">
           </div>
           <div class="field">
+            <label>Bank Account Name</label>
+            <input type="text" id="csBankAccountName" value="${escapeHtml(payment.bankAccountName || '')}">
+          </div>
+          <div class="field">
             <label>Bank Account Number</label>
             <input type="text" id="csBankAccountNumber" value="${escapeHtml(payment.bankAccountNumber || '')}">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Donation Destination Label</label>
+            <input type="text" id="csDonationDestination" value="${escapeHtml(payment.donationDestination || '')}" placeholder="e.g. General Fund">
+          </div>
+          <div class="field">
+            <label>Welfare Destination Label</label>
+            <input type="text" id="csWelfareDestination" value="${escapeHtml(payment.welfareDestination || '')}" placeholder="e.g. Welfare Fund">
           </div>
         </div>
 
@@ -1818,8 +1841,16 @@ async function renderChapterSettings() {
           <textarea id="csMission" rows="2">${escapeHtml(about.mission || '')}</textarea>
         </div>
         <div class="field">
+          <label>Chapter Values</label>
+          <textarea id="csValues" rows="2">${escapeHtml(about.values || '')}</textarea>
+        </div>
+        <div class="field">
           <label>Chapter History</label>
           <textarea id="csHistory" rows="3">${escapeHtml(about.history || '')}</textarea>
+        </div>
+        <div class="field">
+          <label>Chapter Leadership Bio</label>
+          <textarea id="csLeadership" rows="3">${escapeHtml(about.leadership || '')}</textarea>
         </div>
 
         <button type="submit" class="btn btn-primary btn-block" id="saveChapterSettingsBtn" style="margin-top:20px;">Save Chapter Settings</button>
@@ -1880,19 +1911,26 @@ async function renderChapterSettings() {
           youtube: document.getElementById('csYoutube').value,
           instagram: document.getElementById('csInstagram').value,
           facebook: document.getElementById('csFacebook').value,
+          telegram: document.getElementById('csTelegram').value,
           tiktok: document.getElementById('csTiktok').value,
           twitter: document.getElementById('csTwitter').value
         },
         payment: {
+          provider: document.getElementById('csProvider').value,
           momoNumber: document.getElementById('csMomoNumber').value,
           momoName: document.getElementById('csMomoName').value,
           bankName: document.getElementById('csBankName').value,
+          bankAccountName: document.getElementById('csBankAccountName').value,
+          donationDestination: document.getElementById('csDonationDestination').value,
+          welfareDestination: document.getElementById('csWelfareDestination').value,
           bankAccountNumber: document.getElementById('csBankAccountNumber').value
         },
         about: {
           vision: document.getElementById('csVision').value,
           mission: document.getElementById('csMission').value,
-          history: document.getElementById('csHistory').value
+          values: document.getElementById('csValues').value,
+          history: document.getElementById('csHistory').value,
+          leadership: document.getElementById('csLeadership').value
         }
       };
 

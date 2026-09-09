@@ -702,9 +702,22 @@ require('./harness.js');
     tagline: 'Empowered for Impact',
     verseOfTheWeek: 'Romans 12:1-2',
     serviceTimes: ['Sundays 8:00 AM', 'Wednesdays 6:30 PM'],
-    contact: { whatsapp: '233240000000', email: 'knust@aconsu.org' }
+    contact: { whatsapp: '233240000000', email: 'knust@aconsu.org', telegram: 'https://t.me/aconsuknust' },
+    payment: {
+      provider: 'Manual MoMo',
+      momoName: 'ACONSU KNUST',
+      bankAccountName: 'ACONSU KNUST Fellowship',
+      donationDestination: 'General Fund',
+      welfareDestination: 'Welfare Fund'
+    },
+    about: {
+      vision: 'To raise steadfast believers on campus.',
+      values: 'Prayer, fellowship, scripture, service.',
+      leadership: 'The chapter leadership team serves students across KNUST.'
+    }
   });
   check('chapter 1 coordinator updates chapter settings', r.status === 200 && r.data.item.tagline === 'Empowered for Impact', r.data);
+  check('chapter 1 settings include telegram and payment metadata', r.data.item.contact.telegram === 'https://t.me/aconsuknust' && r.data.item.payment.provider === 'Manual MoMo' && r.data.item.about.values.includes('scripture'), r.data);
 
   r = await call('coord2', 'GET', '/api/admin/chapter-settings');
   check('chapter 2 coordinator reads chapter 2 settings', r.status === 200 && r.data.chapterId === 'test-chapter-2', r.data);
@@ -736,6 +749,7 @@ require('./harness.js');
   check('public settings reflect chapter 1 verse of the week', pubRes.status === 200 && pubSettings.verseOfTheWeek === 'Romans 12:1-2', pubSettings);
   check('public settings reflect chapter 1 service times', Array.isArray(pubSettings.serviceTimes) && pubSettings.serviceTimes.includes('Sundays 8:00 AM'), pubSettings);
   check('public settings reflect chapter 1 banner', pubSettings.homeHeaderImageFileId === bannerData.fileId, pubSettings);
+  check('public settings reflect chapter 1 contact and about details', pubSettings.contact.telegram === 'https://t.me/aconsuknust' && pubSettings.payment.donationDestination === 'General Fund' && pubSettings.about.leadership.includes('leadership team'), pubSettings);
 
   console.log('\n== static pages ==');
   for (const page of [

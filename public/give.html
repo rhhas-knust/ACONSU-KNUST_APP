@@ -100,9 +100,12 @@ async function loadHistory() {
       document.getElementById('payInfo').innerHTML = `
         <div class="pay-details">
           <h3 style="margin-bottom:4px;">${escapeHtml(info.chapterName)}</h3>
+          ${p.provider ? `<dt>Giving Channel</dt><dd>${escapeHtml(p.provider)}</dd>` : ''}
           ${p.momoNumber ? `<dt>Mobile Money</dt><dd>${escapeHtml(p.momoNumber)}${p.momoName ? ' — ' + escapeHtml(p.momoName) : ''}</dd>` : ''}
           ${p.bankName ? `<dt>Bank</dt><dd>${escapeHtml(p.bankName)}</dd>` : ''}
           ${p.bankAccountNumber ? `<dt>Account</dt><dd>${escapeHtml(p.bankAccountName || '')} ${escapeHtml(p.bankAccountNumber)}</dd>` : ''}
+          ${p.donationDestination ? `<dt>General Giving</dt><dd>${escapeHtml(p.donationDestination)}</dd>` : ''}
+          ${p.welfareDestination ? `<dt>Welfare Giving</dt><dd>${escapeHtml(p.welfareDestination)}</dd>` : ''}
           <p style="font-size:0.8rem; color:#8a7595; margin-top:14px;">Sent via your own MoMo/bank app — this page doesn't process payments directly.</p>
         </div>
       `;
