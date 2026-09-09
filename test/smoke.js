@@ -710,12 +710,32 @@ require('./harness.js');
   check('chapter 2 coordinator reads chapter 2 settings', r.status === 200 && r.data.chapterId === 'test-chapter-2', r.data);
   check('chapter 2 settings do not have chapter 1 tagline', r.data.tagline !== 'Empowered for Impact', r.data);
 
+  r = await call('coord', 'PUT', '/api/admin/settings', { tagline: 'Should not be allowed' });
+  check('chapter coordinator cannot overwrite global settings', r.status === 401, r.data);
+
+  const bannerForm = new FormData();
+  bannerForm.append('image', new Blob([Buffer.from('fake-banner-bytes')], { type: 'image/png' }), 'banner.png');
+  const bannerRes = await fetch(BASE + '/api/admin/chapter-settings/banner', {
+    method: 'POST',
+    headers: jars.coord ? { cookie: jars.coord } : {},
+    body: bannerForm
+  });
+  const bannerData = await bannerRes.json();
+  check('chapter coordinator uploads a chapter banner', bannerRes.status === 200 && !!bannerData.fileId, bannerData);
+
+  r = await call('coord', 'GET', '/api/admin/chapter-settings');
+  check('chapter banner is linked to chapter 1 settings', r.status === 200 && r.data.homeHeaderImageFileId === bannerData.fileId, r.data);
+
+  const bannerFileRes = await fetch(BASE + '/api/files/' + bannerData.fileId);
+  check('chapter banner is publicly served from files API', bannerFileRes.status === 200);
+
   const pubRes = await fetch(BASE + '/api/settings', {
     headers: { 'X-Chapter-Id': chapterId }
   });
   const pubSettings = await pubRes.json();
   check('public settings reflect chapter 1 verse of the week', pubRes.status === 200 && pubSettings.verseOfTheWeek === 'Romans 12:1-2', pubSettings);
   check('public settings reflect chapter 1 service times', Array.isArray(pubSettings.serviceTimes) && pubSettings.serviceTimes.includes('Sundays 8:00 AM'), pubSettings);
+  check('public settings reflect chapter 1 banner', pubSettings.homeHeaderImageFileId === bannerData.fileId, pubSettings);
 
   console.log('\n== static pages ==');
   for (const page of [

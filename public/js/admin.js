@@ -1605,7 +1605,7 @@ function mediaCardHtml(f) {
 async function renderSettings() {
   const el = document.getElementById('panel-settings');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
-  const settings = await fetchJSON('/api/settings');
+  const settings = await fetchJSON('/api/settings?global=1');
   CURRENT_SETTINGS = settings;
   const fields = [
     { key: 'fellowshipName', label: 'Short Name' },
