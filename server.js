@@ -1864,42 +1864,104 @@ app.get('/api/files/:id', async (req, res) => {
   }
 });
 
+function hasOwn(obj, key) {
+  return Object.prototype.hasOwnProperty.call(obj || {}, key);
+}
+
+function cleanText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function cleanStringList(value) {
+  if (Array.isArray(value)) return value.map((item) => cleanText(String(item ?? ''))).filter(Boolean);
+  if (typeof value === 'string') return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function mergeTextFields(current, incoming, keys) {
+  const merged = { ...(current || {}) };
+  keys.forEach((key) => {
+    if (hasOwn(incoming, key)) merged[key] = cleanText(incoming[key]);
+  });
+  return merged;
+}
+
+function chapterSettingsResponse(chapter) {
+  return chapter ? { ...chapter, chapterId: chapter.id } : null;
+}
+
+function buildPublicSettings(globalSettings, chapter) {
+  if (!chapter) return globalSettings;
+  const contact = chapter.contact || {};
+  const payment = chapter.payment || {};
+  const globalAbout = globalSettings.about || {};
+  const about = chapter.about || {};
+  return {
+    ...globalSettings,
+    chapterId: chapter.id,
+    chapterName: chapter.name,
+    fellowshipName: chapter.name || globalSettings.fellowshipName,
+    fullName: chapter.fullName || globalSettings.fullName,
+    tagline: chapter.tagline || globalSettings.tagline,
+    verseOfTheWeek: chapter.verseOfTheWeek || globalSettings.verseOfTheWeek,
+    address: chapter.address || chapter.location || globalSettings.address,
+    homeHeaderImageFileId: chapter.homeHeaderImageFileId || globalSettings.homeHeaderImageFileId,
+    serviceTimes: chapter.serviceTimes?.length ? chapter.serviceTimes : (globalSettings.serviceTimes || []),
+    email: contact.email || globalSettings.email,
+    phone: contact.phone || globalSettings.phone,
+    whatsapp: contact.whatsapp || globalSettings.whatsapp,
+    facebook: contact.facebook || globalSettings.facebook,
+    instagram: contact.instagram || globalSettings.instagram,
+    youtube: contact.youtube || globalSettings.youtube,
+    tiktok: contact.tiktok || globalSettings.tiktok,
+    twitter: contact.twitter || globalSettings.twitter,
+    telegram: contact.telegram || globalSettings.telegram,
+    momoNumber: payment.momoNumber || globalSettings.momoNumber,
+    momoName: payment.momoName || globalSettings.momoName,
+    contact: {
+      email: contact.email || globalSettings.email || '',
+      phone: contact.phone || globalSettings.phone || '',
+      whatsapp: contact.whatsapp || globalSettings.whatsapp || '',
+      facebook: contact.facebook || globalSettings.facebook || '',
+      instagram: contact.instagram || globalSettings.instagram || '',
+      youtube: contact.youtube || globalSettings.youtube || '',
+      tiktok: contact.tiktok || globalSettings.tiktok || '',
+      twitter: contact.twitter || globalSettings.twitter || '',
+      telegram: contact.telegram || globalSettings.telegram || ''
+    },
+    payment: {
+      provider: payment.provider || globalSettings.provider || '',
+      momoNumber: payment.momoNumber || globalSettings.momoNumber || '',
+      momoName: payment.momoName || globalSettings.momoName || '',
+      bankName: payment.bankName || globalSettings.bankName || '',
+      bankAccountName: payment.bankAccountName || globalSettings.bankAccountName || '',
+      bankAccountNumber: payment.bankAccountNumber || globalSettings.bankAccountNumber || '',
+      donationDestination: payment.donationDestination || globalSettings.donationDestination || '',
+      welfareDestination: payment.welfareDestination || globalSettings.welfareDestination || ''
+    },
+    about: {
+      history: about.history || globalAbout.history || '',
+      vision: about.vision || globalAbout.vision || '',
+      mission: about.mission || globalAbout.mission || '',
+      values: about.values || globalAbout.values || '',
+      leadership: about.leadership || globalAbout.leadership || ''
+    }
+  };
+}
+
 app.get('/api/settings', async (req, res) => {
   try {
     const globalSettings = await repo.getSettings();
-    const chapterId = (req.headers['x-chapter-id'] || req.query.chapterId || '').toString().trim();
+    if (req.query.global === '1' && rolesLib.getActingScope(req).isNational) {
+      return res.json(globalSettings);
+    }
+    const explicitChapterId = cleanText(req.query.chapterId);
+    const chapterId = explicitChapterId || await resolvePublicChapterId(req);
     if (!chapterId) {
       return res.json(globalSettings);
     }
     const chapter = await repo.getById('chapters', chapterId);
-    if (!chapter) {
-      return res.json(globalSettings);
-    }
-    const merged = {
-      ...globalSettings,
-      chapterId: chapter.id,
-      chapterName: chapter.name,
-      fellowshipName: chapter.name || globalSettings.fellowshipName,
-      fullName: chapter.fullName || globalSettings.fullName,
-      tagline: chapter.tagline || globalSettings.tagline,
-      verseOfTheWeek: chapter.verseOfTheWeek || globalSettings.verseOfTheWeek,
-      address: chapter.address || chapter.location || globalSettings.address,
-      homeHeaderImageFileId: chapter.homeHeaderImageFileId || globalSettings.homeHeaderImageFileId,
-      serviceTimes: (chapter.serviceTimes && chapter.serviceTimes.length) ? chapter.serviceTimes : globalSettings.serviceTimes,
-      email: chapter.contact?.email || globalSettings.email,
-      phone: chapter.contact?.phone || globalSettings.phone,
-      whatsapp: chapter.contact?.whatsapp || globalSettings.whatsapp,
-      facebook: chapter.contact?.facebook || globalSettings.facebook,
-      instagram: chapter.contact?.instagram || globalSettings.instagram,
-      youtube: chapter.contact?.youtube || globalSettings.youtube,
-      tiktok: chapter.contact?.tiktok || globalSettings.tiktok,
-      twitter: chapter.contact?.twitter || globalSettings.twitter,
-      telegram: chapter.contact?.telegram || globalSettings.telegram,
-      momoNumber: chapter.payment?.momoNumber || globalSettings.momoNumber,
-      momoName: chapter.payment?.momoName || globalSettings.momoName,
-      about: chapter.about || globalSettings.about
-    };
-    res.json(merged);
+    res.json(buildPublicSettings(globalSettings, chapter));
   } catch (e) {
     res.status(500).json({ error: 'Could not load settings' });
   }
@@ -4234,10 +4296,92 @@ app.get('/api/admin/contact-messages', requireChapterAdmin, async (req, res) => 
   res.json(await repo.getAll('contactMessages', rolesLib.chapterFilter(req, { required: false })));
 });
 
+app.get('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+    res.json(chapterSettingsResponse(chapter));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load chapter settings' });
+  }
+});
+
+app.put('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId || req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+
+    const next = { ...chapter };
+    if (hasOwn(req.body, 'name')) next.name = cleanText(req.body.name);
+    if (hasOwn(req.body, 'fullName')) next.fullName = cleanText(req.body.fullName);
+    if (hasOwn(req.body, 'institution')) next.institution = cleanText(req.body.institution);
+    if (hasOwn(req.body, 'location')) next.location = cleanText(req.body.location);
+    if (hasOwn(req.body, 'address')) next.address = cleanText(req.body.address);
+    if (hasOwn(req.body, 'tagline')) next.tagline = cleanText(req.body.tagline);
+    if (hasOwn(req.body, 'verseOfTheWeek')) next.verseOfTheWeek = cleanText(req.body.verseOfTheWeek);
+    if (hasOwn(req.body, 'serviceTimes')) next.serviceTimes = cleanStringList(req.body.serviceTimes);
+    if (hasOwn(req.body, 'contact')) {
+      next.contact = mergeTextFields(chapter.contact, req.body.contact, [
+        'email', 'phone', 'whatsapp', 'facebook', 'instagram', 'youtube', 'tiktok', 'twitter', 'telegram'
+      ]);
+    }
+    if (hasOwn(req.body, 'payment')) {
+      next.payment = mergeTextFields(chapter.payment, req.body.payment, [
+        'provider', 'momoNumber', 'momoName', 'bankName', 'bankAccountName', 'bankAccountNumber', 'donationDestination', 'welfareDestination'
+      ]);
+    }
+    if (hasOwn(req.body, 'about')) {
+      next.about = mergeTextFields(chapter.about, req.body.about, [
+        'history', 'vision', 'mission', 'values', 'leadership'
+      ]);
+    }
+    if (!next.name) return res.status(400).json({ error: 'Chapter display name is required' });
+
+    const updated = await repo.updateById('chapters', chapter.id, next);
+    res.json({ success: true, item: chapterSettingsResponse(updated) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update chapter settings' });
+  }
+});
+
+app.post('/api/admin/chapter-settings/banner', requireChapterAdmin, upload.single('image'), async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId || req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+    if (!req.file) return res.status(400).json({ error: 'Please choose a banner image to upload' });
+    if (!req.file.mimetype || !req.file.mimetype.startsWith('image/')) {
+      return res.status(400).json({ error: 'Only image files can be used as chapter banners' });
+    }
+
+    const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+    const fileId = await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+      category: 'photo',
+      placement: 'home-header',
+      targetId: chapter.id,
+      title: `${chapter.name || chapter.id} banner`,
+      description: `Homepage hero banner for ${chapter.name || chapter.id}`,
+      contentType: compressed.contentType,
+      chapterId: chapter.id
+    });
+
+    if (chapter.homeHeaderImageFileId) gridfs.deleteFile(chapter.homeHeaderImageFileId).catch(() => {});
+    const updated = await repo.patchById('chapters', chapter.id, { homeHeaderImageFileId: String(fileId) });
+    res.json({ success: true, fileId: String(fileId), item: chapterSettingsResponse(updated) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not upload the chapter banner' });
+  }
+});
+
 // National settings only — a chapter's own About/contact/payment info lives
 // on its Chapter record instead (edited via the National/Chapter Coordinator
 // portals), so this stays a National Coordinator action.
-app.put('/api/admin/settings', requireChapterAdmin, async (req, res) => {
+app.put('/api/admin/settings', rolesLib.requireNational, async (req, res) => {
   await repo.setSettings(req.body);
   res.json({ success: true });
 });
@@ -4380,10 +4524,21 @@ app.post('/api/admin/uploads', requireContentManager, upload.single('file'), asy
         placedOn = event.title;
       }
     } else if (placement === 'home-header') {
-      const current = (await repo.getSettings()).homeHeaderImageFileId || '';
-      if (current) gridfs.deleteFile(current).catch(() => {});
-      await repo.setSettings({ ...(await repo.getSettings()), homeHeaderImageFileId: String(fileId) });
-      placedOn = 'Home page header';
+      const scopedChapterId = await resolveChapterIdForWrite(req, req.body.chapterId || req.query.chapterId);
+      if (scopedChapterId) {
+        const chapter = await repo.getById('chapters', scopedChapterId);
+        if (chapter) {
+          if (chapter.homeHeaderImageFileId) gridfs.deleteFile(chapter.homeHeaderImageFileId).catch(() => {});
+          await repo.patchById('chapters', scopedChapterId, { homeHeaderImageFileId: String(fileId) });
+          placedOn = `${chapter.name || chapter.id} home page header`;
+        }
+      }
+      if (!placedOn) {
+        const current = (await repo.getSettings()).homeHeaderImageFileId || '';
+        if (current) gridfs.deleteFile(current).catch(() => {});
+        await repo.setSettings({ ...(await repo.getSettings()), homeHeaderImageFileId: String(fileId) });
+        placedOn = 'Home page header';
+      }
     }
     res.json({ success: true, id: fileId, placement, placedOn, message: spec.describe(placedOn) });
   } catch (e) {
