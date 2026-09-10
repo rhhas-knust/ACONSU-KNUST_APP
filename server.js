@@ -4283,6 +4283,180 @@ app.delete('/api/admin/members/:id', requireChapterAdmin, async (req, res) => {
 });
 
 
+function rangeDays(beforeDays, afterDays = 0) {
+  const now = new Date();
+  const from = new Date(now);
+  from.setDate(now.getDate() - beforeDays);
+  const to = new Date(now);
+  to.setDate(now.getDate() + afterDays);
+  return { from, to, now };
+}
+
+function safeDate(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function inWindow(date, from, to) {
+  if (!date) return false;
+  return date >= from && date < to;
+}
+
+function trendSummary(current, previous) {
+  const delta = current - previous;
+  const direction = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat');
+  const percent = previous === 0 ? (current > 0 ? 100 : 0) : Math.round((delta / previous) * 100);
+  return { current, previous, delta, percent, direction };
+}
+
+app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to view this dashboard.' });
+    const filter = { chapterId };
+    const [chapter, members, events, attendance, joinRequests, prayerRequests, contactMessages, shepherdingRecords, financeEntries, notifications] = await Promise.all([
+      repo.getById('chapters', chapterId),
+      repo.getAll('members', filter),
+      repo.getAll('events', filter),
+      repo.getAll('attendanceRecords', filter),
+      repo.getAll('joinRequests', filter),
+      repo.getAll('prayerRequests', filter),
+      repo.getAll('contactMessages', filter),
+      repo.getAll('shepherdingRecords', filter),
+      repo.getAll('financeEntries', filter),
+      repo.getAll('notifications', filter)
+    ]);
+
+    const now = new Date();
+    const currentRange = rangeDays(7);
+    const previousRange = { from: rangeDays(14).from, to: currentRange.from };
+    const next30 = rangeDays(0, 30);
+    const prev30 = rangeDays(30);
+
+    const activeMembers = members.filter(m => m.membershipStage === 'active');
+    const newActiveCurrent = activeMembers.filter(m => inWindow(safeDate(m.updatedAt || m.createdAt), currentRange.from, currentRange.to)).length;
+    const newActivePrevious = activeMembers.filter(m => inWindow(safeDate(m.updatedAt || m.createdAt), previousRange.from, previousRange.to)).length;
+
+    const pendingCareCount =
+      joinRequests.filter(r => r.status === 'new').length +
+      prayerRequests.filter(r => r.status === 'new').length +
+      contactMessages.filter(m => m.status !== 'replied').length +
+      shepherdingRecords.filter(r => ['irregular', 'inactive'].includes(r.attendanceStatus)).length;
+    const pendingCareCurrent =
+      joinRequests.filter(r => r.status === 'new' && inWindow(safeDate(r.createdAt), currentRange.from, currentRange.to)).length +
+      prayerRequests.filter(r => r.status === 'new' && inWindow(safeDate(r.createdAt), currentRange.from, currentRange.to)).length +
+      contactMessages.filter(m => m.status !== 'replied' && inWindow(safeDate(m.createdAt), currentRange.from, currentRange.to)).length;
+    const pendingCarePrevious =
+      joinRequests.filter(r => r.status === 'new' && inWindow(safeDate(r.createdAt), previousRange.from, previousRange.to)).length +
+      prayerRequests.filter(r => r.status === 'new' && inWindow(safeDate(r.createdAt), previousRange.from, previousRange.to)).length +
+      contactMessages.filter(m => m.status !== 'replied' && inWindow(safeDate(m.createdAt), previousRange.from, previousRange.to)).length;
+
+    const attendanceRows = [...attendance].sort((a, b) => (a.date === b.date ? 0 : (a.date < b.date ? 1 : -1)));
+    const turnout = (row) => row.marks.filter(m => m.status === 'present').length + (row.visitorCount || 0);
+    const recentFour = attendanceRows.slice(0, 4);
+    const previousFour = attendanceRows.slice(4, 8);
+    const avg = (rows) => rows.length ? Math.round(rows.reduce((sum, row) => sum + turnout(row), 0) / rows.length) : 0;
+    const avgAttendance = avg(recentFour);
+
+    const eventAt = (e) => safeDate(`${e.date || ''}T${e.time || '00:00'}:00`);
+    const upcoming30 = events.filter(e => inWindow(eventAt(e), next30.from, next30.to)).length;
+    const previous30Count = events.filter(e => inWindow(eventAt(e), prev30.from, prev30.to)).length;
+
+    const currentMonthKey = now.toISOString().slice(0, 7);
+    const thisMonthEntries = financeEntries.filter(e => (e.date || '').startsWith(currentMonthKey));
+    const monthNet = financeTotals(thisMonthEntries).balance;
+
+    const pendingCareDrilldown = [
+      ...joinRequests.filter(r => r.status === 'new').map(r => ({
+        id: r.id, type: 'join_request', title: r.name || 'Join request', detail: r.phone || r.email || '', panel: 'joinRequests', at: r.createdAt
+      })),
+      ...prayerRequests.filter(r => r.status === 'new').map(r => ({
+        id: r.id, type: 'prayer_request', title: r.title || r.name || 'Prayer request', detail: r.request || '', panel: 'prayerRequests', at: r.createdAt
+      })),
+      ...contactMessages.filter(m => m.status !== 'replied').map(m => ({
+        id: m.id, type: 'contact_message', title: m.name || m.email || 'Contact message', detail: m.message || '', panel: 'contactMessages', at: m.createdAt
+      }))
+    ]
+      .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+      .slice(0, 12);
+
+    const activity = [
+      ...joinRequests.map(r => ({
+        id: r.id, type: 'join_request', label: 'New join request', title: r.name || 'Visitor', detail: r.phone || r.email || '', panel: 'joinRequests', at: r.createdAt
+      })),
+      ...prayerRequests.map(r => ({
+        id: r.id, type: 'prayer_request', label: 'Prayer request submitted', title: r.name || 'Member', detail: r.request || '', panel: 'prayerRequests', at: r.createdAt
+      })),
+      ...contactMessages.map(m => ({
+        id: m.id, type: 'contact_message', label: 'Contact message received', title: m.name || m.email || 'Visitor', detail: m.message || '', panel: 'contactMessages', at: m.createdAt
+      })),
+      ...attendance.map(a => ({
+        id: a.id, type: 'attendance', label: 'Service attendance logged', title: `${a.serviceType || 'service'} — ${a.date || ''}`, detail: `${turnout(a)} present/visitors`, panel: 'overview', at: a.createdAt
+      })),
+      ...financeEntries.filter(e => e.approvalStatus === 'pending').map(e => ({
+        id: e.id, type: 'finance_pending', label: 'Finance approval pending', title: `${e.entryType} ${e.category}`, detail: `GHS ${Number(e.amount || 0).toFixed(2)}`, panel: 'reports', at: e.createdAt
+      })),
+      ...notifications.map(n => ({
+        id: n.id, type: 'announcement', label: 'Announcement posted', title: n.title || 'Notification', detail: n.body || '', panel: 'notifications', at: n.createdAt
+      }))
+    ]
+      .filter(item => !!safeDate(item.at))
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 25);
+
+    res.json({
+      chapter: chapter ? { id: chapter.id, name: chapter.name } : { id: chapterId, name: chapterId },
+      generatedAt: new Date().toISOString(),
+      refreshEverySeconds: 30,
+      monthNet,
+      kpis: [
+        {
+          key: 'active_members',
+          label: 'Active Members',
+          value: activeMembers.length,
+          trend: trendSummary(newActiveCurrent, newActivePrevious),
+          drilldownPanel: 'members',
+          drilldown: activeMembers
+            .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
+            .slice(0, 12)
+            .map(m => ({ id: m.id, name: m.name || 'Member', level: m.level || '', department: m.department || '', at: m.updatedAt || m.createdAt || null }))
+        },
+        {
+          key: 'pending_care',
+          label: 'Pending Care Cases',
+          value: pendingCareCount,
+          trend: trendSummary(pendingCareCurrent, pendingCarePrevious),
+          drilldownPanel: 'joinRequests',
+          drilldown: pendingCareDrilldown
+        },
+        {
+          key: 'attendance_avg',
+          label: 'Avg Attendance (Last 4 Services)',
+          value: avgAttendance,
+          trend: trendSummary(avgAttendance, avg(previousFour)),
+          drilldownPanel: 'overview',
+          drilldown: attendanceRows.slice(0, 8).map(row => ({ id: row.id, date: row.date, serviceType: row.serviceType, turnout: turnout(row) }))
+        },
+        {
+          key: 'upcoming_events',
+          label: 'Upcoming 30-Day Events',
+          value: upcoming30,
+          trend: trendSummary(upcoming30, previous30Count),
+          drilldownPanel: 'events',
+          drilldown: events
+            .filter(e => inWindow(eventAt(e), next30.from, next30.to))
+            .sort((a, b) => new Date(`${a.date || ''}T${a.time || '00:00'}:00`) - new Date(`${b.date || ''}T${b.time || '00:00'}:00`))
+            .slice(0, 12)
+            .map(e => ({ id: e.id, title: e.title || 'Event', date: e.date, time: e.time || '', location: e.location || '' }))
+        }
+      ],
+      activity
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load admin overview' });
+  }
+});
+
 app.get('/api/admin/join-requests', requireChapterAdmin, async (req, res) => {
   res.json(await repo.getAll('joinRequests', rolesLib.chapterFilter(req, { required: false })));
 });

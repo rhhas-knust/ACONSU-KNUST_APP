@@ -751,6 +751,20 @@ require('./harness.js');
   check('public settings reflect chapter 1 banner', pubSettings.homeHeaderImageFileId === bannerData.fileId, pubSettings);
   check('public settings reflect chapter 1 contact and about details', pubSettings.contact.telegram === 'https://t.me/aconsuknust' && pubSettings.payment.donationDestination === 'General Fund' && pubSettings.about.leadership.includes('leadership team'), pubSettings);
 
+  console.log('\n== operational dashboard (Phase 2) ==');
+  r = await call('coord', 'GET', '/api/admin/overview');
+  check('chapter coordinator can load operational dashboard overview', r.status === 200 && r.data.chapter.id === chapterId, r.data);
+  check('operational dashboard returns Rule-of-4 KPI cards', Array.isArray(r.data.kpis) && r.data.kpis.length === 4, r.data.kpis);
+  check('operational dashboard returns activity stream rows', Array.isArray(r.data.activity), r.data.activity);
+
+  r = await call('coord2', 'GET', '/api/admin/overview');
+  check('chapter 2 coordinator sees chapter 2 dashboard scope only', r.status === 200 && r.data.chapter.id === 'test-chapter-2', r.data);
+
+  r = await call('admin', 'GET', '/api/admin/overview');
+  check('national admin must pick a chapter for operational dashboard once multiple chapters exist', r.status === 400, r.data);
+  r = await call('admin', 'GET', '/api/admin/overview?chapterId=' + chapterId);
+  check('national admin can load a selected chapter operational dashboard', r.status === 200 && r.data.chapter.id === chapterId, r.data);
+
   console.log('\n== static pages ==');
   for (const page of [
     '/more.html', '/admin.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',
