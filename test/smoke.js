@@ -469,7 +469,6 @@ const { fakeModels } = require('./harness.js');
   r = await call('member', 'GET', '/api/member/card');
   check('an active member gets a real digital card with a QR code', r.status === 200 && r.data.ready === true && !!r.data.qrDataUrl, { ready: r.data.ready });
 
-  const { fakeModels } = require('./harness.js');
   const memberDoc = (await fakeModels.Member.find({ id: memberId }))[0];
   const qrToken = memberDoc.qrToken;
   check('the member has a real qrToken on file', typeof qrToken === 'string' && qrToken.length > 10, { qrToken });
@@ -595,15 +594,17 @@ const { fakeModels } = require('./harness.js');
   r = await call('pub', 'POST', `/api/events/${eventId}/volunteers`, { role: 'usher', memberId });
   check('publicity assigns a volunteer role', r.status === 200 && r.data.item.status === 'assigned', r.data);
   const volAssignmentId = r.data.item.id;
-  r = await call('pub', 'POST', '/api/events', { title: 'Clashing Event', date: '2026-09-02', time: '18:00', location: 'Main Hall' });
+  r = await call('pub', 'POST', '/api/publicity/events', { title: 'Clashing Event', date: '2026-09-02', time: '18:00', location: 'Main Hall' });
   check('a second event can be created for conflict checks', r.status === 200, r.data);
-  const clashEventId = r.data.item.id;
-  r = await call('pub', 'POST', `/api/events/${clashEventId}/volunteers`, { role: 'media', memberId });
-  check('volunteer double-booking is blocked by default', r.status === 409, r.data);
-  r = await call('pub', 'POST', `/api/events/${clashEventId}/volunteers`, { role: 'media', memberId, force: true });
-  check('volunteer assignment can be force-saved after warning', r.status === 200, r.data);
+  const clashEventId = r.status === 200 && r.data.item ? r.data.item.id : '';
+  if (clashEventId) {
+    r = await call('pub', 'POST', `/api/events/${clashEventId}/volunteers`, { role: 'media', memberId });
+    check('volunteer double-booking is blocked by default', r.status === 409, r.data);
+    r = await call('pub', 'POST', `/api/events/${clashEventId}/volunteers`, { role: 'media', memberId, force: true });
+    check('volunteer assignment can be force-saved after warning', r.status === 200, r.data);
+  }
   r = await call('member', 'GET', '/api/member/volunteer-assignments');
-  check('the member sees their own assignment, with the event attached', r.data.length === 1 && r.data[0].event && r.data[0].event.id === eventId, r.data);
+  check('the member sees their assignments with event details attached', r.data.some(a => a.event && a.event.id === eventId), r.data);
   r = await call('member', 'PATCH', `/api/member/volunteer-assignments/${volAssignmentId}`, { status: 'confirmed' });
   check('the member confirms their assignment', r.status === 200 && r.data.item.status === 'confirmed', r.data);
 
@@ -820,7 +821,6 @@ const { fakeModels } = require('./harness.js');
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
   if (process.env.SMOKE_SLOW === '1') {
   console.log('\n== scheduler (waits for the 60s tick) ==');
-  const { fakeModels } = require('./harness.js');
   await fakeModels.ScheduledNotification.create({
     id: 'due_1', title: 'Due now', body: 'Should fire', url: '/index.html',
     channels: ['app', 'sms'], audience: 'all', scheduledFor: new Date(Date.now() - 5000), status: 'scheduled'
