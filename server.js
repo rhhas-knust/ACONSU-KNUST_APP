@@ -353,6 +353,11 @@ function contentChapterFilter(req) {
   return rolesLib.chapterFilter(req, { required: false });
 }
 
+const ACTIVATED_MEMBERSHIP_STAGES = new Set(['active', 'worker', 'executive']);
+function isActivatedMember(member) {
+  return ACTIVATED_MEMBERSHIP_STAGES.has(member && member.membershipStage);
+}
+
 // ---------- notifications helper ----------
 // Saves a notification for the in-app feed AND fires a real push to every
 // subscribed device. Used both by the manual admin route and automatic
@@ -393,6 +398,18 @@ async function notifyOfficeByEmail(officeKey, subject, html) {
     if (!recipients.length) return;
     mailer.sendMail({ to: recipients.join(','), subject, html }).catch(() => {});
   } catch (e) { /* non-critical */ }
+}
+
+async function scheduleOnboardingTasks(member) {
+  const now = new Date();
+  await repo.create('onboardingTasks', {
+    chapterId: member.chapterId, memberId: member.id, memberEmail: member.email, memberName: member.name,
+    sequence: 'day0_welcome', sendAt: now, status: 'scheduled'
+  }, 'onb');
+  await repo.create('onboardingTasks', {
+    chapterId: member.chapterId, memberId: member.id, memberEmail: member.email, memberName: member.name,
+    sequence: 'day3_cell_invite', sendAt: new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000)), status: 'scheduled'
+  }, 'onb');
 }
 
 // ---------- member auth routes ----------
@@ -445,6 +462,7 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
       qrToken: crypto.randomBytes(16).toString('hex'),
       birthdayMonth: month, birthdayDay: day
     }, 'mem');
+    scheduleOnboardingTasks(member).catch(() => {});
     req.session.memberId = member.id;
     res.json({ success: true, member: { id: member.id, name: member.name, email: member.email, chapterId: member.chapterId } });
   } catch (e) {
@@ -2691,7 +2709,7 @@ app.get('/api/member/card', requireMember, async (req, res) => {
   try {
     const member = await repo.getById('members', req.session.memberId);
     if (!member) return res.status(404).json({ error: 'Account not found' });
-    if (member.membershipStage !== 'active') {
+    if (!isActivatedMember(member)) {
       return res.json({
         ready: false,
         membershipStage: member.membershipStage,
@@ -2831,7 +2849,7 @@ app.get('/api/shepherd/attendance-summary.pdf', requireViewRole('shepherding'), 
     const chapter = filter.chapterId ? await repo.getById('chapters', filter.chapterId) : null;
 
     const rows = members
-      .filter(m => m.membershipStage === 'active')
+      .filter(m => isActivatedMember(m))
       .map((m) => {
         const marked = records.filter(r => r.marks.some(mk => mk.memberId === m.id));
         const present = records.filter(r => r.marks.some(mk => mk.memberId === m.id && mk.status === 'present')).length;
@@ -2884,8 +2902,8 @@ app.get('/api/shepherd/members/report.pdf', requireViewRole('shepherding'), asyn
       rows: [...members].sort((a, b) => a.name.localeCompare(b.name)),
       summary: [
         { label: 'Total', value: members.length },
-        { label: 'Active members', value: members.filter(m => m.membershipStage === 'active').length },
-        { label: 'Visitors / in review', value: members.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length }
+        { label: 'Active members', value: members.filter(m => isActivatedMember(m)).length },
+        { label: 'Visitors / in review', value: members.filter(m => ['visitor', 'under_review', 'accepted', 'alumni'].includes(m.membershipStage)).length }
       ]
     });
   } catch (e) {
@@ -2927,7 +2945,7 @@ app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
 // -> ACTIVE (section 7). Every registration already starts as 'visitor';
 // everything from here on is Shepherding moving someone forward (or, in
 // principle, back — e.g. correcting a mistaken acceptance).
-const MEMBERSHIP_STAGES = ['visitor', 'under_review', 'accepted', 'active'];
+const MEMBERSHIP_STAGES = ['visitor', 'under_review', 'accepted', 'active', 'worker', 'executive', 'alumni'];
 
 app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) => {
   try {
@@ -2993,6 +3011,16 @@ app.patch('/api/shepherd/contact-messages/:id', requireShepherd, async (req, res
     res.json({ success: true, item });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this message' });
+  }
+});
+
+app.post('/api/shepherd/retention-alerts/run', requireShepherd, async (req, res) => {
+  try {
+    await checkRetentionAlerts();
+    const alerts = await repo.getAll('retentionAlerts', rolesLib.chapterFilter(req));
+    res.json({ success: true, open: alerts.filter((a) => a.status === 'open').length, total: alerts.length });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not run retention check' });
   }
 });
 
@@ -3823,9 +3851,9 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
         followUpNeeded: shepherdingRecords.filter(r => ['irregular', 'inactive'].includes(r.attendanceStatus)).length,
         // Membership pipeline (section 7): how many are still working their
         // way from visitor to active member.
-        awaitingReview: members.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length,
+        awaitingReview: members.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length,
         acceptedNotYetActive: members.filter(m => m.membershipStage === 'accepted').length,
-        activeMembers: members.filter(m => m.membershipStage === 'active').length
+        activeMembers: members.filter(m => isActivatedMember(m)).length
       },
       publicity: {
         notificationsSent: notifications.length,
@@ -3989,8 +4017,8 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
       const recent = [...chAttendance].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
       return {
         id: c.id, name: c.name, status: c.status,
-        memberCount: chMembers.filter(m => m.membershipStage === 'active').length,
-        visitorCount: chMembers.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length
+        memberCount: chMembers.filter(m => isActivatedMember(m)).length,
+        visitorCount: chMembers.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length
           + shepherdingRecords.filter(r => r.chapterId === c.id && !r.memberId).length,
         executiveCount: executives.filter(e => e.chapterId === c.id).length,
         upcomingEvents: events.filter(e => e.chapterId === c.id && new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
@@ -4045,8 +4073,8 @@ app.get('/api/national/reports/overview', rolesLib.requireNational, async (req, 
     ]);
     res.json(chapters.map((chapter) => ({
       chapterId: chapter.id, chapterName: chapter.name, status: chapter.status,
-      activeMembers: members.filter(m => m.chapterId === chapter.id && m.membershipStage === 'active').length,
-      visitors: members.filter(m => m.chapterId === chapter.id && ['visitor', 'under_review'].includes(m.membershipStage)).length,
+      activeMembers: members.filter(m => m.chapterId === chapter.id && isActivatedMember(m)).length,
+      visitors: members.filter(m => m.chapterId === chapter.id && ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length,
       events: events.filter(e => e.chapterId === chapter.id).length,
       servicesRecorded: attendance.filter(a => a.chapterId === chapter.id).length,
       openWelfareRequests: welfare.filter(w => w.chapterId === chapter.id && !['declined', 'fulfilled'].includes(w.status)).length
@@ -4086,8 +4114,8 @@ app.post('/api/national/reports/snapshot', rolesLib.requireNational, async (req,
       const chFinance = financeEntries.filter(f => f.chapterId === c.id);
       return {
         chapterId: c.id, chapterName: c.name, status: c.status,
-        activeMembers: chMembers.filter(m => m.membershipStage === 'active').length,
-        visitors: chMembers.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length,
+        activeMembers: chMembers.filter(m => isActivatedMember(m)).length,
+        visitors: chMembers.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length,
         events: events.filter(e => e.chapterId === c.id).length,
         balance: financeTotals(chFinance).balance
       };
@@ -4333,7 +4361,7 @@ app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
     const next30 = rangeDays(0, 30);
     const prev30 = rangeDays(30);
 
-    const activeMembers = members.filter(m => m.membershipStage === 'active');
+    const activeMembers = members.filter(m => isActivatedMember(m));
     const newActiveCurrent = activeMembers.filter(m => inWindow(safeDate(m.updatedAt || m.createdAt), currentRange.from, currentRange.to)).length;
     const newActivePrevious = activeMembers.filter(m => inWindow(safeDate(m.updatedAt || m.createdAt), previousRange.from, previousRange.to)).length;
 
@@ -5107,6 +5135,105 @@ async function sendDueAnnouncements() {
   }
 }
 
+// ---------- automated onboarding messages (Phase 3) ----------
+async function processOnboardingTasks() {
+  try {
+    const due = await repo.getAll('onboardingTasks', { status: 'scheduled' });
+    for (const task of due.filter((t) => new Date(t.sendAt) <= new Date())) {
+      try {
+        const member = await repo.getById('members', task.memberId, { chapterId: task.chapterId });
+        if (!member) {
+          await repo.updateById('onboardingTasks', task.id, { ...task, status: 'skipped', result: 'Member no longer exists.' });
+          continue;
+        }
+        const chapter = task.chapterId ? await repo.getById('chapters', task.chapterId) : null;
+        const chapterName = chapter ? chapter.name : 'your chapter';
+        const payload = task.sequence === 'day0_welcome'
+          ? {
+            subject: `Welcome to ${chapterName} — ACONSU`,
+            html: `<p>Hi ${escapeHtmlForEmail(member.name || task.memberName || 'there')},</p><p>Welcome to ${escapeHtmlForEmail(chapterName)}. We're glad you're here.</p><p>You are now in our membership workflow as a visitor. A shepherd will follow up shortly.</p>`
+          }
+          : {
+            subject: `Find your small group at ${chapterName}`,
+            html: `<p>Hi ${escapeHtmlForEmail(member.name || task.memberName || 'there')},</p><p>Ready to plug in deeper? Join a small group/cell to grow with others this week.</p><p>Open the app and visit Groups to join one that fits you.</p>`
+          };
+        const sent = await mailer.sendMail({ to: member.email || task.memberEmail, subject: payload.subject, html: payload.html });
+        await repo.updateById('onboardingTasks', task.id, {
+          ...task,
+          status: sent.sent ? 'sent' : (sent.skipped ? 'skipped' : 'failed'),
+          result: sent.sent ? 'sent' : (sent.error || 'email not configured')
+        });
+      } catch (e) {
+        await repo.updateById('onboardingTasks', task.id, { ...task, status: 'failed', result: e.message || 'failed' });
+      }
+    }
+  } catch (e) {
+    console.error('Onboarding task processing failed:', e.message);
+  }
+}
+
+// ---------- inactivity retention alerts (Phase 3) ----------
+function daysBetween(today, isoDate) {
+  if (!isoDate) return 9999;
+  const d = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return 9999;
+  return Math.floor((today - d) / (24 * 60 * 60 * 1000));
+}
+async function checkRetentionAlerts() {
+  try {
+    const [members, records, alerts] = await Promise.all([
+      repo.getAll('members'),
+      repo.getAll('attendanceRecords'),
+      repo.getAll('retentionAlerts')
+    ]);
+    const latestByMember = new Map();
+    records.forEach((record) => {
+      const presentIds = record.marks.filter((m) => m.status === 'present' && m.memberId).map((m) => m.memberId);
+      presentIds.forEach((memberId) => {
+        const prev = latestByMember.get(memberId);
+        if (!prev || prev < record.date) latestByMember.set(memberId, record.date);
+      });
+    });
+    const now = new Date();
+    for (const member of members) {
+      if (!isActivatedMember(member) || member.membershipStage === 'alumni') continue;
+      const lastPresentDate = latestByMember.get(member.id) || '';
+      const daysAbsent = daysBetween(now, lastPresentDate);
+      const open = alerts.find((a) => a.memberId === member.id && a.status === 'open');
+      if (daysAbsent >= 30) {
+        if (!open) {
+          await repo.create('retentionAlerts', {
+            chapterId: member.chapterId,
+            memberId: member.id,
+            memberName: member.name,
+            daysAbsent,
+            lastPresentDate,
+            status: 'open',
+            alertType: 'inactivity_30d',
+            createdBy: 'system'
+          }, 'ral');
+          notifyOfficeByEmail(
+            'shepherdingEmail',
+            'Retention Alert — 30+ days inactive',
+            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please follow up from the Shepherding portal.</p>`
+          );
+          notifyOfficeByEmail(
+            'welfareEmail',
+            'Welfare Attention Needed — 30+ days inactive',
+            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please coordinate care support if needed.</p>`
+          );
+        } else if (open.daysAbsent !== daysAbsent) {
+          await repo.updateById('retentionAlerts', open.id, { ...open, daysAbsent, lastPresentDate });
+        }
+      } else if (open) {
+        await repo.updateById('retentionAlerts', open.id, { ...open, status: 'resolved', notes: open.notes || 'Auto-resolved after attendance resumed.' });
+      }
+    }
+  } catch (e) {
+    console.error('Retention alert check failed:', e.message);
+  }
+}
+
 // ---------- startup ----------
 connectDB()
   .then(() => {
@@ -5117,6 +5244,10 @@ connectDB()
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
     sendDueAnnouncements();
     setInterval(sendDueAnnouncements, 60 * 1000); // a minute's precision is plenty for announcements
+    processOnboardingTasks();
+    setInterval(processOnboardingTasks, 60 * 1000);
+    checkRetentionAlerts();
+    setInterval(checkRetentionAlerts, 60 * 60 * 1000);
   })
   .catch((err) => {
     console.error('Failed to start server:', err.message);

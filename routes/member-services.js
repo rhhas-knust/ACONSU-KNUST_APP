@@ -11,6 +11,10 @@ function registerMemberServiceRoutes(app, deps) {
   const WELFARE_STATUSES = ['submitted', 'under_review', 'approved', 'declined', 'fulfilled'];
   const requireWelfareAccess = (req, res, next) => (isChapterAdminOrAbove(req) || hasRole(req, 'welfare'))
     ? next() : res.status(401).json({ error: 'Not authenticated' });
+  const eventDateTime = (e) => {
+    const d = new Date(`${e.date || ''}T${e.time || '00:00'}:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
   const logMilestone = async ({ chapterId, memberId, memberName, type, note, loggedBy }) => {
     const milestone = await repo.create('milestones', { chapterId, memberId, memberName, type: MILESTONE_TYPES.includes(type) ? type : 'other', note: note || '', loggedBy: loggedBy || '' }, 'mstone');
     createNotification(`Congratulations, ${memberName}!`, `${memberName} ${MILESTONE_LABELS[milestone.type]}${note ? ' — ' + note : ''}`, '/index.html', 'system', chapterId).catch(() => {});
@@ -34,6 +38,27 @@ function registerMemberServiceRoutes(app, deps) {
       if (!VOLUNTEER_ROLES.includes(role) || !memberId) return res.status(400).json({ error: 'A role and a member are required' });
       const member = await repo.getById('members', memberId, filter);
       if (!member) return res.status(400).json({ error: 'That member is not in this chapter' });
+      const assignments = await repo.getAll('volunteerAssignments', { chapterId: event.chapterId, memberId });
+      const events = await repo.getAll('events', {
+        chapterId: event.chapterId,
+        id: { $in: assignments.map((a) => a.eventId).concat(event.id) }
+      });
+      const byId = Object.fromEntries(events.map((e) => [e.id, e]));
+      const currentAt = eventDateTime(event);
+      const sameSlot = assignments.find((a) => {
+        const other = byId[a.eventId];
+        return other && currentAt && eventDateTime(other) && Math.abs(eventDateTime(other) - currentAt) < (90 * 60 * 1000);
+      });
+      if (sameSlot && req.body.force !== true && req.body.force !== 'true') {
+        return res.status(409).json({ error: 'This member is already assigned to another event in the same time slot.', conflict: sameSlot });
+      }
+      const sameDayLoad = assignments.filter((a) => {
+        const other = byId[a.eventId];
+        return other && other.date && event.date && other.date === event.date;
+      }).length;
+      if (sameDayLoad >= 2 && req.body.force !== true && req.body.force !== 'true') {
+        return res.status(409).json({ error: 'This member already has multiple assignments on this date (fatigue prevention).', sameDayAssignments: sameDayLoad });
+      }
       const assignment = await repo.create('volunteerAssignments', { chapterId: event.chapterId, eventId: event.id, role, memberId, memberName: member.name, status: 'assigned', assignedBy: actorName(req) }, 'vol');
       res.json({ success: true, item: assignment });
     } catch (e) { res.status(500).json({ error: 'Could not create this assignment' }); }
@@ -62,6 +87,30 @@ function registerMemberServiceRoutes(app, deps) {
   });
 
   app.get('/api/shepherd/milestones', requireViewRole('shepherding'), async (req, res) => { try { const items = await repo.getAll('milestones', rolesLib.chapterFilter(req)); res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))); } catch (e) { res.status(500).json({ error: 'Could not load milestones' }); } });
+  app.get('/api/shepherd/retention-alerts', requireViewRole('shepherding'), async (req, res) => {
+    try {
+      const items = await repo.getAll('retentionAlerts', rolesLib.chapterFilter(req));
+      res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    } catch (e) { res.status(500).json({ error: 'Could not load retention alerts' }); }
+  });
+  app.patch('/api/shepherd/retention-alerts/:id', requireShepherd, async (req, res) => {
+    try {
+      const filter = rolesLib.chapterFilter(req);
+      const existing = await repo.getById('retentionAlerts', req.params.id, filter);
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      const status = ['open', 'contacted', 'resolved'].includes(req.body.status) ? req.body.status : existing.status;
+      const updated = await repo.updateById('retentionAlerts', req.params.id, {
+        ...existing, status, notes: req.body.notes !== undefined ? req.body.notes : existing.notes, handledBy: actorName(req)
+      }, filter);
+      res.json({ success: true, item: updated });
+    } catch (e) { res.status(500).json({ error: 'Could not update this alert' }); }
+  });
+  app.get('/api/welfare/retention-alerts', requireWelfareAccess, async (req, res) => {
+    try {
+      const items = await repo.getAll('retentionAlerts', rolesLib.chapterFilter(req));
+      res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    } catch (e) { res.status(500).json({ error: 'Could not load retention alerts' }); }
+  });
   app.post('/api/shepherd/milestones', requireShepherd, async (req, res) => {
     try { const filter = rolesLib.chapterFilter(req); const { memberId, type, note } = req.body; if (!memberId || !type) return res.status(400).json({ error: 'A member and a type are required' }); const member = await repo.getById('members', memberId, filter); if (!member) return res.status(404).json({ error: 'Member not found in this chapter' }); res.json({ success: true, item: await logMilestone({ chapterId: filter.chapterId, memberId, memberName: member.name, type, note, loggedBy: actorName(req) }) }); } catch (e) { res.status(500).json({ error: 'Could not log this milestone' }); }
   });
@@ -88,6 +137,84 @@ function registerMemberServiceRoutes(app, deps) {
     try { const filter = rolesLib.chapterFilter(req); const intent = await repo.getById('givingIntents', req.params.id, filter); if (!intent) return res.status(404).json({ error: 'Not found' }); if (intent.status !== 'pending') return res.status(400).json({ error: 'This has already been reviewed.' }); const entry = await repo.create('financeEntries', { chapterId: intent.chapterId, entryType: 'income', category: intent.purpose, amount: intent.amount, date: new Date().toISOString().slice(0, 10), description: `Giving confirmed — ${intent.memberName}`, method: intent.method, reference: intent.reference, payee: intent.memberName, approvalStatus: 'approved', approvedBy: actorName(req), recordedBy: actorName(req) }, 'fin'); const updated = await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'confirmed', matchedFinanceEntryId: entry.id, reviewedBy: actorName(req) }, filter); res.json({ success: true, item: updated, entry }); } catch (e) { res.status(500).json({ error: 'Could not confirm this' }); }
   });
   app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => { try { const filter = rolesLib.chapterFilter(req); const intent = await repo.getById('givingIntents', req.params.id, filter); if (!intent) return res.status(404).json({ error: 'Not found' }); res.json({ success: true, item: await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'rejected', reviewNotes: req.body.notes || '', reviewedBy: actorName(req) }, filter) }); } catch (e) { res.status(500).json({ error: 'Could not reject this' }); } });
+
+  app.get('/api/finance/reconciliation-batches', requireViewRole('finance'), async (req, res) => {
+    try {
+      const items = await repo.getAll('reconciliationBatches', rolesLib.chapterFilter(req));
+      res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    } catch (e) { res.status(500).json({ error: 'Could not load reconciliation batches' }); }
+  });
+  app.post('/api/finance/giving/reconcile-batch', requireFinance, async (req, res) => {
+    try {
+      const filter = rolesLib.chapterFilter(req);
+      const ids = Array.isArray(req.body.intentIds) ? [...new Set(req.body.intentIds.filter(Boolean))] : [];
+      if (!ids.length) return res.status(400).json({ error: 'Select at least one giving claim' });
+      const intents = await repo.getAll('givingIntents', { ...filter, id: { $in: ids } });
+      if (intents.length !== ids.length || intents.some((i) => i.status !== 'pending')) {
+        return res.status(400).json({ error: 'All selected claims must be pending and in your chapter' });
+      }
+      const entries = [];
+      for (const intent of intents) {
+        const entry = await repo.create('financeEntries', {
+          chapterId: intent.chapterId,
+          entryType: 'income',
+          category: intent.purpose,
+          amount: intent.amount,
+          date: new Date().toISOString().slice(0, 10),
+          description: `Batch reconciled giving — ${intent.memberName}`,
+          method: intent.method,
+          reference: intent.reference,
+          payee: intent.memberName,
+          approvalStatus: 'pending',
+          approvedBy: '',
+          recordedBy: actorName(req)
+        }, 'fin');
+        entries.push(entry);
+      }
+      const batch = await repo.create('reconciliationBatches', {
+        chapterId: filter.chapterId,
+        intentIds: intents.map((i) => i.id),
+        financeEntryIds: entries.map((e) => e.id),
+        totalAmount: intents.reduce((s, i) => s + Number(i.amount || 0), 0),
+        status: 'pending_approval',
+        createdBy: actorName(req),
+        notes: req.body.notes || ''
+      }, 'recon');
+      await Promise.all(intents.map((intent, idx) => repo.updateById('givingIntents', intent.id, {
+        ...intent, status: 'confirmed', matchedFinanceEntryId: entries[idx].id, reviewedBy: actorName(req), reviewNotes: `In batch ${batch.id}`
+      }, filter)));
+      res.json({ success: true, item: batch, entriesCreated: entries.length });
+    } catch (e) { res.status(500).json({ error: 'Could not reconcile this batch' }); }
+  });
+  app.patch('/api/finance/reconciliation-batches/:id', async (req, res) => {
+    try {
+      const filter = rolesLib.chapterFilter(req);
+      const batch = await repo.getById('reconciliationBatches', req.params.id, filter);
+      if (!batch) return res.status(404).json({ error: 'Batch not found' });
+      if (batch.status !== 'pending_approval') return res.status(400).json({ error: 'This batch is already closed' });
+      const action = req.body.action === 'approve' ? 'approve' : req.body.action === 'reject' ? 'reject' : '';
+      if (!action) return res.status(400).json({ error: 'action must be approve or reject' });
+      const approver = hasRole(req, 'coordinator') || isChapterAdminOrAbove(req) || hasRole(req, 'finance');
+      if (!approver) return res.status(401).json({ error: 'Not authenticated' });
+      if (hasRole(req, 'finance') && batch.createdBy === actorName(req) && !hasRole(req, 'coordinator') && !isChapterAdminOrAbove(req)) {
+        return res.status(403).json({ error: 'Dual-control rule: creator cannot approve their own batch.' });
+      }
+      const nextStatus = action === 'approve' ? 'approved' : 'rejected';
+      const updated = await repo.updateById('reconciliationBatches', batch.id, {
+        ...batch, status: nextStatus, approvedBy: actorName(req), approvedAt: new Date(), notes: req.body.notes !== undefined ? req.body.notes : batch.notes
+      }, filter);
+      await Promise.all(batch.financeEntryIds.map(async (entryId) => {
+        const existing = await repo.getById('financeEntries', entryId, filter);
+        if (!existing) return;
+        await repo.updateById('financeEntries', entryId, {
+          ...existing,
+          approvalStatus: action === 'approve' ? 'approved' : 'rejected',
+          approvedBy: action === 'approve' ? actorName(req) : ''
+        }, filter);
+      }));
+      res.json({ success: true, item: updated });
+    } catch (e) { res.status(500).json({ error: 'Could not review this batch' }); }
+  });
 
   return { logMilestone };
 }

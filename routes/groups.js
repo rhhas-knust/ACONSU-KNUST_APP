@@ -165,6 +165,31 @@ function registerGroupRoutes(app, deps) {
       res.json({ success: true, item: meeting });
     } catch (e) { res.status(500).json({ error: 'Could not log this meeting' }); }
   });
+
+  // Mobile-first "3-tap" attendance path for cell leaders:
+  // open quick sheet -> tap attendees -> save.
+  app.post('/api/groups/:id/meetings/quick', requireMember, async (req, res) => {
+    try {
+      const group = await repo.getById('groups', req.params.id);
+      if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
+      if (!isGroupLeaderOrAbove(req, group)) return res.status(403).json({ error: 'Only the group leader can log attendance.' });
+      const date = req.body.date || new Date().toISOString().slice(0, 10);
+      const attendeeMemberIds = Array.isArray(req.body.attendeeMemberIds)
+        ? req.body.attendeeMemberIds.filter((id) => group.memberIds.includes(id))
+        : [];
+      const meeting = await repo.create('groupMeetings', {
+        chapterId: group.chapterId,
+        groupId: group.id,
+        date,
+        topic: 'Quick attendance check-in',
+        location: group.meetingLocation || '',
+        attendeeMemberIds,
+        notes: req.body.notes || '',
+        recordedBy: actorName(req)
+      }, 'gmeet');
+      res.json({ success: true, item: meeting });
+    } catch (e) { res.status(500).json({ error: 'Could not save quick attendance' }); }
+  });
 }
 
 module.exports = { registerGroupRoutes };
