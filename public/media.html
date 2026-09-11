@@ -13,6 +13,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<style>
+  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
+  .search-focus-card { border:2px solid var(--purple-deep); box-shadow:0 10px 24px rgba(91,44,130,0.12); }
+</style>
 </head>
 <body>
 
@@ -29,6 +33,7 @@
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
+    <div id="searchContext"></div>
     <div id="sermonList" class="grid" style="grid-template-columns:1fr; gap:18px;"></div>
   </div>
 </section>
@@ -37,14 +42,30 @@
 
 <script src="/js/main.js"></script>
 <script>
+const mediaParams = new URLSearchParams(location.search);
+const selectedSermonId = mediaParams.get('sermon') || '';
+const searchQuery = mediaParams.get('q') || '';
+
 (async function () {
   await initLayout('/media.html');
   try {
     const sermons = await fetchJSON('/api/sermons');
-    const sorted = [...sermons].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const sorted = [...sermons].sort((a, b) => {
+      if (a.id === selectedSermonId) return -1;
+      if (b.id === selectedSermonId) return 1;
+      return new Date(b.date) - new Date(a.date);
+    });
+    if (selectedSermonId || searchQuery) {
+      document.getElementById('searchContext').innerHTML = `
+        <div class="search-context">
+          ${selectedSermonId ? 'Showing your selected sermon result.' : 'Showing sermon results.'}
+          ${searchQuery ? ` Search: <strong>${escapeHtml(searchQuery)}</strong>.` : ''}
+        </div>
+      `;
+    }
     const wrap = document.getElementById('sermonList');
     wrap.innerHTML = sorted.map(s => `
-      <div class="card">
+      <div class="card ${s.id === selectedSermonId ? 'search-focus-card' : ''}" data-sermon-id="${escapeHtml(s.id)}">
         <span class="badge">${s.type === 'video' ? 'Video' : 'Audio'}</span>
         <h3 style="margin:12px 0 4px;">${escapeHtml(s.title)}</h3>
         <p style="font-size:0.88rem; color:#5a4468; margin-bottom:8px;">${escapeHtml(s.speaker || '')} ${s.date ? '· ' + formatDate(s.date) : ''}</p>
@@ -52,6 +73,10 @@
         ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:#a08eb0;">Link coming soon</span>'}
       </div>
     `).join('') || '<p class="empty-state">No sermons uploaded yet — check back soon.</p>';
+    if (selectedSermonId) {
+      const selectedCard = wrap.querySelector(`[data-sermon-id="${CSS.escape(selectedSermonId)}"]`);
+      if (selectedCard) selectedCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   } catch (e) {
     document.getElementById('sermonList').innerHTML = '<p class="empty-state">Could not load sermons right now.</p>';
   }

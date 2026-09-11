@@ -23,8 +23,8 @@ const { fakeModels } = require('./harness.js');
   let failures = 0;
   const jars = {};
 
-  async function call(jar, method, path, body, isForm) {
-    const headers = {};
+  async function call(jar, method, path, body, isForm, extraHeaders) {
+    const headers = { ...(extraHeaders || {}) };
     if (jars[jar]) headers.cookie = jars[jar];
     let payload;
     if (body && !isForm) { headers['content-type'] = 'application/json'; payload = JSON.stringify(body); }
@@ -110,6 +110,53 @@ const { fakeModels } = require('./harness.js');
   r = await call('pub', 'PUT', `/api/admin/content/${liveContentId}`, { title: 'Sunday Miracle Service', summary: 'Live stream of service' });
   check('publicity edits content item', r.status === 200 && r.data.item.title === 'Sunday Miracle Service' && r.data.item.summary === 'Live stream of service', r.data);
 
+  r = await call('admin', 'POST', '/api/admin/sermons', {
+    chapterId,
+    title: 'Covenant Search Message',
+    speaker: 'Rev Search',
+    description: 'Searchable sermon detail',
+    url: 'https://example.com/sermon'
+  });
+  check('admin creates a searchable sermon', r.status === 200 && r.data.item.title === 'Covenant Search Message', r.data);
+  const searchableSermonId = r.data.item.id;
+
+  r = await call('admin', 'POST', '/api/admin/events', {
+    chapterId,
+    title: 'Grace Search Convention',
+    date: '2026-03-14',
+    time: '18:00',
+    location: 'Main Auditorium',
+    description: 'Searchable event detail',
+    status: 'published'
+  });
+  check('admin creates a searchable published event', r.status === 200 && r.data.item.title === 'Grace Search Convention', r.data);
+  const searchableEventId = r.data.item.id;
+
+  r = await call('admin', 'POST', '/api/admin/pages', {
+    chapterId,
+    title: 'Search Welcome Page',
+    slug: 'search-welcome-page',
+    navLabel: 'Search Welcome',
+    description: 'Findable custom page',
+    content: 'Welcome to the searchable custom page'
+  });
+  check('admin creates a searchable custom page', r.status === 200 && r.data.item.slug === 'search-welcome-page', r.data);
+
+  r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Sunday Miracle Service')}`);
+  const liveSearchHit = (r.data.results || []).find(item => item.id === liveContentId);
+  check('public search ranks and deep-links exact content matches', r.status === 200 && r.data.results[0] && r.data.results[0].id === liveContentId && liveSearchHit && liveSearchHit.href.includes(`/content.html?kind=live_service&item=${liveContentId}&q=Sunday%20Miracle%20Service`), r.data.results);
+
+  r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Covenant Search Message')}`);
+  const sermonSearchHit = (r.data.results || []).find(item => item.id === searchableSermonId);
+  check('public search deep-links sermons to the selected item', r.status === 200 && sermonSearchHit && sermonSearchHit.href.includes(`/media.html?sermon=${searchableSermonId}&q=Covenant%20Search%20Message`), r.data.results);
+
+  r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Grace Search Convention')}`);
+  const eventSearchHit = (r.data.results || []).find(item => item.id === searchableEventId);
+  check('public search deep-links events to the selected item', r.status === 200 && eventSearchHit && eventSearchHit.href.includes(`/events.html?event=${searchableEventId}&q=Grace%20Search%20Convention`), r.data.results);
+
+  r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Search Welcome Page')}`);
+  check('public search deep-links custom pages', r.status === 200 && (r.data.results || []).some(item => item.href.includes('/page.html?slug=search-welcome-page&q=Search%20Welcome%20Page')), r.data.results);
+
   r = await call('pub', 'POST', '/api/admin/content', { kind: 'ebook', title: 'Draft Manual', published: false, category: 'Leadership' });
   check('publicity creates draft content item', r.status === 200 && r.data.item.published === false, r.data);
   const draftEbookId = r.data.item.id;
@@ -135,6 +182,8 @@ const { fakeModels } = require('./harness.js');
   check('national coordinator can disable a module', r.status === 200 && r.data.modules.liveStreaming === false, r.data);
   r = await call('anon', 'GET', '/api/content/live_service');
   check('disabled live-streaming hides public live content', r.status === 200 && r.data.length === 0, r.data);
+  r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Sunday Miracle Service')}`);
+  check('disabled live-streaming also hides live content from public search', r.status === 200 && !(r.data.results || []).some(item => item.id === liveContentId), r.data.results);
   r = await call('admin', 'PUT', '/api/national/features', { modules: { liveStreaming: true } });
   r = await call('admin', 'GET', '/api/national/reports/overview');
   check('national report returns aggregates only', r.status === 200 && r.data[0].activeMembers !== undefined && r.data[0].email === undefined, r.data);
@@ -691,6 +740,21 @@ const { fakeModels } = require('./harness.js');
   check('finance account created for chapter 2', r.status === 200 && r.data.item.chapterId === 'test-chapter-2', r.data);
   r = await call('fin2', 'POST', '/api/portal/login', { username: 'fin2', password: 'password123' });
   check('chapter 2 finance officer signs in', r.status === 200, r.data);
+
+  r = await call('admin', 'POST', '/api/admin/pages', {
+    chapterId: 'test-chapter-2',
+    title: 'Chapter Two Search Page',
+    slug: 'chapter-two-search-page',
+    description: 'Only the second chapter should see this page',
+    content: 'Chapter two search content'
+  });
+  check('admin creates a chapter 2 page for search scoping', r.status === 200 && r.data.item.slug === 'chapter-two-search-page', r.data);
+
+  r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Chapter Two Search Page')}`, null, false, { 'X-Chapter-Id': chapterId });
+  check('public search hides other chapters when chapter 1 is selected', r.status === 200 && (r.data.results || []).length === 0, r.data.results);
+
+  r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Chapter Two Search Page')}`, null, false, { 'X-Chapter-Id': 'test-chapter-2' });
+  check('public search shows chapter-specific results for the chosen chapter', r.status === 200 && (r.data.results || []).some(item => item.href.includes('/page.html?slug=chapter-two-search-page')), r.data.results);
 
   // Captured fresh rather than assumed, since an earlier (unrelated) test
   // already deleted the original 1200 income entry as its own cleanup step —

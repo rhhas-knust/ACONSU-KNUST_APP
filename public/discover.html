@@ -16,11 +16,16 @@
 <style>
   .discover-search { width:100%; padding:14px 18px; border-radius:999px; border:1.5px solid var(--line); font-family:'Manrope',sans-serif; font-size:0.95rem; background:#fff; margin-bottom:22px; }
   .discover-search:focus { outline:none; border-color:var(--purple-deep); }
+  .discover-status { margin:-10px 0 18px; color:#5a4468; font-size:0.9rem; }
   .discover-tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:28px; }
   .discover-tile { background:#fff; border:1px solid var(--line); border-radius:16px; padding:20px 16px; text-decoration:none; color:var(--purple-ink); display:flex; align-items:center; gap:12px; font-weight:700; }
   .discover-tile .dt-icon { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,var(--purple-deep),var(--purple-rich)); display:flex; align-items:center; justify-content:center; color:#fff; flex:none; }
   .discover-tile .dt-icon svg { width:20px; height:20px; }
+  .discover-summary { margin-bottom:18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
+  .discover-group { margin-bottom:20px; }
+  .discover-group h3 { margin:0 0 10px; font-size:1rem; }
   .discover-result { display:block; padding:14px 4px; border-bottom:1px solid var(--line); text-decoration:none; color:inherit; }
+  .discover-result:hover { background:rgba(91,44,130,0.03); }
   .discover-result .dr-type { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--flame-gold); font-weight:800; }
 </style>
 </head>
@@ -32,6 +37,7 @@
   <div class="container" style="max-width:640px;">
     <h1 style="margin-bottom:16px;">Discover</h1>
     <input type="text" class="discover-search" id="searchInput" placeholder="Search sermons, departments, events...">
+    <div class="discover-status" id="searchStatus">Type at least 2 characters to search across sermons, events, pages, and resources.</div>
 
     <div id="searchResults" style="display:none;"></div>
 
@@ -50,23 +56,21 @@
 
 <script src="/js/main.js"></script>
 <script>
-let ALL_SERMONS = [], ALL_DEPARTMENTS = [], ALL_EVENTS = [], ALL_PAGES = [], ALL_CONTENT = [];
+let ALL_SERMONS = [], ALL_PAGES = [];
+let SEARCH_TIMER = null;
+let SEARCH_CONTROLLER = null;
+let LAST_SEARCH_TOKEN = 0;
+const INITIAL_QUERY = new URLSearchParams(location.search).get('q') || '';
 
 (async function () {
   await initLayout('/discover.html');
 
-  const [sermons, departments, events, pages, ebooks, seminars, live, highlights] = await Promise.all([
+  const [sermons, pages] = await Promise.all([
     fetchJSON('/api/sermons').catch(() => []),
-    fetchJSON('/api/departments').catch(() => []),
-    fetchJSON('/api/events').catch(() => []),
-    fetchJSON('/api/pages').catch(() => []),
-    fetchJSON('/api/content/ebook').catch(() => []),
-    fetchJSON('/api/content/seminar').catch(() => []),
-    fetchJSON('/api/content/live_service').catch(() => []),
-    fetchJSON('/api/content/weekly_highlight').catch(() => [])
+    fetchJSON('/api/pages').catch(() => [])
   ]);
-  ALL_SERMONS = sermons; ALL_DEPARTMENTS = departments; ALL_EVENTS = events; ALL_PAGES = pages;
-  ALL_CONTENT = [...ebooks, ...seminars, ...live, ...highlights];
+  ALL_SERMONS = sermons;
+  ALL_PAGES = pages;
 
   const coreTiles = [
     { href: '/media.html', label: 'Sermons & Media', icon: ICON_HEADPHONES },
@@ -94,44 +98,97 @@ let ALL_SERMONS = [], ALL_DEPARTMENTS = [], ALL_EVENTS = [], ALL_PAGES = [], ALL
     </a>
   `).join('') || '<p class="empty-state">No sermons uploaded yet.</p>';
 
-  document.getElementById('searchInput').addEventListener('input', (e) => runSearch(e.target.value));
+  const input = document.getElementById('searchInput');
+  input.value = INITIAL_QUERY;
+  input.addEventListener('input', (e) => scheduleSearch(e.target.value));
+  if (INITIAL_QUERY.trim()) runSearch(INITIAL_QUERY.trim());
 })();
 
-function runSearch(query) {
-  const q = query.trim().toLowerCase();
-  const resultsEl = document.getElementById('searchResults');
-  const browseEl = document.getElementById('browseSection');
+function setSearchUrl(query) {
+  const url = new URL(window.location.href);
+  if (query) url.searchParams.set('q', query);
+  else url.searchParams.delete('q');
+  history.replaceState({}, '', url.pathname + (url.search || ''));
+}
 
+function setSearchState(message, showResults) {
+  document.getElementById('searchStatus').textContent = message;
+  document.getElementById('searchResults').style.display = showResults ? 'block' : 'none';
+  document.getElementById('browseSection').style.display = showResults ? 'none' : 'block';
+}
+
+function scheduleSearch(query) {
+  clearTimeout(SEARCH_TIMER);
+  SEARCH_TIMER = setTimeout(() => runSearch(query), 220);
+}
+
+async function runSearch(query) {
+  const q = query.trim();
+  const resultsEl = document.getElementById('searchResults');
   if (!q) {
-    resultsEl.style.display = 'none';
-    browseEl.style.display = 'block';
+    setSearchUrl('');
+    setSearchState('Type at least 2 characters to search across sermons, events, pages, and resources.', false);
     return;
   }
-  browseEl.style.display = 'none';
-  resultsEl.style.display = 'block';
 
-  const results = [
-    ...ALL_SERMONS.filter(s => (s.title + s.speaker).toLowerCase().includes(q)).map(s => ({ type: 'Sermon', title: s.title, sub: s.speaker, href: '/media.html' })),
-    ...ALL_DEPARTMENTS.filter(d => d.name.toLowerCase().includes(q)).map(d => ({ type: 'Department', title: d.name, sub: d.tagline, href: `/department.html?id=${d.id}` })),
-    ...ALL_EVENTS.filter(e => e.title.toLowerCase().includes(q)).map(e => ({ type: 'Event', title: e.title, sub: e.date, href: '/events.html' })),
-    ...ALL_CONTENT.filter(c => (c.title + ' ' + (c.category || '') + ' ' + (c.summary || '')).toLowerCase().includes(q)).map(c => ({
-      type: c.kind === 'ebook' ? 'E-Book' : c.kind === 'seminar' ? 'Seminar' : c.kind === 'live_service' ? 'Live Stream' : 'Media',
-      title: c.title,
-      sub: c.category || c.summary || '',
-      href: `/content.html?kind=${encodeURIComponent(c.kind)}`
-    })),
-    ...ALL_PAGES.filter(p => p.title.toLowerCase().includes(q)).map(p => ({ type: 'Page', title: p.title, sub: p.description, href: `/page.html?slug=${encodeURIComponent(p.slug)}` }))
-  ];
+  if (q.length < 2) {
+    setSearchUrl(q);
+    setSearchState('Type at least 2 characters to start searching.', false);
+    return;
+  }
 
-  resultsEl.innerHTML = results.length
-    ? results.map(r => `
-        <a href="${r.href}" class="discover-result">
-          <div class="dr-type">${escapeHtml(r.type)}</div>
-          <strong>${escapeHtml(r.title)}</strong>
-          ${r.sub ? `<div style="font-size:0.85rem; color:#5a4468;">${escapeHtml(r.sub)}</div>` : ''}
-        </a>
-      `).join('')
-    : '<p class="empty-state">No results found.</p>';
+  setSearchUrl(q);
+  setSearchState(`Searching for “${q}”…`, true);
+  resultsEl.innerHTML = '<p class="empty-state">Searching…</p>';
+
+  if (SEARCH_CONTROLLER) SEARCH_CONTROLLER.abort();
+  SEARCH_CONTROLLER = new AbortController();
+  const token = ++LAST_SEARCH_TOKEN;
+
+  try {
+    const payload = await fetchJSON(`/api/search?q=${encodeURIComponent(q)}`, { signal: SEARCH_CONTROLLER.signal });
+    if (token !== LAST_SEARCH_TOKEN) return;
+    renderSearchResults(q, payload.results || []);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (token !== LAST_SEARCH_TOKEN) return;
+    resultsEl.innerHTML = `<p class="empty-state">Could not search for “${escapeHtml(q)}” right now.</p>`;
+    setSearchState(`Search is temporarily unavailable for “${q}”.`, true);
+  }
+}
+
+function renderSearchResults(query, results) {
+  const resultsEl = document.getElementById('searchResults');
+  if (!results.length) {
+    resultsEl.innerHTML = `<p class="empty-state">No results found for “${escapeHtml(query)}”. Try another word or phrase.</p>`;
+    setSearchState(`No results found for “${query}”.`, true);
+    return;
+  }
+
+  const grouped = results.reduce((acc, item) => {
+    const key = item.typeLabel || item.type || 'Result';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+
+  resultsEl.innerHTML = `
+    <div class="discover-summary">${results.length} result${results.length === 1 ? '' : 's'} for “${escapeHtml(query)}”.</div>
+    ${Object.entries(grouped).map(([label, items]) => `
+      <section class="discover-group">
+        <h3>${escapeHtml(label)}${items.length > 1 ? ` <span style="color:#8b7a99; font-size:0.85rem; font-weight:600;">(${items.length})</span>` : ''}</h3>
+        ${items.map(r => `
+          <a href="${r.href}" class="discover-result">
+            <div class="dr-type">${escapeHtml(r.typeLabel || r.type || 'Result')}</div>
+            <strong>${escapeHtml(r.title)}</strong>
+            ${r.subtitle ? `<div style="font-size:0.85rem; color:#5a4468;">${escapeHtml(r.subtitle)}</div>` : ''}
+            ${r.description ? `<div style="font-size:0.84rem; color:#7a6a87; margin-top:3px;">${escapeHtml(r.description).slice(0, 140)}</div>` : ''}
+          </a>
+        `).join('')}
+      </section>
+    `).join('')}
+  `;
+  setSearchState(`Showing ${results.length} result${results.length === 1 ? '' : 's'} for “${query}”.`, true);
 }
 </script>
 </body>

@@ -13,6 +13,10 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<style>
+  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
+  .search-focus-card { border:2px solid var(--purple-deep); box-shadow:0 10px 24px rgba(91,44,130,0.12); }
+</style>
 </head>
 <body>
 
@@ -30,6 +34,7 @@
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
+    <div id="searchContext"></div>
     <div id="eventList" class="grid" style="grid-template-columns:1fr;"></div>
   </div>
 </section>
@@ -67,6 +72,9 @@
 let CURRENT_EVENTS = [];
 let ACTIVE_EVENT_ID = null;
 let CURRENT_MEMBER = null;
+const eventParams = new URLSearchParams(location.search);
+const selectedEventId = eventParams.get('event') || '';
+const searchQuery = eventParams.get('q') || '';
 
 function spotsBadge(e) {
   if (!e.registrationEnabled) return '';
@@ -90,13 +98,25 @@ function canRegister(e) {
   try {
     const events = await fetchJSON('/api/events');
     CURRENT_EVENTS = events;
-    const sorted = [...events].sort((a, b) => new Date(`${a.date}T${a.time || '00:00'}`) - new Date(`${b.date}T${b.time || '00:00'}`));
+    const sorted = [...events].sort((a, b) => {
+      if (a.id === selectedEventId) return -1;
+      if (b.id === selectedEventId) return 1;
+      return new Date(`${a.date}T${a.time || '00:00'}`) - new Date(`${b.date}T${b.time || '00:00'}`);
+    });
+    if (selectedEventId || searchQuery) {
+      document.getElementById('searchContext').innerHTML = `
+        <div class="search-context">
+          ${selectedEventId ? 'Showing your selected event result.' : 'Showing event results.'}
+          ${searchQuery ? ` Search: <strong>${escapeHtml(searchQuery)}</strong>.` : ''}
+        </div>
+      `;
+    }
 
     const wrap = document.getElementById('eventList');
     wrap.innerHTML = sorted.map(e => {
       const d = new Date(`${e.date}T00:00:00`);
       return `
-      <div class="card event-card">
+      <div class="card event-card ${e.id === selectedEventId ? 'search-focus-card' : ''}" data-event-id="${escapeHtml(e.id)}">
         ${e.flyerFileId ? `<img src="/api/files/${e.flyerFileId}" alt="" loading="lazy" style="width:100%; max-width:140px; border-radius:10px; object-fit:cover; align-self:flex-start;">` : `
         <div class="event-date-badge">
           <div class="day">${d.getDate()}</div>
@@ -127,6 +147,10 @@ function canRegister(e) {
     wrap.querySelectorAll('[data-register]').forEach(btn => {
       btn.addEventListener('click', () => openRegModal(btn.dataset.register));
     });
+    if (selectedEventId) {
+      const selectedCard = wrap.querySelector(`[data-event-id="${CSS.escape(selectedEventId)}"]`);
+      if (selectedCard) selectedCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     const next = nextUpcomingEvent(events);
     const countWrap = document.getElementById('countdownWrap');
