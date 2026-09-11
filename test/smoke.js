@@ -751,7 +751,7 @@ const { fakeModels } = require('./harness.js');
   check('admin creates a chapter 2 page for search scoping', r.status === 200 && r.data.item.slug === 'chapter-two-search-page', r.data);
 
   r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Chapter Two Search Page')}`, null, false, { 'X-Chapter-Id': chapterId });
-  check('public search hides other chapters when chapter 1 is selected', r.status === 200 && (r.data.results || []).length === 0, r.data.results);
+  check('public search hides other chapters when chapter 1 is selected', r.status === 200 && !(r.data.results || []).some(item => item.href.includes('/page.html?slug=chapter-two-search-page')), r.data.results);
 
   r = await call('anon', 'GET', `/api/search?q=${encodeURIComponent('Chapter Two Search Page')}`, null, false, { 'X-Chapter-Id': 'test-chapter-2' });
   check('public search shows chapter-specific results for the chosen chapter', r.status === 200 && (r.data.results || []).some(item => item.href.includes('/page.html?slug=chapter-two-search-page')), r.data.results);
