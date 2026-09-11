@@ -353,6 +353,61 @@ function contentChapterFilter(req) {
   return rolesLib.chapterFilter(req, { required: false });
 }
 
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function scoreSearchField(value, query, terms, weight) {
+  const text = normalizeSearchText(value);
+  if (!text) return 0;
+  let score = 0;
+  if (text === query) score += 180 * weight;
+  else if (text.startsWith(query)) score += 120 * weight;
+  else if (text.includes(query)) score += 75 * weight;
+
+  terms.forEach((term) => {
+    if (!term || term === query) return;
+    if (text === term) score += 36 * weight;
+    else if (text.startsWith(term)) score += 24 * weight;
+    else if (text.includes(term)) score += 12 * weight;
+  });
+  return score;
+}
+
+function buildPublicSearchResult({ query, terms, type, typeLabel, title, subtitle, description, href, extraSearch = [], meta = {} }) {
+  const titleScore = scoreSearchField(title, query, terms, 6);
+  const subtitleScore = scoreSearchField(subtitle, query, terms, 3);
+  const descriptionScore = scoreSearchField(description, query, terms, 2);
+  const extraScore = extraSearch.reduce((sum, value) => sum + scoreSearchField(value, query, terms, 1), 0);
+  const score = titleScore + subtitleScore + descriptionScore + extraScore + (subtitle ? 2 : 0) + (description ? 1 : 0);
+  if (!score) return null;
+  return {
+    type,
+    typeLabel,
+    title: String(title || ''),
+    subtitle: String(subtitle || ''),
+    description: String(description || ''),
+    href,
+    ...meta,
+    score
+  };
+}
+
+const CONTENT_KIND_LABELS = {
+  live_service: 'Live Stream',
+  seminar: 'Seminar',
+  weekly_highlight: 'Weekly Highlight',
+  ebook: 'E-Book',
+  founder: 'Founder Story',
+  church_info: 'Church Info',
+  aconsu_info: 'ACONSU Info'
+};
+
 const ACTIVATED_MEMBERSHIP_STAGES = new Set(['active', 'worker', 'executive']);
 function isActivatedMember(member) {
   return ACTIVATED_MEMBERSHIP_STAGES.has(member && member.membershipStage);
@@ -1838,6 +1893,108 @@ app.get('/api/pages/:slug', async (req, res) => {
     res.json(page);
   } catch (e) {
     res.status(500).json({ error: 'Could not load page' });
+  }
+});
+
+app.get('/api/search', async (req, res) => {
+  try {
+    const rawQuery = String(req.query.q || '').trim();
+    const normalizedQuery = normalizeSearchText(rawQuery);
+    const limit = Math.min(Math.max(Number(req.query.limit) || 24, 1), 60);
+    if (normalizedQuery.length < 2) {
+      return res.json({ query: rawQuery, results: [] });
+    }
+
+    const querySuffix = `q=${encodeURIComponent(rawQuery)}`;
+    const terms = normalizedQuery.split(' ').filter(Boolean);
+    const baseScope = contentChapterFilter(req);
+    const actingScope = rolesLib.getActingScope(req);
+    const eventScope = baseScope.chapterId ? { $or: [{ chapterId: baseScope.chapterId }, { isNational: true }] } : baseScope;
+    const contentScope = baseScope.chapterId ? { $or: [{ chapterId: baseScope.chapterId }, { chapterId: '' }] } : {};
+    const eventFilter = actingScope.kind === 'anonymous' ? { ...eventScope, status: 'published' } : eventScope;
+    const modules = await featureModules();
+
+    const [departments, sermons, events, pages, contentItems] = await Promise.all([
+      repo.getAll('departments', baseScope),
+      repo.getAll('sermons', baseScope),
+      repo.getAll('events', eventFilter),
+      repo.getAll('pages', baseScope),
+      repo.getAll('contentItems', { ...contentScope, published: true })
+    ]);
+
+    const enabledKinds = new Set(CONTENT_KINDS.filter((kind) => !CONTENT_FEATURES[kind] || modules[CONTENT_FEATURES[kind]]));
+    const results = [
+      ...sermons.map((item) => buildPublicSearchResult({
+        query: normalizedQuery,
+        terms,
+        type: 'sermon',
+        typeLabel: 'Sermon',
+        title: item.title,
+        subtitle: item.speaker,
+        description: item.description,
+        href: `/media.html?sermon=${encodeURIComponent(item.id)}&${querySuffix}`,
+        extraSearch: [item.type, item.url],
+        meta: { id: item.id }
+      })),
+      ...departments.map((item) => buildPublicSearchResult({
+        query: normalizedQuery,
+        terms,
+        type: 'department',
+        typeLabel: 'Department',
+        title: item.name,
+        subtitle: item.tagline,
+        description: item.description,
+        href: `/department.html?id=${encodeURIComponent(item.id)}&${querySuffix}`,
+        extraSearch: [item.meetingDay, item.meetingTime, item.meetingLocation, item.leader],
+        meta: { id: item.id }
+      })),
+      ...events.map((item) => buildPublicSearchResult({
+        query: normalizedQuery,
+        terms,
+        type: 'event',
+        typeLabel: 'Event',
+        title: item.title,
+        subtitle: [item.date, item.location].filter(Boolean).join(' · '),
+        description: item.description,
+        href: `/events.html?event=${encodeURIComponent(item.id)}&${querySuffix}`,
+        extraSearch: [item.category, item.time, item.videoUrl, item.recurring],
+        meta: { id: item.id }
+      })),
+      ...pages.map((item) => buildPublicSearchResult({
+        query: normalizedQuery,
+        terms,
+        type: 'page',
+        typeLabel: 'Page',
+        title: item.title,
+        subtitle: item.navLabel,
+        description: item.description || item.content,
+        href: `/page.html?slug=${encodeURIComponent(item.slug)}&${querySuffix}`,
+        extraSearch: [item.type, item.content],
+        meta: { id: item.id || item.slug, slug: item.slug }
+      })),
+      ...contentItems
+        .filter((item) => enabledKinds.has(item.kind))
+        .map((item) => buildPublicSearchResult({
+          query: normalizedQuery,
+          terms,
+          type: 'content',
+          typeLabel: CONTENT_KIND_LABELS[item.kind] || 'Content',
+          title: item.title,
+          subtitle: item.category || item.kind,
+          description: item.summary || item.body,
+          href: `/content.html?kind=${encodeURIComponent(item.kind)}&item=${encodeURIComponent(item.id)}&${querySuffix}`,
+          extraSearch: [item.body, item.category, item.previewUrl, item.resourceUrl],
+          meta: { id: item.id, kind: item.kind }
+        }))
+    ]
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score || a.title.localeCompare(b.title))
+      .slice(0, limit)
+      .map(({ score, ...item }) => item);
+
+    res.json({ query: rawQuery, results });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not search right now' });
   }
 });
 

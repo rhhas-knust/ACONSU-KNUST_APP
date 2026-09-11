@@ -17,6 +17,8 @@
   .cat-pill.active, .cat-pill:hover { background:var(--purple-deep); color:#fff; border-color:var(--purple-deep); }
   .search-bar { width:100%; padding:12px 18px; border-radius:999px; border:1.5px solid var(--line); font-size:0.95rem; margin-bottom:20px; outline:none; font-family:'Manrope',sans-serif; }
   .search-bar:focus { border-color:var(--purple-deep); }
+  .search-context { margin:0 0 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
+  .search-focus-card { border:2px solid var(--purple-deep); box-shadow:0 10px 24px rgba(91,44,130,0.12); }
   .live-badge { display:inline-flex; align-items:center; gap:6px; background:#dc2626; color:#fff; font-weight:800; font-size:0.75rem; text-transform:uppercase; padding:4px 10px; border-radius:999px; letter-spacing:0.05em; }
   .live-dot { width:8px; height:8px; border-radius:50%; background:#fff; animation:pulse 1.5s infinite; }
   @keyframes pulse { 0% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.8); } 100% { opacity:1; transform:scale(1); } }
@@ -37,6 +39,7 @@
 
 <section style="padding-top:0;">
   <div class="container">
+    <div id="searchContext"></div>
     <div id="filterContainer" style="display:none;">
       <input type="text" class="search-bar" id="contentSearch" placeholder="Search resources, topics, authors...">
       <div class="cat-pills" id="categoryPills"></div>
@@ -53,8 +56,11 @@
 
 <script src="/js/main.js"></script>
 <script>
-const type = new URLSearchParams(location.search).get('kind') || 'weekly_highlight';
-const config = {
+const contentParams = new URLSearchParams(location.search);
+let type = contentParams.get('kind') || 'weekly_highlight';
+const selectedItemId = contentParams.get('item') || '';
+const searchQuery = contentParams.get('q') || '';
+const CONTENT_CONFIG = {
   live_service: ['Live Services', 'Join ACONSU online for worship, word, and prayer wherever you are.', 'Live Stream'],
   seminar: ['Seminars & Workshops', 'Practical insights, short video previews, and full training sessions.', 'Seminars'],
   weekly_highlight: ['This Week at ACONSU', 'Outreach, fellowship, and moments across the union family.', 'Weekly Highlights'],
@@ -62,10 +68,16 @@ const config = {
   founder: ['Our Founders', 'Honouring the visionary leaders whose faith and sacrifice established ACONSU.', 'History & Heritage'],
   church_info: ['The Apostles Continuation Church', 'Our church history, foundational doctrines, vision, and leadership.', 'The Mother Church'],
   aconsu_info: ['About ACONSU', 'The Apostles Continuation Students Union history, vision, and campus network.', 'About Us']
-}[type] || ['ACONSU Content', 'Inspiring resources from the union.', 'Resources'];
+};
 
 let allItems = [];
 let activeCategory = 'all';
+let selectedItem = null;
+let pageConfig = getContentConfig(type);
+
+function getContentConfig(kind) {
+  return CONTENT_CONFIG[kind] || ['ACONSU Content', 'Inspiring resources from the union.', 'Resources'];
+}
 
 function parseVideoEmbed(url) {
   if (!url) return '';
@@ -83,17 +95,33 @@ function parseVideoEmbed(url) {
 
 (async () => {
   await initLayout('/content.html');
-  document.title = config[0] + ' — ACONSU';
-  document.getElementById('contentTitle').textContent = config[0];
-  document.getElementById('contentLede').textContent = config[1];
-  document.getElementById('contentEyebrow').textContent = config[2];
+  if (selectedItemId) {
+    try {
+      selectedItem = await fetchJSON('/api/content/item/' + encodeURIComponent(selectedItemId));
+      if (selectedItem && selectedItem.kind) type = selectedItem.kind;
+    } catch (e) { /* fall back to the provided kind */ }
+  }
+  pageConfig = getContentConfig(type);
+  document.title = pageConfig[0] + ' — ACONSU';
+  document.getElementById('contentTitle').textContent = pageConfig[0];
+  document.getElementById('contentLede').textContent = pageConfig[1];
+  document.getElementById('contentEyebrow').textContent = pageConfig[2];
+  if (selectedItemId || searchQuery) {
+    document.getElementById('searchContext').innerHTML = `
+      <div class="search-context">
+        ${selectedItemId ? 'Showing your selected search result.' : 'Showing filtered content results.'}
+        ${searchQuery ? ` Search: <strong>${escapeHtml(searchQuery)}</strong>.` : ''}
+      </div>
+    `;
+  }
 
   try {
     allItems = await fetchJSON('/api/content/' + encodeURIComponent(type));
+    if (selectedItem && !allItems.some(i => i.id === selectedItem.id)) allItems.unshift(selectedItem);
 
     // If e-books, seminars, or highlights, build category pills
     const categories = ['all', ...new Set(allItems.map(i => i.category).filter(Boolean))];
-    if (categories.length > 2 || type === 'ebook' || type === 'seminar') {
+    if (categories.length > 2 || type === 'ebook' || type === 'seminar' || selectedItemId || searchQuery) {
       document.getElementById('filterContainer').style.display = 'block';
       const pillsContainer = document.getElementById('categoryPills');
       pillsContainer.innerHTML = categories.map(cat => `
@@ -111,6 +139,7 @@ function parseVideoEmbed(url) {
         };
       });
 
+      if (searchQuery) document.getElementById('contentSearch').value = searchQuery;
       document.getElementById('contentSearch').oninput = renderContent;
     }
 
@@ -123,14 +152,17 @@ function parseVideoEmbed(url) {
 function renderContent() {
   const query = (document.getElementById('contentSearch')?.value || '').trim().toLowerCase();
   const filtered = allItems.filter(item => {
-    if (activeCategory !== 'all' && item.category !== activeCategory) return false;
+    if (activeCategory !== 'all' && item.category !== activeCategory && item.id !== selectedItemId) return false;
     if (query) {
-      const matchTitle = (item.title || '').toLowerCase().includes(query);
-      const matchBody = (item.body || '').toLowerCase().includes(query);
-      const matchCat = (item.category || '').toLowerCase().includes(query);
-      return matchTitle || matchBody || matchCat;
+      if (item.id === selectedItemId) return true;
+      const haystack = [item.title, item.body, item.category, item.summary].join(' ').toLowerCase();
+      return haystack.includes(query);
     }
     return true;
+  }).sort((a, b) => {
+    if (a.id === selectedItemId) return -1;
+    if (b.id === selectedItemId) return 1;
+    return 0;
   });
 
   const grid = document.getElementById('contentGrid');
@@ -141,11 +173,12 @@ function renderContent() {
 
   grid.innerHTML = filtered.map(item => {
     const videoEmbed = parseVideoEmbed(item.previewUrl);
+    const focusClass = item.id === selectedItemId ? 'search-focus-card' : '';
 
     // Render cards specialized per type
     if (type === 'live_service') {
       return `
-        <article class="card" style="grid-column: 1 / -1; max-width: 820px; margin: 0 auto; width:100%;">
+        <article class="card ${focusClass}" data-content-id="${escapeHtml(item.id)}" style="grid-column: 1 / -1; max-width: 820px; margin: 0 auto; width:100%;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
             <span class="live-badge"><span class="live-dot"></span> Live Service</span>
             ${item.eventDate ? `<span class="muted" style="font-size:0.9rem;">${formatDate(item.eventDate)}</span>` : ''}
@@ -164,7 +197,7 @@ function renderContent() {
 
     if (type === 'seminar') {
       return `
-        <article class="card">
+        <article class="card ${focusClass}" data-content-id="${escapeHtml(item.id)}">
           ${videoEmbed || (item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="" style="width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:10px; margin-bottom:14px;">` : '')}
           <span class="badge">${escapeHtml(item.category || 'Seminar')}</span>
           <h3 style="margin:10px 0 6px;">${escapeHtml(item.title)}</h3>
@@ -181,7 +214,7 @@ function renderContent() {
 
     if (type === 'ebook') {
       return `
-        <article class="card" style="display:flex; flex-direction:column;">
+        <article class="card ${focusClass}" data-content-id="${escapeHtml(item.id)}" style="display:flex; flex-direction:column;">
           ${item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="Book Cover" style="width:100%; aspect-ratio:3/4; object-fit:cover; border-radius:10px; margin-bottom:14px; box-shadow:0 4px 12px rgba(0,0,0,0.08);">` : ''}
           <span class="badge">${escapeHtml(item.category || 'Publication')}</span>
           <h3 style="margin:10px 0 6px;">${escapeHtml(item.title)}</h3>
@@ -197,9 +230,9 @@ function renderContent() {
 
     // Default template for weekly_highlight, founder, church_info, a悲_info
     return `
-      <article class="card">
+      <article class="card ${focusClass}" data-content-id="${escapeHtml(item.id)}">
         ${item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="" style="width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:10px; margin-bottom:14px;">` : ''}
-        <span class="badge">${escapeHtml(item.category || config[2])}</span>
+        <span class="badge">${escapeHtml(item.category || pageConfig[2])}</span>
         <h3 style="margin:10px 0 6px;">${escapeHtml(item.title)}</h3>
         ${item.eventDate ? `<p class="muted" style="font-size:0.85rem; margin-bottom:8px;">${formatDate(item.eventDate)}</p>` : ''}
         ${item.summary ? `<p style="font-weight:600; color:var(--purple-rich); margin-bottom:8px;">${escapeHtml(item.summary)}</p>` : ''}
@@ -213,6 +246,10 @@ function renderContent() {
       </article>
     `;
   }).join('');
+  if (selectedItemId) {
+    const selectedCard = grid.querySelector(`[data-content-id="${CSS.escape(selectedItemId)}"]`);
+    if (selectedCard) selectedCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 </script>
 </body>
