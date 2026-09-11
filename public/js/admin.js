@@ -5,12 +5,15 @@ let CURRENT_SETTINGS = {};
 // by checkAuth() before the shell ever renders.
 let ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
 const ADMIN_NAV_STATE_KEY = 'aconsu_admin_nav_state';
+let OVERVIEW_REFRESH_TIMER = null;
 
-function showModal(html) {
+function showModal(html, { bottomSheet = false } = {}) {
   document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalContent').classList.toggle('bottom-sheet', !!bottomSheet);
   document.getElementById('modalBackdrop').classList.add('open');
 }
 function closeModal() {
+  document.getElementById('modalContent').classList.remove('bottom-sheet');
   document.getElementById('modalBackdrop').classList.remove('open');
 }
 document.getElementById('modalBackdrop').addEventListener('click', (e) => {
@@ -69,6 +72,7 @@ function showAdminShell() {
   }
 
   initAdminNav();
+  initMobileAdminUi();
   initCommandPalette();
   loadPanel('overview');
 }
@@ -105,7 +109,51 @@ function openAdminPanel(name) {
     document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
     const panel = document.getElementById(`panel-${name}`);
     if (panel) panel.classList.add('active');
+    closeMobileNav();
     loadPanel(name);
+  }
+}
+
+function closeMobileNav() {
+  const nav = document.getElementById('adminNav');
+  const backdrop = document.getElementById('adminSideBackdrop');
+  if (nav) nav.classList.remove('open');
+  if (backdrop) backdrop.classList.remove('open');
+}
+
+function initMobileAdminUi() {
+  const navBtn = document.getElementById('mobileNavBtn');
+  const actionsBtn = document.getElementById('mobileQuickActionsBtn');
+  const nav = document.getElementById('adminNav');
+  const backdrop = document.getElementById('adminSideBackdrop');
+  if (navBtn && nav && backdrop) {
+    navBtn.addEventListener('click', () => {
+      nav.classList.toggle('open');
+      backdrop.classList.toggle('open', nav.classList.contains('open'));
+    });
+    backdrop.addEventListener('click', closeMobileNav);
+  }
+  if (actionsBtn) {
+    actionsBtn.addEventListener('click', () => {
+      showModal(`
+        <h3 style="margin-top:0;">Quick Actions</h3>
+        <div class="sheet-list">
+          <div class="sheet-item"><button class="btn btn-primary btn-sm" data-mobile-action="members">Open Members</button></div>
+          <div class="sheet-item"><button class="btn btn-primary btn-sm" data-mobile-action="events">Create Event</button></div>
+          <div class="sheet-item"><button class="btn btn-primary btn-sm" data-mobile-action="notifications">Send Notification</button></div>
+          <div class="sheet-item"><button class="btn btn-primary btn-sm" data-mobile-action="chapterSettings">Chapter Settings</button></div>
+        </div>
+      `, { bottomSheet: true });
+      document.querySelectorAll('[data-mobile-action]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const panel = btn.dataset.mobileAction;
+          closeModal();
+          openAdminPanel(panel);
+          if (panel === 'events') whenElementReady('#addBtn-events', (el) => el.click());
+          if (panel === 'notifications') whenElementReady('#notifTitle', (el) => el.focus());
+        });
+      });
+    });
   }
 }
 
@@ -159,30 +207,91 @@ async function renderOverview() {
   const el = document.getElementById('panel-overview');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   try {
-    const [departments, events, sermons, joinRequests, prayerRequests, testimonies, contactMessages] = await Promise.all([
-      fetchJSON('/api/departments'),
-      fetchJSON('/api/events'),
-      fetchJSON('/api/sermons'),
-      fetchJSON('/api/admin/join-requests'),
-      fetchJSON('/api/admin/prayer-requests'),
-      fetchJSON('/api/admin/testimonies'),
-      fetchJSON('/api/admin/contact-messages')
-    ]);
-    const stat = (label, val) => `<div class="card"><div class="eyebrow">${label}</div><h2 style="margin:6px 0 0;">${val}</h2></div>`;
+    const data = await fetchJSON('/api/admin/overview');
+    if (OVERVIEW_REFRESH_TIMER) clearTimeout(OVERVIEW_REFRESH_TIMER);
+    OVERVIEW_REFRESH_TIMER = setTimeout(() => {
+      const panel = document.getElementById('panel-overview');
+      if (panel && panel.classList.contains('active')) renderOverview();
+    }, Math.max(10, Number(data.refreshEverySeconds || 30)) * 1000);
+
+    const trendLabel = (trend = {}) => {
+      const symbol = trend.direction === 'up' ? '▲' : (trend.direction === 'down' ? '▼' : '•');
+      const pct = Math.abs(Number(trend.percent || 0));
+      const detail = pct ? `${pct}%` : 'no change';
+      return `${symbol} ${detail} vs previous week`;
+    };
+    const formatActivityTime = (value) => {
+      if (!value) return 'Unknown time';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return 'Unknown time';
+      return d.toLocaleString();
+    };
+
     el.innerHTML = `
-      <h2 style="margin-bottom:20px;">Overview</h2>
-      <div class="grid">
-        ${stat('Departments', departments.length)}
-        ${stat('Upcoming Events', events.length)}
-        ${stat('Sermons', sermons.length)}
-        ${stat('New Join Requests', joinRequests.filter(r => r.status === 'new').length)}
-        ${stat('New Prayer Requests', prayerRequests.filter(r => r.status === 'new').length)}
-        ${stat('Testimonies Awaiting Review', testimonies.filter(t => !t.published).length)}
-        ${stat('Contact Messages', contactMessages.length)}
+      <div class="panel-head">
+        <div>
+          <h2 style="margin:0;">Operational Dashboard</h2>
+          <p class="hint" style="margin:4px 0 0;">${escapeHtml((data.chapter && data.chapter.name) || 'Chapter')} • Last refresh ${formatActivityTime(data.generatedAt)}</p>
+        </div>
+        <div class="hint">Rule of 4 KPI view</div>
+      </div>
+      <div class="kpi-grid">
+        ${data.kpis.map((kpi, idx) => `
+          <button type="button" class="kpi-card" data-kpi-index="${idx}">
+            <div class="kpi-label">${escapeHtml(kpi.label)}</div>
+            <div class="kpi-value">${escapeHtml(String(kpi.value))}</div>
+            <div class="kpi-trend ${escapeHtml(kpi.trend.direction || 'flat')}">${escapeHtml(trendLabel(kpi.trend))}</div>
+          </button>
+        `).join('')}
+      </div>
+      <div class="overview-stream">
+        <div class="panel-head" style="margin-bottom:10px;">
+          <h3 style="margin:0;">Live Pastoral Care &amp; Activity Stream</h3>
+          <small class="hint">${data.activity.length} recent updates</small>
+        </div>
+        <ul>
+          ${data.activity.map((item) => `
+            <li>
+              <strong>${escapeHtml(item.label || 'Activity')}</strong> — ${escapeHtml(item.title || '')}<br>
+              <small>${escapeHtml(item.detail || '')}</small><br>
+              <small class="hint">${escapeHtml(formatActivityTime(item.at))}</small><br>
+              ${item.panel ? `<button type="button" data-activity-panel="${escapeHtml(item.panel)}">Open ${escapeHtml(item.panel)}</button>` : ''}
+            </li>
+          `).join('') || '<li><span class="hint">No recent updates yet.</span></li>'}
+        </ul>
       </div>
     `;
+    el.querySelectorAll('[data-kpi-index]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const kpi = data.kpis[Number(btn.dataset.kpiIndex)];
+        const list = Array.isArray(kpi.drilldown) ? kpi.drilldown : [];
+        showModal(`
+          <h3 style="margin-top:0;">${escapeHtml(kpi.label)}</h3>
+          <p class="hint" style="margin-top:4px;">Current value: <strong>${escapeHtml(String(kpi.value))}</strong></p>
+          <div class="sheet-list">
+            ${list.map((row) => `
+              <div class="sheet-item">
+                <h4>${escapeHtml(row.title || row.name || row.date || 'Item')}</h4>
+                <p>${escapeHtml(row.detail || row.location || row.serviceType || row.level || '')}</p>
+              </div>
+            `).join('') || '<p class="hint">No drill-down rows yet.</p>'}
+          </div>
+          ${kpi.drilldownPanel ? `<button class="btn btn-primary btn-sm" data-open-kpi-panel="${escapeHtml(kpi.drilldownPanel)}" style="margin-top:12px;">Open ${escapeHtml(kpi.drilldownPanel)}</button>` : ''}
+        `, { bottomSheet: true });
+        const openBtn = document.querySelector('[data-open-kpi-panel]');
+        if (openBtn) {
+          openBtn.addEventListener('click', () => {
+            closeModal();
+            openAdminPanel(openBtn.dataset.openKpiPanel);
+          });
+        }
+      });
+    });
+    el.querySelectorAll('[data-activity-panel]').forEach((btn) => {
+      btn.addEventListener('click', () => openAdminPanel(btn.dataset.activityPanel));
+    });
   } catch (e) {
-    el.innerHTML = '<p class="empty-state">Could not load overview.</p>';
+    el.innerHTML = `<p class="empty-state">Could not load overview. ${escapeHtml(e.message || '')}</p>`;
   }
 }
 

@@ -5,7 +5,7 @@
 //
 //   npm test              — the full suite
 //   SMOKE_SLOW=1 npm test — also waits out the 60s scheduled-send tick
-require('./harness.js');
+const { fakeModels } = require('./harness.js');
 
 (async () => {
   process.env.MONGODB_URI = 'mongodb://stub/aconsu_test';
@@ -231,6 +231,8 @@ require('./harness.js');
   const regData = await regRes.json();
   jars.member = (regRes.headers.getSetCookie ? regRes.headers.getSetCookie() : []).map(c => c.split(';')[0]).join('; ');
   check('a member registers with chapter + photo', regRes.status === 200, regData);
+  const onboardingTasks = await fakeModels.OnboardingTask.find({ memberId: regData.member.id });
+  check('day 0 + day 3 onboarding tasks are queued for a new registration', onboardingTasks.length === 2, onboardingTasks);
 
   console.log('\n== shepherding: attendance ==');
   r = await call('shep', 'GET', '/api/shepherd/members');
@@ -269,6 +271,18 @@ require('./harness.js');
   check('a membership number is issued on activation', /^TEST-CHAPTER-\d{4}$/.test(r.data.item.membershipNumber), r.data.item);
   check('the assigned shepherd is recorded', r.data.item.shepherdName === 'Sister Grace', r.data.item);
   check('a QR token was generated for the digital membership card', !!r.data.item.qrToken, r.data.item);
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'worker' });
+  check('lifecycle can advance from active to worker', r.status === 200 && r.data.item.membershipStage === 'worker', r.data);
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'executive' });
+  check('lifecycle can advance from worker to executive', r.status === 200 && r.data.item.membershipStage === 'executive', r.data);
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'alumni' });
+  check('lifecycle can advance from executive to alumni', r.status === 200 && r.data.item.membershipStage === 'alumni', r.data);
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active' });
+  check('lifecycle can return to active when needed', r.status === 200 && r.data.item.membershipStage === 'active', r.data);
+  r = await call('shep', 'POST', '/api/shepherd/retention-alerts/run');
+  check('retention automation run succeeds', r.status === 200, r.data);
+  r = await call('shep', 'GET', '/api/shepherd/retention-alerts');
+  check('shepherding can read inactivity retention alerts', r.status === 200 && Array.isArray(r.data), r.data);
 
   console.log('\n== shepherding: member edits + messages ==');
   r = await call('shep', 'PUT', `/api/shepherd/members/${memberId}`, { phone: '0201234567', level: '300' });
@@ -455,7 +469,6 @@ require('./harness.js');
   r = await call('member', 'GET', '/api/member/card');
   check('an active member gets a real digital card with a QR code', r.status === 200 && r.data.ready === true && !!r.data.qrDataUrl, { ready: r.data.ready });
 
-  const { fakeModels } = require('./harness.js');
   const memberDoc = (await fakeModels.Member.find({ id: memberId }))[0];
   const qrToken = memberDoc.qrToken;
   check('the member has a real qrToken on file', typeof qrToken === 'string' && qrToken.length > 10, { qrToken });
@@ -543,6 +556,10 @@ require('./harness.js');
   check('the post is visible to group members', r.data.length === 1, r.data);
   r = await call('member', 'POST', `/api/groups/${groupId}/meetings`, { date: '2026-09-02', topic: 'Intro' });
   check('a plain member cannot log a meeting (leader-only)', r.status === 403, r.data);
+  r = await call('pub', 'PUT', `/api/admin/groups/${groupId}`, { leaderMemberId: memberId });
+  check('group leader can be assigned for attendance logging', r.status === 200 && r.data.item.leaderMemberId === memberId, r.data);
+  r = await call('member', 'POST', `/api/groups/${groupId}/meetings/quick`, { date: '2026-09-02', attendeeMemberIds: [memberId] });
+  check('a group leader can submit 3-tap quick attendance', r.status === 200 && r.data.item.attendeeMemberIds.length === 1, r.data);
   r = await call('member', 'POST', `/api/groups/${groupId}/leave`);
   check('a member leaves the group', r.status === 200, r.data);
   r = await call('member', 'GET', `/api/groups/${groupId}`);
@@ -577,8 +594,17 @@ require('./harness.js');
   r = await call('pub', 'POST', `/api/events/${eventId}/volunteers`, { role: 'usher', memberId });
   check('publicity assigns a volunteer role', r.status === 200 && r.data.item.status === 'assigned', r.data);
   const volAssignmentId = r.data.item.id;
+  r = await call('pub', 'POST', '/api/publicity/events', { title: 'Clashing Event', date: '2026-09-02', time: '18:00', location: 'Main Hall' });
+  check('a second event can be created for conflict checks', r.status === 200, r.data);
+  const clashEventId = r.status === 200 && r.data.item ? r.data.item.id : '';
+  if (clashEventId) {
+    r = await call('pub', 'POST', `/api/events/${clashEventId}/volunteers`, { role: 'media', memberId });
+    check('volunteer double-booking is blocked by default', r.status === 409, r.data);
+    r = await call('pub', 'POST', `/api/events/${clashEventId}/volunteers`, { role: 'media', memberId, force: true });
+    check('volunteer assignment can be force-saved after warning', r.status === 200, r.data);
+  }
   r = await call('member', 'GET', '/api/member/volunteer-assignments');
-  check('the member sees their own assignment, with the event attached', r.data.length === 1 && r.data[0].event && r.data[0].event.id === eventId, r.data);
+  check('the member sees their assignments with event details attached', r.data.some(a => a.event && a.event.id === eventId), r.data);
   r = await call('member', 'PATCH', `/api/member/volunteer-assignments/${volAssignmentId}`, { status: 'confirmed' });
   check('the member confirms their assignment', r.status === 200 && r.data.item.status === 'confirmed', r.data);
 
@@ -608,6 +634,8 @@ require('./harness.js');
   check('shepherding raises a referral on behalf of a member', r.status === 200 && r.data.item.referredBy, r.data);
   r = await call('welf', 'GET', '/api/welfare/requests');
   check('the welfare officer sees both the self-submitted request and the referral', r.data.length === 2, r.data);
+  r = await call('welf', 'GET', '/api/welfare/retention-alerts');
+  check('welfare can read inactivity retention alerts', r.status === 200 && Array.isArray(r.data), r.data);
   r = await call('welf', 'PATCH', `/api/welfare/requests/${ownWelfareId}`, { status: 'approved', notes: 'Approved for GHS200 support' });
   check('the welfare officer updates status and case notes', r.status === 200 && r.data.item.status === 'approved', r.data);
   r = await call('member', 'GET', '/api/welfare/requests/mine');
@@ -636,6 +664,17 @@ require('./harness.js');
   check('the confirmed gift actually moved the books by GHS 50', r.data.totalIncome === incomeBeforeGiving + 50, r.data);
   r = await call('member', 'GET', '/api/giving/mine');
   check('the member sees it as confirmed in their own history', r.data.find(g => g.id === givingIntentId).status === 'confirmed', r.data);
+  r = await call('member', 'POST', '/api/giving/intents', { amount: 30, purpose: 'offertory', method: 'momo', reference: 'MMBATCH1' });
+  const batchIntent1 = r.data.item.id;
+  r = await call('member', 'POST', '/api/giving/intents', { amount: 20, purpose: 'harvest', method: 'bank', reference: 'MMBATCH2' });
+  const batchIntent2 = r.data.item.id;
+  r = await call('fin', 'POST', '/api/finance/giving/reconcile-batch', { intentIds: [batchIntent1, batchIntent2] });
+  check('finance can reconcile giving claims as a pending-approval batch', r.status === 200 && r.data.item.status === 'pending_approval', r.data);
+  const batchId = r.data.item.id;
+  r = await call('fin', 'PATCH', `/api/finance/reconciliation-batches/${batchId}`, { action: 'approve' });
+  check('batch creator cannot self-approve due to dual-control rule', r.status === 403, r.data);
+  r = await call('coord', 'PATCH', `/api/finance/reconciliation-batches/${batchId}`, { action: 'approve' });
+  check('coordinator can approve reconciled batch', r.status === 200 && r.data.item.status === 'approved', r.data);
 
   console.log('\n== chapter isolation (section 1, 43, 44) — the whole point of this phase ==');
   r = await call('admin', 'POST', '/api/national/chapters', { id: 'test-chapter-2', name: 'ACONSU-Test-2', institution: 'Second University' });
@@ -751,6 +790,20 @@ require('./harness.js');
   check('public settings reflect chapter 1 banner', pubSettings.homeHeaderImageFileId === bannerData.fileId, pubSettings);
   check('public settings reflect chapter 1 contact and about details', pubSettings.contact.telegram === 'https://t.me/aconsuknust' && pubSettings.payment.donationDestination === 'General Fund' && pubSettings.about.leadership.includes('leadership team'), pubSettings);
 
+  console.log('\n== operational dashboard (Phase 2) ==');
+  r = await call('coord', 'GET', '/api/admin/overview');
+  check('chapter coordinator can load operational dashboard overview', r.status === 200 && r.data.chapter.id === chapterId, r.data);
+  check('operational dashboard returns Rule-of-4 KPI cards', Array.isArray(r.data.kpis) && r.data.kpis.length === 4, r.data.kpis);
+  check('operational dashboard returns activity stream rows', Array.isArray(r.data.activity), r.data.activity);
+
+  r = await call('coord2', 'GET', '/api/admin/overview');
+  check('chapter 2 coordinator sees chapter 2 dashboard scope only', r.status === 200 && r.data.chapter.id === 'test-chapter-2', r.data);
+
+  r = await call('admin', 'GET', '/api/admin/overview');
+  check('national admin must pick a chapter for operational dashboard once multiple chapters exist', r.status === 400, r.data);
+  r = await call('admin', 'GET', '/api/admin/overview?chapterId=' + chapterId);
+  check('national admin can load a selected chapter operational dashboard', r.status === 200 && r.data.chapter.id === chapterId, r.data);
+
   console.log('\n== static pages ==');
   for (const page of [
     '/more.html', '/admin.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',
@@ -768,7 +821,6 @@ require('./harness.js');
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
   if (process.env.SMOKE_SLOW === '1') {
   console.log('\n== scheduler (waits for the 60s tick) ==');
-  const { fakeModels } = require('./harness.js');
   await fakeModels.ScheduledNotification.create({
     id: 'due_1', title: 'Due now', body: 'Should fire', url: '/index.html',
     channels: ['app', 'sms'], audience: 'all', scheduledFor: new Date(Date.now() - 5000), status: 'scheduled'

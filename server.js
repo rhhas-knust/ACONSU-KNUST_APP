@@ -353,6 +353,11 @@ function contentChapterFilter(req) {
   return rolesLib.chapterFilter(req, { required: false });
 }
 
+const ACTIVATED_MEMBERSHIP_STAGES = new Set(['active', 'worker', 'executive']);
+function isActivatedMember(member) {
+  return ACTIVATED_MEMBERSHIP_STAGES.has(member && member.membershipStage);
+}
+
 // ---------- notifications helper ----------
 // Saves a notification for the in-app feed AND fires a real push to every
 // subscribed device. Used both by the manual admin route and automatic
@@ -393,6 +398,18 @@ async function notifyOfficeByEmail(officeKey, subject, html) {
     if (!recipients.length) return;
     mailer.sendMail({ to: recipients.join(','), subject, html }).catch(() => {});
   } catch (e) { /* non-critical */ }
+}
+
+async function scheduleOnboardingTasks(member) {
+  const now = new Date();
+  await repo.create('onboardingTasks', {
+    chapterId: member.chapterId, memberId: member.id, memberEmail: member.email, memberName: member.name,
+    sequence: 'day0_welcome', sendAt: now, status: 'scheduled'
+  }, 'onb');
+  await repo.create('onboardingTasks', {
+    chapterId: member.chapterId, memberId: member.id, memberEmail: member.email, memberName: member.name,
+    sequence: 'day3_cell_invite', sendAt: new Date(now.getTime() + (3 * 24 * 60 * 60 * 1000)), status: 'scheduled'
+  }, 'onb');
 }
 
 // ---------- member auth routes ----------
@@ -445,6 +462,7 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
       qrToken: crypto.randomBytes(16).toString('hex'),
       birthdayMonth: month, birthdayDay: day
     }, 'mem');
+    scheduleOnboardingTasks(member).catch(() => {});
     req.session.memberId = member.id;
     res.json({ success: true, member: { id: member.id, name: member.name, email: member.email, chapterId: member.chapterId } });
   } catch (e) {
@@ -2691,7 +2709,7 @@ app.get('/api/member/card', requireMember, async (req, res) => {
   try {
     const member = await repo.getById('members', req.session.memberId);
     if (!member) return res.status(404).json({ error: 'Account not found' });
-    if (member.membershipStage !== 'active') {
+    if (!isActivatedMember(member)) {
       return res.json({
         ready: false,
         membershipStage: member.membershipStage,
@@ -2831,7 +2849,7 @@ app.get('/api/shepherd/attendance-summary.pdf', requireViewRole('shepherding'), 
     const chapter = filter.chapterId ? await repo.getById('chapters', filter.chapterId) : null;
 
     const rows = members
-      .filter(m => m.membershipStage === 'active')
+      .filter(m => isActivatedMember(m))
       .map((m) => {
         const marked = records.filter(r => r.marks.some(mk => mk.memberId === m.id));
         const present = records.filter(r => r.marks.some(mk => mk.memberId === m.id && mk.status === 'present')).length;
@@ -2884,8 +2902,8 @@ app.get('/api/shepherd/members/report.pdf', requireViewRole('shepherding'), asyn
       rows: [...members].sort((a, b) => a.name.localeCompare(b.name)),
       summary: [
         { label: 'Total', value: members.length },
-        { label: 'Active members', value: members.filter(m => m.membershipStage === 'active').length },
-        { label: 'Visitors / in review', value: members.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length }
+        { label: 'Active members', value: members.filter(m => isActivatedMember(m)).length },
+        { label: 'Visitors / in review', value: members.filter(m => ['visitor', 'under_review', 'accepted', 'alumni'].includes(m.membershipStage)).length }
       ]
     });
   } catch (e) {
@@ -2927,7 +2945,7 @@ app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
 // -> ACTIVE (section 7). Every registration already starts as 'visitor';
 // everything from here on is Shepherding moving someone forward (or, in
 // principle, back — e.g. correcting a mistaken acceptance).
-const MEMBERSHIP_STAGES = ['visitor', 'under_review', 'accepted', 'active'];
+const MEMBERSHIP_STAGES = ['visitor', 'under_review', 'accepted', 'active', 'worker', 'executive', 'alumni'];
 
 app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) => {
   try {
@@ -2993,6 +3011,16 @@ app.patch('/api/shepherd/contact-messages/:id', requireShepherd, async (req, res
     res.json({ success: true, item });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this message' });
+  }
+});
+
+app.post('/api/shepherd/retention-alerts/run', requireShepherd, async (req, res) => {
+  try {
+    await checkRetentionAlerts();
+    const alerts = await repo.getAll('retentionAlerts', rolesLib.chapterFilter(req));
+    res.json({ success: true, open: alerts.filter((a) => a.status === 'open').length, total: alerts.length });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not run retention check' });
   }
 });
 
@@ -3823,9 +3851,9 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
         followUpNeeded: shepherdingRecords.filter(r => ['irregular', 'inactive'].includes(r.attendanceStatus)).length,
         // Membership pipeline (section 7): how many are still working their
         // way from visitor to active member.
-        awaitingReview: members.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length,
+        awaitingReview: members.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length,
         acceptedNotYetActive: members.filter(m => m.membershipStage === 'accepted').length,
-        activeMembers: members.filter(m => m.membershipStage === 'active').length
+        activeMembers: members.filter(m => isActivatedMember(m)).length
       },
       publicity: {
         notificationsSent: notifications.length,
@@ -3989,8 +4017,8 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
       const recent = [...chAttendance].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
       return {
         id: c.id, name: c.name, status: c.status,
-        memberCount: chMembers.filter(m => m.membershipStage === 'active').length,
-        visitorCount: chMembers.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length
+        memberCount: chMembers.filter(m => isActivatedMember(m)).length,
+        visitorCount: chMembers.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length
           + shepherdingRecords.filter(r => r.chapterId === c.id && !r.memberId).length,
         executiveCount: executives.filter(e => e.chapterId === c.id).length,
         upcomingEvents: events.filter(e => e.chapterId === c.id && new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
@@ -4045,8 +4073,8 @@ app.get('/api/national/reports/overview', rolesLib.requireNational, async (req, 
     ]);
     res.json(chapters.map((chapter) => ({
       chapterId: chapter.id, chapterName: chapter.name, status: chapter.status,
-      activeMembers: members.filter(m => m.chapterId === chapter.id && m.membershipStage === 'active').length,
-      visitors: members.filter(m => m.chapterId === chapter.id && ['visitor', 'under_review'].includes(m.membershipStage)).length,
+      activeMembers: members.filter(m => m.chapterId === chapter.id && isActivatedMember(m)).length,
+      visitors: members.filter(m => m.chapterId === chapter.id && ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length,
       events: events.filter(e => e.chapterId === chapter.id).length,
       servicesRecorded: attendance.filter(a => a.chapterId === chapter.id).length,
       openWelfareRequests: welfare.filter(w => w.chapterId === chapter.id && !['declined', 'fulfilled'].includes(w.status)).length
@@ -4086,8 +4114,8 @@ app.post('/api/national/reports/snapshot', rolesLib.requireNational, async (req,
       const chFinance = financeEntries.filter(f => f.chapterId === c.id);
       return {
         chapterId: c.id, chapterName: c.name, status: c.status,
-        activeMembers: chMembers.filter(m => m.membershipStage === 'active').length,
-        visitors: chMembers.filter(m => ['visitor', 'under_review'].includes(m.membershipStage)).length,
+        activeMembers: chMembers.filter(m => isActivatedMember(m)).length,
+        visitors: chMembers.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length,
         events: events.filter(e => e.chapterId === c.id).length,
         balance: financeTotals(chFinance).balance
       };
@@ -4282,6 +4310,180 @@ app.delete('/api/admin/members/:id', requireChapterAdmin, async (req, res) => {
   }
 });
 
+
+function rangeDays(beforeDays, afterDays = 0) {
+  const now = new Date();
+  const from = new Date(now);
+  from.setDate(now.getDate() - beforeDays);
+  const to = new Date(now);
+  to.setDate(now.getDate() + afterDays);
+  return { from, to, now };
+}
+
+function safeDate(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function inWindow(date, from, to) {
+  if (!date) return false;
+  return date >= from && date < to;
+}
+
+function trendSummary(current, previous) {
+  const delta = current - previous;
+  const direction = delta > 0 ? 'up' : (delta < 0 ? 'down' : 'flat');
+  const percent = previous === 0 ? (current > 0 ? 100 : 0) : Math.round((delta / previous) * 100);
+  return { current, previous, delta, percent, direction };
+}
+
+app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to view this dashboard.' });
+    const filter = { chapterId };
+    const [chapter, members, events, attendance, joinRequests, prayerRequests, contactMessages, shepherdingRecords, financeEntries, notifications] = await Promise.all([
+      repo.getById('chapters', chapterId),
+      repo.getAll('members', filter),
+      repo.getAll('events', filter),
+      repo.getAll('attendanceRecords', filter),
+      repo.getAll('joinRequests', filter),
+      repo.getAll('prayerRequests', filter),
+      repo.getAll('contactMessages', filter),
+      repo.getAll('shepherdingRecords', filter),
+      repo.getAll('financeEntries', filter),
+      repo.getAll('notifications', filter)
+    ]);
+
+    const now = new Date();
+    const currentRange = rangeDays(7);
+    const previousRange = { from: rangeDays(14).from, to: currentRange.from };
+    const next30 = rangeDays(0, 30);
+    const prev30 = rangeDays(30);
+
+    const activeMembers = members.filter(m => isActivatedMember(m));
+    const newActiveCurrent = activeMembers.filter(m => inWindow(safeDate(m.updatedAt || m.createdAt), currentRange.from, currentRange.to)).length;
+    const newActivePrevious = activeMembers.filter(m => inWindow(safeDate(m.updatedAt || m.createdAt), previousRange.from, previousRange.to)).length;
+
+    const pendingCareCount =
+      joinRequests.filter(r => r.status === 'new').length +
+      prayerRequests.filter(r => r.status === 'new').length +
+      contactMessages.filter(m => m.status !== 'replied').length +
+      shepherdingRecords.filter(r => ['irregular', 'inactive'].includes(r.attendanceStatus)).length;
+    const pendingCareCurrent =
+      joinRequests.filter(r => r.status === 'new' && inWindow(safeDate(r.createdAt), currentRange.from, currentRange.to)).length +
+      prayerRequests.filter(r => r.status === 'new' && inWindow(safeDate(r.createdAt), currentRange.from, currentRange.to)).length +
+      contactMessages.filter(m => m.status !== 'replied' && inWindow(safeDate(m.createdAt), currentRange.from, currentRange.to)).length;
+    const pendingCarePrevious =
+      joinRequests.filter(r => r.status === 'new' && inWindow(safeDate(r.createdAt), previousRange.from, previousRange.to)).length +
+      prayerRequests.filter(r => r.status === 'new' && inWindow(safeDate(r.createdAt), previousRange.from, previousRange.to)).length +
+      contactMessages.filter(m => m.status !== 'replied' && inWindow(safeDate(m.createdAt), previousRange.from, previousRange.to)).length;
+
+    const attendanceRows = [...attendance].sort((a, b) => (a.date === b.date ? 0 : (a.date < b.date ? 1 : -1)));
+    const turnout = (row) => row.marks.filter(m => m.status === 'present').length + (row.visitorCount || 0);
+    const recentFour = attendanceRows.slice(0, 4);
+    const previousFour = attendanceRows.slice(4, 8);
+    const avg = (rows) => rows.length ? Math.round(rows.reduce((sum, row) => sum + turnout(row), 0) / rows.length) : 0;
+    const avgAttendance = avg(recentFour);
+
+    const eventAt = (e) => safeDate(`${e.date || ''}T${e.time || '00:00'}:00`);
+    const upcoming30 = events.filter(e => inWindow(eventAt(e), next30.from, next30.to)).length;
+    const previous30Count = events.filter(e => inWindow(eventAt(e), prev30.from, prev30.to)).length;
+
+    const currentMonthKey = now.toISOString().slice(0, 7);
+    const thisMonthEntries = financeEntries.filter(e => (e.date || '').startsWith(currentMonthKey));
+    const monthNet = financeTotals(thisMonthEntries).balance;
+
+    const pendingCareDrilldown = [
+      ...joinRequests.filter(r => r.status === 'new').map(r => ({
+        id: r.id, type: 'join_request', title: r.name || 'Join request', detail: r.phone || r.email || '', panel: 'joinRequests', at: r.createdAt
+      })),
+      ...prayerRequests.filter(r => r.status === 'new').map(r => ({
+        id: r.id, type: 'prayer_request', title: r.title || r.name || 'Prayer request', detail: r.request || '', panel: 'prayerRequests', at: r.createdAt
+      })),
+      ...contactMessages.filter(m => m.status !== 'replied').map(m => ({
+        id: m.id, type: 'contact_message', title: m.name || m.email || 'Contact message', detail: m.message || '', panel: 'contactMessages', at: m.createdAt
+      }))
+    ]
+      .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+      .slice(0, 12);
+
+    const activity = [
+      ...joinRequests.map(r => ({
+        id: r.id, type: 'join_request', label: 'New join request', title: r.name || 'Visitor', detail: r.phone || r.email || '', panel: 'joinRequests', at: r.createdAt
+      })),
+      ...prayerRequests.map(r => ({
+        id: r.id, type: 'prayer_request', label: 'Prayer request submitted', title: r.name || 'Member', detail: r.request || '', panel: 'prayerRequests', at: r.createdAt
+      })),
+      ...contactMessages.map(m => ({
+        id: m.id, type: 'contact_message', label: 'Contact message received', title: m.name || m.email || 'Visitor', detail: m.message || '', panel: 'contactMessages', at: m.createdAt
+      })),
+      ...attendance.map(a => ({
+        id: a.id, type: 'attendance', label: 'Service attendance logged', title: `${a.serviceType || 'service'} — ${a.date || ''}`, detail: `${turnout(a)} present/visitors`, panel: 'overview', at: a.createdAt
+      })),
+      ...financeEntries.filter(e => e.approvalStatus === 'pending').map(e => ({
+        id: e.id, type: 'finance_pending', label: 'Finance approval pending', title: `${e.entryType} ${e.category}`, detail: `GHS ${Number(e.amount || 0).toFixed(2)}`, panel: 'reports', at: e.createdAt
+      })),
+      ...notifications.map(n => ({
+        id: n.id, type: 'announcement', label: 'Announcement posted', title: n.title || 'Notification', detail: n.body || '', panel: 'notifications', at: n.createdAt
+      }))
+    ]
+      .filter(item => !!safeDate(item.at))
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 25);
+
+    res.json({
+      chapter: chapter ? { id: chapter.id, name: chapter.name } : { id: chapterId, name: chapterId },
+      generatedAt: new Date().toISOString(),
+      refreshEverySeconds: 30,
+      monthNet,
+      kpis: [
+        {
+          key: 'active_members',
+          label: 'Active Members',
+          value: activeMembers.length,
+          trend: trendSummary(newActiveCurrent, newActivePrevious),
+          drilldownPanel: 'members',
+          drilldown: activeMembers
+            .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
+            .slice(0, 12)
+            .map(m => ({ id: m.id, name: m.name || 'Member', level: m.level || '', department: m.department || '', at: m.updatedAt || m.createdAt || null }))
+        },
+        {
+          key: 'pending_care',
+          label: 'Pending Care Cases',
+          value: pendingCareCount,
+          trend: trendSummary(pendingCareCurrent, pendingCarePrevious),
+          drilldownPanel: 'joinRequests',
+          drilldown: pendingCareDrilldown
+        },
+        {
+          key: 'attendance_avg',
+          label: 'Avg Attendance (Last 4 Services)',
+          value: avgAttendance,
+          trend: trendSummary(avgAttendance, avg(previousFour)),
+          drilldownPanel: 'overview',
+          drilldown: attendanceRows.slice(0, 8).map(row => ({ id: row.id, date: row.date, serviceType: row.serviceType, turnout: turnout(row) }))
+        },
+        {
+          key: 'upcoming_events',
+          label: 'Upcoming 30-Day Events',
+          value: upcoming30,
+          trend: trendSummary(upcoming30, previous30Count),
+          drilldownPanel: 'events',
+          drilldown: events
+            .filter(e => inWindow(eventAt(e), next30.from, next30.to))
+            .sort((a, b) => new Date(`${a.date || ''}T${a.time || '00:00'}:00`) - new Date(`${b.date || ''}T${b.time || '00:00'}:00`))
+            .slice(0, 12)
+            .map(e => ({ id: e.id, title: e.title || 'Event', date: e.date, time: e.time || '', location: e.location || '' }))
+        }
+      ],
+      activity
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load admin overview' });
+  }
+});
 
 app.get('/api/admin/join-requests', requireChapterAdmin, async (req, res) => {
   res.json(await repo.getAll('joinRequests', rolesLib.chapterFilter(req, { required: false })));
@@ -4933,6 +5135,105 @@ async function sendDueAnnouncements() {
   }
 }
 
+// ---------- automated onboarding messages (Phase 3) ----------
+async function processOnboardingTasks() {
+  try {
+    const due = await repo.getAll('onboardingTasks', { status: 'scheduled' });
+    for (const task of due.filter((t) => new Date(t.sendAt) <= new Date())) {
+      try {
+        const member = await repo.getById('members', task.memberId, { chapterId: task.chapterId });
+        if (!member) {
+          await repo.updateById('onboardingTasks', task.id, { ...task, status: 'skipped', result: 'Member no longer exists.' });
+          continue;
+        }
+        const chapter = task.chapterId ? await repo.getById('chapters', task.chapterId) : null;
+        const chapterName = chapter ? chapter.name : 'your chapter';
+        const payload = task.sequence === 'day0_welcome'
+          ? {
+            subject: `Welcome to ${chapterName} — ACONSU`,
+            html: `<p>Hi ${escapeHtmlForEmail(member.name || task.memberName || 'there')},</p><p>Welcome to ${escapeHtmlForEmail(chapterName)}. We're glad you're here.</p><p>You are now in our membership workflow as a visitor. A shepherd will follow up shortly.</p>`
+          }
+          : {
+            subject: `Find your small group at ${chapterName}`,
+            html: `<p>Hi ${escapeHtmlForEmail(member.name || task.memberName || 'there')},</p><p>Ready to plug in deeper? Join a small group/cell to grow with others this week.</p><p>Open the app and visit Groups to join one that fits you.</p>`
+          };
+        const sent = await mailer.sendMail({ to: member.email || task.memberEmail, subject: payload.subject, html: payload.html });
+        await repo.updateById('onboardingTasks', task.id, {
+          ...task,
+          status: sent.sent ? 'sent' : (sent.skipped ? 'skipped' : 'failed'),
+          result: sent.sent ? 'sent' : (sent.error || 'email not configured')
+        });
+      } catch (e) {
+        await repo.updateById('onboardingTasks', task.id, { ...task, status: 'failed', result: e.message || 'failed' });
+      }
+    }
+  } catch (e) {
+    console.error('Onboarding task processing failed:', e.message);
+  }
+}
+
+// ---------- inactivity retention alerts (Phase 3) ----------
+function daysBetween(today, isoDate) {
+  if (!isoDate) return 9999;
+  const d = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return 9999;
+  return Math.floor((today - d) / (24 * 60 * 60 * 1000));
+}
+async function checkRetentionAlerts() {
+  try {
+    const [members, records, alerts] = await Promise.all([
+      repo.getAll('members'),
+      repo.getAll('attendanceRecords'),
+      repo.getAll('retentionAlerts')
+    ]);
+    const latestByMember = new Map();
+    records.forEach((record) => {
+      const presentIds = record.marks.filter((m) => m.status === 'present' && m.memberId).map((m) => m.memberId);
+      presentIds.forEach((memberId) => {
+        const prev = latestByMember.get(memberId);
+        if (!prev || prev < record.date) latestByMember.set(memberId, record.date);
+      });
+    });
+    const now = new Date();
+    for (const member of members) {
+      if (!isActivatedMember(member) || member.membershipStage === 'alumni') continue;
+      const lastPresentDate = latestByMember.get(member.id) || '';
+      const daysAbsent = daysBetween(now, lastPresentDate);
+      const open = alerts.find((a) => a.memberId === member.id && a.status === 'open');
+      if (daysAbsent >= 30) {
+        if (!open) {
+          await repo.create('retentionAlerts', {
+            chapterId: member.chapterId,
+            memberId: member.id,
+            memberName: member.name,
+            daysAbsent,
+            lastPresentDate,
+            status: 'open',
+            alertType: 'inactivity_30d',
+            createdBy: 'system'
+          }, 'ral');
+          notifyOfficeByEmail(
+            'shepherdingEmail',
+            'Retention Alert — 30+ days inactive',
+            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please follow up from the Shepherding portal.</p>`
+          );
+          notifyOfficeByEmail(
+            'welfareEmail',
+            'Welfare Attention Needed — 30+ days inactive',
+            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please coordinate care support if needed.</p>`
+          );
+        } else if (open.daysAbsent !== daysAbsent) {
+          await repo.updateById('retentionAlerts', open.id, { ...open, daysAbsent, lastPresentDate });
+        }
+      } else if (open) {
+        await repo.updateById('retentionAlerts', open.id, { ...open, status: 'resolved', notes: open.notes || 'Auto-resolved after attendance resumed.' });
+      }
+    }
+  } catch (e) {
+    console.error('Retention alert check failed:', e.message);
+  }
+}
+
 // ---------- startup ----------
 connectDB()
   .then(() => {
@@ -4943,6 +5244,10 @@ connectDB()
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
     sendDueAnnouncements();
     setInterval(sendDueAnnouncements, 60 * 1000); // a minute's precision is plenty for announcements
+    processOnboardingTasks();
+    setInterval(processOnboardingTasks, 60 * 1000);
+    checkRetentionAlerts();
+    setInterval(checkRetentionAlerts, 60 * 60 * 1000);
   })
   .catch((err) => {
     console.error('Failed to start server:', err.message);

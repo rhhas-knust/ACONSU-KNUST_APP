@@ -737,9 +737,23 @@ async function renderMessages(el) {
 // REGISTERED -> VISITOR -> SHEPHERDING REVIEW -> ACCEPTED -> ASSIGNED
 // SHEPHERD -> ACTIVE. Every registration lands here first; this is the one
 // place that moves someone forward.
-const STAGE_LABELS = { visitor: 'Visitor', under_review: 'Under Review', accepted: 'Accepted', active: 'Active Member' };
-const NEXT_STAGE = { visitor: 'under_review', under_review: 'accepted' };
-const NEXT_ACTION_LABEL = { visitor: 'Begin Review', under_review: 'Accept as Member' };
+const STAGE_LABELS = {
+  visitor: 'Visitor',
+  under_review: 'Under Review',
+  accepted: 'Accepted',
+  active: 'Active Member',
+  worker: 'Worker',
+  executive: 'Executive',
+  alumni: 'Alumni'
+};
+const NEXT_STAGE = { visitor: 'under_review', under_review: 'accepted', active: 'worker', worker: 'executive', executive: 'alumni' };
+const NEXT_ACTION_LABEL = {
+  visitor: 'Begin Review',
+  under_review: 'Accept as Member',
+  active: 'Promote to Worker',
+  worker: 'Promote to Executive',
+  executive: 'Mark as Alumni'
+};
 
 async function moveStage(memberId, stage, extra) {
   try {
@@ -782,8 +796,9 @@ async function renderVisitors(el) {
   // Only ACONSU accounts go through this workflow — a manually-added visitor
   // record with no account isn't a "registration" to review yet.
   const withAccount = people.filter(p => p.source === 'member');
-  const pipeline = withAccount.filter(p => p.membershipStage !== 'active');
-  const active = withAccount.filter(p => p.membershipStage === 'active');
+  const pipeline = withAccount.filter(p => ['visitor', 'under_review', 'accepted'].includes(p.membershipStage));
+  const active = withAccount.filter(p => ['active', 'worker', 'executive'].includes(p.membershipStage));
+  const alumni = withAccount.filter(p => p.membershipStage === 'alumni');
 
   el.innerHTML = `
     <div class="panel-head">
@@ -830,20 +845,37 @@ async function renderVisitors(el) {
       <p class="hint">${active.length} member${active.length === 1 ? '' : 's'} with an assigned shepherd and a digital membership card.</p>
       <div class="table-wrap">
         <table class="portal-table">
-          <thead><tr><th></th><th>Name</th><th>Membership No.</th><th>Shepherd</th></tr></thead>
+          <thead><tr><th></th><th>Name</th><th>Stage</th><th>Membership No.</th><th>Shepherd</th><th></th></tr></thead>
           <tbody>
             ${active.slice(0, 20).map(p => `
               <tr>
                 <td>${avatar(p)}</td>
                 <td>${escapeHtml(p.name)}</td>
+                <td>${pill(STAGE_LABELS[p.membershipStage] || p.membershipStage)}</td>
                 <td class="tiny muted">${escapeHtml(p.membershipNumber || '—')}</td>
                 <td class="tiny muted">${escapeHtml(p.shepherdName || '—')}</td>
+                <td>${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}</td>
               </tr>
-            `).join('') || emptyRow(4, 'No active members yet.')}
+            `).join('') || emptyRow(6, 'No active members yet.')}
           </tbody>
         </table>
       </div>
       ${active.length > 20 ? `<p class="tiny muted" style="margin-top:10px;">Showing the first 20 — see the Members tab for everyone.</p>` : ''}
+    </div>
+
+    <div class="portal-card">
+      <h3>Alumni</h3>
+      <p class="hint">${alumni.length} member${alumni.length === 1 ? '' : 's'} transitioned to alumni stage.</p>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th>Name</th><th>Membership No.</th><th>Shepherd</th></tr></thead>
+          <tbody>
+            ${alumni.slice(0, 20).map(p => `
+              <tr><td>${escapeHtml(p.name)}</td><td class="tiny muted">${escapeHtml(p.membershipNumber || '—')}</td><td class="tiny muted">${escapeHtml(p.shepherdName || '—')}</td></tr>
+            `).join('') || emptyRow(3, 'No alumni transitions yet.')}
+          </tbody>
+        </table>
+      </div>
     </div>
   `;
 
@@ -857,9 +889,10 @@ async function renderVisitors(el) {
 
 // ---------- pastoral care: welfare referrals + milestones (sections 22, 33, 36) ----------
 async function renderCare(el) {
-  const [people, milestones] = await Promise.all([
+  const [people, milestones, retentionAlerts] = await Promise.all([
     fetchJSON('/api/shepherd/members'),
-    fetchJSON('/api/shepherd/milestones')
+    fetchJSON('/api/shepherd/milestones'),
+    fetchJSON('/api/shepherd/retention-alerts').catch(() => [])
   ]);
   const memberOptions = people.filter(p => p.source === 'member');
 
@@ -921,6 +954,24 @@ async function renderCare(el) {
         </table>
       </div>
     </div>
+    <div class="portal-card">
+      <h3>30-Day Inactivity Alerts</h3>
+      <p class="hint">System-generated alerts shared with Welfare for follow-up.</p>
+      <div class="table-wrap">
+        <table class="portal-table" style="min-width:0;">
+          <tbody>
+            ${retentionAlerts.slice(0, 12).map(a => `
+              <tr>
+                <td><strong>${escapeHtml(a.memberName)}</strong><br><small class="muted">${a.lastPresentDate ? `last present ${shortDate(a.lastPresentDate)}` : 'no attendance recorded yet'}</small></td>
+                <td class="num">${a.daysAbsent} day(s)</td>
+                <td>${pill(a.status, a.status === 'resolved' ? 'green' : a.status === 'contacted' ? 'amber' : 'red')}</td>
+                <td class="row-actions">${a.status !== 'resolved' ? `<button data-alert-contacted="${a.id}">Mark Contacted</button><button data-alert-resolved="${a.id}">Resolve</button>` : ''}</td>
+              </tr>
+            `).join('') || emptyRow(4, 'No open inactivity alerts.')}
+          </tbody>
+        </table>
+      </div>
+    </div>
   `;
 
   document.getElementById('referralForm').addEventListener('submit', async (e) => {
@@ -958,6 +1009,20 @@ async function renderCare(el) {
       setFormMsg('milestoneMsg', err.message || 'Could not log this milestone.', 'error');
     }
   });
+  el.querySelectorAll('[data-alert-contacted]').forEach(btn => btn.addEventListener('click', async () => {
+    await fetchJSON(`/api/shepherd/retention-alerts/${btn.dataset.alertContacted}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'contacted' })
+    });
+    showToast('Alert marked contacted.', 'success');
+    openPanel('care');
+  }));
+  el.querySelectorAll('[data-alert-resolved]').forEach(btn => btn.addEventListener('click', async () => {
+    await fetchJSON(`/api/shepherd/retention-alerts/${btn.dataset.alertResolved}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'resolved' })
+    });
+    showToast('Alert resolved.', 'success');
+    openPanel('care');
+  }));
 }
 
 initPortal({

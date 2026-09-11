@@ -211,7 +211,12 @@ async function renderMeetings(body) {
   try {
     const meetings = await fetchJSON(`/api/groups/${groupId}/meetings`);
     body.innerHTML = `
-      ${GROUP.isLeader ? `<button class="btn btn-primary btn-sm" id="logMeetingBtn" style="margin-bottom:16px;">+ Log a Meeting</button>` : ''}
+      ${GROUP.isLeader ? `
+        <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" id="quickAttendanceBtn">⚡ 3-Tap Attendance</button>
+          <button class="btn btn-outline btn-sm" id="logMeetingBtn">+ Log a Meeting</button>
+        </div>
+      ` : ''}
       ${meetings.map(m => `
         <div class="meeting-card">
           <strong>${shortDateSafe(m.date)}</strong>${m.topic ? ` — ${escapeHtml(m.topic)}` : ''}
@@ -222,9 +227,67 @@ async function renderMeetings(body) {
     `;
     const btn = document.getElementById('logMeetingBtn');
     if (btn) btn.addEventListener('click', () => openLogMeetingForm(body));
+    const quick = document.getElementById('quickAttendanceBtn');
+    if (quick) quick.addEventListener('click', () => openQuickAttendanceForm(body));
   } catch (e) {
     body.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load meetings.')}</p>`;
   }
+}
+
+function openQuickAttendanceForm(body) {
+  const backdrop = document.createElement('div');
+  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:300; display:flex; align-items:flex-end; justify-content:center; padding:0;';
+  backdrop.innerHTML = `
+    <form class="form-card" id="quickAttendanceForm" style="max-width:700px; width:100%; border-radius:16px 16px 0 0; max-height:85vh; overflow-y:auto; margin:0;">
+      <h3>3-Tap Attendance</h3>
+      <p class="hint">1) Set date 2) Tap attendees 3) Save.</p>
+      <div class="field"><label>Date</label><input type="date" id="qaDate" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field">
+        <label>Who attended?</label>
+        <div style="display:grid; gap:8px; grid-template-columns:repeat(auto-fill,minmax(140px,1fr));">
+          ${GROUP.members.map(m => `<button type="button" class="btn btn-outline btn-sm qa-person" data-member-id="${m.id}">${escapeHtml(m.name)}</button>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save Attendance</button>
+        <button type="button" class="btn btn-outline" id="qaCancel">Cancel</button>
+      </div>
+      <div class="form-msg" id="qaMsg"></div>
+    </form>
+  `;
+  document.body.appendChild(backdrop);
+  const chosen = new Set();
+  backdrop.querySelectorAll('.qa-person').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.memberId;
+      if (chosen.has(id)) {
+        chosen.delete(id);
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-outline');
+      } else {
+        chosen.add(id);
+        btn.classList.remove('btn-outline');
+        btn.classList.add('btn-primary');
+      }
+    });
+  });
+  document.getElementById('qaCancel').addEventListener('click', () => backdrop.remove());
+  document.getElementById('quickAttendanceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await fetchJSON(`/api/groups/${groupId}/meetings/quick`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: document.getElementById('qaDate').value, attendeeMemberIds: [...chosen] })
+      });
+      backdrop.remove();
+      showToast('Attendance saved.', 'success');
+      renderMeetings(body);
+    } catch (err) {
+      document.getElementById('qaMsg').textContent = err.message || 'Could not save attendance.';
+      document.getElementById('qaMsg').className = 'form-msg error';
+    }
+  });
 }
 
 function openLogMeetingForm(body) {

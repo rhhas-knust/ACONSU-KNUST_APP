@@ -637,20 +637,27 @@ async function renderReports(el) {
 // that claim becomes (or doesn't become) a real ledger entry. Nothing here
 // is a payment gateway — see the note on GivingIntent in lib/models.js.
 async function renderGivingQueue(el) {
-  const items = await fetchJSON('/api/finance/giving-queue');
+  const [items, batches] = await Promise.all([
+    fetchJSON('/api/finance/giving-queue'),
+    fetchJSON('/api/finance/reconciliation-batches').catch(() => [])
+  ]);
   el.innerHTML = `
     <div class="panel-head">
       <div>
         <h2>Giving Claims (${items.length})</h2>
-        <p class="sub">Members log what they sent via MoMo/bank; confirming turns it into a real ledger entry.</p>
+        <p class="sub">Members log what they sent via MoMo/bank; reconcile in batches, then approve with dual-control.</p>
+      </div>
+      <div class="panel-actions">
+        <button class="btn btn-primary btn-sm" id="reconcileBatchBtn">Reconcile Selected as Batch</button>
       </div>
     </div>
     <div class="table-wrap">
       <table class="portal-table">
-        <thead><tr><th>Member</th><th>Purpose</th><th class="num">Amount</th><th>Method</th><th>Reference</th><th></th></tr></thead>
+        <thead><tr><th></th><th>Member</th><th>Purpose</th><th class="num">Amount</th><th>Method</th><th>Reference</th><th></th></tr></thead>
         <tbody>
           ${items.map(g => `
             <tr>
+              <td><input type="checkbox" data-batch-id="${g.id}" style="width:auto;"></td>
               <td>${escapeHtml(g.memberName)}</td>
               <td>${incomeLabel(g.purpose)}</td>
               <td class="num">${money(g.amount)}</td>
@@ -661,11 +668,44 @@ async function renderGivingQueue(el) {
                 <button data-reject="${g.id}" class="danger">Reject</button>
               </td>
             </tr>
-          `).join('') || emptyRow(6, 'No pending giving claims.')}
+          `).join('') || emptyRow(7, 'No pending giving claims.')}
         </tbody>
       </table>
     </div>
+    <div class="portal-card" style="margin-top:14px;">
+      <h3>Recent Reconciliation Batches</h3>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th>Batch</th><th class="num">Claims</th><th class="num">Amount</th><th>Status</th><th></th></tr></thead>
+          <tbody>
+           ${(batches || []).slice(0, 12).map(b => `
+             <tr>
+               <td class="tiny muted">${escapeHtml(b.id)}</td>
+               <td class="num">${(b.intentIds || []).length}</td>
+               <td class="num">${money(b.totalAmount || 0)}</td>
+               <td>${pill((b.status || '').replace('_', ' '), b.status === 'approved' ? 'green' : b.status === 'rejected' ? 'red' : 'amber')}</td>
+               <td class="row-actions">
+                 ${b.status === 'pending_approval' ? `<button data-batch-approve="${b.id}">Approve</button><button class="danger" data-batch-reject="${b.id}">Reject</button>` : ''}
+               </td>
+             </tr>
+           `).join('') || emptyRow(5, 'No batches yet.')}
+          </tbody>
+        </table>
+      </div>
+    </div>
   `;
+  const batchBtn = document.getElementById('reconcileBatchBtn');
+  if (batchBtn) batchBtn.addEventListener('click', async () => {
+    const intentIds = [...el.querySelectorAll('[data-batch-id]:checked')].map(c => c.dataset.batchId);
+    if (!intentIds.length) return showToast('Select at least one claim.', 'error');
+    try {
+      await fetchJSON('/api/finance/giving/reconcile-batch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intentIds })
+      });
+      showToast('Batch reconciled and sent for approval.', 'success');
+      openPanel('giving');
+    } catch (err) { showToast(err.message || 'Could not reconcile this batch.', 'error'); }
+  });
   el.querySelectorAll('[data-confirm]').forEach(btn => btn.addEventListener('click', async () => {
     try {
       await fetchJSON(`/api/finance/giving/${btn.dataset.confirm}/confirm`, { method: 'PATCH' });
@@ -682,6 +722,25 @@ async function renderGivingQueue(el) {
       showToast('Claim rejected.', 'success');
       openPanel('giving');
     } catch (err) { showToast(err.message || 'Could not reject this.', 'error'); }
+  }));
+  el.querySelectorAll('[data-batch-approve]').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+      await fetchJSON(`/api/finance/reconciliation-batches/${btn.dataset.batchApprove}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'approve' })
+      });
+      showToast('Batch approved.', 'success');
+      openPanel('giving');
+    } catch (err) { showToast(err.message || 'Could not approve this batch.', 'error'); }
+  }));
+  el.querySelectorAll('[data-batch-reject]').forEach(btn => btn.addEventListener('click', async () => {
+    const notes = prompt('Optional note for rejection:') || '';
+    try {
+      await fetchJSON(`/api/finance/reconciliation-batches/${btn.dataset.batchReject}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reject', notes })
+      });
+      showToast('Batch rejected.', 'success');
+      openPanel('giving');
+    } catch (err) { showToast(err.message || 'Could not reject this batch.', 'error'); }
   }));
 }
 

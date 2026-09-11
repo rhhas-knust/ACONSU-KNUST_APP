@@ -158,6 +158,18 @@ const fakeModels = {
     chapterId: '', memberId: '', memberName: '', purpose: 'other', method: 'momo', reference: '',
     status: 'pending', matchedFinanceEntryId: '', reviewNotes: '', reviewedBy: ''
   }),
+  RetentionAlert: makeModel({
+    chapterId: '', memberId: '', memberName: '', daysAbsent: 0, lastPresentDate: '',
+    status: 'open', alertType: 'inactivity_30d', notes: '', createdBy: 'system', handledBy: ''
+  }),
+  OnboardingTask: makeModel({
+    chapterId: '', memberId: '', memberEmail: '', memberName: '', sequence: 'day0_welcome',
+    sendAt: null, status: 'scheduled', result: ''
+  }),
+  ReconciliationBatch: makeModel({
+    chapterId: '', intentIds: [], financeEntryIds: [], totalAmount: 0, status: 'pending_approval',
+    createdBy: '', approvedBy: '', approvedAt: null, notes: ''
+  }),
   Member: makeModel({
     chapterId: '', phone: '', level: '', programme: '', hostel: '', academicHistory: [], department: '',
     profileImageFileId: '', membershipStage: 'visitor', membershipNumber: '', qrToken: '',
