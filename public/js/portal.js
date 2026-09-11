@@ -204,12 +204,15 @@ async function initPortal(config) {
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
+// Fix for public/js/portal.js - Update the login form submission handler
+// Replace lines 207-231 with this:
+
   document.getElementById('portalLoginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('portalLoginBtn');
     btn.disabled = true;
     try {
-      await fetchJSON('/api/portal/login', {
+      const loginResponse = await fetchJSON('/api/portal/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -217,19 +220,32 @@ async function initPortal(config) {
           password: document.getElementById('portalPassword').value
         })
       });
+      
+      // Verify login was successful
+      if (!loginResponse || !loginResponse.success) {
+        setFormMsg('portalLoginMsg', 'Login failed. Please try again.', 'error');
+        btn.disabled = false;
+        return;
+      }
+
+      // Wait a brief moment for the session cookie to be set
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Now refresh the session to verify access
       const allowed = await refreshPortalSession();
       if (!allowed) {
         setFormMsg('portalLoginMsg', `That account is not part of the ${PORTAL.label}. Check with the admin about which portal it opens.`, 'error');
+        btn.disabled = false;
         return;
       }
+      
+      // Proceed to show the portal
       showPortalOrLogin();
     } catch (err) {
       setFormMsg('portalLoginMsg', err.message || 'Invalid username or password.', 'error');
-    } finally {
       btn.disabled = false;
     }
   });
-
   document.getElementById('portalLogoutBtn').addEventListener('click', async () => {
     await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
     PORTAL.user = null;
