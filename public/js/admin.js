@@ -46,7 +46,11 @@ async function checkAuth() {
   try {
     const me = await fetchJSON('/api/portal/me');
     const role = me.staff && me.staff.role;
-    if (me.isNational || role === 'coordinator' || role === 'chapterAdmin' || role === 'executive') {
+    // Executives are deliberately not admitted here: this dashboard's panels
+    // are all gated on isChapterAdminOrAbove, which excludes them, so they
+    // used to land in a 22-panel shell where almost everything 401'd. Their
+    // own portal is /executive.html.
+    if (me.isNational || role === 'coordinator' || role === 'chapterAdmin') {
       ADMIN_SCOPE = {
         isNational: !!me.isNational,
         chapterId: (me.staff && me.staff.chapterId) || '',
@@ -590,12 +594,13 @@ const PORTAL_ROLES = [
   { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter — dashboard, chapters, announcements.', href: '/national.html' },
   { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority — oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
   { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — chapter-scoped dashboard.', href: '/chapter.html' },
-  { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/executive.html' },
+  // Executive is deliberately absent: an executive is a member the Chapter
+  // Coordinator promotes, either by approving their application or from the
+  // Coordinator's own Leadership Accounts panel, which asks which member.
   { value: 'finance', label: 'Finance', blurb: 'Budgets, ledger, financial reports.', href: '/finance.html' },
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance, member care, contact messages.', href: '/shepherding.html' },
   { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' },
-  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' },
-  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department.', href: '/department.html' }
+  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' }
 ];
 // Only a National Coordinator may hand out these two — see /api/admin/staff.
 const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];
@@ -1505,7 +1510,7 @@ async function renderExecutives() {
             <td>${escapeHtml(a.scope || '—')}</td>
             <td><span class="status-pill ${a.executiveStatus === 'verified' ? 'done' : ''}">${escapeHtml(a.executiveStatus || 'pending')}</span></td>
             <td class="row-actions">${a.executiveStatus === 'pending' ? `
-              <button data-verify-exec="${a.memberId}">Verify</button>
+              <button data-verify-exec="${a.memberId}" data-exec-name="${escapeHtml(a.name || '')}">Verify</button>
               <button class="danger" data-reject-exec="${a.memberId}">Reject</button>` : '—'}</td>
           </tr>`).join('') || '<tr><td colspan="7">No executive applications yet.</td></tr>'}
         </tbody>
@@ -1532,15 +1537,67 @@ async function renderExecutives() {
     </div>
   `;
 
+  // Approving an executive is one action that promotes the member, issues
+  // their portal login for this academic year and creates their public
+  // roster card — so it asks for the sign-in details rather than leaving
+  // someone "verified" with no way in.
+  function approveExecutiveForm(memberIdToApprove, name) {
+    showModal(`
+      <h3>Approve ${escapeHtml(name || 'this executive')}</h3>
+      <p class="hint">This promotes them, creates their public roster card and issues their portal login for the current academic year. Their term ends with the academic year and can be renewed.</p>
+      <form id="approveExecForm">
+        <div class="field"><label>Username</label>
+          <input type="text" id="apUsername" autocomplete="off" required>
+          <small class="hint">They sign in with this. Lowercase, no spaces.</small>
+        </div>
+        <div class="field"><label>Password</label>
+          <input type="password" id="apPassword" minlength="8" autocomplete="new-password" required>
+          <small class="hint">At least 8 characters. Share it with them directly.</small>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:22px;">
+          <button type="submit" class="btn btn-primary">Approve &amp; Issue Login</button>
+          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+        </div>
+        <div class="form-msg" id="approveExecMsg"></div>
+      </form>
+    `);
+    const cancel = document.getElementById('cancelModalBtn');
+    if (cancel) cancel.addEventListener('click', closeModal);
+    document.getElementById('approveExecForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await fetchJSON(`/api/admin/executive-applications/${memberIdToApprove}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            decision: 'approve',
+            username: document.getElementById('apUsername').value,
+            password: document.getElementById('apPassword').value
+          })
+        });
+        closeModal();
+        showToast('Executive approved — login issued and roster card created.', 'success');
+        renderExecutives();
+      } catch (err) {
+        setFormMsg('approveExecMsg', err.message || 'Could not approve this executive.', 'error');
+      }
+    });
+  }
+
   el.querySelectorAll('[data-verify-exec], [data-reject-exec]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const decision = btn.dataset.verifyExec ? 'approve' : 'reject';
-      if (decision === 'reject' && !confirm('Reject this executive application?')) return;
-      await fetchJSON(`/api/admin/executive-applications/${btn.dataset.verifyExec || btn.dataset.rejectExec}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision })
-      });
-      showToast(decision === 'approve' ? 'Executive verified.' : 'Application rejected.', 'success');
-      renderExecutives();
+      if (decision === 'reject') {
+        if (!confirm('Reject this executive application?')) return;
+        await fetchJSON(`/api/admin/executive-applications/${btn.dataset.rejectExec}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision })
+        });
+        showToast('Application rejected.', 'success');
+        return renderExecutives();
+      }
+      // Approving promotes the member, issues their portal login for this
+      // academic year and creates their public roster card in one action —
+      // so it needs the sign-in details up front.
+      approveExecutiveForm(btn.dataset.verifyExec, btn.dataset.execName || '');
     });
   });
 

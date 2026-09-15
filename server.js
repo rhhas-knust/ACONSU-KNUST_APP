@@ -155,11 +155,32 @@ app.get('/api/shepherd/check', (req, res) => {
 // data this session may touch" — these helpers only answer "which role".
 const PORTAL_ROLES = [
   'nationalCoordinator', 'coordinator', 'chapterAdmin', 'executive',
-  'finance', 'shepherding', 'publicity', 'welfare', 'departmentLeader'
+  'finance', 'shepherding', 'publicity', 'welfare'
 ];
 
+// An executive serves one academic year (section 9). The term deadline rides
+// in the session alongside the rest of the staff record, and is compared
+// against the clock here — the one place every permission check and every
+// require* middleware already funnels through. That means a term lapses
+// mid-session the moment the date passes, and a route written years from now
+// inherits the rule for free. Deliberately not a nightly sweep that flips
+// `active`: a sweep is only correct if it ran, and derived state can't drift.
+function isTermExpired(staff) {
+  return !!(staff && staff.termEndsAt && new Date(staff.termEndsAt) <= new Date());
+}
+
 function currentStaff(req) {
-  return (req.session && req.session.staff) || null;
+  const staff = (req.session && req.session.staff) || null;
+  return isTermExpired(staff) ? null : staff;
+}
+
+// The academic year turns over on 1 August, matching
+// currentAcademicYearLabel() — so every executive in a chapter serves the
+// same year and hands over together, however far into it they were elected.
+function academicYearEndsAt() {
+  const now = new Date();
+  const year = now.getFullYear();
+  return new Date(Date.UTC(now.getMonth() + 1 >= 8 ? year + 1 : year, 7, 1));
 }
 
 // Who to stamp on a record they just created. Records outlive sessions, so this
@@ -286,10 +307,19 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     if (!user || !user.active) return res.status(401).json({ error: 'Invalid credentials' });
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+    // A lapsed term is not a wrong password — say so, so the outgoing
+    // executive knows to ask their Coordinator rather than retyping.
+    if (isTermExpired(user)) {
+      return res.status(403).json({
+        error: `Your ${user.termYear || 'executive'} term of office has ended. Your Chapter Coordinator can renew it or hand the office over.`
+      });
+    }
 
     req.session.staff = {
       id: user.id, username: user.username, name: user.name || user.username,
-      role: user.role, chapterId: user.chapterId || ''
+      role: user.role, chapterId: user.chapterId || '',
+      memberId: user.memberId || '',
+      termYear: user.termYear || '', termEndsAt: user.termEndsAt || null
     };
     models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
     res.json({ success: true, staff: req.session.staff });
@@ -2367,15 +2397,66 @@ app.get('/api/admin/executive-applications', requireChapterAdmin, async (req, re
   }
 });
 
-app.patch('/api/admin/executive-applications/:memberId', requireChapterAdmin, async (req, res) => {
+// Vetting an executive is the Chapter Coordinator's call (the "Chapter
+// approvals" row of the responsibility matrix), and approving is one action
+// that provisions the whole person: the member is promoted, their portal
+// login is issued for this academic year, and their public roster card is
+// created — all linked by memberId. Before this, approval flipped a flag and
+// stopped, leaving "verified" executives with no way in and roster cards
+// belonging to nobody.
+app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinator, async (req, res) => {
   try {
-    const { decision, scope } = req.body || {};
+    const { decision, scope, username, password } = req.body || {};
     const filter = rolesLib.chapterFilter(req, { required: false });
     const member = await repo.getById('members', req.params.memberId, filter);
     if (!member) return res.status(404).json({ error: 'Member not found' });
     if (!['approve', 'reject'].includes(decision)) {
       return res.status(400).json({ error: 'Decision must be approve or reject' });
     }
+
+    let account = null;
+    let issuedLogin = false;
+    if (decision === 'approve') {
+      // Renew in place if this member already holds the office, so a
+      // re-elected executive keeps their account, card and history rather
+      // than collecting a second set.
+      account = await models.StaffUser.findOne({ memberId: member.id, role: 'executive' }).lean();
+      if (account) {
+        account = await repo.patchById('staffUsers', account.id, {
+          active: true, termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
+        });
+      } else {
+        const clean = String(username || '').toLowerCase().trim();
+        if (!clean || !password) {
+          return res.status(400).json({ error: 'A username and password are required to issue this executive their portal login.' });
+        }
+        if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        if (await models.StaffUser.findOne({ username: clean })) {
+          return res.status(400).json({ error: 'That username is already taken' });
+        }
+        account = await repo.create('staffUsers', {
+          username: clean, name: member.name || clean, role: 'executive',
+          chapterId: member.chapterId, memberId: member.id,
+          passwordHash: await bcrypt.hash(String(password), 10), active: true,
+          termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
+        }, 'staff');
+        issuedLogin = true;
+      }
+
+      // The public roster card, created here rather than waiting for the
+      // executive to discover the profile form.
+      const existingCard = await models.Executive.findOne({ staffId: account.id, chapterId: member.chapterId }).lean();
+      if (!existingCard) {
+        await repo.create('executives', {
+          chapterId: member.chapterId, staffId: account.id,
+          name: member.name || '', role: member.executiveRole || '',
+          department: member.executiveDepartment || '',
+          bio: '', contact: { phone: member.phone || '', email: member.email || '' },
+          imageFileId: member.profileImageFileId || '', history: []
+        }, 'exec');
+      }
+    }
+
     const nextStatus = decision === 'approve' ? 'verified' : 'rejected';
     const updated = await repo.updateById('members', member.id, {
       ...member,
@@ -2392,7 +2473,9 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterAdmin, as
       isExecutive: !!updated.isExecutive,
       scope: updated.executiveScope,
       role: updated.executiveRole,
-      department: updated.executiveDepartment
+      department: updated.executiveDepartment,
+      account: account ? { id: account.id, username: account.username, termYear: account.termYear, termEndsAt: account.termEndsAt } : null,
+      issuedLogin
     }});
   } catch (e) {
     res.status(500).json({ error: 'Could not update executive application' });
@@ -4187,8 +4270,8 @@ app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNation
 // chapter, plus a per-chapter breakdown for comparison (section 3, 38).
 // Offices a chapter needs staffed to run day to day (the "Staff chapter
 // offices" row in GOVERNANCE_TIER_REVIEW.md's responsibility matrix) — a
-// deliberately shorter list than every appointable role: executive and
-// departmentLeader are per-person/per-department, not one office to fill.
+// deliberately shorter list than every appointable role: executive is a
+// whole elected body, per-person, not one office to fill.
 const READINESS_OFFICE_ROLES = ['finance', 'shepherding', 'publicity', 'welfare'];
 
 app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) => {
@@ -4396,11 +4479,28 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   if (NATIONAL_ONLY_ROLES.includes(role) && !scope.isNational) {
     return res.status(403).json({ error: 'Only the National Coordinator can assign this role.' });
   }
+  // Promotion to the executive body is the Chapter Coordinator's call — a
+  // Chapter Admin runs the chapter's operations, but doesn't elect its
+  // officers.
+  if (role === 'executive' && !isChapterCoordinatorOrAbove(req)) {
+    return res.status(403).json({ error: 'Only the Chapter Coordinator can promote a member to the executive body.' });
+  }
   // A chapter-scoped admin can only ever create accounts for their own
   // chapter, regardless of what the request body claims.
   const chapterId = role === 'nationalCoordinator' ? '' : await resolveChapterIdForWrite(req, req.body.chapterId);
   if (role !== 'nationalCoordinator' && !chapterId) {
     return res.status(400).json({ error: 'A chapter is required for this role — this deployment now has more than one, please specify which.' });
+  }
+  // An executive is a promoted member, vetted by the Coordinator — so the
+  // office is always attached to a real member record, never a free-floating
+  // login. That link is what makes the one-year term and their own
+  // appointment history mean anything.
+  let memberId = '';
+  if (role === 'executive') {
+    memberId = String(req.body.memberId || '').trim();
+    if (!memberId) return res.status(400).json({ error: 'Choose the member being promoted — an executive account belongs to a member.' });
+    const member = await repo.getById('members', memberId, chapterId ? { chapterId } : undefined);
+    if (!member) return res.status(400).json({ error: 'That member is not in this chapter.' });
   }
   try {
     if (chapterId) {
@@ -4411,8 +4511,9 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     const existing = await models.StaffUser.findOne({ username: clean });
     if (existing) return res.status(400).json({ error: 'That username is already taken' });
     const user = await repo.create('staffUsers', {
-      username: clean, name: name || clean, role, chapterId,
-      passwordHash: await bcrypt.hash(password, 10), active: true
+      username: clean, name: name || clean, role, chapterId, memberId,
+      passwordHash: await bcrypt.hash(password, 10), active: true,
+      ...(role === 'executive' ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
     }, 'staff');
     const { passwordHash, ...safe } = user;
     res.json({ success: true, item: safe });
@@ -4435,12 +4536,16 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
     if (!scope.isNational && (NATIONAL_ONLY_ROLES.includes(existing.role) || (role && NATIONAL_ONLY_ROLES.includes(role)))) {
       return res.status(403).json({ error: 'Only the National Coordinator can change this role.' });
     }
+    // Renewing an executive for the new academic year — re-election keeps the
+    // same account, card and history rather than starting a person over.
+    const renewTerm = req.body.renewTerm === true && (role || existing.role) === 'executive';
     const updated = await repo.updateById('staffUsers', req.params.id, {
       ...existing,
       name: name !== undefined ? name : existing.name,
       role: role || existing.role,
       active: active !== undefined ? !!active : existing.active,
-      passwordHash: password ? await bcrypt.hash(password, 10) : existing.passwordHash
+      passwordHash: password ? await bcrypt.hash(password, 10) : existing.passwordHash,
+      ...(renewTerm ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
     });
     const { passwordHash, ...safe } = updated;
     res.json({ success: true, item: safe });

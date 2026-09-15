@@ -69,14 +69,17 @@ const { fakeModels } = require('./harness.js');
     r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123' });
     check(`create ${role} account`, r.status === 200, r.data);
   }
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.bible', name: 'Bible Study Exec', role: 'executive', password: 'password123' });
-  check('create executive account', r.status === 200, r.data);
+  // An executive is a promoted member, so the office can't be created out of
+  // thin air — the promotion itself is exercised further down, once members
+  // exist (see "executive portal + event workflow").
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nomember', name: 'No Member', role: 'executive', password: 'password123' });
+  check('an executive account cannot be created without a member to promote', r.status === 400, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.ama', name: 'dupe', role: 'finance', password: 'password123' });
   check('duplicate username rejected', r.status === 400, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'weak', name: 'weak', role: 'finance', password: 'short' });
   check('short password rejected', r.status === 400, r.data);
 
-  for (const [jar, user] of Object.entries({ fin: 'fin.ama', shep: 'shep.kojo', pub: 'pub.esi', coord: 'coord.yaw', bibleExec: 'exec.bible' })) {
+  for (const [jar, user] of Object.entries({ fin: 'fin.ama', shep: 'shep.kojo', pub: 'pub.esi', coord: 'coord.yaw' })) {
     r = await call(jar, 'POST', '/api/portal/login', { username: user, password: 'password123' });
     check(`${user} signs in`, r.status === 200, r.data);
   }
@@ -84,9 +87,6 @@ const { fakeModels } = require('./harness.js');
   check('wrong password rejected', r.status === 401, r.data);
 
   console.log('\n== national coordinator ==');
-  r = await call('bibleExec', 'POST', '/api/admin/bible-studies', { topic: 'Faith in Action', date: '2026-02-01', scriptureReference: 'James 2:14-26', studyMaterial: 'Test study' });
-  check('executive can manage Bible studies', r.status === 200 && r.data.item.topic === 'Faith in Action', r.data);
-
   r = await call('admin', 'GET', '/api/admin/image-placements');
   check('homepage header placement is available to the media library', r.status === 200 && r.data.placements.some(p => p.value === 'home-header'), r.data);
 
@@ -455,8 +455,23 @@ const { fakeModels } = require('./harness.js');
   check('finance cannot view form submissions', r.status === 401, r.data);
 
   console.log('\n== executive portal + event workflow (section 9) ==');
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123' });
-  check('executive account created', r.status === 200, r.data);
+  // Registration needs a photo, so this goes through multipart like the real
+  // form does. An executive is a promoted member, so one is registered here
+  // purely to be promoted.
+  const execRegForm = new FormData();
+  execRegForm.append('profileImage', new Blob([Buffer.from('fake-photo-bytes')], { type: 'image/png' }), 'exec.png');
+  execRegForm.append('name', 'Ama Exec');
+  execRegForm.append('email', 'exec.ama@test.com');
+  execRegForm.append('password', 'secret123');
+  execRegForm.append('chapterId', chapterId);
+  const execRegRes = await fetch(BASE + '/api/auth/register', { method: 'POST', body: execRegForm });
+  const execRegData = await execRegRes.json();
+  check('a member registers, ready to be promoted to executive', execRegRes.status === 200, execRegData);
+  const amaMemberId = execRegData.member.id;
+
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123', memberId: amaMemberId });
+  check('executive account created by promoting that member', r.status === 200 && r.data.item.memberId === amaMemberId, r.data);
+  check('the promoted executive is given a one-year term of office', !!r.data.item.termEndsAt && !!r.data.item.termYear, r.data.item);
   r = await call('exec', 'POST', '/api/portal/login', { username: 'exec.ama', password: 'password123' });
   check('executive signs in', r.status === 200, r.data);
 
@@ -485,6 +500,9 @@ const { fakeModels } = require('./harness.js');
   const execData = await execRes.json();
   check('executive saves their own profile', execRes.status === 200 && execData.item.role === 'Financial Secretary', execData);
 
+  r = await call('exec', 'POST', '/api/admin/bible-studies', { topic: 'Faith in Action', date: '2026-02-01', scriptureReference: 'James 2:14-26', studyMaterial: 'Test study' });
+  check('executive can manage Bible studies', r.status === 200 && r.data.item.topic === 'Faith in Action', r.data);
+
   r = await call('member', 'POST', '/api/member/executive-interest', {
     role: 'Treasurer', department: 'finance', scope: 'chapter'
   });
@@ -492,7 +510,42 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', '/api/admin/executive-applications');
   check('executive applications are visible to admin', r.status === 200 && Array.isArray(r.data) && r.data.some(a => a.id === memberId), r.data);
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, { decision: 'approve', scope: 'chapter' });
+  check('approving without a login to issue is refused, rather than half-provisioning', r.status === 400, r.data);
+  r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, {
+    decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password123'
+  });
   check('chapter executive application is approved', r.status === 200 && r.data.item.executiveStatus === 'verified', r.data);
+  check('approval issues the portal login in the same action', r.data.item.issuedLogin === true && !!r.data.item.account.termEndsAt, r.data.item);
+
+  // The whole point of provisioning in one action: the approved executive can
+  // sign in and already has a public roster card, with nothing done by hand.
+  r = await call('newExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('the newly approved executive can sign straight in', r.status === 200, r.data);
+  r = await call('newExec', 'GET', '/api/executive/me');
+  check('their public roster card already exists', r.status === 200 && r.data.item && r.data.item.staffId, r.data);
+
+  // Term of office. The deadline is compared against the live clock on every
+  // check, so a term that runs out mid-session ends that session's authority
+  // there and then — no sweep job has to have run. Proved here by signing in
+  // with a deadline a second away and letting it pass.
+  const lapsed = fakeModels.StaffUser._docs.find(s => s.username === 'exec.kwabena');
+  lapsed.termEndsAt = new Date(Date.now() + 1200);
+  r = await call('expiring', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('an executive signs in while their term still has time to run', r.status === 200, r.data);
+  r = await call('expiring', 'GET', '/api/executive/me');
+  check('and works normally right up to the deadline', r.status === 200, r.data);
+  await new Promise(res => setTimeout(res, 1400));
+  r = await call('expiring', 'GET', '/api/executive/me');
+  check('the moment the term runs out, that live session loses its authority', r.status === 401, r.data);
+
+  lapsed.termEndsAt = new Date(Date.now() - 86400000);
+  r = await call('lapsedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('a lapsed executive is refused at login, and told why', r.status === 403 && /term of office has ended/.test(r.data.error || ''), r.data);
+
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { renewTerm: true });
+  check('the coordinator renews the term for the new year', r.status === 200 && new Date(r.data.item.termEndsAt) > new Date(), r.data);
+  r = await call('renewedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('the renewed executive signs in again, same account and card', r.status === 200, r.data);
 
   r = await call('exec', 'POST', '/api/executive/events', { title: 'Campus Outreach', date: '2026-10-10' });
   check('executive submits an event', r.status === 200 && r.data.item.status === 'submitted', r.data);
@@ -1000,6 +1053,11 @@ const { fakeModels } = require('./harness.js');
   r = await call('coord', 'POST', '/api/admin/staff',
     { username: 'nope', name: 'Nope', role: 'nationalCoordinator', password: 'password123' });
   check('a coordinator still cannot mint a National Coordinator', r.status === 403, r.data);
+
+  // Electing officers is the Coordinator's call, not the Chapter Admin's.
+  r = await call('delegated', 'POST', '/api/admin/staff',
+    { username: 'exec.sneak', name: 'Sneak Exec', role: 'executive', password: 'password123', memberId });
+  check('a Chapter Admin cannot promote a member to the executive body', r.status === 403, r.data);
 
   r = await call('coord2', 'GET', '/api/admin/staff');
   check('chapter 2 never sees chapter 1\'s newly appointed staff',
