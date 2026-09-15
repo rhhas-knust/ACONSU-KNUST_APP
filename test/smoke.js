@@ -650,6 +650,13 @@ const { fakeModels } = require('./harness.js');
   r = await call('endedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
   check('and they cannot sign back in', r.status === 403, r.data);
 
+  // Sessions live in the database now and outlive a restart, so the record
+  // that revokes them has to as well — an in-memory-only list would be
+  // forgotten while the session it revoked came back.
+  check('the revocation is written to the account, not just held in memory',
+    !!fakeModels.StaffUser._docs.find(s => s.id === lapsed.id).sessionsRevokedAt,
+    fakeModels.StaffUser._docs.find(s => s.id === lapsed.id));
+
   // Disabling an account reaches a live session the same way.
   r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { renewTerm: true });
   r = await call('reinstated', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });

@@ -225,6 +225,6 @@ function stub(relPath, exports) {
 
 stub('lib/models.js', fakeModels);
 stub('lib/gridfs.js', fakeGridfs);
-stub('lib/db.js', { connectDB: () => Promise.resolve({}) });
+stub('lib/db.js', { connectDB: () => Promise.resolve({}), createSessionStore: () => undefined });
 
 module.exports = { fakeModels, fakeGridfs };

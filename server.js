@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
-const { connectDB } = require('./lib/db');
+const { connectDB, createSessionStore } = require('./lib/db');
 const repo = require('./lib/repo');
 const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
@@ -37,12 +37,35 @@ const isProd = process.env.NODE_ENV === 'production';
 // Needed for secure cookies and correct client IPs for rate limiting.
 app.set('trust proxy', 1);
 
+// The fallbacks below this line exist so a developer can clone and run
+// without ceremony. In production they are a way in: 'changeme' signs you in
+// as the national administrator, and a known session secret lets anyone mint
+// a session cookie for any account. So production refuses to start on them
+// rather than running quietly wide open — a deploy that fails loudly is a far
+// smaller problem than one nobody notices.
+if (isProd) {
+  const insecure = [
+    !process.env.ADMIN_PASSWORD && 'ADMIN_PASSWORD (defaults to "changeme")',
+    !process.env.SESSION_SECRET && 'SESSION_SECRET (defaults to a public value, so session cookies could be forged)'
+  ].filter(Boolean);
+  if (insecure.length) {
+    console.error('Refusing to start in production with default credentials still in place:');
+    insecure.forEach((item) => console.error(`  - ${item} is not set`));
+    console.error('Set these in the environment (Render → Environment) and redeploy.');
+    process.exit(1);
+  }
+}
+
 app.use(helmet({
   contentSecurityPolicy: false // keep simple for now; the app has no user-supplied scripts
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
+  // Stored in MongoDB (see createSessionStore) so a restart or deploy no
+  // longer signs everybody out. Undefined falls back to the in-memory store,
+  // which is what the test harness runs on.
+  store: typeof createSessionStore === 'function' ? createSessionStore() : undefined,
   secret: process.env.SESSION_SECRET || 'dev_secret_change_me',
   resave: false,
   saveUninitialized: false,
@@ -184,22 +207,46 @@ function isTermExpired(staff) {
 // list: the moment an account is changed against its holder, anything issued
 // before that moment stops counting.
 //
-// Kept in memory deliberately — express-session here uses the default
-// in-process MemoryStore, so these entries and the sessions they guard have
-// exactly the same lifetime. A restart clears both together, leaving no
-// window where a revoked session outlives the record revoking it.
+// Held in memory for the check itself, which has to stay synchronous, but
+// written to the account too: sessions now live in MongoDB and outlive a
+// restart, so a revocation that existed only in this process's memory would
+// be forgotten while the session it revoked came back. loadStaffRevocations()
+// rebuilds the map from the database before the server accepts a request.
 const STAFF_REVOCATIONS = new Map();
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 8;
 
-function revokeStaffSessions(staffId) {
-  if (!staffId) return;
+function rememberRevocation(staffId, at) {
   const now = Date.now();
-  STAFF_REVOCATIONS.set(String(staffId), now);
+  STAFF_REVOCATIONS.set(String(staffId), at);
   // No session older than the cookie's own lifetime can still be valid, so
   // the entries guarding them have nothing left to do.
-  STAFF_REVOCATIONS.forEach((at, id) => {
-    if (now - at > SESSION_MAX_AGE_MS) STAFF_REVOCATIONS.delete(id);
+  STAFF_REVOCATIONS.forEach((ts, id) => {
+    if (now - ts > SESSION_MAX_AGE_MS) STAFF_REVOCATIONS.delete(id);
   });
+}
+
+function revokeStaffSessions(staffId) {
+  if (!staffId) return Promise.resolve();
+  const at = Date.now();
+  rememberRevocation(staffId, at);
+  return repo.patchById('staffUsers', String(staffId), { sessionsRevokedAt: new Date(at) })
+    .catch(() => { /* the in-memory entry still holds for this process */ });
+}
+
+// Rebuilt at boot and refreshed periodically, the same belt-and-braces
+// pattern refreshSoleActiveChapter() uses for its own cached answer.
+async function loadStaffRevocations() {
+  try {
+    const cutoff = Date.now() - SESSION_MAX_AGE_MS;
+    const staff = await repo.getAll('staffUsers');
+    staff.forEach((user) => {
+      if (!user.sessionsRevokedAt) return;
+      const at = new Date(user.sessionsRevokedAt).getTime();
+      if (at > cutoff) STAFF_REVOCATIONS.set(String(user.id), at);
+    });
+  } catch (e) {
+    // Leave whatever is already cached rather than dropping revocations.
+  }
 }
 
 function isSessionRevoked(staff) {
@@ -5819,10 +5866,15 @@ async function refreshSoleActiveChapter() {
 }
 
 connectDB()
+  // Revocations are loaded BEFORE the first request is served: sessions
+  // survive a restart now, so a session revoked before the restart must not
+  // get a window where it works again.
+  .then(() => loadStaffRevocations())
   .then(() => {
     app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);
     });
+    setInterval(loadStaffRevocations, 5 * 60 * 1000);
     refreshSoleActiveChapter();
     setInterval(refreshSoleActiveChapter, 5 * 60 * 1000); // belt and braces against drift
     checkBirthdaysAndNotify();

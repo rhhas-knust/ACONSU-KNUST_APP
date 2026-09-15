@@ -1,0 +1,46 @@
+name: CI
+
+# The smoke suite boots the real Express app against an in-memory data layer
+# (test/harness.js), so it needs no database, no secrets and no network —
+# which is exactly why it can run on every push.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    name: Smoke suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run the smoke suite
+        run: npm test
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      # Advisory: reports known vulnerabilities without blocking a deploy on
+      # something that may have no fix yet. Tighten to --audit-level=high once
+      # the current backlog is cleared.
+      - name: Audit
+        run: npm audit --audit-level=high || true
