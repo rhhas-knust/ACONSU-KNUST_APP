@@ -953,6 +953,39 @@ const { fakeModels } = require('./harness.js');
   check('the scope-selector header narrows a national actor the same way',
     Array.isArray(r.data) && r.data.every(e => e.chapterId === 'test-chapter-2'), r.data);
 
+  console.log('\n== national events: open to the public, not any chapter\'s ==');
+  r = await call('admin', 'POST', '/api/admin/events', {
+    title: 'National Youth Conference', date: '2026-12-01', time: '09:00', location: 'National Auditorium',
+    isNational: true
+  });
+  check('national coordinator creates a national event', r.status === 200 && r.data.item.chapterId === '' && r.data.item.isNational === true, r.data);
+  const nationalEventId = r.data.item.id;
+
+  r = await call('anon', 'GET', '/api/events');
+  check('an anonymous visitor sees the national event on the public site',
+    Array.isArray(r.data) && r.data.some(e => e.id === nationalEventId), r.data);
+
+  r = await call('admin', 'GET', '/api/events');
+  check('national scope sees only national events, never a chapter\'s own merged in',
+    Array.isArray(r.data) && r.data.every(e => e.isNational), r.data);
+
+  r = await call('coord', 'GET', '/api/events');
+  check('a chapter\'s own events view includes the national event alongside its own',
+    Array.isArray(r.data) && r.data.some(e => e.id === nationalEventId) && r.data.some(e => e.chapterId === chapterId), r.data);
+
+  await call('coord', 'DELETE', `/api/admin/events/${nationalEventId}`);
+  r = await call('admin', 'GET', '/api/events');
+  check('a chapter admin cannot delete a national event by guessing its id',
+    Array.isArray(r.data) && r.data.some(e => e.id === nationalEventId), r.data);
+
+  r = await call('admin', 'PUT', `/api/admin/events/${nationalEventId}`, { title: 'National Youth Conference (Updated)' });
+  check('national coordinator edits the national event', r.status === 200 && r.data.item.title === 'National Youth Conference (Updated)', r.data);
+
+  await call('admin', 'DELETE', `/api/admin/events/${nationalEventId}`);
+  r = await call('admin', 'GET', '/api/events');
+  check('national coordinator removes the national event',
+    Array.isArray(r.data) && !r.data.some(e => e.id === nationalEventId), r.data);
+
   console.log('\n== delegation: a coordinator staffs their own chapter ==');
   r = await call('coord', 'POST', '/api/admin/staff',
     { username: 'delegated-admin', name: 'Delegated Admin', role: 'chapterAdmin', password: 'password123' });

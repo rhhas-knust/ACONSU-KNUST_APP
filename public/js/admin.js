@@ -1,20 +1,17 @@
 let CURRENT_SETTINGS = {};
 // Who's actually driving this dashboard — the legacy env admin (national-
-// equivalent, sees a chapter switcher on resource forms) or a chapter-scoped
-// Chapter Admin/Coordinator account (auto-scoped, no switcher needed). Set
-// by checkAuth() before the shell ever renders.
+// equivalent, sees only public-app/national panels once a second chapter
+// exists) or a chapter-scoped Chapter Admin/Coordinator account (runs their
+// own chapter's full operations). Set by checkAuth() before the shell ever
+// renders.
 let ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
 const ADMIN_NAV_STATE_KEY = 'aconsu_admin_nav_state';
-// The chapter a NATIONAL actor has deliberately chosen to look into, kept
-// separate from the public site's chapter picker. Without this separation a
-// national officer who had browsed the public KNUST site would arrive at the
-// dashboard silently scoped to KNUST, which is exactly the kind of invisible
-// scoping this change exists to remove. Empty means national scope.
-const ADMIN_SCOPE_KEY = 'aconsu_admin_scope_chapter';
+// How many active chapters exist — the only thing national scope needs to
+// know here now that this dashboard no longer offers a way to step into a
+// specific chapter's operations (that's each chapter's own admin's job; see
+// GOVERNANCE_TIER_REVIEW.md). Chapter oversight lives on the National Portal
+// instead (readiness rollup, national events) — see loadAdminChapterCount().
 let ADMIN_CHAPTERS = [];
-// The only panels a true-national actor keeps once chapter operations are
-// pruned from the nav (see applyNavScopeVisibility).
-const NATIONAL_VISIBLE_PANEL_KEYS = ['overview', 'settings'];
 // The live push connection behind the operational dashboard (Phase 2) — see
 // closeOverviewStream() and GET /api/admin/overview/stream in server.js.
 let OVERVIEW_STREAM = null;
@@ -63,32 +60,13 @@ async function checkAuth() {
   document.getElementById('adminShell').style.display = 'none';
 }
 
-function readAdminScopeChapter() {
-  try { return localStorage.getItem(ADMIN_SCOPE_KEY) || ''; } catch (e) { return ''; }
-}
-function writeAdminScopeChapter(id) {
-  try {
-    if (id) localStorage.setItem(ADMIN_SCOPE_KEY, id);
-    else localStorage.removeItem(ADMIN_SCOPE_KEY);
-  } catch (e) { /* private browsing — scope simply resets to national */ }
-}
-// fetchJSON attaches X-Chapter-Id from the shared chapter store, so the
-// admin's own choice is pushed into it on every load. That way the dashboard
-// never inherits a chapter left behind by the public site's picker.
-function applyAdminScope() {
-  if (!ADMIN_SCOPE.isNational) return;
-  setSelectedChapterId(readAdminScopeChapter());
-}
-function currentAdminScopeChapter() {
-  return ADMIN_SCOPE.isNational ? readAdminScopeChapter() : ADMIN_SCOPE.chapterId;
-}
-
-// "National by default, chapter by selection" (GOVERNANCE_TIER_REVIEW.md).
-// True only once there is a real choice to make — deliberately inert with a
-// single active chapter (ADMIN_CHAPTERS.length !== 1), the same "single
-// chapter, zero friction" rule the server applies.
+// "National by default, chapter operations belong to chapters"
+// (GOVERNANCE_TIER_REVIEW.md). True once there's more than one active
+// chapter — deliberately inert with a single chapter (ADMIN_CHAPTERS.length
+// !== 1), the same "single chapter, zero friction" rule the server applies,
+// so nothing changes for ACONSU's current single-chapter deployment.
 function isTrueNationalScope() {
-  return ADMIN_SCOPE.isNational && !currentAdminScopeChapter() && ADMIN_CHAPTERS.length !== 1;
+  return ADMIN_SCOPE.isNational && ADMIN_CHAPTERS.length !== 1;
 }
 
 // Phase D — the national actor's admin nav is a wall of 22 chapter-operations
@@ -113,72 +91,52 @@ function applyNavScopeVisibility() {
   return pruned;
 }
 
-async function initChapterScopeSelector() {
-  const wrap = document.getElementById('adminScopeWrap');
-  const select = document.getElementById('adminScopeSelect');
-  const badge = document.getElementById('adminChapterBadge');
-  if (!wrap || !select || !ADMIN_SCOPE.isNational) return;
-
-  try {
-    ADMIN_CHAPTERS = await fetchJSON('/api/national/chapters');
-  } catch (e) {
-    ADMIN_CHAPTERS = [];
-  }
-  const chosen = readAdminScopeChapter();
-  select.innerHTML = `
-    <option value="">🌐 ACONSU National</option>
-    ${ADMIN_CHAPTERS.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === chosen ? 'selected' : ''}>📍 ${escapeHtml(c.name)}</option>`).join('')}
-  `;
-  wrap.style.display = 'inline-flex';
-  if (badge) {
-    const found = ADMIN_CHAPTERS.find(c => c.id === chosen);
-    badge.textContent = found ? `Viewing ${found.name}` : 'National scope';
-  }
-
-  select.addEventListener('change', () => {
-    writeAdminScopeChapter(select.value);
-    applyAdminScope();
-    const found = ADMIN_CHAPTERS.find(c => c.id === select.value);
-    if (badge) badge.textContent = found ? `Viewing ${found.name}` : 'National scope';
-    showToast(found ? `Now viewing ${found.name}` : 'Back to national scope', 'success');
-    const pruned = applyNavScopeVisibility();
-    const active = document.querySelector('.admin-panel.active');
-    const activeKey = active ? active.id.replace('panel-', '') : 'overview';
-    // If scope just went national and the panel being viewed is chapter-only
-    // (now hidden from the nav), don't leave the admin stranded on it.
-    loadPanel(pruned && !NATIONAL_VISIBLE_PANEL_KEYS.includes(activeKey) ? 'overview' : activeKey);
-  });
+// Just enough to know whether a second chapter exists — this dashboard no
+// longer offers a way to step into one (chapter operations are that
+// chapter's own admin's job), so there's nothing else to fetch here.
+async function loadAdminChapterCount() {
+  if (!ADMIN_SCOPE.isNational) return;
+  try { ADMIN_CHAPTERS = await fetchJSON('/api/national/chapters'); }
+  catch (e) { ADMIN_CHAPTERS = []; }
 }
 
 async function showAdminShell() {
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('adminShell').style.display = 'block';
 
-  // Chapter badge display in topbar
-  const badge = document.getElementById('adminChapterBadge');
-  if (badge) {
-    if (ADMIN_SCOPE.isNational) {
-      badge.textContent = 'National scope';
-      const natBtn = document.getElementById('navNationalBtn');
-      const globBtn = document.getElementById('navGlobalSettingsBtn');
-      if (natBtn) natBtn.style.display = 'flex';
-      if (globBtn) globBtn.style.display = 'flex';
-    } else if (ADMIN_SCOPE.chapterId) {
-      fetchJSON('/api/admin/chapter-settings')
-        .then(cs => { badge.textContent = `📍 ${cs.name || ADMIN_SCOPE.chapterId}`; })
-        .catch(() => { badge.textContent = `📍 ${ADMIN_SCOPE.chapterId}`; });
-    }
-  }
-
-  applyAdminScope();
   initAdminNav();
   initMobileAdminUi();
   initCommandPalette();
   // Awaited so ADMIN_CHAPTERS is populated before the nav is pruned and the
   // first panel loads — otherwise both would briefly judge scope off an
   // empty chapter list and mis-render on the very first paint.
-  await initChapterScopeSelector();
+  await loadAdminChapterCount();
   applyNavScopeVisibility();
+
+  // Chapter badge + brand: national is its own identity; a chapter-scoped
+  // account's portal identity IS its chapter, front and center.
+  const badge = document.getElementById('adminChapterBadge');
+  const brand = document.getElementById('adminBrandName');
+  if (ADMIN_SCOPE.isNational) {
+    if (badge) badge.textContent = isTrueNationalScope() ? '🌐 National — Public App & Events' : '🌐 National Admin';
+    if (brand) brand.textContent = 'ACONSU Admin';
+    const natBtn = document.getElementById('navNationalBtn');
+    const globBtn = document.getElementById('navGlobalSettingsBtn');
+    if (natBtn) natBtn.style.display = 'flex';
+    if (globBtn) globBtn.style.display = 'flex';
+  } else if (ADMIN_SCOPE.chapterId) {
+    fetchJSON('/api/admin/chapter-settings')
+      .then(cs => {
+        const name = cs.name || ADMIN_SCOPE.chapterId;
+        if (badge) badge.textContent = `📍 ${name}`;
+        if (brand) brand.textContent = `ACONSU — ${name}`;
+      })
+      .catch(() => {
+        if (badge) badge.textContent = `📍 ${ADMIN_SCOPE.chapterId}`;
+        if (brand) brand.textContent = `ACONSU — ${ADMIN_SCOPE.chapterId}`;
+      });
+  }
+
   loadPanel('overview');
 }
 
@@ -418,9 +376,9 @@ async function renderOverview() {
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   closeOverviewStream();
   // The operational dashboard is a chapter's dashboard — there is no
-  // meaningful cross-chapter version of "this week's attendance". A national
-  // actor picks a chapter for it, or goes to the National Portal for the
-  // aggregate view, rather than being shown a raw error.
+  // meaningful cross-chapter version of "this week's attendance", and running
+  // one is each chapter's own admin's job now, not national's. Point at the
+  // National Portal's aggregate/readiness view instead of a raw error.
   if (isTrueNationalScope()) {
     el.innerHTML = `
       <div class="panel-head">
@@ -430,8 +388,8 @@ async function renderOverview() {
         </div>
       </div>
       <p class="empty-state">
-        You are viewing at <strong>national scope</strong>. Choose a chapter from the selector in the top bar to see its
-        dashboard, or open the <a href="/national.html">National Portal</a> for the cross-chapter picture.
+        Chapter operations are run by each chapter's own admin. Open the <a href="/national.html">National Portal</a>
+        for chapter readiness and the cross-chapter picture.
       </p>`;
     return;
   }
@@ -512,12 +470,14 @@ async function renderResourcePanel(resource, fields, singular) {
                 ${item.headerImageFileId ? `<img src="/api/files/${item.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">` : 'none'}
               </div>
             </td>` : ''}
-            ${fields.slice(0, 3).map(f => `<td>${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
+            ${fields.slice(0, 3).map((f, idx) => `<td>${idx === 0 && resource === 'events' && item.isNational ? '<span class="badge" style="margin-right:6px;">National</span>' : ''}${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
             ${resource === 'events' ? `<td>${item.registrationEnabled ? `<button data-view-regs="${item.id}" data-title="${escapeHtml(item.title)}">View (${item.capacity > 0 ? `cap ${item.capacity}` : 'unlimited'})</button>` : '—'}</td>` : ''}
             <td class="row-actions">
-              ${resource === 'departments' ? `<button data-header-image="${item.id}">Header Image</button>` : ''}
-              <button data-edit="${item.id}">Edit</button>
-              <button class="danger" data-delete="${item.id}">Delete</button>
+              ${resource === 'events' && item.isNational ? `<span class="tiny muted">Managed from the National Portal</span>` : `
+                ${resource === 'departments' ? `<button data-header-image="${item.id}">Header Image</button>` : ''}
+                <button data-edit="${item.id}">Edit</button>
+                <button class="danger" data-delete="${item.id}">Delete</button>
+              `}
             </td>
           </tr>
         `).join('') || `<tr><td colspan="${fields.length + (resource === 'events' ? 2 : 1) + (resource === 'departments' ? 1 : 0)}">No ${singular.toLowerCase()}s yet.</td></tr>`}

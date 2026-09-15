@@ -422,6 +422,123 @@ async function renderNationalExecutives(el) {
   }));
 }
 
+// ---------- national events ----------
+// Events open to everyone — the public, prospective members, anyone who
+// hasn't logged in — rather than one chapter's own members. Stored with an
+// empty chapterId and isNational: true, the same convention as national
+// executives; a chapter's own events (registration drives, cell meetings,
+// local services) stay each chapter's own admin's to run.
+function nationalEventForm(event) {
+  const isEdit = !!event;
+  showModal(`
+    <h3>${isEdit ? 'Edit National Event' : 'New National Event'}</h3>
+    <p class="hint">Open to the public — visitors and non-members can see and register for this without signing in. A chapter's own events are managed inside that chapter.</p>
+    <form id="nationalEventForm">
+      <div class="field"><label>Event Title</label>
+        <input type="text" id="neTitle" value="${escapeHtml(event?.title || '')}" required></div>
+      <div class="field-row">
+        <div class="field"><label>Date</label>
+          <input type="date" id="neDate" value="${escapeHtml(event?.date || '')}" required></div>
+        <div class="field"><label>Time</label>
+          <input type="time" id="neTime" value="${escapeHtml(event?.time || '')}" required></div>
+      </div>
+      <div class="field"><label>Location</label>
+        <input type="text" id="neLocation" value="${escapeHtml(event?.location || '')}"></div>
+      <div class="field"><label>Description</label>
+        <textarea id="neDescription" rows="3">${escapeHtml(event?.description || '')}</textarea></div>
+      <div class="field checkbox-field">
+        <input type="checkbox" id="neRegEnabled" ${event?.registrationEnabled ? 'checked' : ''}>
+        <label for="neRegEnabled" style="margin:0;">Enable registration for this event</label>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Capacity (0 = unlimited)</label>
+          <input type="number" id="neCapacity" value="${Number(event?.capacity || 0)}"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:22px;">
+        <button type="submit" class="btn btn-primary">Save Event</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="nationalEventMsg"></div>
+    </form>
+  `);
+
+  document.getElementById('nationalEventForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await fetchJSON(isEdit ? `/api/admin/events/${event.id}` : '/api/admin/events', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: document.getElementById('neTitle').value,
+          date: document.getElementById('neDate').value,
+          time: document.getElementById('neTime').value,
+          location: document.getElementById('neLocation').value,
+          description: document.getElementById('neDescription').value,
+          registrationEnabled: document.getElementById('neRegEnabled').checked,
+          capacity: Number(document.getElementById('neCapacity').value || 0),
+          isNational: true
+        })
+      });
+      closeModal();
+      showToast(isEdit ? 'Event updated' : 'National event added', 'success');
+      openPanel('events');
+    } catch (err) {
+      setFormMsg('nationalEventMsg', err.message || 'Could not save this event.', 'error');
+    }
+  });
+}
+
+async function renderNationalEvents(el) {
+  const events = await fetchJSON('/api/events');
+  const national = events.filter(e => e.isNational);
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>National Events</h2>
+        <p class="sub">Open to the public — visitors and non-members can register without signing in. Each chapter runs its own events separately.</p>
+      </div>
+      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newNationalEventBtn">+ New Event</button></div>
+    </div>
+    <div class="table-wrap">
+      <table class="portal-table">
+        <thead><tr><th>Title</th><th>Date</th><th>Location</th><th>Registration</th><th></th></tr></thead>
+        <tbody>
+          ${national.map(e => `
+            <tr>
+              <td><strong>${escapeHtml(e.title || '—')}</strong></td>
+              <td>${shortDate(e.date)} ${escapeHtml(e.time || '')}</td>
+              <td>${escapeHtml(e.location || '—')}</td>
+              <td>${e.registrationEnabled ? pill(e.capacity > 0 ? `cap ${e.capacity}` : 'unlimited', 'green') : pill('off', 'grey')}</td>
+              <td>
+                <div class="row-actions">
+                  <button data-edit-event="${e.id}">Edit</button>
+                  <button data-delete-event="${e.id}" class="danger">Remove</button>
+                </div>
+              </td>
+            </tr>
+          `).join('') || emptyRow(5, 'No national events yet — add one open to the whole public here.')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('newNationalEventBtn').addEventListener('click', () => nationalEventForm(null));
+  el.querySelectorAll('[data-edit-event]').forEach(btn => btn.addEventListener('click', () =>
+    nationalEventForm(national.find(e => e.id === btn.dataset.editEvent))
+  ));
+  el.querySelectorAll('[data-delete-event]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Remove this national event?')) return;
+    try {
+      await fetchJSON(`/api/admin/events/${btn.dataset.deleteEvent}`, { method: 'DELETE' });
+      showToast('Event removed', 'success');
+      openPanel('events');
+    } catch (err) {
+      showToast(err.message || 'Could not remove this event.', 'error');
+    }
+  }));
+}
+
 const FEATURE_LABELS = {
   bible: 'Bible', bibleStudy: 'Bible Study', events: 'Events', donations: 'Donations', welfare: 'Welfare',
   communityChat: 'Community Chat', ebooks: 'E-Books', liveStreaming: 'Live Streaming', attendance: 'Attendance',
@@ -452,6 +569,7 @@ initPortal({
     { key: 'dashboard', label: 'National Dashboard', render: renderNationalDashboard },
     { key: 'chapters', label: 'Chapters', render: renderChapters },
     { key: 'executives', label: 'National Executives', render: renderNationalExecutives },
+    { key: 'events', label: 'National Events', render: renderNationalEvents },
     { key: 'reports', label: 'National Reports', render: renderNationalReports },
     { key: 'features', label: 'Feature Configuration', render: renderFeatures },
     { key: 'announcements', label: 'National Announcements', render: renderNationalAnnouncements }
