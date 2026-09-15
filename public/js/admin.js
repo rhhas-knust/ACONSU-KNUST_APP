@@ -2497,4 +2497,28 @@ function initCommandPalette() {
   });
 }
 
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  const msg = document.getElementById('loginMsg');
+  btn.disabled = true; btn.textContent = 'Logging in...';
+  msg.textContent = ''; msg.className = 'form-msg';
+  try {
+    await fetchJSON('/api/portal/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: document.getElementById('username').value,
+        password: document.getElementById('password').value
+      })
+    });
+    await checkAuth();
+  } catch (err) {
+    msg.textContent = err.message || 'Could not log in.';
+    msg.className = 'form-msg error';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Log In';
+  }
+});
+
 checkAuth();
