@@ -4083,6 +4083,7 @@ app.post('/api/national/chapters', rolesLib.requireNational, async (req, res) =>
       location: location || '', address: address || '', status: 'active',
       createdBy: actorName(req)
     }, slug);
+    await refreshSoleActiveChapter();
     res.json({ success: true, item: chapter });
   } catch (e) {
     res.status(500).json({ error: 'Could not create this chapter' });
@@ -4106,6 +4107,7 @@ app.patch('/api/national/chapters/:id/status', rolesLib.requireNational, async (
   try {
     const item = await repo.patchById('chapters', req.params.id, { status });
     if (!item) return res.status(404).json({ error: 'Chapter not found' });
+    await refreshSoleActiveChapter();
     res.json({ success: true, item });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this chapter' });
@@ -4944,8 +4946,17 @@ app.delete('/api/admin/files/:id', requireChapterAdmin, async (req, res) => {
 
 app.post('/api/admin/executives', requireChapterAdmin, upload.single('image'), async (req, res) => {
   try {
-    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
-    if (!chapterId) return res.status(400).json({ error: 'A chapter is required — this deployment now has more than one, please specify which.' });
+    // A national actor may deliberately create a NATIONAL executive — one of
+    // the union's own officers rather than a chapter's. That is a different
+    // statement from "I forgot to pick a chapter", so it has to be said
+    // explicitly with the NATIONAL_SCOPE token; everything else still
+    // resolves to a real chapter and is rejected if it cannot.
+    const wantsNational = rolesLib.getActingScope(req).isNational
+      && String(req.body.chapterId || '') === rolesLib.NATIONAL_SCOPE;
+    const chapterId = wantsNational
+      ? rolesLib.NATIONAL_CHAPTER_ID
+      : await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!wantsNational && !chapterId) return res.status(400).json({ error: 'A chapter is required — this deployment now has more than one, please specify which.' });
     let imageFileId = '';
     if (req.file) {
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
@@ -5392,11 +5403,26 @@ async function checkRetentionAlerts() {
 }
 
 // ---------- startup ----------
+// Keeps lib/roles.js's "single chapter, zero friction" shortcut honest.
+// chapterFilter() runs on nearly every request and cannot be async, so the
+// answer to "is there exactly one active chapter?" is cached here and
+// refreshed whenever a chapter is created, edited or activated/deactivated.
+async function refreshSoleActiveChapter() {
+  try {
+    const active = await repo.getAll('chapters', { status: 'active' });
+    rolesLib.setSoleActiveChapterId(active.length === 1 ? active[0].id : null);
+  } catch (e) {
+    // Leave the previous value in place rather than silently widening scope.
+  }
+}
+
 connectDB()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);
     });
+    refreshSoleActiveChapter();
+    setInterval(refreshSoleActiveChapter, 5 * 60 * 1000); // belt and braces against drift
     checkBirthdaysAndNotify();
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
     sendDueAnnouncements();

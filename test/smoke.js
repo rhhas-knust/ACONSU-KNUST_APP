@@ -868,6 +868,57 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', '/api/admin/overview?chapterId=' + chapterId);
   check('national admin can load a selected chapter operational dashboard', r.status === 200 && r.data.chapter.id === chapterId, r.data);
 
+  console.log('\n== governance tiers: national by default, chapter by selection ==');
+  // With more than one chapter in play, an unscoped national read must mean
+  // "ACONSU nationally", not "every chapter merged into one list" — that
+  // merging is what let a national officer browse every chapter's executives
+  // and members at once. See GOVERNANCE_TIER_REVIEW.md.
+  r = await call('admin', 'GET', '/api/executives');
+  check('national scope returns no chapter-owned executives once several chapters exist',
+    Array.isArray(r.data) && r.data.every(e => !e.chapterId), r.data);
+
+  r = await call('admin', 'POST', '/api/admin/executives', new URLSearchParams({
+    name: 'National President', role: 'National President', chapterId: '__national__', order: '0'
+  }).toString(), true, { 'content-type': 'application/x-www-form-urlencoded' });
+  check('national coordinator can create a national executive', r.status === 200 && r.data.item.chapterId === '', r.data);
+
+  r = await call('admin', 'GET', '/api/executives');
+  check('the national executive is listed at national scope',
+    Array.isArray(r.data) && r.data.some(e => e.name === 'National President'), r.data);
+
+  r = await call('coord', 'GET', '/api/executives');
+  check('a chapter never sees national executives mixed into its own roster',
+    Array.isArray(r.data) && r.data.every(e => e.chapterId === chapterId), r.data);
+
+  r = await call('admin', 'GET', '/api/executives?chapterId=' + chapterId);
+  check('national can still look into one chapter deliberately',
+    Array.isArray(r.data) && r.data.every(e => e.chapterId === chapterId), r.data);
+
+  // The X-Chapter-Id header is what the admin dashboard's scope selector
+  // sends, so it must narrow a national actor exactly as ?chapterId= does.
+  r = await call('admin', 'GET', '/api/executives', null, false, { 'x-chapter-id': 'test-chapter-2' });
+  check('the scope-selector header narrows a national actor the same way',
+    Array.isArray(r.data) && r.data.every(e => e.chapterId === 'test-chapter-2'), r.data);
+
+  console.log('\n== delegation: a coordinator staffs their own chapter ==');
+  r = await call('coord', 'POST', '/api/admin/staff',
+    { username: 'delegated-admin', name: 'Delegated Admin', role: 'chapterAdmin', password: 'password123' });
+  check('Chapter Coordinator appoints their own Chapter Admin', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
+
+  r = await call('delegated', 'POST', '/api/portal/login', { username: 'delegated-admin', password: 'password123' });
+  check('the appointed Chapter Admin can sign in', r.status === 200, r.data);
+
+  r = await call('delegated', 'GET', '/api/admin/chapter-settings');
+  check('the appointed Chapter Admin carries on the chapter work', r.status === 200, r.data);
+
+  r = await call('coord', 'POST', '/api/admin/staff',
+    { username: 'nope', name: 'Nope', role: 'nationalCoordinator', password: 'password123' });
+  check('a coordinator still cannot mint a National Coordinator', r.status === 403, r.data);
+
+  r = await call('coord2', 'GET', '/api/admin/staff');
+  check('chapter 2 never sees chapter 1\'s newly appointed staff',
+    Array.isArray(r.data) && r.data.every(s => s.chapterId === 'test-chapter-2'), r.data);
+
   console.log('\n== static pages ==');
   for (const page of [
     '/more.html', '/admin.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',
