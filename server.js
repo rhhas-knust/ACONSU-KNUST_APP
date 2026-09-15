@@ -177,9 +177,41 @@ function isTermExpired(staff) {
   return !!(staff && staff.termEndsAt && new Date(staff.termEndsAt) <= new Date());
 }
 
+// Ending someone's term early, disabling or deleting their account, or
+// changing their role or password has to take effect NOW, not whenever they
+// next happen to sign out. A session carries the authority it was stamped
+// with at login, so the way to reach one already in flight is a revocation
+// list: the moment an account is changed against its holder, anything issued
+// before that moment stops counting.
+//
+// Kept in memory deliberately — express-session here uses the default
+// in-process MemoryStore, so these entries and the sessions they guard have
+// exactly the same lifetime. A restart clears both together, leaving no
+// window where a revoked session outlives the record revoking it.
+const STAFF_REVOCATIONS = new Map();
+const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 8;
+
+function revokeStaffSessions(staffId) {
+  if (!staffId) return;
+  const now = Date.now();
+  STAFF_REVOCATIONS.set(String(staffId), now);
+  // No session older than the cookie's own lifetime can still be valid, so
+  // the entries guarding them have nothing left to do.
+  STAFF_REVOCATIONS.forEach((at, id) => {
+    if (now - at > SESSION_MAX_AGE_MS) STAFF_REVOCATIONS.delete(id);
+  });
+}
+
+function isSessionRevoked(staff) {
+  if (!staff || !staff.id) return false; // env admin / shepherd logins carry no account id
+  const revokedAt = STAFF_REVOCATIONS.get(String(staff.id));
+  return !!(revokedAt && (!staff.issuedAt || staff.issuedAt <= revokedAt));
+}
+
 function currentStaff(req) {
   const staff = (req.session && req.session.staff) || null;
-  return isTermExpired(staff) ? null : staff;
+  if (isTermExpired(staff) || isSessionRevoked(staff)) return null;
+  return staff;
 }
 
 // The academic year turns over on 1 August, matching
@@ -327,7 +359,8 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       id: user.id, username: user.username, name: user.name || user.username,
       role: user.role, chapterId: user.chapterId || '',
       memberId: user.memberId || '',
-      termYear: user.termYear || '', termEndsAt: user.termEndsAt || null
+      termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
+      issuedAt: Date.now() // what a later revocation is measured against
     };
     models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
     res.json({ success: true, staff: req.session.staff });
@@ -2478,6 +2511,17 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
           bio: '', contact: { phone: member.phone || '', email: member.email || '' },
           imageFileId: member.profileImageFileId || '', history: []
         }, 'exec');
+      }
+    }
+
+    // Withdrawing a verification from someone who already held the office
+    // closes it: ending the term and the session they are using, rather than
+    // leaving a rejected executive with a working login.
+    if (decision === 'reject') {
+      const held = await models.StaffUser.findOne({ memberId: member.id, role: 'executive' }).lean();
+      if (held) {
+        await repo.patchById('staffUsers', held.id, { termEndsAt: new Date() });
+        revokeStaffSessions(held.id);
       }
     }
 
@@ -4671,15 +4715,28 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
     }
     // Renewing an executive for the new academic year — re-election keeps the
     // same account, card and history rather than starting a person over.
-    const renewTerm = req.body.renewTerm === true && (role || existing.role) === 'executive';
+    const isExecutive = (role || existing.role) === 'executive';
+    const renewTerm = req.body.renewTerm === true && isExecutive;
+    // Ending a term early: someone stepping down, or being stood down,
+    // before the academic year is out.
+    const endTerm = req.body.endTerm === true && isExecutive;
     const updated = await repo.updateById('staffUsers', req.params.id, {
       ...existing,
       name: name !== undefined ? name : existing.name,
       role: role || existing.role,
       active: active !== undefined ? !!active : existing.active,
       passwordHash: password ? await bcrypt.hash(password, 10) : existing.passwordHash,
-      ...(renewTerm ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
+      ...(renewTerm ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {}),
+      ...(endTerm ? { termEndsAt: new Date() } : {})
     });
+    // Anything that takes authority away, or hands it to a different person,
+    // has to reach the session they are using right now — not wait for them
+    // to sign out. A rename is left alone: it changes nothing they can do.
+    const authorityChanged = endTerm
+      || (active !== undefined && !active)
+      || (role && role !== existing.role)
+      || !!password;
+    if (authorityChanged) revokeStaffSessions(existing.id);
     const { passwordHash, ...safe } = updated;
     res.json({ success: true, item: safe });
   } catch (e) {
@@ -4699,6 +4756,9 @@ app.delete('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
       return res.status(403).json({ error: 'Only the National Coordinator can remove this role.' });
     }
     await repo.removeById('staffUsers', req.params.id);
+    // "Their sign-in stops working immediately" is what the confirmation
+    // promises, so it has to be true of the session they hold right now.
+    revokeStaffSessions(existing.id);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete this account' });

@@ -632,6 +632,40 @@ const { fakeModels } = require('./harness.js');
   r = await call('renewedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
   check('the renewed executive signs in again, same account and card', r.status === 200, r.data);
 
+  // Appointing mid-year: the term runs to the same academic-year boundary as
+  // everyone else's, so the whole body still hands over together.
+  check('a mid-year appointment still ends with the academic year',
+    new Date(lapsed.termEndsAt).getUTCMonth() === 7 && new Date(lapsed.termEndsAt).getUTCDate() === 1, lapsed.termEndsAt);
+
+  console.log('\n== ending an office reaches the session already in use ==');
+  // The gap this closes: a term ended, an account disabled or deleted used to
+  // leave whoever held it working away in a session stamped before the change.
+  r = await call('renewedExec', 'GET', '/api/executive/me');
+  check('the executive is working normally before anything changes', r.status === 200, r.data);
+
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { endTerm: true });
+  check('the coordinator ends their term early', r.status === 200, r.data);
+  r = await call('renewedExec', 'GET', '/api/executive/me');
+  check('their live session stops working at once, without signing out', r.status === 401, r.data);
+  r = await call('endedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('and they cannot sign back in', r.status === 403, r.data);
+
+  // Disabling an account reaches a live session the same way.
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { renewTerm: true });
+  r = await call('reinstated', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('reinstated once the coordinator renews the term', r.status === 200, r.data);
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { active: false });
+  r = await call('reinstated', 'GET', '/api/executive/me');
+  check('disabling an account also ends the session it is being used in', r.status === 401, r.data);
+
+  // A rename is not a loss of authority, so it must not sign anyone out.
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { active: true });
+  r = await call('renamed', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('re-enabled and signed in again', r.status === 200, r.data);
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { name: 'Kwabena Renamed' });
+  r = await call('renamed', 'GET', '/api/executive/me');
+  check('but simply renaming them does not throw them out mid-session', r.status === 200, r.data);
+
   r = await call('exec', 'POST', '/api/executive/events', { title: 'Campus Outreach', date: '2026-10-10' });
   check('executive submits an event', r.status === 200 && r.data.item.status === 'submitted', r.data);
   const execEventId = r.data.item.id;

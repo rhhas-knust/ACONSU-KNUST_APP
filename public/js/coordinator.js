@@ -233,7 +233,7 @@ function staffForm(existing) {
         <div class="field" id="sfMemberWrap" hidden>
           <label>Member being promoted</label>
           <select id="sfMemberId"><option value="">Loading members…</option></select>
-          <small class="hint">An executive is an elected member of this chapter, so the office is attached to their member record. Their term runs to the end of this academic year.</small>
+          <small class="hint">An executive is an elected member of this chapter, so the office is attached to their member record. You can appoint someone at any point in the year — their term runs to <strong>${escapeHtml(academicYearEndLabel())}</strong>, when the whole executive body hands over together.</small>
         </div>`}
       <div class="field"><label>${isEdit ? 'New Password (optional)' : 'Password'}</label>
         <input type="password" id="sfPassword" minlength="8" autocomplete="new-password" ${isEdit ? '' : 'required'}>
@@ -297,6 +297,16 @@ function staffForm(existing) {
   });
 }
 
+// The academic year turns over on 1 August, matching the server
+// (academicYearEndsAt). Shown when appointing so a Coordinator filling a
+// seat mid-year can see exactly how long the term they're granting runs.
+function academicYearEndLabel() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const end = new Date(Date.UTC(now.getMonth() + 1 >= 8 ? year + 1 : year, 7, 1));
+  return end.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 // Only the executive office carries a term; every other account runs until
 // it's disabled, so their cell stays quiet rather than saying "no term".
 function termCell(staff) {
@@ -345,6 +355,8 @@ async function renderLeadershipAccounts(el) {
                 <div class="row-actions">
                   ${s.role === 'coordinator' ? '<span class="tiny muted">assigned by National</span>' : `
                     ${s.role === 'executive' ? `<button data-renew-staff="${s.id}">Renew term</button>` : ''}
+                    ${s.role === 'executive' && s.termEndsAt && new Date(s.termEndsAt) > new Date()
+                      ? `<button data-endterm-staff="${s.id}">End term</button>` : ''}
                     <button data-edit-staff="${s.id}">Edit</button>
                     <button data-toggle-staff="${s.id}" data-active="${s.active ? '1' : '0'}">${s.active ? 'Disable' : 'Enable'}</button>
                     <button data-delete-staff="${s.id}" class="danger">Remove</button>
@@ -367,6 +379,17 @@ async function renderLeadershipAccounts(el) {
   el.querySelectorAll('[data-edit-staff]').forEach(btn => btn.addEventListener('click', () =>
     staffForm(appointable.find(s => s.id === btn.dataset.editStaff))
   ));
+  el.querySelectorAll('[data-endterm-staff]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('End this executive\'s term now? They are signed out immediately and their office closes until you renew it.')) return;
+    try {
+      await fetchJSON(`/api/admin/staff/${btn.dataset.endtermStaff}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endTerm: true })
+      });
+      showToast('Term ended — they have been signed out', 'success');
+      openPanel('accounts');
+    } catch (err) { showToast(err.message || 'Could not end this term.', 'error'); }
+  }));
   el.querySelectorAll('[data-renew-staff]').forEach(btn => btn.addEventListener('click', async () => {
     if (!confirm('Renew this executive for the current academic year?')) return;
     try {
