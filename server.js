@@ -3918,6 +3918,13 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
     if (!department) {
       return res.status(400).json({ error: 'Please choose a department for your executive office.' });
     }
+    // It has to be a real department in their own chapter: this id is what
+    // every "my department" screen resolves against, and what the public
+    // department page links to, so a free-typed value would leave them
+    // holding an office that doesn't exist.
+    if (!await repo.getById('departments', department, { chapterId: staff.chapterId })) {
+      return res.status(400).json({ error: 'That department is not in your chapter — pick one from the list.' });
+    }
 
     // A real position/department change gets snapshotted into history first
     // (section 9: "updated every academic year"), same pattern as a
@@ -3992,12 +3999,114 @@ app.post('/api/executive/events', requireRole('executive'), async (req, res) => 
 app.get('/api/executive/events', requireRole('executive'), async (req, res) => {
   try {
     const staff = currentStaff(req);
-    const items = await repo.getAll('events', { submittedByStaffId: staff.id });
+    const items = await repo.getAll('events', { submittedByStaffId: staff.id, chapterId: staff.chapterId });
     res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
   } catch (e) {
     res.status(500).json({ error: 'Could not load your submitted events' });
   }
 });
+
+// ---------- an executive's own department ----------
+// Everything below is scoped by the department on the executive's own roster
+// card, resolved here rather than taken from the request — so an executive
+// can only ever run the department they actually hold, and only inside their
+// own chapter. Returns null when they haven't chosen a department yet, which
+// the portal turns into a prompt rather than an error.
+async function findOwnDepartment(req) {
+  const staff = currentStaff(req);
+  const record = await findOwnExecutiveRecord(req);
+  if (!staff || !record || !record.department) return null;
+  return repo.getById('departments', record.department, { chapterId: staff.chapterId });
+}
+
+function requireOwnDepartment(handler) {
+  return async (req, res) => {
+    try {
+      const department = await findOwnDepartment(req);
+      if (!department) {
+        return res.status(400).json({ error: 'Choose your department on your profile first — that is what this section belongs to.' });
+      }
+      return await handler(req, res, department, currentStaff(req));
+    } catch (e) {
+      res.status(500).json({ error: 'Could not load your department right now.' });
+    }
+  };
+}
+
+app.get('/api/executive/department', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const [members, meetings] = await Promise.all([
+    repo.getAll('members', { chapterId: staff.chapterId, department: department.id }),
+    repo.getAll('departmentMeetings', { chapterId: staff.chapterId, departmentId: department.id })
+  ]);
+  const recent = [...meetings].sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null;
+  res.json({
+    department,
+    memberCount: members.length,
+    meetingCount: meetings.length,
+    lastMeeting: recent ? { date: recent.date, topic: recent.topic, present: (recent.attendeeMemberIds || []).length } : null
+  });
+}));
+
+app.put('/api/executive/department', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  // Name stays out: renaming a department is a chapter-level decision, and
+  // its id is referenced by members and executives alike.
+  const next = { ...department };
+  ['tagline', 'description', 'meetingDay', 'meetingTime', 'meetingLocation'].forEach((key) => {
+    if (hasOwn(req.body, key)) next[key] = cleanText(req.body[key]);
+  });
+  const updated = await repo.updateById('departments', department.id, next, { chapterId: staff.chapterId });
+  res.json({ success: true, item: updated });
+}));
+
+app.get('/api/executive/department/members', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  res.json(members
+    .map(m => ({
+      id: m.id, name: m.name, email: m.email, phone: m.phone || '',
+      level: m.level || '', programme: m.programme || '', membershipStage: m.membershipStage
+    }))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
+}));
+
+app.get('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const meetings = await repo.getAll('departmentMeetings', { chapterId: staff.chapterId, departmentId: department.id });
+  res.json(meetings.sort((a, b) => (a.date < b.date ? 1 : -1)));
+}));
+
+// Mobile-first register: open, tap whoever is present, save. Attendance is
+// confined to this department's own members, so a mistyped or guessed id
+// can't pull someone else's record into the count.
+app.post('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  const ownIds = new Set(members.map(m => m.id));
+  const attendeeMemberIds = Array.isArray(req.body.attendeeMemberIds)
+    ? req.body.attendeeMemberIds.filter(id => ownIds.has(id))
+    : [];
+  const item = await repo.create('departmentMeetings', {
+    chapterId: staff.chapterId,
+    departmentId: department.id,
+    date: req.body.date || new Date().toISOString().slice(0, 10),
+    topic: cleanText(req.body.topic || ''),
+    location: cleanText(req.body.location || department.meetingLocation || ''),
+    attendeeMemberIds,
+    notes: cleanText(req.body.notes || ''),
+    recordedBy: actorName(req)
+  }, 'dmeet');
+  res.json({ success: true, item });
+}));
+
+// An announcement to this department's own members, not the whole chapter —
+// chapter-wide announcements stay with the Coordinator and Publicity.
+app.post('/api/executive/department/announcement', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const title = cleanText(req.body.title || '');
+  const body = cleanText(req.body.body || '');
+  if (!title || !body) return res.status(400).json({ error: 'A title and message are required' });
+  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  const item = await createNotification(
+    `${department.name}: ${title}`, body, '/department.html?id=' + department.id, 'department', staff.chapterId
+  );
+  res.json({ success: true, item, reached: members.length });
+}));
 
 // ---------- Publicity: event review queue (section 9, continued) ----------
 app.get('/api/publicity/events/queue', requireViewRole('publicity'), async (req, res) => {

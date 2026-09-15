@@ -519,13 +519,58 @@ const { fakeModels } = require('./harness.js');
   const execForm = new FormData();
   execForm.append('name', 'Ama Executive');
   execForm.append('role', 'Financial Secretary');
-  execForm.append('department', 'welfare');
+  execForm.append('department', deptId);
   const execRes = await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: execForm });
   const execData = await execRes.json();
   check('executive saves their own profile', execRes.status === 200 && execData.item.role === 'Financial Secretary', execData);
 
   r = await call('exec', 'POST', '/api/admin/bible-studies', { topic: 'Faith in Action', date: '2026-02-01', scriptureReference: 'James 2:14-26', studyMaterial: 'Test study' });
   check('executive can manage Bible studies', r.status === 200 && r.data.item.topic === 'Faith in Action', r.data);
+
+  console.log('\n== an executive runs their own department ==');
+  // Their department comes from their own roster card, never the request.
+  r = await call('exec', 'GET', '/api/executive/department');
+  check('an executive sees the department they actually hold', r.status === 200 && r.data.department.id === deptId, r.data);
+
+  r = await call('exec', 'PUT', '/api/executive/department', {
+    tagline: 'Caring for one another', meetingDay: 'Saturdays', meetingTime: '4:00 PM', meetingLocation: 'Room 12'
+  });
+  check('they keep their own department page current', r.status === 200 && r.data.item.meetingDay === 'Saturdays', r.data);
+  r = await call('anon', 'GET', '/api/departments');
+  check('and that reaches the public department listing',
+    Array.isArray(r.data) && r.data.some(d => d.id === deptId && d.meetingTime === '4:00 PM'), r.data);
+
+  // Put a member in the department so there is someone to see and to mark.
+  r = await call('admin', 'PUT', `/api/admin/members/${amaMemberId}`, { department: deptId });
+  check('a member is assigned to the department', r.status === 200, r.data);
+
+  r = await call('exec', 'GET', '/api/executive/department/members');
+  check('the executive sees their department\'s members', r.status === 200 && r.data.some(m => m.id === amaMemberId), r.data);
+
+  r = await call('exec', 'POST', '/api/executive/department/meetings', {
+    date: '2026-03-07', topic: 'Welfare planning', attendeeMemberIds: [amaMemberId, memberId]
+  });
+  check('the executive logs a department meeting register', r.status === 200, r.data);
+  check('marking is confined to their own department\'s members, whatever ids are sent',
+    r.data.item.attendeeMemberIds.length === 1 && r.data.item.attendeeMemberIds[0] === amaMemberId, r.data.item);
+
+  r = await call('exec', 'GET', '/api/executive/department/meetings');
+  check('past meetings are listed back', r.status === 200 && r.data.length === 1, r.data);
+
+  // The point of a separate register: department meetings must not quietly
+  // inflate the chapter's service attendance figures.
+  r = await call('shep', 'GET', '/api/shepherd/attendance');
+  check('a department meeting never lands in the chapter\'s service register',
+    Array.isArray(r.data) && !r.data.some(a => a.date === '2026-03-07'), r.data);
+
+  r = await call('exec', 'POST', '/api/executive/department/announcement', { title: 'Meeting moved', body: 'We now meet at 5pm.' });
+  check('the executive messages their own department', r.status === 200 && r.data.reached >= 1, r.data);
+  r = await call('exec', 'POST', '/api/executive/department/announcement', { title: '', body: '' });
+  check('an empty announcement is refused', r.status === 400, r.data);
+
+  // A different chapter's executive must never reach this department.
+  r = await call('coord2', 'GET', '/api/executive/department');
+  check('a chapter 2 account cannot read chapter 1\'s department through this route', r.status === 401, r.data);
 
   r = await call('member', 'POST', '/api/member/executive-interest', {
     role: 'Treasurer', department: 'finance', scope: 'chapter'
