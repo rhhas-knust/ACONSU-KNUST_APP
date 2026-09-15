@@ -8,6 +8,7 @@ const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const { connectDB } = require('./lib/db');
 const repo = require('./lib/repo');
+const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
 const models = require('./lib/models');
 const rolesLib = require('./lib/roles');
@@ -4544,10 +4545,11 @@ function trendSummary(current, previous) {
   return { current, previous, delta, percent, direction };
 }
 
-app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
-  try {
-    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
-    if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to view this dashboard.' });
+// Builds the operational dashboard payload for one chapter — shared by the
+// plain GET (first paint) and the SSE stream below (every push after that),
+// so there is exactly one place that computes the Rule-of-4 KPIs and the
+// activity feed, not two copies that can drift.
+async function buildChapterOverview(chapterId) {
     const filter = { chapterId };
     const [chapter, members, events, attendance, joinRequests, prayerRequests, contactMessages, shepherdingRecords, financeEntries, notifications] = await Promise.all([
       repo.getById('chapters', chapterId),
@@ -4639,10 +4641,9 @@ app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
       .sort((a, b) => new Date(b.at) - new Date(a.at))
       .slice(0, 25);
 
-    res.json({
+    return {
       chapter: chapter ? { id: chapter.id, name: chapter.name } : { id: chapterId, name: chapterId },
       generatedAt: new Date().toISOString(),
-      refreshEverySeconds: 30,
       monthNet,
       kpis: [
         {
@@ -4686,10 +4687,60 @@ app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
         }
       ],
       activity
-    });
+    };
+}
+
+app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to view this dashboard.' });
+    res.json(await buildChapterOverview(chapterId));
   } catch (e) {
     res.status(500).json({ error: 'Could not load admin overview' });
   }
+});
+
+// Live push for the operational dashboard (Phase 2) — replaces the previous
+// client-side poll. One SSE connection per open dashboard; the server pushes
+// a freshly rebuilt overview whenever activityBus reports something in this
+// chapter changed (see repo.create() in lib/repo.js), instead of the client
+// re-fetching on a timer. Plain GET above still serves the first paint —
+// this only carries updates after that.
+app.get('/api/admin/overview/stream', requireChapterAdmin, async (req, res) => {
+  const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+  if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to view this dashboard.' });
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no' // nginx/Render: don't buffer the stream away
+  });
+  res.write('retry: 5000\n\n');
+
+  let closed = false;
+  const push = async () => {
+    if (closed) return;
+    try {
+      const overview = await buildChapterOverview(chapterId);
+      res.write(`event: overview\ndata: ${JSON.stringify(overview)}\n\n`);
+    } catch (e) {
+      // A build failure shouldn't take the connection down — the next
+      // activity event, or the client's own reconnect, tries again.
+    }
+  };
+  const onActivity = (payload) => { if (payload.chapterId === chapterId) push(); };
+  activityBus.on('activity', onActivity);
+
+  // Comment-only ping so proxies/load balancers don't time out an otherwise
+  // silent connection during a quiet chapter.
+  const heartbeat = setInterval(() => { if (!closed) res.write(': ping\n\n'); }, 25000);
+
+  req.on('close', () => {
+    closed = true;
+    clearInterval(heartbeat);
+    activityBus.off('activity', onActivity);
+  });
 });
 
 app.get('/api/admin/join-requests', requireChapterAdmin, async (req, res) => {

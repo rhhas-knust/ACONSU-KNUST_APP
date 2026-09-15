@@ -868,6 +868,59 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', '/api/admin/overview?chapterId=' + chapterId);
   check('national admin can load a selected chapter operational dashboard', r.status === 200 && r.data.chapter.id === chapterId, r.data);
 
+  console.log('\n== operational dashboard: live push, not polling (Phase 2, SSE) ==');
+  {
+    const streamHeaders = (cookieJar) => (jars[cookieJar] ? { cookie: jars[cookieJar] } : {});
+    const anonStream = await fetch(BASE + '/api/admin/overview/stream?chapterId=' + chapterId);
+    check('the live dashboard stream requires authentication', anonStream.status === 401, anonStream.status);
+
+    // A helper that reads SSE chunks off a real, open connection until a
+    // marker string shows up or the deadline passes — this is exercising the
+    // actual push transport, not a stand-in for it.
+    const readUntil = async (reader, decoder, marker, timeoutMs) => {
+      const deadline = Date.now() + timeoutMs;
+      let buffer = '';
+      while (Date.now() < deadline) {
+        const remaining = deadline - Date.now();
+        const { value, done } = await Promise.race([
+          reader.read(),
+          new Promise((resolve) => setTimeout(() => resolve({ done: false, value: undefined, timeout: true }), Math.max(50, remaining)))
+        ]);
+        if (done) return { found: false, buffer };
+        if (value) buffer += decoder.decode(value, { stream: true });
+        if (buffer.includes(marker)) return { found: true, buffer };
+      }
+      return { found: false, buffer };
+    };
+
+    const ch1 = new AbortController();
+    const ch1Res = await fetch(BASE + '/api/admin/overview/stream?chapterId=' + chapterId, { headers: streamHeaders('coord'), signal: ch1.signal });
+    check('the live dashboard stream opens for an authenticated chapter admin',
+      ch1Res.status === 200 && (ch1Res.headers.get('content-type') || '').includes('text/event-stream'), ch1Res.status);
+
+    const ch2 = new AbortController();
+    const ch2Res = await fetch(BASE + '/api/admin/overview/stream?chapterId=test-chapter-2', { headers: streamHeaders('coord2'), signal: ch2.signal });
+    const ch1Reader = ch1Res.body.getReader();
+    const ch2Reader = ch2Res.body.getReader();
+    const decoder1 = new TextDecoder();
+    const decoder2 = new TextDecoder();
+
+    const marker = 'SSE push marker ' + Date.now();
+    const posted = await fetch(BASE + '/api/contact', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-chapter-id': chapterId },
+      body: JSON.stringify({ name: marker, email: 'sse-test@example.com', message: 'live push check' })
+    });
+    check('a public contact message is accepted (the activity this push is about)', posted.status === 200, posted.status);
+
+    const ch1Result = await readUntil(ch1Reader, decoder1, marker, 4000);
+    check('the chapter\'s own dashboard stream pushes the new activity, unprompted', ch1Result.found, ch1Result.buffer.slice(0, 300));
+
+    const ch2Result = await readUntil(ch2Reader, decoder2, marker, 800);
+    check('a different chapter\'s stream never receives another chapter\'s activity', !ch2Result.found, ch2Result.buffer.slice(0, 300));
+
+    ch1.abort(); ch2.abort();
+  }
+
   console.log('\n== governance tiers: national by default, chapter by selection ==');
   // With more than one chapter in play, an unscoped national read must mean
   // "ACONSU nationally", not "every chapter merged into one list" — that

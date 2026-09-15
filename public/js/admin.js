@@ -15,7 +15,9 @@ let ADMIN_CHAPTERS = [];
 // The only panels a true-national actor keeps once chapter operations are
 // pruned from the nav (see applyNavScopeVisibility).
 const NATIONAL_VISIBLE_PANEL_KEYS = ['overview', 'settings'];
-let OVERVIEW_REFRESH_TIMER = null;
+// The live push connection behind the operational dashboard (Phase 2) — see
+// closeOverviewStream() and GET /api/admin/overview/stream in server.js.
+let OVERVIEW_STREAM = null;
 
 function showModal(html, { bottomSheet = false } = {}) {
   document.getElementById('modalContent').innerHTML = html;
@@ -302,13 +304,119 @@ async function loadPanel(name) {
     chapterSettings: renderChapterSettings,
     settings: renderSettings
   };
+  // Navigating away from the overview panel leaves nothing listening for its
+  // pushes; renderOverview() re-opens the connection when it's shown again.
+  if (name !== 'overview') closeOverviewStream();
   if (handlers[name]) handlers[name]();
 }
 
 // ---------- overview ----------
+function closeOverviewStream() {
+  if (OVERVIEW_STREAM) { OVERVIEW_STREAM.close(); OVERVIEW_STREAM = null; }
+}
+
+function overviewTrendLabel(trend = {}) {
+  const symbol = trend.direction === 'up' ? '▲' : (trend.direction === 'down' ? '▼' : '•');
+  const pct = Math.abs(Number(trend.percent || 0));
+  const detail = pct ? `${pct}%` : 'no change';
+  return `${symbol} ${detail} vs previous week`;
+}
+function overviewActivityTime(value) {
+  if (!value) return 'Unknown time';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Unknown time';
+  return d.toLocaleString();
+}
+
+// Pure render: builds the panel from one overview payload. Called for the
+// first paint (from fetchJSON below) and again for every live push the SSE
+// connection delivers, so a push looks exactly like a fresh load — no
+// separate "delta" shape to keep in sync with the server.
+function renderOverviewData(el, data) {
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2 style="margin:0;">Operational Dashboard</h2>
+        <p class="hint" style="margin:4px 0 0;">${escapeHtml((data.chapter && data.chapter.name) || 'Chapter')} • Live as of ${overviewActivityTime(data.generatedAt)}</p>
+      </div>
+      <div class="hint">Rule of 4 KPI view</div>
+    </div>
+    <div class="kpi-grid">
+      ${data.kpis.map((kpi, idx) => `
+        <button type="button" class="kpi-card" data-kpi-index="${idx}">
+          <div class="kpi-label">${escapeHtml(kpi.label)}</div>
+          <div class="kpi-value">${escapeHtml(String(kpi.value))}</div>
+          <div class="kpi-trend ${escapeHtml(kpi.trend.direction || 'flat')}">${escapeHtml(overviewTrendLabel(kpi.trend))}</div>
+        </button>
+      `).join('')}
+    </div>
+    <div class="overview-stream">
+      <div class="panel-head" style="margin-bottom:10px;">
+        <h3 style="margin:0;">Live Pastoral Care &amp; Activity Stream</h3>
+        <small class="hint">${data.activity.length} recent updates</small>
+      </div>
+      <ul>
+        ${data.activity.map((item) => `
+          <li>
+            <strong>${escapeHtml(item.label || 'Activity')}</strong> — ${escapeHtml(item.title || '')}<br>
+            <small>${escapeHtml(item.detail || '')}</small><br>
+            <small class="hint">${escapeHtml(overviewActivityTime(item.at))}</small><br>
+            ${item.panel ? `<button type="button" data-activity-panel="${escapeHtml(item.panel)}">Open ${escapeHtml(item.panel)}</button>` : ''}
+          </li>
+        `).join('') || '<li><span class="hint">No recent updates yet.</span></li>'}
+      </ul>
+    </div>
+  `;
+  el.querySelectorAll('[data-kpi-index]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const kpi = data.kpis[Number(btn.dataset.kpiIndex)];
+      const list = Array.isArray(kpi.drilldown) ? kpi.drilldown : [];
+      showModal(`
+        <h3 style="margin-top:0;">${escapeHtml(kpi.label)}</h3>
+        <p class="hint" style="margin-top:4px;">Current value: <strong>${escapeHtml(String(kpi.value))}</strong></p>
+        <div class="sheet-list">
+          ${list.map((row) => `
+            <div class="sheet-item">
+              <h4>${escapeHtml(row.title || row.name || row.date || 'Item')}</h4>
+              <p>${escapeHtml(row.detail || row.location || row.serviceType || row.level || '')}</p>
+            </div>
+          `).join('') || '<p class="hint">No drill-down rows yet.</p>'}
+        </div>
+        ${kpi.drilldownPanel ? `<button class="btn btn-primary btn-sm" data-open-kpi-panel="${escapeHtml(kpi.drilldownPanel)}" style="margin-top:12px;">Open ${escapeHtml(kpi.drilldownPanel)}</button>` : ''}
+      `, { bottomSheet: true });
+      const openBtn = document.querySelector('[data-open-kpi-panel]');
+      if (openBtn) {
+        openBtn.addEventListener('click', () => {
+          closeModal();
+          openAdminPanel(openBtn.dataset.openKpiPanel);
+        });
+      }
+    });
+  });
+  el.querySelectorAll('[data-activity-panel]').forEach((btn) => {
+    btn.addEventListener('click', () => openAdminPanel(btn.dataset.activityPanel));
+  });
+}
+
+// Opens (or replaces) the live push connection for one chapter's dashboard.
+// Native EventSource reconnects on its own after a drop, so there is no
+// client-side polling fallback to maintain alongside it.
+function subscribeOverviewStream(chapterId) {
+  closeOverviewStream();
+  if (!chapterId || typeof EventSource === 'undefined') return;
+  const es = new EventSource(`/api/admin/overview/stream?chapterId=${encodeURIComponent(chapterId)}`);
+  OVERVIEW_STREAM = es;
+  es.addEventListener('overview', (evt) => {
+    const panel = document.getElementById('panel-overview');
+    if (!panel || !panel.classList.contains('active') || es !== OVERVIEW_STREAM) return;
+    try { renderOverviewData(panel, JSON.parse(evt.data)); } catch (e) { /* wait for the next push */ }
+  });
+}
+
 async function renderOverview() {
   const el = document.getElementById('panel-overview');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
+  closeOverviewStream();
   // The operational dashboard is a chapter's dashboard — there is no
   // meaningful cross-chapter version of "this week's attendance". A national
   // actor picks a chapter for it, or goes to the National Portal for the
@@ -329,88 +437,8 @@ async function renderOverview() {
   }
   try {
     const data = await fetchJSON('/api/admin/overview');
-    if (OVERVIEW_REFRESH_TIMER) clearTimeout(OVERVIEW_REFRESH_TIMER);
-    OVERVIEW_REFRESH_TIMER = setTimeout(() => {
-      const panel = document.getElementById('panel-overview');
-      if (panel && panel.classList.contains('active')) renderOverview();
-    }, Math.max(10, Number(data.refreshEverySeconds || 30)) * 1000);
-
-    const trendLabel = (trend = {}) => {
-      const symbol = trend.direction === 'up' ? '▲' : (trend.direction === 'down' ? '▼' : '•');
-      const pct = Math.abs(Number(trend.percent || 0));
-      const detail = pct ? `${pct}%` : 'no change';
-      return `${symbol} ${detail} vs previous week`;
-    };
-    const formatActivityTime = (value) => {
-      if (!value) return 'Unknown time';
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return 'Unknown time';
-      return d.toLocaleString();
-    };
-
-    el.innerHTML = `
-      <div class="panel-head">
-        <div>
-          <h2 style="margin:0;">Operational Dashboard</h2>
-          <p class="hint" style="margin:4px 0 0;">${escapeHtml((data.chapter && data.chapter.name) || 'Chapter')} • Last refresh ${formatActivityTime(data.generatedAt)}</p>
-        </div>
-        <div class="hint">Rule of 4 KPI view</div>
-      </div>
-      <div class="kpi-grid">
-        ${data.kpis.map((kpi, idx) => `
-          <button type="button" class="kpi-card" data-kpi-index="${idx}">
-            <div class="kpi-label">${escapeHtml(kpi.label)}</div>
-            <div class="kpi-value">${escapeHtml(String(kpi.value))}</div>
-            <div class="kpi-trend ${escapeHtml(kpi.trend.direction || 'flat')}">${escapeHtml(trendLabel(kpi.trend))}</div>
-          </button>
-        `).join('')}
-      </div>
-      <div class="overview-stream">
-        <div class="panel-head" style="margin-bottom:10px;">
-          <h3 style="margin:0;">Live Pastoral Care &amp; Activity Stream</h3>
-          <small class="hint">${data.activity.length} recent updates</small>
-        </div>
-        <ul>
-          ${data.activity.map((item) => `
-            <li>
-              <strong>${escapeHtml(item.label || 'Activity')}</strong> — ${escapeHtml(item.title || '')}<br>
-              <small>${escapeHtml(item.detail || '')}</small><br>
-              <small class="hint">${escapeHtml(formatActivityTime(item.at))}</small><br>
-              ${item.panel ? `<button type="button" data-activity-panel="${escapeHtml(item.panel)}">Open ${escapeHtml(item.panel)}</button>` : ''}
-            </li>
-          `).join('') || '<li><span class="hint">No recent updates yet.</span></li>'}
-        </ul>
-      </div>
-    `;
-    el.querySelectorAll('[data-kpi-index]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const kpi = data.kpis[Number(btn.dataset.kpiIndex)];
-        const list = Array.isArray(kpi.drilldown) ? kpi.drilldown : [];
-        showModal(`
-          <h3 style="margin-top:0;">${escapeHtml(kpi.label)}</h3>
-          <p class="hint" style="margin-top:4px;">Current value: <strong>${escapeHtml(String(kpi.value))}</strong></p>
-          <div class="sheet-list">
-            ${list.map((row) => `
-              <div class="sheet-item">
-                <h4>${escapeHtml(row.title || row.name || row.date || 'Item')}</h4>
-                <p>${escapeHtml(row.detail || row.location || row.serviceType || row.level || '')}</p>
-              </div>
-            `).join('') || '<p class="hint">No drill-down rows yet.</p>'}
-          </div>
-          ${kpi.drilldownPanel ? `<button class="btn btn-primary btn-sm" data-open-kpi-panel="${escapeHtml(kpi.drilldownPanel)}" style="margin-top:12px;">Open ${escapeHtml(kpi.drilldownPanel)}</button>` : ''}
-        `, { bottomSheet: true });
-        const openBtn = document.querySelector('[data-open-kpi-panel]');
-        if (openBtn) {
-          openBtn.addEventListener('click', () => {
-            closeModal();
-            openAdminPanel(openBtn.dataset.openKpiPanel);
-          });
-        }
-      });
-    });
-    el.querySelectorAll('[data-activity-panel]').forEach((btn) => {
-      btn.addEventListener('click', () => openAdminPanel(btn.dataset.activityPanel));
-    });
+    renderOverviewData(el, data);
+    subscribeOverviewStream(data.chapter && data.chapter.id);
   } catch (e) {
     el.innerHTML = `<p class="empty-state">Could not load overview. ${escapeHtml(e.message || '')}</p>`;
   }
