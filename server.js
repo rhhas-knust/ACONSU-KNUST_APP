@@ -1883,6 +1883,31 @@ app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => 
 });
 */
 
+// Who runs a department is the executive holding it — the roster card
+// carrying this department — rather than a name typed into the department
+// record itself. Those were two separate answers that could disagree, and
+// the typed one went stale the moment an office changed hands. Derived on
+// read so it is always whoever currently holds the office, with no second
+// field to keep in step.
+async function attachDepartmentLeaders(departments) {
+  const many = Array.isArray(departments);
+  const list = many ? departments : [departments];
+  if (!list.length || !list[0]) return departments;
+  const execs = await repo.getAll('executives');
+  const key = (chapterId, departmentId) => `${chapterId || ''}::${departmentId}`;
+  const holders = new Map();
+  execs.forEach((exec) => {
+    if (!exec.department) return;
+    const k = key(exec.chapterId, exec.department);
+    if (!holders.has(k)) holders.set(k, exec);
+  });
+  const decorate = (dept) => {
+    const holder = holders.get(key(dept.chapterId, dept.id));
+    return { ...dept, leaderName: holder ? holder.name || '' : '', leaderRole: holder ? holder.role || '' : '' };
+  };
+  return many ? list.map(decorate) : decorate(list[0]);
+}
+
 ['departments', 'sermons', 'testimonies'].forEach((resource) => {
   app.get(`/api/${resource}`, async (req, res) => {
     try {
@@ -1891,7 +1916,7 @@ app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => 
       if (resource === 'testimonies') {
         return res.json(items.filter((t) => t.published));
       }
-      res.json(items);
+      res.json(resource === 'departments' ? await attachDepartmentLeaders(items) : items);
     } catch (e) {
       res.status(500).json({ error: 'Could not load data' });
     }
@@ -1968,7 +1993,7 @@ app.get('/api/search', async (req, res) => {
     const modules = await featureModules();
 
     const [departments, sermons, events, pages, contentItems] = await Promise.all([
-      repo.getAll('departments', baseScope),
+      repo.getAll('departments', baseScope).then(attachDepartmentLeaders),
       repo.getAll('sermons', baseScope),
       repo.getAll('events', eventFilter),
       repo.getAll('pages', baseScope),
@@ -1998,7 +2023,7 @@ app.get('/api/search', async (req, res) => {
         subtitle: item.tagline,
         description: item.description,
         href: `/department.html?id=${encodeURIComponent(item.id)}&${querySuffix}`,
-        extraSearch: [item.meetingDay, item.meetingTime, item.meetingLocation, item.leader],
+        extraSearch: [item.meetingDay, item.meetingTime, item.meetingLocation, item.leaderName],
         meta: { id: item.id }
       })),
       ...events.map((item) => buildPublicSearchResult({
@@ -2331,7 +2356,7 @@ app.get('/api/departments/:id', async (req, res) => {
   try {
     const dept = await repo.getById('departments', req.params.id);
     if (!dept) return res.status(404).json({ error: 'Department not found' });
-    res.json(dept);
+    res.json(await attachDepartmentLeaders(dept));
   } catch (e) {
     res.status(500).json({ error: 'Could not load department' });
   }

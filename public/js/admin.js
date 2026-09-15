@@ -426,8 +426,9 @@ const DEPARTMENT_FIELDS = [
   { key: 'description', label: 'Description', type: 'textarea' },
   { key: 'meetingDay', label: 'Meeting Day', type: 'text' },
   { key: 'meetingTime', label: 'Meeting Time', type: 'text' },
-  { key: 'meetingLocation', label: 'Meeting Location', type: 'text' },
-  { key: 'leader', label: 'Department Leader', type: 'text' }
+  { key: 'meetingLocation', label: 'Meeting Location', type: 'text' }
+  // No leader field: who runs a department is the executive holding it (see
+  // attachDepartmentLeaders in server.js), not a name typed in here.
 ];
 const EVENT_FIELDS = [
   { key: 'title', label: 'Event Title', type: 'text', required: true },

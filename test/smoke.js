@@ -540,6 +540,22 @@ const { fakeModels } = require('./harness.js');
   check('and that reaches the public department listing',
     Array.isArray(r.data) && r.data.some(d => d.id === deptId && d.meetingTime === '4:00 PM'), r.data);
 
+  // Who leads a department is derived from whoever holds the office, so there
+  // is no typed-in name left to go stale when it changes hands.
+  check('the department names its leader from the executive holding it',
+    r.data.some(d => d.id === deptId && d.leaderName === 'Ama Executive' && d.leaderRole === 'Financial Secretary'), r.data);
+  r = await call('anon', 'GET', `/api/departments/${deptId}`);
+  check('the department\'s own page names them too', r.data.leaderName === 'Ama Executive', r.data);
+
+  const handedOver = new FormData();
+  handedOver.append('name', 'Ama Executive');
+  handedOver.append('role', 'Organising Secretary');
+  handedOver.append('department', deptId);
+  await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: handedOver });
+  r = await call('anon', 'GET', `/api/departments/${deptId}`);
+  check('and it follows the office, not a stale copy, when the position changes',
+    r.data.leaderRole === 'Organising Secretary', r.data);
+
   // Put a member in the department so there is someone to see and to mark.
   r = await call('admin', 'PUT', `/api/admin/members/${amaMemberId}`, { department: deptId });
   check('a member is assigned to the department', r.status === 200, r.data);

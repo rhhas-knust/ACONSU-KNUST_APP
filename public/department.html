@@ -137,7 +137,7 @@
             <div><div class="eyebrow">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
             <div><div class="eyebrow">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
             <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
-            ${dept.leader ? `<div><div class="eyebrow">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leader)}</p></div>` : ''}
+            ${dept.leaderName ? `<div><div class="eyebrow">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leaderName)}</p>${dept.leaderRole ? `<p class="tiny muted" style="margin:2px 0 0;">${escapeHtml(dept.leaderRole)}</p>` : ''}</div>` : ''}
           </div>
         </div>
         <p style="color:#5a4468;">${escapeHtml(dept.description)}</p>
