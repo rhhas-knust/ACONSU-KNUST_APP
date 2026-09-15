@@ -233,6 +233,29 @@ function requireChapterCoordinator(req, res, next) {
   return res.status(401).json({ error: 'Not authenticated' });
 }
 
+// Confidentiality boundary (GOVERNANCE_TIER_REVIEW.md, Phase C). Welfare case
+// notes and the finance ledger are local pastoral and financial records; the
+// national tier is entitled to aggregate figures, never to the case files
+// behind them. This refuses in plain words rather than quietly returning an
+// empty list, so the boundary reads as a decision instead of a bug.
+//
+// Deliberately inert while only one chapter exists: there, the national
+// account is also that chapter's day-to-day operator (see the legacy admin
+// login in lib/roles.js), and there is no second chapter whose privacy is at
+// stake. The boundary comes into force alongside the second chapter, matching
+// the "single chapter, zero friction" rule used throughout.
+function chapterConfidential(what) {
+  return (req, res, next) => {
+    const scope = rolesLib.getActingScope(req);
+    if (scope.isNational && !rolesLib.getSoleActiveChapterId()) {
+      return res.status(403).json({
+        error: `${what} stay inside the chapter they belong to. National oversight sees aggregate figures, not individual records.`
+      });
+    }
+    return next();
+  };
+}
+
 app.post('/api/portal/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
@@ -1200,7 +1223,7 @@ const communityRouteDeps = {
   repo, models, rolesLib, requireMember, requireContentManager, requireShepherd,
   requireViewRole, requireFinance, requireChapterAdmin, isChapterAdminOrAbove,
   hasRole, resolveViewerChapterId, resolveChapterIdForWrite, actorName,
-  createNotification, notifyAdminByEmail
+  createNotification, notifyAdminByEmail, chapterConfidential
 };
 registerGroupRoutes(app, communityRouteDeps);
 registerChatRoutes(app, communityRouteDeps);
@@ -3203,7 +3226,7 @@ function filterEntries(entries, { from, to, entryType, category, budgetId }) {
   return out;
 }
 
-app.get('/api/finance/entries', requireViewRole('finance'), async (req, res) => {
+app.get('/api/finance/entries', chapterConfidential('Finance ledger entries'), requireViewRole('finance'), async (req, res) => {
   try {
     const entries = filterEntries(await repo.getAll('financeEntries', rolesLib.chapterFilter(req)), req.query);
     entries.sort((a, b) => (a.date === b.date ? new Date(b.createdAt) - new Date(a.createdAt) : (a.date < b.date ? 1 : -1)));
@@ -3469,7 +3492,7 @@ app.delete('/api/finance/budgets/:id', requireFinance, async (req, res) => {
 });
 
 // Spreadsheet-ready export of whatever the finance office is currently looking at.
-app.get('/api/finance/export.csv', requireViewRole('finance'), async (req, res) => {
+app.get('/api/finance/export.csv', chapterConfidential('Finance ledger entries'), requireViewRole('finance'), async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
     const entries = filterEntries(await repo.getAll('financeEntries', filter), req.query);
@@ -3502,7 +3525,7 @@ app.get('/api/finance/export.csv', requireViewRole('finance'), async (req, res) 
 // PDF sibling to the CSV export — same filtering, laid out to be read at a
 // meeting rather than opened in a spreadsheet (section 37: Generate -> Preview
 // (the existing on-screen ledger) -> Download PDF).
-app.get('/api/finance/export.pdf', requireViewRole('finance'), async (req, res) => {
+app.get('/api/finance/export.pdf', chapterConfidential('Finance ledger entries'), requireViewRole('finance'), async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
     const [entries, chapter] = await Promise.all([
@@ -5032,6 +5055,11 @@ async function resolveChapterIdForWrite(req, explicitChapterId) {
   const scope = rolesLib.getActingScope(req);
   if (!scope.isNational) return scope.chapterId;
   if (explicitChapterId) return explicitChapterId;
+  // A national actor who has chosen a chapter in the dashboard's scope
+  // selector has already said which chapter they mean — that choice arrives
+  // on the request (see lib/roles.js selectedChapterId) and counts here just
+  // as an explicit ?chapterId= would.
+  if (scope.chapterId) return scope.chapterId;
   const chapters = await repo.getAll('chapters', { status: 'active' });
   return chapters.length === 1 ? chapters[0].id : '';
 }

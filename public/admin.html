@@ -21,6 +21,9 @@
   .admin-topbar-right { display: flex; align-items: center; gap: 12px; }
   .mobile-nav-toggle, .mobile-actions-toggle { display: none; }
   .chapter-badge { background: rgba(255,255,255,0.16); padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; color: var(--flame-gold); letter-spacing: 0.02em; border: 1px solid rgba(232,151,30,0.3); }
+  .scope-select-wrap select { background: rgba(255,255,255,0.14); color: #fff; border: 1px solid rgba(255,255,255,0.28); border-radius: 8px; padding: 5px 10px; font-family: inherit; font-size: 0.78rem; font-weight: 700; max-width: 190px; }
+  .scope-select-wrap select option { color: var(--purple-ink, #3A1B54); background: #fff; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
   .cmd-trigger { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; font-family: inherit; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: background 0.15s ease; }
   .cmd-trigger:hover { background: rgba(255,255,255,0.22); }
   .cmd-trigger kbd { background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-family: monospace; border: 1px solid rgba(255,255,255,0.15); }
@@ -141,6 +144,12 @@
       <button type="button" class="mobile-nav-toggle" id="mobileNavBtn">☰</button>
       <strong>ACONSU Admin</strong>
       <span class="chapter-badge" id="adminChapterBadge">Loading Chapter...</span>
+      <!-- National actors only: which chapter am I looking at? Hidden for
+           chapter-scoped accounts, who are pinned to their own chapter. -->
+      <label class="scope-select-wrap" id="adminScopeWrap" style="display:none;">
+        <span class="sr-only">Viewing</span>
+        <select id="adminScopeSelect" title="Which chapter you are viewing"></select>
+      </label>
     </div>
     <div class="admin-topbar-right">
       <button type="button" class="mobile-actions-toggle" id="mobileQuickActionsBtn">⚡</button>

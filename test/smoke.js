@@ -919,6 +919,36 @@ const { fakeModels } = require('./harness.js');
   check('chapter 2 never sees chapter 1\'s newly appointed staff',
     Array.isArray(r.data) && r.data.every(s => s.chapterId === 'test-chapter-2'), r.data);
 
+  // The dashboard's scope selector sends its choice on the request rather
+  // than as ?chapterId=, so endpoints that resolve a chapter for themselves
+  // must honour it too — otherwise picking a chapter in the top bar silently
+  // fails to reach them.
+  r = await call('admin', 'GET', '/api/admin/overview', null, false, { 'x-chapter-id': chapterId });
+  check('the scope selector reaches endpoints that resolve their own chapter',
+    r.status === 200 && r.data.chapter.id === chapterId, r.data);
+
+  console.log('\n== confidentiality boundary: national sees aggregates, not case files ==');
+  r = await call('admin', 'GET', '/api/welfare/requests');
+  check('national is refused the welfare queue outright, with a reason', r.status === 403 && /stay inside the chapter/.test(r.data.error || ''), r.data);
+
+  r = await call('admin', 'GET', '/api/welfare/requests?chapterId=' + chapterId);
+  check('naming a chapter does not open welfare case notes to national either', r.status === 403, r.data);
+
+  r = await call('admin', 'GET', '/api/finance/entries');
+  check('national is refused the finance ledger', r.status === 403, r.data);
+
+  r = await call('admin', 'GET', '/api/finance/export.csv?chapterId=' + chapterId);
+  check('national cannot export a chapter ledger either', r.status === 403, r.data);
+
+  r = await call('welf', 'GET', '/api/welfare/requests');
+  check('the chapter welfare officer still reads their own queue', r.status === 200, r.data);
+
+  r = await call('fin', 'GET', '/api/finance/entries');
+  check('the chapter finance officer still reads their own ledger', r.status === 200, r.data);
+
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  check('national keeps the aggregate financial picture', r.status === 200 && r.data.financialOverview, r.data);
+
   console.log('\n== static pages ==');
   for (const page of [
     '/more.html', '/admin.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',

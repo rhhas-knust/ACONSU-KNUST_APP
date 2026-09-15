@@ -5,6 +5,13 @@ let CURRENT_SETTINGS = {};
 // by checkAuth() before the shell ever renders.
 let ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
 const ADMIN_NAV_STATE_KEY = 'aconsu_admin_nav_state';
+// The chapter a NATIONAL actor has deliberately chosen to look into, kept
+// separate from the public site's chapter picker. Without this separation a
+// national officer who had browsed the public KNUST site would arrive at the
+// dashboard silently scoped to KNUST, which is exactly the kind of invisible
+// scoping this change exists to remove. Empty means national scope.
+const ADMIN_SCOPE_KEY = 'aconsu_admin_scope_chapter';
+let ADMIN_CHAPTERS = [];
 let OVERVIEW_REFRESH_TIMER = null;
 
 function showModal(html, { bottomSheet = false } = {}) {
@@ -51,15 +58,68 @@ async function checkAuth() {
   document.getElementById('adminShell').style.display = 'none';
 }
 
+function readAdminScopeChapter() {
+  try { return localStorage.getItem(ADMIN_SCOPE_KEY) || ''; } catch (e) { return ''; }
+}
+function writeAdminScopeChapter(id) {
+  try {
+    if (id) localStorage.setItem(ADMIN_SCOPE_KEY, id);
+    else localStorage.removeItem(ADMIN_SCOPE_KEY);
+  } catch (e) { /* private browsing — scope simply resets to national */ }
+}
+// fetchJSON attaches X-Chapter-Id from the shared chapter store, so the
+// admin's own choice is pushed into it on every load. That way the dashboard
+// never inherits a chapter left behind by the public site's picker.
+function applyAdminScope() {
+  if (!ADMIN_SCOPE.isNational) return;
+  setSelectedChapterId(readAdminScopeChapter());
+}
+function currentAdminScopeChapter() {
+  return ADMIN_SCOPE.isNational ? readAdminScopeChapter() : ADMIN_SCOPE.chapterId;
+}
+
+async function initChapterScopeSelector() {
+  const wrap = document.getElementById('adminScopeWrap');
+  const select = document.getElementById('adminScopeSelect');
+  const badge = document.getElementById('adminChapterBadge');
+  if (!wrap || !select || !ADMIN_SCOPE.isNational) return;
+
+  try {
+    ADMIN_CHAPTERS = await fetchJSON('/api/national/chapters');
+  } catch (e) {
+    ADMIN_CHAPTERS = [];
+  }
+  const chosen = readAdminScopeChapter();
+  select.innerHTML = `
+    <option value="">🌐 ACONSU National</option>
+    ${ADMIN_CHAPTERS.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === chosen ? 'selected' : ''}>📍 ${escapeHtml(c.name)}</option>`).join('')}
+  `;
+  wrap.style.display = 'inline-flex';
+  if (badge) {
+    const found = ADMIN_CHAPTERS.find(c => c.id === chosen);
+    badge.textContent = found ? `Viewing ${found.name}` : 'National scope';
+  }
+
+  select.addEventListener('change', () => {
+    writeAdminScopeChapter(select.value);
+    applyAdminScope();
+    const found = ADMIN_CHAPTERS.find(c => c.id === select.value);
+    if (badge) badge.textContent = found ? `Viewing ${found.name}` : 'National scope';
+    showToast(found ? `Now viewing ${found.name}` : 'Back to national scope', 'success');
+    const active = document.querySelector('.admin-panel.active');
+    loadPanel(active ? active.id.replace('panel-', '') : 'overview');
+  });
+}
+
 function showAdminShell() {
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('adminShell').style.display = 'block';
-  
+
   // Chapter badge display in topbar
   const badge = document.getElementById('adminChapterBadge');
   if (badge) {
     if (ADMIN_SCOPE.isNational) {
-      badge.textContent = '🌐 National Admin';
+      badge.textContent = 'National scope';
       const natBtn = document.getElementById('navNationalBtn');
       const globBtn = document.getElementById('navGlobalSettingsBtn');
       if (natBtn) natBtn.style.display = 'flex';
@@ -71,9 +131,11 @@ function showAdminShell() {
     }
   }
 
+  applyAdminScope();
   initAdminNav();
   initMobileAdminUi();
   initCommandPalette();
+  initChapterScopeSelector();
   loadPanel('overview');
 }
 
@@ -206,6 +268,24 @@ async function loadPanel(name) {
 async function renderOverview() {
   const el = document.getElementById('panel-overview');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
+  // The operational dashboard is a chapter's dashboard — there is no
+  // meaningful cross-chapter version of "this week's attendance". A national
+  // actor picks a chapter for it, or goes to the National Portal for the
+  // aggregate view, rather than being shown a raw error.
+  if (ADMIN_SCOPE.isNational && !currentAdminScopeChapter() && ADMIN_CHAPTERS.length !== 1) {
+    el.innerHTML = `
+      <div class="panel-head">
+        <div>
+          <h2>Operational Dashboard</h2>
+          <p class="hint" style="margin:4px 0 0;">This dashboard belongs to a chapter.</p>
+        </div>
+      </div>
+      <p class="empty-state">
+        You are viewing at <strong>national scope</strong>. Choose a chapter from the selector in the top bar to see its
+        dashboard, or open the <a href="/national.html">National Portal</a> for the cross-chapter picture.
+      </p>`;
+    return;
+  }
   try {
     const data = await fetchJSON('/api/admin/overview');
     if (OVERVIEW_REFRESH_TIMER) clearTimeout(OVERVIEW_REFRESH_TIMER);
