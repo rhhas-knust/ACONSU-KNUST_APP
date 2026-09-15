@@ -84,6 +84,19 @@ function requireAdmin(req, res, next) {
 }
 
 // ---------- auth routes ----------
+// One session carries every identity this browser holds — the env admin flag,
+// a staff record, the shepherd flag, a member id — and the portals' own login
+// form can set two of them at once (see /api/portal/login, where the env admin
+// credentials set isAdmin *and* staff). So a logout that deletes only its own
+// key leaves the person signed in through another door: clearing `staff` while
+// `isAdmin` survives is exactly why logging out of a portal appeared to do
+// nothing. Logging out means the session ends — every endpoint below shares
+// this, which also matters on the shared campus devices this runs on.
+function endSession(req, res) {
+  if (!req.session) return res.json({ success: true });
+  req.session.destroy(() => res.json({ success: true }));
+}
+
 app.post('/api/admin/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
   const adminUser = process.env.ADMIN_USERNAME || 'admin';
@@ -95,9 +108,7 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
   return res.status(401).json({ error: 'Invalid credentials' });
 });
 
-app.post('/api/admin/logout', (req, res) => {
-  req.session.destroy(() => res.json({ success: true }));
-});
+app.post('/api/admin/logout', (req, res) => endSession(req, res));
 
 app.get('/api/admin/check', (req, res) => {
   res.json({ isAdmin: !!(req.session && req.session.isAdmin) });
@@ -127,10 +138,7 @@ app.post('/api/shepherd/login', loginLimiter, (req, res) => {
   return res.status(401).json({ error: 'Invalid credentials' });
 });
 
-app.post('/api/shepherd/logout', (req, res) => {
-  delete req.session.isShepherd;
-  res.json({ success: true });
-});
+app.post('/api/shepherd/logout', (req, res) => endSession(req, res));
 
 app.get('/api/shepherd/check', (req, res) => {
   res.json({ isShepherd: hasRole(req, 'shepherding') });
@@ -328,13 +336,7 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/portal/logout', (req, res) => {
-  if (req.session) {
-    delete req.session.staff;
-    delete req.session.isShepherd;
-  }
-  res.json({ success: true });
-});
+app.post('/api/portal/logout', (req, res) => endSession(req, res));
 
 // Tells a portal page who is signed in and which areas they may open.
 app.get('/api/portal/me', async (req, res) => {
@@ -594,10 +596,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  delete req.session.memberId;
-  res.json({ success: true });
-});
+app.post('/api/auth/logout', (req, res) => endSession(req, res));
 
 // ---------- password reset ----------
 app.post('/api/auth/forgot-password', loginLimiter, async (req, res) => {

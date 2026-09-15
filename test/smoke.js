@@ -86,6 +86,30 @@ const { fakeModels } = require('./harness.js');
   r = await call('bad', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'wrong' });
   check('wrong password rejected', r.status === 401, r.data);
 
+  console.log('\n== logging out actually logs you out ==');
+  // The env admin signing in through a portal form gets BOTH isAdmin and a
+  // staff record, so a logout that only cleared `staff` left them signed in —
+  // which is what made the portals feel impossible to leave.
+  r = await call('logoutTest', 'POST', '/api/portal/login', { username: 'admin', password: 'admin123' });
+  check('the env admin can sign in through a portal login form', r.status === 200, r.data);
+  r = await call('logoutTest', 'GET', '/api/admin/check');
+  check('and is recognised as admin while signed in', r.data.isAdmin === true, r.data);
+  r = await call('logoutTest', 'POST', '/api/portal/logout');
+  check('portal logout succeeds', r.status === 200, r.data);
+  r = await call('logoutTest', 'GET', '/api/admin/check');
+  check('the admin flag is gone after logging out, not just the staff record', r.data.isAdmin === false, r.data);
+  r = await call('logoutTest', 'GET', '/api/portal/me');
+  check('and the portal no longer recognises them at all', !r.data.staff && r.data.isAdmin === false, r.data);
+
+  // A member signed in on the same browser is signed out too, rather than
+  // being left behind on a shared device.
+  r = await call('logoutTest2', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+  check('a staff account signs in', r.status === 200, r.data);
+  r = await call('logoutTest2', 'POST', '/api/auth/logout');
+  check('the member-side logout ends the session too', r.status === 200, r.data);
+  r = await call('logoutTest2', 'GET', '/api/portal/me');
+  check('leaving no staff identity behind on a shared device', !r.data.staff, r.data);
+
   console.log('\n== national coordinator ==');
   r = await call('admin', 'GET', '/api/admin/image-placements');
   check('homepage header placement is available to the media library', r.status === 200 && r.data.placements.some(p => p.value === 'home-header'), r.data);

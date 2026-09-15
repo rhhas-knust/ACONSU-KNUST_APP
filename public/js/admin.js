@@ -141,6 +141,19 @@ async function showAdminShell() {
       });
   }
 
+  // The Log Out button has always been in the markup but was never bound to
+  // anything, so clicking it did nothing at all. Bound once here, after the
+  // shell exists (admin.html and chapter.html both load this file).
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn && !logoutBtn.dataset.bound) {
+    logoutBtn.dataset.bound = '1';
+    logoutBtn.addEventListener('click', async () => {
+      closeOverviewStream();
+      await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
+      window.location.href = '/admin.html';
+    });
+  }
+
   loadPanel('overview');
 }
 
