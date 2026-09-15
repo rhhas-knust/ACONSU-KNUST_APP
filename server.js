@@ -233,6 +233,29 @@ function requireChapterCoordinator(req, res, next) {
   return res.status(401).json({ error: 'Not authenticated' });
 }
 
+// Confidentiality boundary (GOVERNANCE_TIER_REVIEW.md, Phase C). Welfare case
+// notes and the finance ledger are local pastoral and financial records; the
+// national tier is entitled to aggregate figures, never to the case files
+// behind them. This refuses in plain words rather than quietly returning an
+// empty list, so the boundary reads as a decision instead of a bug.
+//
+// Deliberately inert while only one chapter exists: there, the national
+// account is also that chapter's day-to-day operator (see the legacy admin
+// login in lib/roles.js), and there is no second chapter whose privacy is at
+// stake. The boundary comes into force alongside the second chapter, matching
+// the "single chapter, zero friction" rule used throughout.
+function chapterConfidential(what) {
+  return (req, res, next) => {
+    const scope = rolesLib.getActingScope(req);
+    if (scope.isNational && !rolesLib.getSoleActiveChapterId()) {
+      return res.status(403).json({
+        error: `${what} stay inside the chapter they belong to. National oversight sees aggregate figures, not individual records.`
+      });
+    }
+    return next();
+  };
+}
+
 app.post('/api/portal/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
@@ -1200,7 +1223,7 @@ const communityRouteDeps = {
   repo, models, rolesLib, requireMember, requireContentManager, requireShepherd,
   requireViewRole, requireFinance, requireChapterAdmin, isChapterAdminOrAbove,
   hasRole, resolveViewerChapterId, resolveChapterIdForWrite, actorName,
-  createNotification, notifyAdminByEmail
+  createNotification, notifyAdminByEmail, chapterConfidential
 };
 registerGroupRoutes(app, communityRouteDeps);
 registerChatRoutes(app, communityRouteDeps);
@@ -3203,7 +3226,7 @@ function filterEntries(entries, { from, to, entryType, category, budgetId }) {
   return out;
 }
 
-app.get('/api/finance/entries', requireViewRole('finance'), async (req, res) => {
+app.get('/api/finance/entries', chapterConfidential('Finance ledger entries'), requireViewRole('finance'), async (req, res) => {
   try {
     const entries = filterEntries(await repo.getAll('financeEntries', rolesLib.chapterFilter(req)), req.query);
     entries.sort((a, b) => (a.date === b.date ? new Date(b.createdAt) - new Date(a.createdAt) : (a.date < b.date ? 1 : -1)));
@@ -3469,7 +3492,7 @@ app.delete('/api/finance/budgets/:id', requireFinance, async (req, res) => {
 });
 
 // Spreadsheet-ready export of whatever the finance office is currently looking at.
-app.get('/api/finance/export.csv', requireViewRole('finance'), async (req, res) => {
+app.get('/api/finance/export.csv', chapterConfidential('Finance ledger entries'), requireViewRole('finance'), async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
     const entries = filterEntries(await repo.getAll('financeEntries', filter), req.query);
@@ -3502,7 +3525,7 @@ app.get('/api/finance/export.csv', requireViewRole('finance'), async (req, res) 
 // PDF sibling to the CSV export — same filtering, laid out to be read at a
 // meeting rather than opened in a spreadsheet (section 37: Generate -> Preview
 // (the existing on-screen ledger) -> Download PDF).
-app.get('/api/finance/export.pdf', requireViewRole('finance'), async (req, res) => {
+app.get('/api/finance/export.pdf', chapterConfidential('Finance ledger entries'), requireViewRole('finance'), async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
     const [entries, chapter] = await Promise.all([
@@ -4083,6 +4106,7 @@ app.post('/api/national/chapters', rolesLib.requireNational, async (req, res) =>
       location: location || '', address: address || '', status: 'active',
       createdBy: actorName(req)
     }, slug);
+    await refreshSoleActiveChapter();
     res.json({ success: true, item: chapter });
   } catch (e) {
     res.status(500).json({ error: 'Could not create this chapter' });
@@ -4106,6 +4130,7 @@ app.patch('/api/national/chapters/:id/status', rolesLib.requireNational, async (
   try {
     const item = await repo.patchById('chapters', req.params.id, { status });
     if (!item) return res.status(404).json({ error: 'Chapter not found' });
+    await refreshSoleActiveChapter();
     res.json({ success: true, item });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this chapter' });
@@ -4944,8 +4969,17 @@ app.delete('/api/admin/files/:id', requireChapterAdmin, async (req, res) => {
 
 app.post('/api/admin/executives', requireChapterAdmin, upload.single('image'), async (req, res) => {
   try {
-    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
-    if (!chapterId) return res.status(400).json({ error: 'A chapter is required — this deployment now has more than one, please specify which.' });
+    // A national actor may deliberately create a NATIONAL executive — one of
+    // the union's own officers rather than a chapter's. That is a different
+    // statement from "I forgot to pick a chapter", so it has to be said
+    // explicitly with the NATIONAL_SCOPE token; everything else still
+    // resolves to a real chapter and is rejected if it cannot.
+    const wantsNational = rolesLib.getActingScope(req).isNational
+      && String(req.body.chapterId || '') === rolesLib.NATIONAL_SCOPE;
+    const chapterId = wantsNational
+      ? rolesLib.NATIONAL_CHAPTER_ID
+      : await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!wantsNational && !chapterId) return res.status(400).json({ error: 'A chapter is required — this deployment now has more than one, please specify which.' });
     let imageFileId = '';
     if (req.file) {
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
@@ -5021,6 +5055,11 @@ async function resolveChapterIdForWrite(req, explicitChapterId) {
   const scope = rolesLib.getActingScope(req);
   if (!scope.isNational) return scope.chapterId;
   if (explicitChapterId) return explicitChapterId;
+  // A national actor who has chosen a chapter in the dashboard's scope
+  // selector has already said which chapter they mean — that choice arrives
+  // on the request (see lib/roles.js selectedChapterId) and counts here just
+  // as an explicit ?chapterId= would.
+  if (scope.chapterId) return scope.chapterId;
   const chapters = await repo.getAll('chapters', { status: 'active' });
   return chapters.length === 1 ? chapters[0].id : '';
 }
@@ -5392,11 +5431,26 @@ async function checkRetentionAlerts() {
 }
 
 // ---------- startup ----------
+// Keeps lib/roles.js's "single chapter, zero friction" shortcut honest.
+// chapterFilter() runs on nearly every request and cannot be async, so the
+// answer to "is there exactly one active chapter?" is cached here and
+// refreshed whenever a chapter is created, edited or activated/deactivated.
+async function refreshSoleActiveChapter() {
+  try {
+    const active = await repo.getAll('chapters', { status: 'active' });
+    rolesLib.setSoleActiveChapterId(active.length === 1 ? active[0].id : null);
+  } catch (e) {
+    // Leave the previous value in place rather than silently widening scope.
+  }
+}
+
 connectDB()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);
     });
+    refreshSoleActiveChapter();
+    setInterval(refreshSoleActiveChapter, 5 * 60 * 1000); // belt and braces against drift
     checkBirthdaysAndNotify();
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
     sendDueAnnouncements();

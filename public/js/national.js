@@ -178,10 +178,7 @@ function assignCoordinatorForm(chapter, staffInChapter) {
 }
 
 async function renderChapters(el) {
-  const [chapters, staff] = await Promise.all([
-    fetchJSON('/api/national/chapters'),
-    fetchJSON('/api/admin/staff')
-  ]);
+  const chapters = await fetchJSON('/api/national/chapters');
 
   el.innerHTML = `
     <div class="panel-head">
@@ -219,9 +216,17 @@ async function renderChapters(el) {
   el.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () =>
     chapterForm(chapters.find(c => c.id === btn.dataset.edit))
   ));
-  el.querySelectorAll('[data-assign]').forEach(btn => btn.addEventListener('click', () =>
-    assignCoordinatorForm(chapters.find(c => c.id === btn.dataset.assign), staff.filter(s => s.chapterId === btn.dataset.assign))
-  ));
+  // A chapter's own staff list is fetched with that chapter named explicitly.
+  // National scope no longer means "every chapter's records merged", so the
+  // accounts to promote from have to be asked for by chapter.
+  el.querySelectorAll('[data-assign]').forEach(btn => btn.addEventListener('click', async () => {
+    const chapter = chapters.find(c => c.id === btn.dataset.assign);
+    let chapterStaff = [];
+    try {
+      chapterStaff = await fetchJSON(`/api/admin/staff?chapterId=${encodeURIComponent(chapter.id)}`);
+    } catch (e) { /* fall through with an empty list — "new account" still works */ }
+    assignCoordinatorForm(chapter, chapterStaff.filter(s => s.chapterId === chapter.id));
+  }));
   el.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
     const next = btn.dataset.status === 'active' ? 'inactive' : 'active';
     try {
@@ -282,6 +287,114 @@ async function renderNationalReports(el) {
   <div class="portal-card"><div class="table-wrap"><table class="portal-table"><thead><tr><th>Chapter</th><th>Status</th><th class="num">Active members</th><th class="num">Visitors</th><th class="num">Events</th><th class="num">Services</th><th class="num">Open welfare</th></tr></thead><tbody>${rows.map(r=>`<tr><td><strong>${escapeHtml(r.chapterName)}</strong></td><td>${pill(r.status,r.status==='active'?'green':'grey')}</td><td class="num">${r.activeMembers}</td><td class="num">${r.visitors}</td><td class="num">${r.events}</td><td class="num">${r.servicesRecorded}</td><td class="num">${r.openWelfareRequests}</td></tr>`).join('')||emptyRow(7,'No chapters yet.')}</tbody></table></div></div>`;
 }
 
+// ---------- national executives ----------
+// The union's own officers, not any chapter's. These are the records stored
+// with an empty chapterId; chapter executives belong to, and are managed in,
+// their own chapter's dashboard. Sending the NATIONAL_SCOPE token on create
+// is what distinguishes "this is a national officer" from "I forgot to pick
+// a chapter" (see POST /api/admin/executives).
+const NATIONAL_SCOPE_TOKEN = '__national__';
+
+function nationalExecForm(exec) {
+  const isEdit = !!exec;
+  showModal(`
+    <h3>${isEdit ? 'Edit National Executive' : 'New National Executive'}</h3>
+    <p class="hint">A national officer of ACONSU. Chapter officers are managed inside their own chapter.</p>
+    <form id="nationalExecForm">
+      <div class="field"><label>Full Name</label>
+        <input type="text" id="neName" value="${escapeHtml(exec?.name || '')}" required></div>
+      <div class="field"><label>Position</label>
+        <input type="text" id="neRole" value="${escapeHtml(exec?.role || '')}" placeholder="e.g. National President" required></div>
+      <div class="field"><label>Bio (optional)</label>
+        <textarea id="neBio" rows="3">${escapeHtml(exec?.bio || '')}</textarea></div>
+      <div class="field-row">
+        <div class="field"><label>Display Order</label>
+          <input type="number" id="neOrder" value="${Number(exec?.order || 0)}"></div>
+        <div class="field"><label>Photo (optional)</label>
+          <input type="file" id="neImage" accept="image/*"></div>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:22px;">
+        <button type="submit" class="btn btn-primary">Save Executive</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="nationalExecMsg"></div>
+    </form>
+  `);
+
+  document.getElementById('nationalExecForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = new FormData();
+    body.append('name', document.getElementById('neName').value);
+    body.append('role', document.getElementById('neRole').value);
+    body.append('bio', document.getElementById('neBio').value);
+    body.append('order', document.getElementById('neOrder').value || '0');
+    body.append('chapterId', NATIONAL_SCOPE_TOKEN);
+    const file = document.getElementById('neImage').files[0];
+    if (file) body.append('image', file);
+    try {
+      const url = isEdit ? `/api/admin/executives/${exec.id}` : '/api/admin/executives';
+      const res = await fetch(url, { method: isEdit ? 'PUT' : 'POST', body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save this executive.');
+      closeModal();
+      showToast(isEdit ? 'Executive updated' : 'National executive added', 'success');
+      openPanel('executives');
+    } catch (err) {
+      setFormMsg('nationalExecMsg', err.message || 'Could not save this executive.', 'error');
+    }
+  });
+}
+
+async function renderNationalExecutives(el) {
+  const execs = await fetchJSON('/api/executives');
+  const national = execs.filter(e => !e.chapterId);
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>National Executives</h2>
+        <p class="sub">ACONSU's own national officers. Each chapter's executives are managed by that chapter and never appear here.</p>
+      </div>
+      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newNationalExecBtn">+ New Executive</button></div>
+    </div>
+    <div class="table-wrap">
+      <table class="portal-table">
+        <thead><tr><th>Name</th><th>Position</th><th class="num">Order</th><th></th></tr></thead>
+        <tbody>
+          ${national.map(e => `
+            <tr>
+              <td><strong>${escapeHtml(e.name || '—')}</strong>${e.bio ? `<br><small class="muted">${escapeHtml(e.bio.slice(0, 80))}${e.bio.length > 80 ? '…' : ''}</small>` : ''}</td>
+              <td>${escapeHtml(e.role || '—')}</td>
+              <td class="num">${Number(e.order || 0)}</td>
+              <td>
+                <div class="row-actions">
+                  <button data-edit-exec="${e.id}">Edit</button>
+                  <button data-delete-exec="${e.id}" class="danger">Remove</button>
+                </div>
+              </td>
+            </tr>
+          `).join('') || emptyRow(4, 'No national executives yet — add the union\'s national officers here.')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('newNationalExecBtn').addEventListener('click', () => nationalExecForm(null));
+  el.querySelectorAll('[data-edit-exec]').forEach(btn => btn.addEventListener('click', () =>
+    nationalExecForm(national.find(e => e.id === btn.dataset.editExec))
+  ));
+  el.querySelectorAll('[data-delete-exec]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Remove this national executive?')) return;
+    try {
+      await fetchJSON(`/api/admin/executives/${btn.dataset.deleteExec}`, { method: 'DELETE' });
+      showToast('Executive removed', 'success');
+      openPanel('executives');
+    } catch (err) {
+      showToast(err.message || 'Could not remove this executive.', 'error');
+    }
+  }));
+}
+
 const FEATURE_LABELS = {
   bible: 'Bible', bibleStudy: 'Bible Study', events: 'Events', donations: 'Donations', welfare: 'Welfare',
   communityChat: 'Community Chat', ebooks: 'E-Books', liveStreaming: 'Live Streaming', attendance: 'Attendance',
@@ -301,6 +414,7 @@ initPortal({
   panels: [
     { key: 'dashboard', label: 'National Dashboard', render: renderNationalDashboard },
     { key: 'chapters', label: 'Chapters', render: renderChapters },
+    { key: 'executives', label: 'National Executives', render: renderNationalExecutives },
     { key: 'reports', label: 'National Reports', render: renderNationalReports },
     { key: 'features', label: 'Feature Configuration', render: renderFeatures },
     { key: 'announcements', label: 'National Announcements', render: renderNationalAnnouncements }

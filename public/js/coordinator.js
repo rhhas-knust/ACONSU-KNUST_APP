@@ -10,8 +10,26 @@ const OFFICE_LINKS = [
   { role: 'chapterAdmin', href: '/chapter.html', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration' },
   { role: 'finance', href: '/finance.html', label: 'Finance Office', blurb: 'Budgets, ledger and reports' },
   { role: 'shepherding', href: '/shepherding.html', label: 'Shepherding', blurb: 'Attendance, member care, messages' },
-  { role: 'publicity', href: '/publicity.html', label: 'Publicity', blurb: 'Announcements, SMS, testimonies' }
+  { role: 'publicity', href: '/publicity.html', label: 'Publicity', blurb: 'Announcements, SMS, testimonies' },
+  { role: 'welfare', href: '/welfare-portal.html', label: 'Welfare Office', blurb: 'Welfare requests and case notes' }
 ];
+
+// The roles a Chapter Coordinator may appoint. Deliberately excludes
+// nationalCoordinator and coordinator — those stay with National, and the
+// server enforces it regardless of what this list says (NATIONAL_ONLY_ROLES
+// in server.js). Every account created here is stamped with this
+// coordinator's own chapter by the server, never by the browser.
+const APPOINTABLE_ROLES = [
+  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Runs the chapter day to day — members, events, content, reports' },
+  { value: 'finance', label: 'Finance Officer', blurb: 'Budgets, ledger, giving reconciliation' },
+  { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance registers, member care, contact inbox' },
+  { value: 'publicity', label: 'Publicity Officer', blurb: 'Announcements, SMS, testimonies' },
+  { value: 'welfare', label: 'Welfare Officer', blurb: 'Welfare requests and confidential case notes' },
+  { value: 'executive', label: 'Executive', blurb: 'An executive with their own portal account' },
+  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department' }
+];
+const ROLE_LABEL = APPOINTABLE_ROLES.reduce((acc, r) => { acc[r.value] = r.label; return acc; },
+  { coordinator: 'Chapter Coordinator', nationalCoordinator: 'National Coordinator' });
 
 // ---------- dashboard ----------
 async function renderCoordinatorDashboard(el) {
@@ -181,9 +199,160 @@ async function renderOffices(el) {
           </tbody>
         </table>
       </div>
-      <p class="tiny muted" style="margin-top:12px;">Accounts are created by the ACONSU admin under Leadership Accounts.</p>
+      <p class="tiny muted" style="margin-top:12px;">Coordinator accounts are assigned by the National Coordinator. Everyone else in your chapter, you appoint yourself under Leadership Accounts.</p>
     </div>
   `;
+}
+
+// ---------- leadership accounts ----------
+// The Chapter Coordinator is the top local authority, so staffing the chapter
+// belongs here rather than in the national inbox. The server already allowed
+// this; until now nothing in the interface offered it, so every appointment
+// in every chapter had to be requested from National.
+function staffForm(existing) {
+  const isEdit = !!existing;
+  showModal(`
+    <h3>${isEdit ? `Edit ${escapeHtml(existing.name || existing.username)}` : 'Appoint Chapter Leader'}</h3>
+    <p class="hint">${isEdit
+      ? 'Change their role, rename them, or set a new password. Leave the password blank to keep the current one.'
+      : 'The account is created inside your own chapter automatically.'}</p>
+    <form id="staffForm">
+      ${isEdit ? '' : `
+        <div class="field"><label>Username</label>
+          <input type="text" id="sfUsername" autocomplete="off" required>
+          <small class="hint">They sign in with this. Lowercase, no spaces.</small>
+        </div>`}
+      <div class="field"><label>Full Name</label>
+        <input type="text" id="sfName" value="${escapeHtml(existing?.name || '')}" required></div>
+      <div class="field"><label>Role</label>
+        <select id="sfRole">
+          ${APPOINTABLE_ROLES.map(r => `<option value="${r.value}" ${existing?.role === r.value ? 'selected' : ''}>${escapeHtml(r.label)}</option>`).join('')}
+        </select>
+        <small class="hint" id="sfRoleBlurb"></small>
+      </div>
+      <div class="field"><label>${isEdit ? 'New Password (optional)' : 'Password'}</label>
+        <input type="password" id="sfPassword" minlength="8" autocomplete="new-password" ${isEdit ? '' : 'required'}>
+        <small class="hint">At least 8 characters.</small>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:22px;">
+        <button type="submit" class="btn btn-primary">${isEdit ? 'Save Changes' : 'Create Account'}</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="staffFormMsg"></div>
+    </form>
+  `);
+
+  const roleSelect = document.getElementById('sfRole');
+  const blurb = document.getElementById('sfRoleBlurb');
+  const showBlurb = () => {
+    const found = APPOINTABLE_ROLES.find(r => r.value === roleSelect.value);
+    blurb.textContent = found ? found.blurb : '';
+  };
+  roleSelect.addEventListener('change', showBlurb);
+  showBlurb();
+
+  document.getElementById('staffForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = document.getElementById('sfPassword').value;
+    const payload = {
+      name: document.getElementById('sfName').value,
+      role: roleSelect.value
+    };
+    if (password) payload.password = password;
+    if (!isEdit) payload.username = document.getElementById('sfUsername').value;
+    try {
+      await fetchJSON(isEdit ? `/api/admin/staff/${existing.id}` : '/api/admin/staff', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      closeModal();
+      showToast(isEdit ? 'Account updated' : 'Chapter leader appointed', 'success');
+      openPanel('accounts');
+    } catch (err) {
+      setFormMsg('staffFormMsg', err.message || 'Could not save this account.', 'error');
+    }
+  });
+}
+
+async function renderLeadershipAccounts(el) {
+  const staff = await fetchJSON('/api/admin/staff');
+  const appointable = staff.filter(s => s.role !== 'nationalCoordinator');
+  const filled = new Set(appointable.filter(s => s.active).map(s => s.role));
+  const unfilled = APPOINTABLE_ROLES.filter(r => !filled.has(r.value) && r.value !== 'departmentLeader' && r.value !== 'executive');
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Leadership Accounts</h2>
+        <p class="sub">Appoint the people who run your chapter. These accounts belong to your chapter and are yours to manage — National is not involved.</p>
+      </div>
+      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newStaffBtn">+ Appoint Leader</button></div>
+    </div>
+
+    ${unfilled.length ? `
+      <div class="portal-card" style="border-left:4px solid var(--flame-gold, #E8971E);">
+        <h3>Offices still to fill</h3>
+        <p class="hint">Your chapter runs on these. Appoint someone to each and they take the work from there.</p>
+        <div class="row-actions" style="flex-wrap:wrap; gap:8px; margin-top:10px;">
+          ${unfilled.map(r => `<button data-quick-role="${r.value}">+ ${escapeHtml(r.label)}</button>`).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <div class="table-wrap">
+      <table class="portal-table">
+        <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+        <tbody>
+          ${appointable.map(s => `
+            <tr>
+              <td><strong>${escapeHtml(s.name || s.username)}</strong><br><small class="muted">${escapeHtml(s.username)}</small></td>
+              <td>${escapeHtml(ROLE_LABEL[s.role] || s.role)}</td>
+              <td>${pill(s.active ? 'active' : 'disabled', s.active ? 'green' : 'grey')}</td>
+              <td class="tiny muted">${s.lastLoginAt ? dateTimeLabel(s.lastLoginAt) : 'never'}</td>
+              <td>
+                <div class="row-actions">
+                  ${s.role === 'coordinator' ? '<span class="tiny muted">assigned by National</span>' : `
+                    <button data-edit-staff="${s.id}">Edit</button>
+                    <button data-toggle-staff="${s.id}" data-active="${s.active ? '1' : '0'}">${s.active ? 'Disable' : 'Enable'}</button>
+                    <button data-delete-staff="${s.id}" class="danger">Remove</button>
+                  `}
+                </div>
+              </td>
+            </tr>
+          `).join('') || emptyRow(5, 'No chapter accounts yet — appoint your Chapter Admin first.')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('newStaffBtn').addEventListener('click', () => staffForm(null));
+  el.querySelectorAll('[data-quick-role]').forEach(btn => btn.addEventListener('click', () => {
+    staffForm(null);
+    const select = document.getElementById('sfRole');
+    if (select) { select.value = btn.dataset.quickRole; select.dispatchEvent(new Event('change')); }
+  }));
+  el.querySelectorAll('[data-edit-staff]').forEach(btn => btn.addEventListener('click', () =>
+    staffForm(appointable.find(s => s.id === btn.dataset.editStaff))
+  ));
+  el.querySelectorAll('[data-toggle-staff]').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+      await fetchJSON(`/api/admin/staff/${btn.dataset.toggleStaff}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: btn.dataset.active !== '1' })
+      });
+      showToast('Account updated', 'success');
+      openPanel('accounts');
+    } catch (err) { showToast(err.message || 'Could not update this account.', 'error'); }
+  }));
+  el.querySelectorAll('[data-delete-staff]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Remove this account? Their sign-in stops working immediately.')) return;
+    try {
+      await fetchJSON(`/api/admin/staff/${btn.dataset.deleteStaff}`, { method: 'DELETE' });
+      showToast('Account removed', 'success');
+      openPanel('accounts');
+    } catch (err) { showToast(err.message || 'Could not remove this account.', 'error'); }
+  }));
 }
 
 // ---------- approvals ----------
@@ -288,6 +457,7 @@ initPortal({
   panels: [
     { key: 'dashboard', label: 'Dashboard', render: renderCoordinatorDashboard },
     { key: 'offices', label: 'Offices & Leaders', render: renderOffices },
+    { key: 'accounts', label: 'Leadership Accounts', render: renderLeadershipAccounts },
     { key: 'approvals', label: 'Approvals', render: renderApprovals },
     { key: 'announcements', label: 'Chapter Announcement', render: renderChapterAnnouncements }
   ]

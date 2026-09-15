@@ -3,7 +3,7 @@
 function registerMemberServiceRoutes(app, deps) {
   const { repo, rolesLib, requireMember, requireContentManager, requireShepherd, requireViewRole,
     requireFinance, isChapterAdminOrAbove, hasRole, actorName, createNotification, notifyAdminByEmail,
-    resolveViewerChapterId } = deps;
+    resolveViewerChapterId, chapterConfidential } = deps;
   const VOLUNTEER_ROLES = ['usher', 'prayer_team', 'media', 'musician', 'protocol', 'publicity', 'transport', 'other'];
   const MILESTONE_TYPES = ['graduation', 'executive_appointment', 'membership_anniversary', 'other'];
   const MILESTONE_LABELS = { graduation: 'graduated! 🎓', executive_appointment: 'was appointed to a new executive position! 🎉', membership_anniversary: 'is celebrating a membership milestone! 🎉', other: 'has something to celebrate! 🎉' };
@@ -122,8 +122,8 @@ function registerMemberServiceRoutes(app, deps) {
   app.post('/api/shepherd/welfare-referrals', requireShepherd, async (req, res) => {
     try { const filter = rolesLib.chapterFilter(req); const { memberId, category, description } = req.body; if (!memberId || !description) return res.status(400).json({ error: 'A member and description are required' }); const member = await repo.getById('members', memberId, filter); if (!member) return res.status(404).json({ error: 'Member not found in this chapter' }); res.json({ success: true, item: await repo.create('welfareRequests', { chapterId: filter.chapterId, memberId: member.id, memberName: member.name, category: WELFARE_CATEGORIES.includes(category) ? category : 'other', description, status: 'submitted', referredBy: actorName(req) }, 'welf') }); } catch (e) { res.status(500).json({ error: 'Could not submit this referral' }); }
   });
-  app.get('/api/welfare/requests', requireWelfareAccess, async (req, res) => { try { const items = await repo.getAll('welfareRequests', rolesLib.chapterFilter(req)); res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))); } catch (e) { res.status(500).json({ error: 'Could not load welfare requests' }); } });
-  app.patch('/api/welfare/requests/:id', requireWelfareAccess, async (req, res) => {
+  app.get('/api/welfare/requests', chapterConfidential('Welfare requests and case notes'), requireWelfareAccess, async (req, res) => { try { const items = await repo.getAll('welfareRequests', rolesLib.chapterFilter(req)); res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))); } catch (e) { res.status(500).json({ error: 'Could not load welfare requests' }); } });
+  app.patch('/api/welfare/requests/:id', chapterConfidential('Welfare requests and case notes'), requireWelfareAccess, async (req, res) => {
     try { const filter = rolesLib.chapterFilter(req); const existing = await repo.getById('welfareRequests', req.params.id, filter); if (!existing) return res.status(404).json({ error: 'Not found' }); const { status, notes } = req.body; res.json({ success: true, item: await repo.updateById('welfareRequests', req.params.id, { ...existing, status: WELFARE_STATUSES.includes(status) ? status : existing.status, notes: notes !== undefined ? notes : existing.notes, handledBy: actorName(req) }, filter) }); } catch (e) { res.status(500).json({ error: 'Could not update this request' }); }
   });
 
