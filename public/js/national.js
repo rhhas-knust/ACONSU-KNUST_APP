@@ -50,7 +50,34 @@ async function renderNationalDashboard(el) {
         </table>
       </div>
     </div>
+
+    <div class="portal-card">
+      <h3>Chapter Readiness</h3>
+      <p class="hint">Is this chapter standing on its own — not what it's doing. Welfare cases and the finance ledger stay inside the chapter either way.</p>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th>Chapter</th><th>Coordinator</th><th>Admin</th><th>Offices Staffed</th><th>Settings</th><th>Last Activity</th></tr></thead>
+          <tbody>
+            ${data.chapters.map(c => `
+              <tr>
+                <td><strong>${escapeHtml(c.name)}</strong></td>
+                <td>${readinessPill(c.readiness.coordinatorAssigned, 'Assigned', 'Unassigned')}</td>
+                <td>${readinessPill(c.readiness.adminAppointed, 'Appointed', 'Not appointed')}</td>
+                <td>${pill(`${c.readiness.officesStaffedCount} / ${c.readiness.officesTotal}`,
+                  c.readiness.officesStaffedCount === c.readiness.officesTotal ? 'green' : c.readiness.officesStaffedCount ? 'amber' : 'red')}</td>
+                <td>${readinessPill(c.readiness.settingsComplete, 'Complete', 'Incomplete')}</td>
+                <td class="tiny muted">${c.readiness.lastActivityAt ? dateTimeLabel(c.readiness.lastActivityAt) : 'No activity yet'}</td>
+              </tr>
+            `).join('') || emptyRow(6, 'No chapters yet — create the first one from the Chapters tab.')}
+          </tbody>
+        </table>
+      </div>
+    </div>
   `;
+}
+
+function readinessPill(ok, yesLabel, noLabel) {
+  return pill(ok ? yesLabel : noLabel, ok ? 'green' : 'red');
 }
 
 // ---------- chapters ----------
@@ -407,6 +434,16 @@ async function renderFeatures(el) {
   document.querySelectorAll('#featuresForm input').forEach(input=>input.addEventListener('change',()=>input.closest('.choice').classList.toggle('selected',input.checked)));
   document.getElementById('featuresForm').addEventListener('submit',async e=>{e.preventDefault();const modules={};Object.keys(FEATURE_LABELS).forEach(k=>modules[k]=document.querySelector(`#featuresForm [name="${k}"]`).checked);try{await fetchJSON('/api/national/features',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({modules})});setFormMsg('featuresMsg','Saved.','success');showToast('Feature configuration saved','success')}catch(err){setFormMsg('featuresMsg',err.message||'Could not save.','error')}});
 }
+
+// This portal is always national scope, never chapter-scoped — so a chapter
+// chosen elsewhere in the same browser (the admin dashboard's own scope
+// selector, or the public site's chapter picker — both share fetchJSON's
+// X-Chapter-Id store in main.js) must not silently leak into requests made
+// here. Without this, National Executives, Reports and the rest of this
+// portal could end up scoped to whatever chapter admin.html was last
+// pointed at, defeating the "national by default" rule this whole feature
+// exists to enforce.
+setSelectedChapterId('');
 
 initPortal({
   role: 'nationalCoordinator',

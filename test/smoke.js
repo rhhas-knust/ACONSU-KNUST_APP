@@ -949,6 +949,43 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', '/api/national/dashboard');
   check('national keeps the aggregate financial picture', r.status === 200 && r.data.financialOverview, r.data);
 
+  console.log('\n== chapter readiness rollup (Phase D): oversight without interference ==');
+  r = await call('admin', 'POST', '/api/national/chapters', { id: 'readiness-ch', name: 'ACONSU-Readiness', institution: 'Readiness U' });
+  check('a fresh chapter is created for readiness checks', r.status === 200, r.data);
+
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  let readinessCh = (r.data.chapters || []).find(c => c.id === 'readiness-ch');
+  check('a brand-new chapter starts with nothing staffed, no coordinator and incomplete settings',
+    !!readinessCh && !readinessCh.readiness.coordinatorAssigned && !readinessCh.readiness.adminAppointed &&
+    readinessCh.readiness.officesStaffedCount === 0 && !readinessCh.readiness.settingsComplete &&
+    readinessCh.readiness.lastActivityAt === null, readinessCh);
+
+  r = await call('admin', 'POST', '/api/national/chapters/readiness-ch/assign-coordinator',
+    { username: 'readiness-coord', name: 'Readiness Coordinator', password: 'password123' });
+  check('national assigns the new chapter its own coordinator', r.status === 200 && r.data.chapter.coordinatorStaffId, r.data);
+
+  r = await call('readiness-coord', 'POST', '/api/portal/login', { username: 'readiness-coord', password: 'password123' });
+  check('the new coordinator signs in', r.status === 200, r.data);
+  r = await call('readiness-coord', 'POST', '/api/admin/staff',
+    { username: 'readiness-fin', name: 'Readiness Finance', role: 'finance', password: 'password123' });
+  check('the coordinator staffs the finance office', r.status === 200, r.data);
+
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  readinessCh = (r.data.chapters || []).find(c => c.id === 'readiness-ch');
+  check('readiness now shows a coordinator and exactly one of four offices staffed', !!readinessCh &&
+    readinessCh.readiness.coordinatorAssigned && !readinessCh.readiness.adminAppointed &&
+    readinessCh.readiness.officesStaffedCount === 1 && readinessCh.readiness.officesStaffed.finance === true &&
+    readinessCh.readiness.officesStaffed.welfare === false, readinessCh);
+
+  r = await call('readiness-coord', 'PUT', '/api/admin/chapter-settings',
+    { tagline: 'Readiness Test Tagline', serviceTimes: ['Sundays 9AM'], contact: { phone: '0000000000' } });
+  check('the coordinator completes the chapter\'s settings', r.status === 200, r.data);
+
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  readinessCh = (r.data.chapters || []).find(c => c.id === 'readiness-ch');
+  check('readiness reflects settings now being complete, without national ever reading chapter content',
+    !!readinessCh && readinessCh.readiness.settingsComplete, readinessCh);
+
   console.log('\n== static pages ==');
   for (const page of [
     '/more.html', '/admin.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',

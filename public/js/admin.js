@@ -12,6 +12,9 @@ const ADMIN_NAV_STATE_KEY = 'aconsu_admin_nav_state';
 // scoping this change exists to remove. Empty means national scope.
 const ADMIN_SCOPE_KEY = 'aconsu_admin_scope_chapter';
 let ADMIN_CHAPTERS = [];
+// The only panels a true-national actor keeps once chapter operations are
+// pruned from the nav (see applyNavScopeVisibility).
+const NATIONAL_VISIBLE_PANEL_KEYS = ['overview', 'settings'];
 let OVERVIEW_REFRESH_TIMER = null;
 
 function showModal(html, { bottomSheet = false } = {}) {
@@ -78,6 +81,36 @@ function currentAdminScopeChapter() {
   return ADMIN_SCOPE.isNational ? readAdminScopeChapter() : ADMIN_SCOPE.chapterId;
 }
 
+// "National by default, chapter by selection" (GOVERNANCE_TIER_REVIEW.md).
+// True only once there is a real choice to make — deliberately inert with a
+// single active chapter (ADMIN_CHAPTERS.length !== 1), the same "single
+// chapter, zero friction" rule the server applies.
+function isTrueNationalScope() {
+  return ADMIN_SCOPE.isNational && !currentAdminScopeChapter() && ADMIN_CHAPTERS.length !== 1;
+}
+
+// Phase D — the national actor's admin nav is a wall of 22 chapter-operations
+// panels that were never national's to begin with (see Finding 1). Panels
+// tagged data-scope="chapter" in admin.html are hidden at true national
+// scope; a group collapses entirely once every one of its panels is hidden.
+// Global Settings and the National Portal link are untagged and always
+// follow their own national-only visibility, set in showAdminShell.
+function applyNavScopeVisibility() {
+  const pruned = isTrueNationalScope();
+  document.querySelectorAll('#adminNav [data-scope="chapter"]').forEach(el => {
+    el.style.display = pruned ? 'none' : '';
+  });
+  document.querySelectorAll('#adminNav .nav-group').forEach(group => {
+    const body = group.querySelector('.nav-group-body');
+    if (!body) return;
+    const anyVisible = Array.from(body.children).some(child => child.style.display !== 'none');
+    group.style.display = anyVisible ? '' : 'none';
+  });
+  const hint = document.getElementById('adminNavScopeHint');
+  if (hint) hint.hidden = !pruned;
+  return pruned;
+}
+
 async function initChapterScopeSelector() {
   const wrap = document.getElementById('adminScopeWrap');
   const select = document.getElementById('adminScopeSelect');
@@ -106,12 +139,16 @@ async function initChapterScopeSelector() {
     const found = ADMIN_CHAPTERS.find(c => c.id === select.value);
     if (badge) badge.textContent = found ? `Viewing ${found.name}` : 'National scope';
     showToast(found ? `Now viewing ${found.name}` : 'Back to national scope', 'success');
+    const pruned = applyNavScopeVisibility();
     const active = document.querySelector('.admin-panel.active');
-    loadPanel(active ? active.id.replace('panel-', '') : 'overview');
+    const activeKey = active ? active.id.replace('panel-', '') : 'overview';
+    // If scope just went national and the panel being viewed is chapter-only
+    // (now hidden from the nav), don't leave the admin stranded on it.
+    loadPanel(pruned && !NATIONAL_VISIBLE_PANEL_KEYS.includes(activeKey) ? 'overview' : activeKey);
   });
 }
 
-function showAdminShell() {
+async function showAdminShell() {
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('adminShell').style.display = 'block';
 
@@ -135,7 +172,11 @@ function showAdminShell() {
   initAdminNav();
   initMobileAdminUi();
   initCommandPalette();
-  initChapterScopeSelector();
+  // Awaited so ADMIN_CHAPTERS is populated before the nav is pruned and the
+  // first panel loads — otherwise both would briefly judge scope off an
+  // empty chapter list and mis-render on the very first paint.
+  await initChapterScopeSelector();
+  applyNavScopeVisibility();
   loadPanel('overview');
 }
 
@@ -272,7 +313,7 @@ async function renderOverview() {
   // meaningful cross-chapter version of "this week's attendance". A national
   // actor picks a chapter for it, or goes to the National Portal for the
   // aggregate view, rather than being shown a raw error.
-  if (ADMIN_SCOPE.isNational && !currentAdminScopeChapter() && ADMIN_CHAPTERS.length !== 1) {
+  if (isTrueNationalScope()) {
     el.innerHTML = `
       <div class="panel-head">
         <div>

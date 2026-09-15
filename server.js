@@ -4184,12 +4184,18 @@ app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNation
 // National dashboard: chapter counts, aggregated (never individually
 // identifying) membership/attendance/finance/welfare figures across every
 // chapter, plus a per-chapter breakdown for comparison (section 3, 38).
+// Offices a chapter needs staffed to run day to day (the "Staff chapter
+// offices" row in GOVERNANCE_TIER_REVIEW.md's responsibility matrix) — a
+// deliberately shorter list than every appointable role: executive and
+// departmentLeader are per-person/per-department, not one office to fill.
+const READINESS_OFFICE_ROLES = ['finance', 'shepherding', 'publicity', 'welfare'];
+
 app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) => {
   try {
-    const [chapters, members, events, financeEntries, attendance, shepherdingRecords, executives] = await Promise.all([
+    const [chapters, members, events, financeEntries, attendance, shepherdingRecords, executives, staffUsers] = await Promise.all([
       repo.getAll('chapters'), repo.getAll('members'), repo.getAll('events'),
       repo.getAll('financeEntries'), repo.getAll('attendanceRecords'),
-      repo.getAll('shepherdingRecords'), repo.getAll('executives')
+      repo.getAll('shepherdingRecords'), repo.getAll('executives'), repo.getAll('staffUsers')
     ]);
     const now = new Date();
     const byChapter = chapters.map((c) => {
@@ -4197,6 +4203,15 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
       const chFinance = financeEntries.filter(f => f.chapterId === c.id);
       const chAttendance = attendance.filter(a => a.chapterId === c.id);
       const recent = [...chAttendance].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+      // Chapter readiness rollup (Phase C, item 6) — a national oversight
+      // signal that never opens the chapter's own records: who's appointed
+      // and what's configured, not what anyone in the chapter is doing.
+      const chStaff = staffUsers.filter(s => s.chapterId === c.id && s.active);
+      const officesStaffed = Object.fromEntries(READINESS_OFFICE_ROLES.map(role => [role, chStaff.some(s => s.role === role)]));
+      const lastStaffLoginAt = chStaff.reduce((latest, s) =>
+        (s.lastLoginAt && (!latest || new Date(s.lastLoginAt) > new Date(latest))) ? s.lastLoginAt : latest, null);
+      const lastActivityAt = [recent && recent.createdAt, lastStaffLoginAt]
+        .filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
       return {
         id: c.id, name: c.name, status: c.status,
         memberCount: chMembers.filter(m => isActivatedMember(m)).length,
@@ -4205,7 +4220,17 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
         executiveCount: executives.filter(e => e.chapterId === c.id).length,
         upcomingEvents: events.filter(e => e.chapterId === c.id && new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
         lastServiceAttendance: recent ? recent.marks.filter(m => m.status === 'present').length + (recent.visitorCount || 0) : null,
-        balance: financeTotals(chFinance).balance
+        balance: financeTotals(chFinance).balance,
+        readiness: {
+          coordinatorAssigned: !!c.coordinatorStaffId,
+          adminAppointed: chStaff.some(s => s.role === 'chapterAdmin'),
+          officesStaffed,
+          officesStaffedCount: READINESS_OFFICE_ROLES.filter(role => officesStaffed[role]).length,
+          officesTotal: READINESS_OFFICE_ROLES.length,
+          settingsComplete: !!(c.tagline && c.serviceTimes && c.serviceTimes.length
+            && c.contact && (c.contact.phone || c.contact.email || c.contact.whatsapp)),
+          lastActivityAt
+        }
       };
     });
     res.json({
