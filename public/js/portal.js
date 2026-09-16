@@ -195,6 +195,21 @@ async function showPortalOrLogin() {
   document.getElementById('portalLoginWrap').style.display = allowed ? 'none' : 'flex';
   document.getElementById('portalShell').style.display = allowed ? 'block' : 'none';
   if (allowed) {
+    // A portal can narrow its own panels once it knows who is signed in — the
+    // executive portal uses this to show only the panels the holder's position
+    // is actually granted. It runs here, after the session is confirmed,
+    // because until then there is nobody to decide about.
+    if (typeof PORTAL.resolvePanels === 'function') {
+      try {
+        const narrowed = await PORTAL.resolvePanels(PORTAL.allPanels);
+        if (Array.isArray(narrowed) && narrowed.length) PORTAL.panels = narrowed;
+      } catch (err) {
+        // Falling back to the full list would show panels the server will
+        // refuse; showing the profile alone at least leaves a usable portal.
+        PORTAL.panels = PORTAL.allPanels.slice(0, 1);
+      }
+    }
+    if (!PORTAL.panels.some(p => p.key === PORTAL.active)) PORTAL.active = PORTAL.panels[0].key;
     renderPortalChrome();
     openPanel(PORTAL.active || PORTAL.panels[0].key);
   }
@@ -205,6 +220,8 @@ async function initPortal(config) {
   PORTAL.role = config.role;
   PORTAL.label = config.label;
   PORTAL.panels = config.panels;
+  PORTAL.allPanels = config.panels;
+  PORTAL.resolvePanels = config.resolvePanels || null;
   PORTAL.active = config.panels[0].key;
 
   document.getElementById('modalBackdrop').addEventListener('click', (e) => {

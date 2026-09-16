@@ -1,23 +1,59 @@
 /* ============================================================
-   Executive Portal — self-service profile + event submission
-   (section 9). An executive can only ever see/edit their own
-   record; event submissions go into Publicity's review queue
-   rather than publishing directly.
+   Executive Portal (section 9).
+
+   What an executive sees is decided by the POSITION they hold,
+   not by the fact that they are an executive. The six elected
+   officers run the chapter and get chapter-wide screens; the
+   portfolio officers run one department each and get the
+   department screens. lib/positions.js is the single source of
+   that grant — the server enforces it and this file draws from
+   the same list, so a panel can never appear that the server
+   would refuse.
+
+   Position and department are deliberately read-only here: they
+   decide what their holder may do, so only the Chapter
+   Coordinator sets them.
    ============================================================ */
 
+// Filled in once per sign-in, from /api/executive/me.
+let EXEC_POSITION = null;
+
+function can(capability) {
+  return !!EXEC_POSITION && (EXEC_POSITION.capabilities || []).includes(capability);
+}
+
 async function renderExecProfile(el) {
-  const [{ item }, departments] = await Promise.all([
-    fetchJSON('/api/executive/me'),
-    fetchJSON('/api/departments')
-  ]);
+  const me = await fetchJSON('/api/executive/me');
+  const item = me.item;
+  const position = me.position || { label: '', kind: 'unknown' };
+  const departmentName = me.department ? me.department.name : '';
   el.innerHTML = `
     <div class="panel-head">
       <div>
         <h2>My Executive Profile</h2>
-        <p class="sub">Shown publicly on the About page. Update it whenever your position or department changes — last year's info is kept on file automatically.</p>
+        <p class="sub">Shown publicly on the About page. Your position is set by your Chapter Coordinator — everything else here is yours to keep current.</p>
       </div>
     </div>
+    ${position.kind === 'unknown' ? `
+      <div class="portal-card" style="border-color: var(--flame-gold); background:#FFF8EC; max-width:520px;">
+        <strong>Your position hasn't been set yet.</strong>
+        <span class="muted"> Ask your Chapter Coordinator to set it and the rest of your portal will open up.</span>
+      </div>` : ''}
     <div class="portal-card" style="max-width:520px;">
+      <div class="field">
+        <label>Position</label>
+        <p style="margin:0; font-weight:600;">${escapeHtml(position.label || 'Not set')}</p>
+        <small class="hint">${position.kind === 'officer'
+          ? 'An officer of the chapter — you answer for the chapter as a whole, so you hold no single department.'
+          : position.kind === 'portfolio'
+            ? `You run the ${escapeHtml(departmentName || 'department attached to your office')}.`
+            : 'Set by your Chapter Coordinator.'}</small>
+      </div>
+      ${me.needsDepartment ? `
+        <div class="portal-card" style="border-color: var(--flame-gold); background:#FFF8EC;">
+          <strong>No department attached yet.</strong>
+          <span class="muted"> Your office runs a department, but none has been attached — ask your Chapter Coordinator.</span>
+        </div>` : ''}
       <form id="execForm">
         <div class="field" style="text-align:center;">
           ${item && item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="" style="width:96px; height:96px; border-radius:50%; object-fit:cover; margin-bottom:10px;">` : ''}
@@ -25,13 +61,9 @@ async function renderExecProfile(el) {
           <input type="file" id="eImage" accept="image/*">
         </div>
         <div class="field"><label>Full Name</label><input type="text" id="eName" value="${escapeHtml(item?.name || '')}" required></div>
-        <div class="field"><label>Position</label><input type="text" id="eRole" value="${escapeHtml(item?.role || '')}" placeholder="e.g. Financial Secretary" required></div>
-        <div class="field"><label>Department (required)</label><select id="eDept" required>
-          <option value="">Choose your department</option>
-          ${departments.map(d => `<option value="${escapeHtml(d.id)}" ${item?.department === d.id ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
-        </select></div>
+        ${can('department') && departmentName ? `
         <div class="field"><label>Department Header</label><input type="file" id="eDeptHeader" accept="image/*">
-          <small class="hint">Upload the banner for your assigned department. It will replace the current header.</small></div>
+          <small class="hint">The banner for ${escapeHtml(departmentName)}. It will replace the current header.</small></div>` : ''}
         <div class="field"><label>Bio</label><textarea id="eBio" rows="4">${escapeHtml(item?.bio || '')}</textarea></div>
         <div class="field-row">
           <div class="field"><label>Phone</label><input type="tel" id="ePhone" value="${escapeHtml(item?.contact?.phone || '')}"></div>
@@ -57,13 +89,12 @@ async function renderExecProfile(el) {
       const imgFile = document.getElementById('eImage').files[0];
       if (imgFile) formData.append('image', imgFile);
       formData.append('name', document.getElementById('eName').value);
-      formData.append('role', document.getElementById('eRole').value);
-      formData.append('department', document.getElementById('eDept').value);
       formData.append('bio', document.getElementById('eBio').value);
       formData.append('phone', document.getElementById('ePhone').value);
       formData.append('email', document.getElementById('eEmail').value);
       await fetchJSON('/api/executive/me', { method: 'PUT', body: formData });
-      const headerFile = document.getElementById('eDeptHeader').files[0];
+      const headerInput = document.getElementById('eDeptHeader');
+      const headerFile = headerInput && headerInput.files[0];
       if (headerFile) {
         const headerData = new FormData();
         headerData.append('file', headerFile);
@@ -467,16 +498,322 @@ async function renderExecBibleStudies(el) {
   }));
 }
 
+/* ---------- chapter-wide screens, for the elected officers ---------- */
+
+async function renderExecChapterPulse(el) {
+  const d = await fetchJSON('/api/executive/chapter/pulse');
+  const stageRows = Object.entries(d.byStage || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([stage, count]) => `<tr><td>${escapeHtml(stage.replace(/_/g, ' '))}</td><td>${count}</td></tr>`)
+    .join('');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>The Chapter at a Glance</h2>
+        <p class="sub">Where the chapter stands today — membership, departments and what is coming up.</p>
+      </div>
+    </div>
+    <div class="stat-row" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+      ${[['Members', d.memberCount], ['Departments', d.departmentCount], ['Executives', d.executiveCount], ['Events awaiting review', d.pendingEvents]]
+        .map(([label, value]) => `
+          <div class="portal-card" style="flex:1 1 140px; min-width:140px; text-align:center;">
+            <div style="font-size:1.8rem; font-weight:700;">${value}</div>
+            <div class="muted" style="font-size:0.8rem;">${escapeHtml(label)}</div>
+          </div>`).join('')}
+    </div>
+    <div class="portal-card">
+      <h4 style="margin-top:0;">Membership</h4>
+      ${stageRows
+        ? `<div class="table-wrap"><table class="portal-table" style="min-width:0;">
+             <thead><tr><th>Stage</th><th>People</th></tr></thead><tbody>${stageRows}</tbody></table></div>`
+        : '<p class="empty-state">No members yet.</p>'}
+    </div>
+    <div class="portal-card">
+      <h4 style="margin-top:0;">Coming Up</h4>
+      ${(d.upcomingEvents || []).length ? `
+        <div class="table-wrap"><table class="portal-table" style="min-width:0;">
+          <thead><tr><th>Date</th><th>Event</th><th>Where</th></tr></thead>
+          <tbody>${d.upcomingEvents.map(e => `
+            <tr><td>${escapeHtml(e.date)}</td><td>${escapeHtml(e.title)}</td><td>${escapeHtml(e.location || '—')}</td></tr>
+          `).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">Nothing on the calendar yet.</p>'}
+    </div>
+  `;
+}
+
+async function renderExecChapterMembers(el) {
+  const members = await fetchJSON('/api/executive/chapter/members');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Chapter Members</h2>
+        <p class="sub">Everyone in the chapter, across every department.</p>
+      </div>
+      <div class="panel-actions"><span class="tiny muted">${members.length} member${members.length === 1 ? '' : 's'}</span></div>
+    </div>
+    <div class="portal-card">
+      <div class="field"><input type="search" id="memberSearch" placeholder="Search by name, department or programme"></div>
+      ${members.length ? `
+        <div class="table-wrap"><table class="portal-table">
+          <thead><tr><th>Name</th><th>Department</th><th>Level</th><th>Stage</th><th>Contact</th></tr></thead>
+          <tbody id="memberRows">${members.map(m => `
+            <tr data-search="${escapeHtml(`${m.name} ${m.department} ${m.programme}`.toLowerCase())}">
+              <td>${escapeHtml(m.name || '')}</td>
+              <td>${escapeHtml(m.department || '—')}</td>
+              <td>${escapeHtml(m.level || '—')}</td>
+              <td>${escapeHtml((m.membershipStage || '').replace(/_/g, ' '))}</td>
+              <td>${escapeHtml(m.phone || m.email || '—')}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">No members yet.</p>'}
+    </div>
+  `;
+  const search = document.getElementById('memberSearch');
+  if (search) {
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      document.querySelectorAll('#memberRows tr').forEach(row => {
+        row.style.display = !q || row.dataset.search.includes(q) ? '' : 'none';
+      });
+    });
+  }
+}
+
+async function renderExecChapterDepartments(el) {
+  const departments = await fetchJSON('/api/executive/chapter/departments');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Departments</h2>
+        <p class="sub">Every department in the chapter, who heads it and how many belong to it.</p>
+      </div>
+    </div>
+    <div class="portal-card">
+      ${departments.length ? `
+        <div class="table-wrap"><table class="portal-table">
+          <thead><tr><th>Department</th><th>Head</th><th>Members</th><th>Meets</th></tr></thead>
+          <tbody>${departments.map(d => `
+            <tr>
+              <td><strong>${escapeHtml(d.name)}</strong>${d.tagline ? `<br><span class="tiny muted">${escapeHtml(d.tagline)}</span>` : ''}</td>
+              <td>${d.headName ? `${escapeHtml(d.headName)}<br><span class="tiny muted">${escapeHtml(d.headRole || '')}</span>` : '<span class="muted">Vacant</span>'}</td>
+              <td>${d.memberCount}</td>
+              <td>${escapeHtml([d.meetingDay, d.meetingTime].filter(Boolean).join(', ') || '—')}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">No departments yet.</p>'}
+    </div>
+  `;
+}
+
+async function renderExecChapterAttendance(el) {
+  const records = await fetchJSON('/api/executive/chapter/attendance');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Service Attendance</h2>
+        <p class="sub">The chapter's service registers. Taking a register stays with Shepherding — this is the record of it.</p>
+      </div>
+    </div>
+    <div class="portal-card">
+      ${records.length ? `
+        <div class="table-wrap"><table class="portal-table">
+          <thead><tr><th>Date</th><th>Service</th><th>Present</th><th>Visitors</th></tr></thead>
+          <tbody>${records.map(r => `
+            <tr>
+              <td>${escapeHtml(r.date)}</td>
+              <td>${escapeHtml(r.title || r.serviceType || '—')}</td>
+              <td>${r.present}${r.total ? ` <span class="tiny muted">of ${r.total}</span>` : ''}</td>
+              <td>${r.visitorCount || 0}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">No registers taken yet.</p>'}
+    </div>
+  `;
+}
+
+async function renderExecFinance(el) {
+  const d = await fetchJSON('/api/executive/chapter/finance');
+  const money = (n) => `GHS ${Number(n || 0).toFixed(2)}`;
+  const categories = Object.entries(d.incomeByCategory || {}).sort((a, b) => b[1] - a[1]);
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>The Books</h2>
+        <p class="sub">Read-only. Recording income and expenses stays with the Finance office — this is so you can answer for the money, not move it.</p>
+      </div>
+    </div>
+    <div class="stat-row" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+      ${[['Income', money(d.totalIncome)], ['Expenses', money(d.totalExpense)], ['Balance', money(d.balance)], ['Awaiting approval', d.pendingApprovals]]
+        .map(([label, value]) => `
+          <div class="portal-card" style="flex:1 1 150px; min-width:150px; text-align:center;">
+            <div style="font-size:1.3rem; font-weight:700;">${escapeHtml(String(value))}</div>
+            <div class="muted" style="font-size:0.8rem;">${escapeHtml(label)}</div>
+          </div>`).join('')}
+    </div>
+    <div class="portal-card">
+      <h4 style="margin-top:0;">Where the income came from</h4>
+      ${categories.length ? `
+        <div class="table-wrap"><table class="portal-table" style="min-width:0;">
+          <thead><tr><th>Source</th><th>Amount</th></tr></thead>
+          <tbody>${categories.map(([cat, amount]) => `
+            <tr><td>${escapeHtml(cat)}</td><td>${money(amount)}</td></tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">Nothing recorded yet.</p>'}
+    </div>
+  `;
+}
+
+async function renderExecMinutes(el) {
+  const items = await fetchJSON('/api/executive/minutes');
+  const canAdopt = ['president', 'vice_president', 'secretary'].includes(EXEC_POSITION && EXEC_POSITION.key);
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Executive Minutes</h2>
+        <p class="sub">The record of what the executive body decided. Drafts become the record once adopted.</p>
+      </div>
+      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newMinuteBtn">+ New Minutes</button></div>
+    </div>
+    <div class="portal-card">
+      ${items.length ? `
+        <div class="table-wrap"><table class="portal-table">
+          <thead><tr><th>Date</th><th>Title</th><th>Status</th><th></th></tr></thead>
+          <tbody>${items.map(m => `
+            <tr>
+              <td>${escapeHtml(m.date)}</td>
+              <td>${escapeHtml(m.title || '—')}<br><span class="tiny muted">${escapeHtml((m.body || '').slice(0, 90))}${(m.body || '').length > 90 ? '…' : ''}</span></td>
+              <td>${m.status === 'adopted'
+                ? `<span class="tiny">Adopted${m.adoptedBy ? ` by ${escapeHtml(m.adoptedBy)}` : ''}</span>`
+                : '<span class="tiny muted">Draft</span>'}</td>
+              <td>${m.status !== 'adopted' && canAdopt
+                ? `<button class="btn btn-sm" data-adopt="${escapeHtml(m.id)}">Adopt</button>` : ''}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">No minutes recorded yet.</p>'}
+    </div>
+  `;
+
+  document.getElementById('newMinuteBtn').addEventListener('click', () => {
+    showModal(`
+      <h3>New Minutes</h3>
+      <form id="minuteForm">
+        <div class="field-row">
+          <div class="field"><label>Date</label><input type="date" id="mDate" value="${todayISO()}" required></div>
+          <div class="field"><label>Title</label><input type="text" id="mTitle" placeholder="e.g. Term planning"></div>
+        </div>
+        <div class="field"><label>Minutes</label><textarea id="mBody" rows="6" required placeholder="What was discussed"></textarea></div>
+        <div class="field"><label>Decisions</label><textarea id="mDecisions" rows="3" placeholder="Resolutions taken"></textarea></div>
+        <div class="field"><label>Apologies</label><input type="text" id="mApologies" placeholder="Who sent apologies"></div>
+        <div style="display:flex; gap:10px; margin-top:22px;">
+          <button type="submit" class="btn btn-primary">Save as Draft</button>
+          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+        </div>
+        <div class="form-msg" id="minuteMsg"></div>
+      </form>
+    `);
+    const cancelMinute = document.getElementById('cancelModalBtn');
+    if (cancelMinute) cancelMinute.addEventListener('click', closeModal);
+    document.getElementById('minuteForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await fetchJSON('/api/executive/minutes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: document.getElementById('mDate').value,
+            title: document.getElementById('mTitle').value,
+            body: document.getElementById('mBody').value,
+            decisions: document.getElementById('mDecisions').value,
+            apologies: document.getElementById('mApologies').value
+          })
+        });
+        closeModal();
+        showToast('Minutes saved as a draft.', 'success');
+        openPanel('minutes');
+      } catch (err) {
+        setFormMsg('minuteMsg', err.message || 'Could not save these minutes.', 'error');
+      }
+    });
+  });
+
+  el.querySelectorAll('[data-adopt]').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+      await fetchJSON(`/api/executive/minutes/${btn.dataset.adopt}/adopt`, { method: 'PATCH' });
+      showToast('Minutes adopted.', 'success');
+      openPanel('minutes');
+    } catch (err) {
+      showToast(err.message || 'Could not adopt these minutes.', 'error');
+    }
+  }));
+}
+
+async function renderExecChapterAnnounce(el) {
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Message the Chapter</h2>
+        <p class="sub">Goes to everyone in the chapter, in-app and by push. Use it for what the whole chapter needs to know.</p>
+      </div>
+    </div>
+    <div class="portal-card" style="max-width:520px;">
+      <form id="chapterAnnounceForm">
+        <div class="field"><label>Title</label><input type="text" id="caTitle" required></div>
+        <div class="field"><label>Message</label><textarea id="caBody" rows="4" required></textarea></div>
+        <button type="submit" class="btn btn-primary">Send to the Chapter</button>
+        <div class="form-msg" id="chapterAnnounceMsg"></div>
+      </form>
+    </div>
+  `;
+  document.getElementById('chapterAnnounceForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetchJSON('/api/executive/chapter/announcement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: document.getElementById('caTitle').value,
+          body: document.getElementById('caBody').value
+        })
+      });
+      showToast(`Sent to ${res.reached} member${res.reached === 1 ? '' : 's'}.`, 'success');
+      openPanel('chapterAnnounce');
+    } catch (err) {
+      setFormMsg('chapterAnnounceMsg', err.message || 'Could not send this announcement.', 'error');
+    }
+  });
+}
+
+/* ---------- which panels this executive actually gets ---------- */
+// Every panel names the capability it needs. The list is filtered against the
+// grant the server sent, so the portal and the server can never disagree about
+// what this office may do.
+const EXEC_PANELS = [
+  { key: 'profile',          label: 'My Profile',          capability: 'profile',              render: renderExecProfile },
+  { key: 'pulse',            label: 'Chapter Overview',    capability: 'chapter.pulse',        render: renderExecChapterPulse },
+  { key: 'chapterMembers',   label: 'Chapter Members',     capability: 'chapter.members',      render: renderExecChapterMembers },
+  { key: 'chapterDepts',     label: 'Departments',         capability: 'chapter.departments',  render: renderExecChapterDepartments },
+  { key: 'minutes',          label: 'Minutes',             capability: 'minutes',              render: renderExecMinutes },
+  { key: 'chapterAttend',    label: 'Service Attendance',  capability: 'attendance.chapter',   render: renderExecChapterAttendance },
+  { key: 'finance',          label: 'The Books',           capability: 'finance.summary',      render: renderExecFinance },
+  { key: 'chapterAnnounce',  label: 'Message Chapter',     capability: 'announce.chapter',     render: renderExecChapterAnnounce },
+  { key: 'department',       label: 'My Department',       capability: 'department',           render: renderExecDepartment },
+  { key: 'members',          label: 'Department Members',  capability: 'department.members',   render: renderExecDeptMembers },
+  { key: 'attendance',       label: 'Attendance',          capability: 'department.attendance', render: renderExecDeptAttendance },
+  { key: 'announce',         label: 'Message Department',  capability: 'announce.department',  render: renderExecAnnounce },
+  { key: 'bibleStudies',     label: 'Bible Studies',       capability: 'bibleStudies',         render: renderExecBibleStudies },
+  { key: 'events',           label: 'My Events',           capability: 'events',               render: renderExecEvents }
+];
+
 initPortal({
   role: 'executive',
   label: 'Executive',
-  panels: [
-    { key: 'profile', label: 'My Profile', render: renderExecProfile },
-    { key: 'department', label: 'My Department', render: renderExecDepartment },
-    { key: 'members', label: 'Department Members', render: renderExecDeptMembers },
-    { key: 'attendance', label: 'Attendance', render: renderExecDeptAttendance },
-    { key: 'announce', label: 'Message Department', render: renderExecAnnounce },
-    { key: 'bibleStudies', label: 'Bible Studies', render: renderExecBibleStudies },
-    { key: 'events', label: 'My Events', render: renderExecEvents }
-  ]
+  panels: EXEC_PANELS,
+  // Runs once the session is known: asks the server which position this is and
+  // keeps only the panels it grants. The profile panel is always kept, so an
+  // executive whose position has not been set yet still lands somewhere that
+  // explains why the rest is missing.
+  resolvePanels: async (all) => {
+    const me = await fetchJSON('/api/executive/me');
+    EXEC_POSITION = me.position || null;
+    if (me.position && me.position.label) {
+      PORTAL.label = `Executive · ${me.position.label}`;
+    }
+    const granted = all.filter(p => can(p.capability));
+    return granted.length ? granted : all.filter(p => p.key === 'profile');
+  }
 });

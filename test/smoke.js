@@ -520,36 +520,50 @@ const { fakeModels } = require('./harness.js');
   check('a member registers, ready to be promoted to executive', execRegRes.status === 200, execRegData);
   const amaMemberId = execRegData.member.id;
 
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123', memberId: amaMemberId });
+  // A position is required up front — an executive with no position is one
+  // nothing in the system can reason about.
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nopos', name: 'No Position', role: 'executive', password: 'password123', memberId: amaMemberId });
+  check('an executive cannot be created without a position', r.status === 400, r.data);
+
+  // A portfolio holder runs a department; an officer never does. Both halves
+  // of that rule are enforced, not just the first.
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nodept', name: 'No Dept', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'music' });
+  check('a portfolio holder must be given a department', r.status === 400, r.data);
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.baddept', name: 'Officer With Dept', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'president', department: deptId });
+  check('an officer is refused a department, since they answer for the whole chapter', r.status === 400, r.data);
+
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'music', department: deptId });
   check('executive account created by promoting that member', r.status === 200 && r.data.item.memberId === amaMemberId, r.data);
   check('the promoted executive is given a one-year term of office', !!r.data.item.termEndsAt && !!r.data.item.termYear, r.data.item);
   r = await call('exec', 'POST', '/api/portal/login', { username: 'exec.ama', password: 'password123' });
   check('executive signs in', r.status === 200, r.data);
 
+  // Provisioning is one action: the roster card exists before they ever open
+  // the profile form.
   r = await call('exec', 'GET', '/api/executive/me');
-  check('no executive record exists yet', r.data.item === null, r.data);
+  check('their roster card is provisioned with the account', r.status === 200 && r.data.item && r.data.item.positionKey === 'music', r.data);
+  check('the portal is told which position they hold', r.data.position && r.data.position.key === 'music' && r.data.position.kind === 'portfolio', r.data.position);
+  check('a portfolio holder is granted their department panels',
+    r.data.position.capabilities.includes('department') && r.data.position.capabilities.includes('department.members'), r.data.position);
+  check('and is not granted the chapter-wide ones',
+    !r.data.position.capabilities.includes('chapter.pulse') && !r.data.position.capabilities.includes('finance.summary'), r.data.position);
 
-  const badExecRes = await fetch(BASE + '/api/executive/me', {
-    method: 'PUT',
-    headers: { cookie: jars.exec },
-    body: (() => {
-      const form = new FormData();
-      form.append('name', 'Ama Executive');
-      form.append('role', 'Financial Secretary');
-      form.append('department', '');
-      return form;
-    })()
-  });
-  const badExecData = await badExecRes.json();
-  check('executive must choose a valid department', badExecRes.status === 400, badExecData);
-
-  const execForm = new FormData();
-  execForm.append('name', 'Ama Executive');
-  execForm.append('role', 'Financial Secretary');
-  execForm.append('department', deptId);
-  const execRes = await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: execForm });
-  const execData = await execRes.json();
-  check('executive saves their own profile', execRes.status === 200 && execData.item.role === 'Financial Secretary', execData);
+  // The position decides what its holder can do, so it cannot be self-set:
+  // otherwise any executive could type their way into the officers' screens.
+  const escalateForm = new FormData();
+  escalateForm.append('name', 'Ama Executive');
+  escalateForm.append('role', 'President');
+  escalateForm.append('positionKey', 'president');
+  escalateForm.append('department', '');
+  const escalateRes = await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: escalateForm });
+  const escalateData = await escalateRes.json();
+  check('an executive can save their profile', escalateRes.status === 200, escalateData);
+  check('but cannot promote themselves by typing a different position',
+    escalateData.item.positionKey === 'music' && escalateData.item.role === 'Music Director', escalateData.item);
+  r = await call('exec', 'GET', '/api/executive/chapter/pulse');
+  check('so the chapter-wide screens stay shut to them', r.status === 403, r.data);
+  r = await call('exec', 'GET', '/api/executive/chapter/finance');
+  check('including the books summary', r.status === 403, r.data);
 
   r = await call('exec', 'POST', '/api/admin/bible-studies', { topic: 'Faith in Action', date: '2026-02-01', scriptureReference: 'James 2:14-26', studyMaterial: 'Test study' });
   check('executive can manage Bible studies', r.status === 200 && r.data.item.topic === 'Faith in Action', r.data);
@@ -570,18 +584,32 @@ const { fakeModels } = require('./harness.js');
   // Who leads a department is derived from whoever holds the office, so there
   // is no typed-in name left to go stale when it changes hands.
   check('the department names its leader from the executive holding it',
-    r.data.some(d => d.id === deptId && d.leaderName === 'Ama Executive' && d.leaderRole === 'Financial Secretary'), r.data);
+    r.data.some(d => d.id === deptId && d.leaderName === 'Ama Executive' && d.leaderRole === 'Music Director'), r.data);
   r = await call('anon', 'GET', `/api/departments/${deptId}`);
   check('the department\'s own page names them too', r.data.leaderName === 'Ama Executive', r.data);
 
-  const handedOver = new FormData();
-  handedOver.append('name', 'Ama Executive');
-  handedOver.append('role', 'Organising Secretary');
-  handedOver.append('department', deptId);
-  await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: handedOver });
+  // A mid-year reshuffle is the Coordinator's to make, not the executive's.
+  r = await call('exec', 'GET', '/api/executive/me');
+  const amaCardId = r.data.item.id;
+  r = await call('exec', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'president' });
+  check('an executive cannot reshuffle themselves', r.status === 401 || r.status === 403, r.data);
+
+  r = await call('admin', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'welfare', department: deptId });
+  check('the coordinator moves a sitting executive to another portfolio', r.status === 200 && r.data.item.positionKey === 'welfare', r.data);
+  check('the office they left is snapshotted into their history',
+    (r.data.item.history || []).some(h => h.role === 'Music Director'), r.data.item);
   r = await call('anon', 'GET', `/api/departments/${deptId}`);
   check('and it follows the office, not a stale copy, when the position changes',
-    r.data.leaderRole === 'Organising Secretary', r.data);
+    r.data.leaderRole === 'Welfare Coordinator', r.data);
+
+  // Moving someone into an officer's seat has to release the department, and
+  // the rule is enforced rather than silently patched over.
+  r = await call('admin', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'president', department: deptId });
+  check('an officer cannot keep hold of a department', r.status === 400, r.data);
+
+  // Put them back where the rest of these checks expect them.
+  r = await call('admin', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'music', department: deptId });
+  check('and back again, with the department intact', r.status === 200 && r.data.item.department === deptId, r.data);
 
   // Put a member in the department so there is someone to see and to mark.
   r = await call('admin', 'PUT', `/api/admin/members/${amaMemberId}`, { department: deptId });
@@ -626,7 +654,13 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, {
     decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password123'
   });
+  check('approving without naming a position is refused', r.status === 400, r.data);
+  r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, {
+    decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password123', positionKey: 'president'
+  });
   check('chapter executive application is approved', r.status === 200 && r.data.item.executiveStatus === 'verified', r.data);
+  check('the approved office is recorded on the member, from the position chosen',
+    r.data.item.role === 'President' && !r.data.item.department, r.data.item);
   check('approval issues the portal login in the same action', r.data.item.issuedLogin === true && !!r.data.item.account.termEndsAt, r.data.item);
 
   // The whole point of provisioning in one action: the approved executive can
@@ -635,6 +669,79 @@ const { fakeModels } = require('./harness.js');
   check('the newly approved executive can sign straight in', r.status === 200, r.data);
   r = await call('newExec', 'GET', '/api/executive/me');
   check('their public roster card already exists', r.status === 200 && r.data.item && r.data.item.staffId, r.data);
+
+  console.log('\n== an officer runs the chapter, not a department ==');
+  // The case the portal could not serve at all before: a President has no
+  // department, and used to be told to go and choose one before anything
+  // would open. They are now granted chapter-wide screens instead.
+  check('a President holds an officer position, with no department',
+    r.data.position.key === 'president' && r.data.position.kind === 'officer' && !r.data.needsDepartment, r.data);
+
+  r = await call('newExec', 'GET', '/api/executive/chapter/pulse');
+  check('the President sees the chapter as a whole',
+    r.status === 200 && typeof r.data.memberCount === 'number' && typeof r.data.departmentCount === 'number', r.data);
+  r = await call('newExec', 'GET', '/api/executive/chapter/members');
+  check('and the chapter-wide member directory', r.status === 200 && Array.isArray(r.data) && r.data.length > 0, r.data);
+  check('which carries no credential material',
+    r.data.every(m => !('passwordHash' in m) && !('qrToken' in m) && !('resetTokenHash' in m)), r.data[0]);
+  r = await call('newExec', 'GET', '/api/executive/chapter/departments');
+  check('and every department with who heads it',
+    r.status === 200 && r.data.some(d => d.id === deptId && d.headName === 'Ama Executive'), r.data);
+  r = await call('newExec', 'GET', '/api/executive/chapter/finance');
+  check('the President can read the books summary', r.status === 200 && typeof r.data.balance === 'number', r.data);
+
+  // Officers are not handed department screens they have no department for.
+  r = await call('newExec', 'GET', '/api/executive/department');
+  check('an officer is turned away from the department screens by their position', r.status === 403, r.data);
+  r = await call('newExec', 'GET', '/api/executive/department/members');
+  check('including its member list', r.status === 403, r.data);
+
+  // Attendance belongs to the Secretary and Organiser, not the President.
+  r = await call('newExec', 'GET', '/api/executive/chapter/attendance');
+  check('a capability the President was not granted stays shut, even to the President', r.status === 403, r.data);
+
+  // Minutes: written by those who keep them, adopted only by those who chair.
+  r = await call('newExec', 'POST', '/api/executive/minutes', { date: '2026-04-02', title: 'Term planning', body: 'Agreed the calendar.' });
+  check('the President records minutes of an executive meeting', r.status === 200 && r.data.item.status === 'draft', r.data);
+  const minuteId = r.data.item.id;
+  r = await call('newExec', 'POST', '/api/executive/minutes', { date: '2026-04-02', body: '' });
+  check('empty minutes are refused', r.status === 400, r.data);
+  r = await call('newExec', 'PATCH', `/api/executive/minutes/${minuteId}/adopt`);
+  check('and the President adopts them', r.status === 200 && r.data.item.status === 'adopted' && !!r.data.item.adoptedAt, r.data);
+  r = await call('exec', 'GET', '/api/executive/minutes');
+  check('a portfolio holder cannot read the executive minutes', r.status === 403, r.data);
+
+  r = await call('newExec', 'POST', '/api/executive/chapter/announcement', { title: 'Chapter meeting', body: 'Saturday, 4pm.' });
+  check('the President messages the whole chapter', r.status === 200 && r.data.reached >= 1, r.data);
+  r = await call('exec', 'POST', '/api/executive/chapter/announcement', { title: 'Hello', body: 'Everyone' });
+  check('a portfolio holder cannot message the whole chapter', r.status === 403, r.data);
+
+  // The roster ranks by office, so the President is never listed under a
+  // portfolio holder because of the order the cards were created in.
+  r = await call('anon', 'GET', '/api/executives');
+  const rosterNames = r.data.map(e => e.role);
+  check('the public roster ranks the President above a portfolio holder',
+    rosterNames.indexOf('President') !== -1 && rosterNames.indexOf('President') < rosterNames.indexOf('Music Director'), rosterNames);
+
+  r = await call('anon', 'GET', '/api/executive-positions');
+  check('the position catalogue is available for the promotion screen',
+    r.status === 200 && r.data.some(p => p.key === 'president' && p.requiresDepartment === false)
+      && r.data.some(p => p.key === 'music' && p.requiresDepartment === true), r.data);
+
+  // Editing a roster card must not let the displayed title drift away from the
+  // position behind it — a card reading "President" with a Music Director's
+  // capabilities is exactly the confusion positions exist to prevent.
+  const editForm = new FormData();
+  editForm.append('name', 'Ama Executive');
+  editForm.append('role', 'President');
+  editForm.append('order', '0');
+  const editRes = await fetch(BASE + `/api/admin/executives/${amaCardId}`, {
+    method: 'PUT', headers: { cookie: jars.admin }, body: editForm
+  });
+  const editData = await editRes.json();
+  check('a card edit cannot rename the office out from under its position',
+    editRes.status === 200 && editData.item.role === 'Music Director' && editData.item.positionKey === 'music', editData.item);
+  check('and the edit still saves what it is meant to', editData.item.name === 'Ama Executive', editData.item);
 
   // Term of office. The deadline is compared against the live clock on every
   // check, so a term that runs out mid-session ends that session's authority
@@ -868,7 +975,7 @@ const { fakeModels } = require('./harness.js');
   check('shepherding logs a milestone', r.status === 200, r.data);
   r = await call('shep', 'GET', '/api/shepherd/milestones');
   check('the milestone is listed', r.data.some(m => m.type === 'membership_anniversary'), r.data);
-  check('an executive-appointment milestone was auto-logged earlier when Ama Executive set up her profile', r.data.some(m => m.type === 'executive_appointment'), r.data);
+  check('an executive-appointment milestone was logged when the office was granted, not when a form was filled in', r.data.some(m => m.type === 'executive_appointment'), r.data);
 
   console.log('\n== Welfare (section 33) ==');
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'welf.efua', name: 'Efua Welfare', role: 'welfare', password: 'password123' });

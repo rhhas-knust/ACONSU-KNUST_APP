@@ -147,6 +147,7 @@ const fakeModels = {
   GroupPost: makeModel({ chapterId: '', authorMemberId: '', authorName: '', isAnnouncement: false }),
   GroupMeeting: makeModel({ chapterId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
   DepartmentMeeting: makeModel({ chapterId: '', departmentId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
+  ExecutiveMinute: makeModel({ chapterId: '', date: '', title: '', presentExecutiveIds: [], presentNames: [], apologies: '', body: '', decisions: '', status: 'draft', adoptedBy: '', adoptedAt: null, recordedBy: '' }),
   ChatTopic: makeModel({ chapterId: '', createdByMemberId: '', createdByName: '', locked: false }),
   ChatMessage: makeModel({ chapterId: '', authorMemberId: '', authorName: '', reportCount: 0, hidden: false, hiddenBy: '' }),
   VolunteerAssignment: makeModel({ chapterId: '', memberName: '', status: 'assigned', notes: '', assignedBy: '' }),

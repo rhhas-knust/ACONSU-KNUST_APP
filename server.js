@@ -12,6 +12,8 @@ const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
 const models = require('./lib/models');
 const rolesLib = require('./lib/roles');
+const positions = require('./lib/positions');
+const CAP = positions.CAPABILITIES;
 const BIBLE_BOOKS = require('./lib/bibleBooks');
 const push = require('./lib/push');
 const sms = require('./lib/sms');
@@ -1844,7 +1846,16 @@ app.get('/api/departments/:id', async (req, res) => {
 app.get('/api/executives', async (req, res) => {
   try {
     const execs = await repo.getAll('executives', contentChapterFilter(req));
-    res.json(execs.sort((a, b) => (a.order || 0) - (b.order || 0)));
+    // Rank by the position itself, so the President heads the roster whatever
+    // order the cards happened to be created in. A card whose `order` was set
+    // by hand keeps it; anything else falls back to its position's rank, and
+    // an unplaceable title sorts to the end rather than to the top.
+    const rank = (e) => {
+      if (e.order) return e.order;
+      const position = positions.resolvePosition(e.positionKey, e.role, !!e.department);
+      return position.order;
+    };
+    res.json(execs.sort((a, b) => rank(a) - rank(b) || String(a.name || '').localeCompare(String(b.name || ''))));
   } catch (e) {
     res.status(500).json({ error: 'Could not load executives' });
   }
@@ -1909,7 +1920,7 @@ app.get('/api/admin/executive-applications', requireChapterAdmin, async (req, re
 // belonging to nobody.
 app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinator, async (req, res) => {
   try {
-    const { decision, scope, username, password } = req.body || {};
+    const { decision, scope, username, password, positionKey, department } = req.body || {};
     const filter = rolesLib.chapterFilter(req, { required: false });
     const member = await repo.getById('members', req.params.memberId, filter);
     if (!member) return res.status(404).json({ error: 'Member not found' });
@@ -1919,6 +1930,28 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
 
     let account = null;
     let issuedLogin = false;
+    let position = null;
+    if (decision === 'approve') {
+      // The position is what grants capabilities, so it is settled here — by
+      // the Coordinator doing the vetting — and never by the executive
+      // themselves. A portfolio holder must arrive with a real department in
+      // this chapter, since that is what their panels operate on.
+      position = positions.positionByKey(positionKey);
+      if (!position) {
+        return res.status(400).json({ error: 'Choose the position this executive is being approved into.' });
+      }
+      const wantsDepartment = String(department || '').trim();
+      if (positions.requiresDepartment(position)) {
+        if (!wantsDepartment) {
+          return res.status(400).json({ error: `A ${position.label} runs a department — choose which one.` });
+        }
+        if (!await repo.getById('departments', wantsDepartment, { chapterId: member.chapterId })) {
+          return res.status(400).json({ error: 'That department is not in this chapter — pick one from the list.' });
+        }
+      } else if (wantsDepartment) {
+        return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
+      }
+    }
     if (decision === 'approve') {
       // Renew in place if this member already holds the office, so a
       // re-elected executive keeps their account, card and history rather
@@ -1948,15 +1981,26 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
 
       // The public roster card, created here rather than waiting for the
       // executive to discover the profile form.
+      const departmentId = positions.requiresDepartment(position) ? String(department || '').trim() : '';
       const existingCard = await models.Executive.findOne({ staffId: account.id, chapterId: member.chapterId }).lean();
-      if (!existingCard) {
+      if (existingCard) {
+        // A re-elected executive can come back into a different office, so the
+        // position is refreshed rather than frozen at whatever they held first.
+        await repo.patchById('executives', existingCard.id, {
+          positionKey: position.key, role: position.label, department: departmentId, order: position.order
+        }, { chapterId: member.chapterId });
+      } else {
         await repo.create('executives', {
           chapterId: member.chapterId, staffId: account.id,
-          name: member.name || '', role: member.executiveRole || '',
-          department: member.executiveDepartment || '',
+          name: member.name || '', role: position.label, positionKey: position.key,
+          department: departmentId, order: position.order,
           bio: '', contact: { phone: member.phone || '', email: member.email || '' },
           imageFileId: member.profileImageFileId || '', history: []
         }, 'exec');
+        await logMilestone({
+          chapterId: member.chapterId, memberId: member.id, memberName: member.name || '',
+          type: 'executive_appointment', note: position.label, loggedBy: 'System'
+        });
       }
     }
 
@@ -1976,6 +2020,10 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
       ...member,
       executiveStatus: nextStatus,
       executiveScope: scope || member.executiveScope || 'chapter',
+      executiveRole: position ? position.label : member.executiveRole,
+      executiveDepartment: position
+        ? (positions.requiresDepartment(position) ? String(department || '').trim() : '')
+        : member.executiveDepartment,
       isExecutive: decision === 'approve',
       executiveVerifiedAt: decision === 'approve' ? new Date() : null
     }, filter);
@@ -1993,6 +2041,69 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
     }});
   } catch (e) {
     res.status(500).json({ error: 'Could not update executive application' });
+  }
+});
+
+// Reshuffling a sitting executive mid-year — the Secretary steps up to Vice
+// President, a portfolio changes hands. Kept with the Coordinator for the same
+// reason approval is: the position decides what its holder can do.
+app.patch('/api/admin/executives/:id/position', requireChapterCoordinator, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const card = await repo.getById('executives', req.params.id, filter);
+    if (!card) return res.status(404).json({ error: 'That executive was not found.' });
+
+    const position = positions.positionByKey(req.body && req.body.positionKey);
+    if (!position) return res.status(400).json({ error: 'Choose a position from the list.' });
+
+    const departmentId = String((req.body && req.body.department) || '').trim();
+    if (positions.requiresDepartment(position)) {
+      if (!departmentId) return res.status(400).json({ error: `A ${position.label} runs a department — choose which one.` });
+      if (!await repo.getById('departments', departmentId, { chapterId: card.chapterId })) {
+        return res.status(400).json({ error: 'That department is not in this chapter — pick one from the list.' });
+      }
+    } else if (departmentId) {
+      return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
+    }
+
+    // Snapshot the office they are leaving before overwriting it, so "who was
+    // Secretary in 2025/2026" survives the reshuffle.
+    const history = [...(card.history || [])];
+    const changed = card.positionKey !== position.key || (card.department || '') !== departmentId;
+    if (changed && (card.role || card.department)) {
+      history.push({
+        year: currentAcademicYearLabel(),
+        role: card.role || '',
+        department: card.department || '',
+        updatedAt: new Date()
+      });
+    }
+
+    const item = await repo.patchById('executives', card.id, {
+      positionKey: position.key,
+      role: position.label,
+      department: departmentId,
+      order: position.order,
+      history
+    }, { chapterId: card.chapterId });
+
+    // The member record carries the same office, so it moves with the card.
+    if (card.staffId) {
+      const staffAccount = await models.StaffUser.findOne({ id: card.staffId }).lean();
+      const linkedMember = staffAccount && staffAccount.memberId
+        ? await models.Member.findOne({ id: staffAccount.memberId }).lean()
+        : null;
+      if (linkedMember) {
+        await repo.patchById('members', linkedMember.id, {
+          executiveRole: position.label,
+          executiveDepartment: departmentId
+        });
+      }
+    }
+
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not change this executive\'s position.' });
   }
 });
 
@@ -3382,20 +3493,77 @@ async function findOwnExecutiveRecord(req) {
   return models.Executive.findOne({ staffId: staff.id, chapterId: staff.chapterId }).lean();
 }
 
+// An executive's position is what decides what they can do, so it is resolved
+// here — from their own roster card, in their own chapter — and never taken
+// from the request. Returns the card alongside the position so a caller that
+// needs both does not load the card twice.
+async function resolveOwnPosition(req) {
+  const record = await findOwnExecutiveRecord(req);
+  const position = positions.resolvePosition(
+    record && record.positionKey,
+    record && record.role,
+    !!(record && record.department)
+  );
+  return { record, position };
+}
+
+// The single gate for every executive route. A route names the capability it
+// serves; the position grants it or the request stops here. This is the same
+// grant the portal reads to decide which panels to draw, so a panel can never
+// appear without a route behind it, and a route can never be reachable by an
+// executive whose position was never given it.
+function requireCapability(capability, handler) {
+  return async (req, res) => {
+    try {
+      const { record, position } = await resolveOwnPosition(req);
+      if (!positions.hasCapability(position, capability)) {
+        return res.status(403).json({
+          error: position.kind === 'unknown'
+            ? 'Your position has not been set yet — ask your Chapter Coordinator to set it, and this section will open up.'
+            : `This section belongs to another office. Yours is ${position.label || 'not set'}.`
+        });
+      }
+      return await handler(req, res, { record, position, staff: currentStaff(req) });
+    } catch (e) {
+      res.status(500).json({ error: 'Could not load this section right now.' });
+    }
+  };
+}
+
 app.get('/api/executive/me', requireRole('executive'), async (req, res) => {
   try {
-    const record = await findOwnExecutiveRecord(req);
-    res.json({ item: record });
+    const { record, position } = await resolveOwnPosition(req);
+    let department = null;
+    if (record && record.department) {
+      const staff = currentStaff(req);
+      const found = await repo.getById('departments', record.department, { chapterId: staff.chapterId });
+      if (found) department = { id: found.id, name: found.name };
+    }
+    res.json({
+      item: record,
+      position: positions.publicShape(position),
+      department,
+      // A portfolio holder with no department yet cannot run their panels;
+      // the portal turns this into a prompt rather than a dead end.
+      needsDepartment: positions.requiresDepartment(position) && !department
+    });
   } catch (e) {
     res.status(500).json({ error: 'Could not load your executive profile' });
   }
 });
 
-app.post('/api/executive/department-header', requireRole('executive'), upload.single('file'), async (req, res) => {
+// The catalogue itself, so the Coordinator's promotion screen offers real
+// positions instead of an empty text box.
+app.get('/api/executive-positions', (req, res) => {
+  res.json(positions.POSITIONS.map(p => ({
+    key: p.key, label: p.label, kind: p.kind, order: p.order,
+    requiresDepartment: positions.requiresDepartment(p)
+  })));
+});
+
+app.post('/api/executive/department-header', requireRole('executive'), upload.single('file'), requireCapability(CAP.DEPARTMENT, async (req, res, { record, staff }) => {
   try {
-    const staff = currentStaff(req);
-    const record = await findOwnExecutiveRecord(req);
-    if (!record || !record.department) return res.status(400).json({ error: 'Set your department before uploading its header.' });
+    if (!record || !record.department) return res.status(400).json({ error: 'Your Chapter Coordinator has not attached a department to your office yet.' });
     if (!req.file) return res.status(400).json({ error: 'No image provided' });
     const department = await repo.getById('departments', record.department, { chapterId: staff.chapterId });
     if (!department) return res.status(404).json({ error: 'Your assigned department was not found in this chapter.' });
@@ -3410,7 +3578,7 @@ app.post('/api/executive/department-header', requireRole('executive'), upload.si
   } catch (e) {
     res.status(500).json({ error: 'Could not upload the department header' });
   }
-});
+}));
 
 app.put('/api/executive/me', requireRole('executive'), upload.single('image'), async (req, res) => {
   try {
@@ -3425,35 +3593,27 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
       if (existing && existing.imageFileId) gridfs.deleteFile(existing.imageFileId).catch(() => {});
     }
     const name = String(req.body?.name || '').trim();
-    const role = String(req.body?.role || '').trim();
-    const department = String(req.body?.department || '').trim();
     const bio = String(req.body?.bio || '');
     const phone = String(req.body?.phone || '');
     const email = String(req.body?.email || '');
-    if (!department) {
-      return res.status(400).json({ error: 'Please choose a department for your executive office.' });
-    }
-    // It has to be a real department in their own chapter: this id is what
-    // every "my department" screen resolves against, and what the public
-    // department page links to, so a free-typed value would leave them
-    // holding an office that doesn't exist.
-    if (!await repo.getById('departments', department, { chapterId: staff.chapterId })) {
-      return res.status(400).json({ error: 'That department is not in your chapter — pick one from the list.' });
-    }
 
-    // A real position/department change gets snapshotted into history first
-    // (section 9: "updated every academic year"), same pattern as a
-    // member's academicHistory.
-    let history = existing ? existing.history || [] : [];
-    if (existing && ((role && role !== existing.role) || (department && department !== existing.department))) {
-      history = [...history, { year: currentAcademicYearLabel(), role: existing.role || '', department: existing.department || '', updatedAt: new Date() }];
-    }
+    // Position and department are deliberately NOT read from this request.
+    // They decide which capabilities the holder has (lib/positions.js), so
+    // letting an executive type their own would let a Music Director make
+    // themselves President and walk into the chapter-wide screens. Both are
+    // set by the Chapter Coordinator, who is the one doing the vetting; this
+    // form edits how an executive presents themselves, not what they may do.
+    const role = existing ? existing.role : '';
+    const department = existing ? existing.department : '';
+
+    const history = existing ? existing.history || [] : [];
     const fields = {
       chapterId: staff.chapterId,
       staffId: staff.id,
       name: name || (existing ? existing.name : staff.name),
-      role: role || (existing ? existing.role : ''),
-      department: department || (existing ? existing.department : ''),
+      role,
+      positionKey: existing ? (existing.positionKey || '') : '',
+      department,
       bio: bio || (existing ? existing.bio : ''),
       contact: {
         phone: phone || (existing ? existing.contact.phone : ''),
@@ -3477,13 +3637,6 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
         executiveVerifiedAt: member.executiveVerifiedAt || new Date()
       });
     }
-    // First time this executive has set up their profile — a genuine new
-    // appointment worth celebrating (section 36), not just a form save.
-    // memberId is left blank unless this StaffUser is linked to a Member
-    // profile — the celebration still posts either way.
-    if (!existing) {
-      await logMilestone({ chapterId: staff.chapterId, memberId: staff.memberId || '', memberName: fields.name, type: 'executive_appointment', note: fields.role, loggedBy: 'System' });
-    }
     res.json({ success: true, item: record });
   } catch (e) {
     res.status(500).json({ error: 'Could not save your executive profile' });
@@ -3494,9 +3647,8 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
 // APPROVED -> PUBLISHED. Never published directly — that's the whole point
 // of the workflow, and it's enforced here (status is always 'submitted'),
 // not left to whatever the client sends.
-app.post('/api/executive/events', requireRole('executive'), async (req, res) => {
+app.post('/api/executive/events', requireRole('executive'), requireCapability(CAP.EVENTS, async (req, res, { staff }) => {
   try {
-    const staff = currentStaff(req);
     const { title, date, time, location, description, category, videoUrl } = req.body;
     if (!title || !date) return res.status(400).json({ error: 'Title and date are required' });
     const item = await repo.create('events', {
@@ -3509,46 +3661,41 @@ app.post('/api/executive/events', requireRole('executive'), async (req, res) => 
   } catch (e) {
     res.status(500).json({ error: 'Could not submit this event' });
   }
-});
+}));
 
-app.get('/api/executive/events', requireRole('executive'), async (req, res) => {
+app.get('/api/executive/events', requireRole('executive'), requireCapability(CAP.EVENTS, async (req, res, { staff }) => {
   try {
-    const staff = currentStaff(req);
     const items = await repo.getAll('events', { submittedByStaffId: staff.id, chapterId: staff.chapterId });
     res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
   } catch (e) {
     res.status(500).json({ error: 'Could not load your submitted events' });
   }
-});
+}));
 
-// ---------- an executive's own department ----------
+// ---------- a portfolio holder's own department ----------
 // Everything below is scoped by the department on the executive's own roster
-// card, resolved here rather than taken from the request — so an executive
-// can only ever run the department they actually hold, and only inside their
-// own chapter. Returns null when they haven't chosen a department yet, which
-// the portal turns into a prompt rather than an error.
-async function findOwnDepartment(req) {
-  const staff = currentStaff(req);
-  const record = await findOwnExecutiveRecord(req);
-  if (!staff || !record || !record.department) return null;
-  return repo.getById('departments', record.department, { chapterId: staff.chapterId });
-}
+// card, resolved from that card rather than taken from the request — so an
+// executive can only ever run the department they actually hold, and only
+// inside their own chapter.
 
-function requireOwnDepartment(handler) {
-  return async (req, res) => {
-    try {
-      const department = await findOwnDepartment(req);
-      if (!department) {
-        return res.status(400).json({ error: 'Choose your department on your profile first — that is what this section belongs to.' });
-      }
-      return await handler(req, res, department, currentStaff(req));
-    } catch (e) {
-      res.status(500).json({ error: 'Could not load your department right now.' });
+// Department panels now sit behind a capability as well as a department:
+// only a portfolio holder (Evangelism, Welfare, Publicity, Prayer, Music) is
+// granted these, so an officer such as the President — who has no department
+// and never should — is turned away by the grant rather than being told to
+// go and pick a department they do not have.
+function requireOwnDepartment(capability, handler) {
+  return requireCapability(capability, async (req, res, ctx) => {
+    const department = ctx.record && ctx.record.department
+      ? await repo.getById('departments', ctx.record.department, { chapterId: ctx.staff.chapterId })
+      : null;
+    if (!department) {
+      return res.status(400).json({ error: 'Your Chapter Coordinator has not attached a department to your office yet — ask them to set it, and this section will open up.' });
     }
-  };
+    return await handler(req, res, department, ctx.staff);
+  });
 }
 
-app.get('/api/executive/department', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+app.get('/api/executive/department', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT, async (req, res, department, staff) => {
   const [members, meetings] = await Promise.all([
     repo.getAll('members', { chapterId: staff.chapterId, department: department.id }),
     repo.getAll('departmentMeetings', { chapterId: staff.chapterId, departmentId: department.id })
@@ -3562,7 +3709,7 @@ app.get('/api/executive/department', requireRole('executive'), requireOwnDepartm
   });
 }));
 
-app.put('/api/executive/department', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+app.put('/api/executive/department', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT, async (req, res, department, staff) => {
   // Name stays out: renaming a department is a chapter-level decision, and
   // its id is referenced by members and executives alike.
   const next = { ...department };
@@ -3573,7 +3720,7 @@ app.put('/api/executive/department', requireRole('executive'), requireOwnDepartm
   res.json({ success: true, item: updated });
 }));
 
-app.get('/api/executive/department/members', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+app.get('/api/executive/department/members', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT_MEMBERS, async (req, res, department, staff) => {
   const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
   res.json(members
     .map(m => ({
@@ -3583,7 +3730,7 @@ app.get('/api/executive/department/members', requireRole('executive'), requireOw
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
 }));
 
-app.get('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+app.get('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT_ATTENDANCE, async (req, res, department, staff) => {
   const meetings = await repo.getAll('departmentMeetings', { chapterId: staff.chapterId, departmentId: department.id });
   res.json(meetings.sort((a, b) => (a.date < b.date ? 1 : -1)));
 }));
@@ -3591,7 +3738,7 @@ app.get('/api/executive/department/meetings', requireRole('executive'), requireO
 // Mobile-first register: open, tap whoever is present, save. Attendance is
 // confined to this department's own members, so a mistyped or guessed id
 // can't pull someone else's record into the count.
-app.post('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+app.post('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT_ATTENDANCE, async (req, res, department, staff) => {
   const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
   const ownIds = new Set(members.map(m => m.id));
   const attendeeMemberIds = Array.isArray(req.body.attendeeMemberIds)
@@ -3612,7 +3759,7 @@ app.post('/api/executive/department/meetings', requireRole('executive'), require
 
 // An announcement to this department's own members, not the whole chapter —
 // chapter-wide announcements stay with the Coordinator and Publicity.
-app.post('/api/executive/department/announcement', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+app.post('/api/executive/department/announcement', requireRole('executive'), requireOwnDepartment(CAP.ANNOUNCE_DEPARTMENT, async (req, res, department, staff) => {
   const title = cleanText(req.body.title || '');
   const body = cleanText(req.body.body || '');
   if (!title || !body) return res.status(400).json({ error: 'A title and message are required' });
@@ -3620,6 +3767,174 @@ app.post('/api/executive/department/announcement', requireRole('executive'), req
   const item = await createNotification(
     `${department.name}: ${title}`, body, '/department.html?id=' + department.id, 'department', staff.chapterId
   );
+  res.json({ success: true, item, reached: members.length });
+}));
+
+// ---------- chapter-wide screens, for the elected officers ----------
+// A President or Secretary answers for the whole chapter, so these read
+// across every department rather than one. Each is gated by the capability
+// its position grants (lib/positions.js): the Financial Secretary reaches the
+// books summary and nothing else, the Organiser reaches events and
+// attendance, and so on.
+
+app.get('/api/executive/chapter/pulse', requireRole('executive'), requireCapability(CAP.CHAPTER_PULSE, async (req, res, { staff }) => {
+  const filter = { chapterId: staff.chapterId };
+  const [members, departments, events, execs] = await Promise.all([
+    repo.getAll('members', filter),
+    repo.getAll('departments', filter),
+    repo.getAll('events', filter),
+    repo.getAll('executives', filter)
+  ]);
+  const byStage = members.reduce((acc, m) => {
+    const stage = m.membershipStage || 'visitor';
+    acc[stage] = (acc[stage] || 0) + 1;
+    return acc;
+  }, {});
+  const today = new Date().toISOString().slice(0, 10);
+  res.json({
+    memberCount: members.length,
+    byStage,
+    departmentCount: departments.length,
+    executiveCount: execs.length,
+    upcomingEvents: events
+      .filter(e => e.status === 'published' && e.date >= today)
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+      .slice(0, 5)
+      .map(e => ({ id: e.id, title: e.title, date: e.date, location: e.location || '' })),
+    pendingEvents: events.filter(e => e.status === 'submitted').length
+  });
+}));
+
+app.get('/api/executive/chapter/members', requireRole('executive'), requireCapability(CAP.CHAPTER_MEMBERS, async (req, res, { staff }) => {
+  const members = await repo.getAll('members', { chapterId: staff.chapterId });
+  const departments = await repo.getAll('departments', { chapterId: staff.chapterId });
+  const deptName = new Map(departments.map(d => [d.id, d.name]));
+  // A directory for running the chapter, not a data export: contact details
+  // and stage, never password hashes, reset tokens or QR tokens.
+  res.json(members
+    .map(m => ({
+      id: m.id, name: m.name, email: m.email, phone: m.phone || '',
+      level: m.level || '', programme: m.programme || '',
+      department: deptName.get(m.department) || '',
+      membershipStage: m.membershipStage || 'visitor'
+    }))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
+}));
+
+app.get('/api/executive/chapter/departments', requireRole('executive'), requireCapability(CAP.CHAPTER_DEPARTMENTS, async (req, res, { staff }) => {
+  const filter = { chapterId: staff.chapterId };
+  const [departments, members, execs] = await Promise.all([
+    repo.getAll('departments', filter),
+    repo.getAll('members', filter),
+    repo.getAll('executives', filter)
+  ]);
+  const headByDept = new Map(execs.filter(e => e.department).map(e => [e.department, e]));
+  const countByDept = members.reduce((acc, m) => {
+    if (m.department) acc.set(m.department, (acc.get(m.department) || 0) + 1);
+    return acc;
+  }, new Map());
+  res.json(departments
+    .map(d => {
+      const head = headByDept.get(d.id);
+      return {
+        id: d.id, name: d.name, tagline: d.tagline || '',
+        meetingDay: d.meetingDay || '', meetingTime: d.meetingTime || '',
+        memberCount: countByDept.get(d.id) || 0,
+        headName: head ? head.name : '',
+        headRole: head ? head.role : ''
+      };
+    })
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
+}));
+
+// ---------- minutes of the executive meetings ----------
+app.get('/api/executive/minutes', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff }) => {
+  const items = await repo.getAll('executiveMinutes', { chapterId: staff.chapterId });
+  res.json(items.sort((a, b) => (a.date < b.date ? 1 : -1)));
+}));
+
+app.post('/api/executive/minutes', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff }) => {
+  const date = String(req.body.date || '').trim() || new Date().toISOString().slice(0, 10);
+  const title = cleanText(req.body.title || '');
+  const body = cleanText(req.body.body || '');
+  if (!body) return res.status(400).json({ error: 'Minutes need a body — what was discussed.' });
+  // Attendance is confined to this chapter's own executives, so a mistyped or
+  // guessed id can never put someone else in the room.
+  const execs = await repo.getAll('executives', { chapterId: staff.chapterId });
+  const byId = new Map(execs.map(e => [e.id, e]));
+  const presentExecutiveIds = Array.isArray(req.body.presentExecutiveIds)
+    ? req.body.presentExecutiveIds.filter(id => byId.has(id))
+    : [];
+  const item = await repo.create('executiveMinutes', {
+    chapterId: staff.chapterId,
+    date, title, body,
+    presentExecutiveIds,
+    presentNames: presentExecutiveIds.map(id => byId.get(id).name || ''),
+    apologies: cleanText(req.body.apologies || ''),
+    decisions: cleanText(req.body.decisions || ''),
+    status: 'draft',
+    recordedBy: actorName(req)
+  }, 'emin');
+  res.json({ success: true, item });
+}));
+
+// Adopting minutes is what turns a draft into the record, so it is kept to
+// the officers who chair the meeting rather than everyone who can write them.
+app.patch('/api/executive/minutes/:id/adopt', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff, position }) => {
+  if (!['president', 'vice_president', 'secretary'].includes(position.key)) {
+    return res.status(403).json({ error: 'Only the President, Vice President or Secretary can adopt minutes.' });
+  }
+  const existing = await repo.getById('executiveMinutes', req.params.id, { chapterId: staff.chapterId });
+  if (!existing) return res.status(404).json({ error: 'Those minutes were not found.' });
+  const item = await repo.patchById('executiveMinutes', existing.id, {
+    status: 'adopted', adoptedBy: actorName(req), adoptedAt: new Date()
+  }, { chapterId: staff.chapterId });
+  res.json({ success: true, item });
+}));
+
+// ---------- chapter attendance (Secretary, Assistant Secretary, Organiser) ----------
+app.get('/api/executive/chapter/attendance', requireRole('executive'), requireCapability(CAP.ATTENDANCE_CHAPTER, async (req, res, { staff }) => {
+  const records = await repo.getAll('attendanceRecords', { chapterId: staff.chapterId });
+  res.json(records
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, 50)
+    .map(r => ({
+      id: r.id, date: r.date, serviceType: r.serviceType, title: r.title || '',
+      present: (r.marks || []).filter(m => m.status === 'present').length,
+      total: (r.marks || []).length,
+      visitorCount: r.visitorCount || 0
+    })));
+}));
+
+// ---------- books summary (Financial Secretary, President) ----------
+// Read-only by design: recording money stays with the Finance portal, so the
+// elected officer can answer for the books without being able to edit them.
+app.get('/api/executive/chapter/finance', requireRole('executive'), requireCapability(CAP.FINANCE_SUMMARY, async (req, res, { staff }) => {
+  const entries = await repo.getAll('financeEntries', { chapterId: staff.chapterId });
+  const income = entries.filter(e => e.entryType === 'income');
+  const expense = entries.filter(e => e.entryType === 'expense');
+  const sum = list => list.reduce((t, e) => t + (Number(e.amount) || 0), 0);
+  const byCategory = income.reduce((acc, e) => {
+    acc[e.category || 'other'] = (acc[e.category || 'other'] || 0) + (Number(e.amount) || 0);
+    return acc;
+  }, {});
+  res.json({
+    totalIncome: sum(income),
+    totalExpense: sum(expense),
+    balance: sum(income) - sum(expense),
+    incomeByCategory: byCategory,
+    entryCount: entries.length,
+    pendingApprovals: expense.filter(e => e.approvalStatus === 'pending').length
+  });
+}));
+
+// ---------- a chapter-wide announcement (President, Secretary) ----------
+app.post('/api/executive/chapter/announcement', requireRole('executive'), requireCapability(CAP.ANNOUNCE_CHAPTER, async (req, res, { staff }) => {
+  const title = cleanText(req.body.title || '');
+  const body = cleanText(req.body.body || '');
+  if (!title || !body) return res.status(400).json({ error: 'A title and message are required' });
+  const members = await repo.getAll('members', { chapterId: staff.chapterId });
+  const item = await createNotification(title, body, '/index.html', 'executive', staff.chapterId);
   res.json({ success: true, item, reached: members.length });
 }));
 
@@ -4119,11 +4434,29 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   // login. That link is what makes the one-year term and their own
   // appointment history mean anything.
   let memberId = '';
+  let position = null;
+  let executiveDepartment = '';
+  let promotedMember = null;
   if (role === 'executive') {
     memberId = String(req.body.memberId || '').trim();
     if (!memberId) return res.status(400).json({ error: 'Choose the member being promoted — an executive account belongs to a member.' });
-    const member = await repo.getById('members', memberId, chapterId ? { chapterId } : undefined);
-    if (!member) return res.status(400).json({ error: 'That member is not in this chapter.' });
+    promotedMember = await repo.getById('members', memberId, chapterId ? { chapterId } : undefined);
+    if (!promotedMember) return res.status(400).json({ error: 'That member is not in this chapter.' });
+
+    // An executive without a position is an executive nothing can reason
+    // about — no capabilities, no place on the roster. Both ways of creating
+    // one (here, and approving an application) settle it up front.
+    position = positions.positionByKey(req.body.positionKey);
+    if (!position) return res.status(400).json({ error: 'Choose the position this executive is being given.' });
+    executiveDepartment = String(req.body.department || '').trim();
+    if (positions.requiresDepartment(position)) {
+      if (!executiveDepartment) return res.status(400).json({ error: `A ${position.label} runs a department — choose which one.` });
+      if (!await repo.getById('departments', executiveDepartment, { chapterId })) {
+        return res.status(400).json({ error: 'That department is not in this chapter — pick one from the list.' });
+      }
+    } else if (executiveDepartment) {
+      return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
+    }
   }
   try {
     if (chapterId) {
@@ -4138,6 +4471,34 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
       passwordHash: await bcrypt.hash(password, 10), active: true,
       ...(role === 'executive' ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
     }, 'staff');
+    // The public roster card is created here rather than waiting for the new
+    // executive to find the profile form — the same one-action provisioning
+    // the approval route does.
+    if (role === 'executive' && position) {
+      await repo.create('executives', {
+        chapterId, staffId: user.id,
+        name: user.name, role: position.label, positionKey: position.key,
+        department: executiveDepartment, order: position.order,
+        bio: '',
+        contact: { phone: (promotedMember && promotedMember.phone) || '', email: (promotedMember && promotedMember.email) || '' },
+        imageFileId: (promotedMember && promotedMember.profileImageFileId) || '',
+        history: []
+      }, 'exec');
+      await repo.patchById('members', memberId, {
+        isExecutive: true,
+        executiveStatus: 'verified',
+        executiveRole: position.label,
+        executiveDepartment,
+        executiveVerifiedAt: new Date()
+      });
+      // The appointment is the milestone, so it is logged here — at the moment
+      // the office is granted — rather than whenever they first open the
+      // profile form, which they might never do.
+      await logMilestone({
+        chapterId, memberId, memberName: user.name,
+        type: 'executive_appointment', note: position.label, loggedBy: 'System'
+      });
+    }
     const { passwordHash, ...safe } = user;
     res.json({ success: true, item: safe });
   } catch (e) {
@@ -4807,12 +5168,20 @@ app.post('/api/admin/executives', requireChapterAdmin, upload.single('image'), a
         category: 'executive', contentType: compressed.contentType, title: req.body.name || req.file.originalname, chapterId
       }));
     }
+    // This route creates a roster card on its own — a name and a face on the
+    // public page, with no portal login behind it. It still records a real
+    // position where one is given, so the card ranks correctly and reads the
+    // same as every other. Capabilities are not involved: there is no account
+    // here for them to attach to.
+    const position = positions.positionByKey(req.body.positionKey);
     const exec = await repo.create('executives', {
       chapterId,
       name: req.body.name || '',
-      role: req.body.role || '',
+      role: position ? position.label : (req.body.role || ''),
+      positionKey: position ? position.key : '',
+      department: position && positions.requiresDepartment(position) ? String(req.body.department || '').trim() : '',
       bio: req.body.bio || '',
-      order: Number(req.body.order || 0),
+      order: Number(req.body.order || 0) || (position ? position.order : 0),
       imageFileId
     }, 'exec');
     res.json({ success: true, item: exec });
@@ -4836,9 +5205,14 @@ app.put('/api/admin/executives/:id', requireChapterAdmin, upload.single('image')
         gridfs.deleteFile(existing.imageFileId).catch(() => {}); // best-effort cleanup of the old photo
       }
     }
+    // Where a real position is held, its label is the position's — not
+    // whatever is typed here. Otherwise the card could read "President" while
+    // the capabilities behind it stayed those of a Music Director. Changing
+    // the position itself goes through /api/admin/executives/:id/position.
+    const held = positions.positionByKey(existing.positionKey);
     const updated = await repo.updateById('executives', req.params.id, {
       name: req.body.name || '',
-      role: req.body.role || '',
+      role: held ? held.label : (req.body.role || ''),
       bio: req.body.bio || '',
       order: Number(req.body.order || 0),
       imageFileId

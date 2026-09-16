@@ -234,6 +234,15 @@ function staffForm(existing) {
           <label>Member being promoted</label>
           <select id="sfMemberId"><option value="">Loading members…</option></select>
           <small class="hint">An executive is an elected member of this chapter, so the office is attached to their member record. You can appoint someone at any point in the year — their term runs to <strong>${escapeHtml(academicYearEndLabel())}</strong>, when the whole executive body hands over together.</small>
+        </div>
+        <div class="field" id="sfPositionWrap" hidden>
+          <label>Position</label>
+          <select id="sfPosition"><option value="">Loading positions…</option></select>
+          <small class="hint">This is what decides which parts of the portal open for them. The six officers answer for the whole chapter; a portfolio officer runs one department.</small>
+        </div>
+        <div class="field" id="sfDeptWrap" hidden>
+          <label>Department</label>
+          <select id="sfDepartment"><option value="">Loading departments…</option></select>
         </div>`}
       <div class="field"><label>${isEdit ? 'New Password (optional)' : 'Password'}</label>
         <input type="password" id="sfPassword" minlength="8" autocomplete="new-password" ${isEdit ? '' : 'required'}>
@@ -251,13 +260,49 @@ function staffForm(existing) {
   const blurb = document.getElementById('sfRoleBlurb');
   const memberWrap = document.getElementById('sfMemberWrap');
   const memberSelect = document.getElementById('sfMemberId');
+  const positionWrap = document.getElementById('sfPositionWrap');
+  const positionSelect = document.getElementById('sfPosition');
+  const deptWrap = document.getElementById('sfDeptWrap');
+  const deptSelect = document.getElementById('sfDepartment');
+  // A portfolio officer runs a department; the elected six do not. The picker
+  // follows that rule, so the form cannot be submitted in a shape the server
+  // would have to refuse.
+  const syncDepartment = () => {
+    if (!positionSelect || !deptWrap || !deptSelect) return;
+    const opt = positionSelect.options[positionSelect.selectedIndex];
+    const needs = opt && opt.dataset.requiresDepartment === 'true';
+    deptWrap.hidden = !needs || roleSelect.value !== 'executive';
+    if (!needs) deptSelect.value = '';
+  };
   const showBlurb = () => {
     const found = APPOINTABLE_ROLES.find(r => r.value === roleSelect.value);
     blurb.textContent = found ? found.blurb : '';
-    if (memberWrap) memberWrap.hidden = roleSelect.value !== 'executive';
+    const isExecutive = roleSelect.value === 'executive';
+    if (memberWrap) memberWrap.hidden = !isExecutive;
+    if (positionWrap) positionWrap.hidden = !isExecutive;
+    syncDepartment();
   };
   roleSelect.addEventListener('change', showBlurb);
+  if (positionSelect) positionSelect.addEventListener('change', syncDepartment);
   showBlurb();
+
+  if (positionSelect) {
+    fetchJSON('/api/executive-positions')
+      .then(list => {
+        positionSelect.innerHTML = '<option value="">Choose the position they are being given</option>'
+          + list.map(p => `<option value="${escapeHtml(p.key)}" data-requires-department="${p.requiresDepartment}">${escapeHtml(p.label)}</option>`).join('');
+        syncDepartment();
+      })
+      .catch(() => { positionSelect.innerHTML = '<option value="">Could not load positions</option>'; });
+  }
+  if (deptSelect) {
+    fetchJSON('/api/departments')
+      .then(list => {
+        deptSelect.innerHTML = '<option value="">Choose the department they will run</option>'
+          + list.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
+      })
+      .catch(() => { deptSelect.innerHTML = '<option value="">Could not load departments</option>'; });
+  }
 
   // Only the executive office needs a member to promote, so the roster is
   // fetched once, lazily, rather than on every appointment.
@@ -280,7 +325,11 @@ function staffForm(existing) {
     if (password) payload.password = password;
     if (!isEdit) {
       payload.username = document.getElementById('sfUsername').value;
-      if (roleSelect.value === 'executive') payload.memberId = memberSelect ? memberSelect.value : '';
+      if (roleSelect.value === 'executive') {
+        payload.memberId = memberSelect ? memberSelect.value : '';
+        payload.positionKey = positionSelect ? positionSelect.value : '';
+        payload.department = deptSelect ? deptSelect.value : '';
+      }
     }
     try {
       await fetchJSON(isEdit ? `/api/admin/staff/${existing.id}` : '/api/admin/staff', {
