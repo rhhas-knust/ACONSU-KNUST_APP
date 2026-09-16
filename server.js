@@ -305,6 +305,20 @@ function requireRole(role) {
   };
 }
 
+// The portals that are one person's own workspace rather than a tier of
+// oversight. National and Coordinator are deliberately absent: the admin IS
+// the national tier, and a Coordinator running their own chapter's portal is
+// the point of it. See the access map in /api/portal/me.
+const OFFICE_PORTAL_ROLES = ['finance', 'shepherding', 'publicity', 'welfare', 'executive'];
+
+function holdsOfficePortal(req, role) {
+  const staff = currentStaff(req);
+  if (!staff) return false;
+  if (staff.role === role) return true;                  // the holder themselves
+  if (staff.role === 'coordinator') return canView(req, role); // oversees their own chapter's offices
+  return false;
+}
+
 function requireViewRole(role) {
   return (req, res, next) => {
     if (canView(req, role)) return next();
@@ -432,8 +446,17 @@ app.get('/api/portal/me', async (req, res) => {
     isAdmin,
     isNational: scope.isNational,
     chapter: chapter ? { id: chapter.id, name: chapter.name } : null,
+    // Holding an office is not the same as outranking it. The env admin and a
+    // National Coordinator outrank every office — that's why hasRole() lets
+    // them through the API guards, and that stays — but an office portal is
+    // the holder's own workspace. Seating the admin in it automatically meant
+    // every portal opened as "the admin", and the office's own sign-in screen
+    // became unreachable without clearing cookies. So entry to those portals
+    // asks whether you hold the office (or oversee it as that chapter's
+    // Coordinator), not whether you outrank it.
     access: PORTAL_ROLES.reduce((acc, role) => {
-      acc[role] = { view: canView(req, role), edit: hasRole(req, role) };
+      const entitled = OFFICE_PORTAL_ROLES.includes(role) ? holdsOfficePortal(req, role) : canView(req, role);
+      acc[role] = { view: entitled, edit: entitled && hasRole(req, role) };
       return acc;
     }, {})
   });

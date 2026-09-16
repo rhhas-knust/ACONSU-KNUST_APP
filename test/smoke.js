@@ -86,6 +86,33 @@ const { fakeModels } = require('./harness.js');
   r = await call('bad', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'wrong' });
   check('wrong password rejected', r.status === 401, r.data);
 
+  console.log('\n== the admin no longer takes over every office portal ==');
+  // Reported from the live site: whichever portal you opened, the admin was
+  // already sitting in it, and the office's own sign-in was unreachable.
+  r = await call('adminPortals', 'POST', '/api/portal/login', { username: 'admin', password: 'admin123' });
+  check('the admin signs in', r.status === 200, r.data);
+  r = await call('adminPortals', 'GET', '/api/portal/me');
+  const adminAccess = r.data.access || {};
+  check('the office portals now ask for the office holder instead of seating the admin',
+    ['finance', 'shepherding', 'publicity', 'welfare', 'executive'].every(role => adminAccess[role].view === false), adminAccess);
+  check('while the national portal, which is genuinely theirs, still opens',
+    adminAccess.nationalCoordinator.view === true, adminAccess);
+  check('and the coordinator portal is deliberately left alone',
+    adminAccess.coordinator.view === true, adminAccess);
+
+  // The people who actually hold the offices are unaffected.
+  r = await call('fin', 'GET', '/api/portal/me');
+  check('the finance officer still opens their own portal', r.data.access.finance.view === true, r.data.access);
+  check('but is not handed somebody else\'s office', r.data.access.publicity.view === false, r.data.access);
+  r = await call('coord', 'GET', '/api/portal/me');
+  check('a chapter coordinator still oversees their own chapter\'s offices',
+    r.data.access.finance.view === true && r.data.access.welfare.view === true, r.data.access);
+
+  // The admin keeps its API reach — this changed which portal opens, not who
+  // can do what once inside.
+  r = await call('adminPortals', 'GET', '/api/finance/summary');
+  check('the admin still has its API authority over finance', r.status === 200, r.data);
+
   console.log('\n== logging out actually logs you out ==');
   // The env admin signing in through a portal form gets BOTH isAdmin and a
   // staff record, so a logout that only cleared `staff` left them signed in —
