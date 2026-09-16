@@ -1503,10 +1503,40 @@ function openMemberEditForm(member) {
 async function renderExecutives() {
   const el = document.getElementById('panel-executives');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
-  const [execs, applications] = await Promise.all([
+  const [execs, applications, positionList, departments] = await Promise.all([
     fetchJSON('/api/executives'),
-    fetchJSON('/api/admin/executive-applications').catch(() => [])
+    fetchJSON('/api/admin/executive-applications').catch(() => []),
+    fetchJSON('/api/executive-positions').catch(() => []),
+    fetchJSON('/api/departments').catch(() => [])
   ]);
+
+  // The position decides what its holder can do, so it is chosen from the real
+  // list rather than typed. A portfolio position runs a department; an officer
+  // answers for the whole chapter and must not be given one — the picker
+  // follows that rule so the server never has to refuse the form.
+  const positionOptions = (selected) => positionList.map(p =>
+    `<option value="${escapeHtml(p.key)}" data-requires-department="${p.requiresDepartment}" ${p.key === selected ? 'selected' : ''}>${escapeHtml(p.label)}</option>`
+  ).join('');
+  const departmentOptions = (selected) => departments.map(d =>
+    `<option value="${escapeHtml(d.id)}" ${d.id === selected ? 'selected' : ''}>${escapeHtml(d.name)}</option>`
+  ).join('');
+  // Shows the department picker only for the positions that need one, and
+  // clears it otherwise so an officer can never be submitted holding one.
+  function wirePositionPicker(positionId, departmentWrapId, departmentId) {
+    const select = document.getElementById(positionId);
+    const wrap = document.getElementById(departmentWrapId);
+    const dept = document.getElementById(departmentId);
+    if (!select || !wrap || !dept) return;
+    const sync = () => {
+      const opt = select.options[select.selectedIndex];
+      const needs = opt && opt.dataset.requiresDepartment === 'true';
+      wrap.style.display = needs ? '' : 'none';
+      dept.required = !!needs;
+      if (!needs) dept.value = '';
+    };
+    select.addEventListener('change', sync);
+    sync();
+  }
 
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Executives</h2>
@@ -1535,8 +1565,20 @@ async function renderExecutives() {
       <form id="execForm">
         <div class="field-row">
           <div class="field"><label>Full Name</label><input type="text" id="execName" required></div>
-          <div class="field"><label>Role / Position</label><input type="text" id="execRole" placeholder="e.g. President" required></div>
+          <div class="field"><label>Position</label>
+            <select id="execRole" required>
+              <option value="">Choose a position</option>
+              ${positionOptions('')}
+            </select>
+          </div>
         </div>
+        <div class="field" id="execDeptWrap" style="display:none;"><label>Department</label>
+          <select id="execDepartment">
+            <option value="">Choose the department</option>
+            ${departmentOptions('')}
+          </select>
+        </div>
+        <p class="hint">This adds a card to the public page only. To give someone a portal login, promote a member under Leadership Accounts.</p>
         <div class="field"><label>Bio / Credentials</label><textarea id="execBio" placeholder="Short bio, course of study, achievements..."></textarea></div>
         <div class="field-row">
           <div class="field"><label>Display Order (lower shows first)</label><input type="number" id="execOrder" value="0"></div>
@@ -1568,6 +1610,19 @@ async function renderExecutives() {
           <input type="password" id="apPassword" minlength="8" autocomplete="new-password" required>
           <small class="hint">At least 8 characters. Share it with them directly.</small>
         </div>
+        <div class="field"><label>Position</label>
+          <select id="apPosition" required>
+            <option value="">Choose the position they are approved into</option>
+            ${positionOptions('')}
+          </select>
+          <small class="hint">This is what decides which parts of the portal open for them.</small>
+        </div>
+        <div class="field" id="apDeptWrap" style="display:none;"><label>Department</label>
+          <select id="apDepartment">
+            <option value="">Choose the department they will run</option>
+            ${departmentOptions('')}
+          </select>
+        </div>
         <div style="display:flex; gap:10px; margin-top:22px;">
           <button type="submit" class="btn btn-primary">Approve &amp; Issue Login</button>
           <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
@@ -1577,6 +1632,7 @@ async function renderExecutives() {
     `);
     const cancel = document.getElementById('cancelModalBtn');
     if (cancel) cancel.addEventListener('click', closeModal);
+    wirePositionPicker('apPosition', 'apDeptWrap', 'apDepartment');
     document.getElementById('approveExecForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       try {
@@ -1585,7 +1641,9 @@ async function renderExecutives() {
           body: JSON.stringify({
             decision: 'approve',
             username: document.getElementById('apUsername').value,
-            password: document.getElementById('apPassword').value
+            password: document.getElementById('apPassword').value,
+            positionKey: document.getElementById('apPosition').value,
+            department: document.getElementById('apDepartment').value
           })
         });
         closeModal();
@@ -1615,6 +1673,59 @@ async function renderExecutives() {
     });
   });
 
+  wirePositionPicker('execRole', 'execDeptWrap', 'execDepartment');
+
+  // Mid-year reshuffles: the Secretary steps up, a portfolio changes hands.
+  document.querySelectorAll('[data-position-exec]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const exec = execs.find(x => x.id === btn.dataset.positionExec);
+      if (!exec) return;
+      showModal(`
+        <h3>Change position — ${escapeHtml(exec.name || '')}</h3>
+        <p class="hint">The office they are leaving is kept on file, so their history stays intact.</p>
+        <form id="execPositionForm">
+          <div class="field"><label>Position</label>
+            <select id="cpPosition" required>
+              <option value="">Choose a position</option>
+              ${positionOptions(exec.positionKey || '')}
+            </select>
+          </div>
+          <div class="field" id="cpDeptWrap" style="display:none;"><label>Department</label>
+            <select id="cpDepartment">
+              <option value="">Choose the department</option>
+              ${departmentOptions(exec.department || '')}
+            </select>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:22px;">
+            <button type="submit" class="btn btn-primary">Save Position</button>
+            <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+          </div>
+          <div class="form-msg" id="cpMsg"></div>
+        </form>
+      `);
+      const cancelCp = document.getElementById('cancelModalBtn');
+      if (cancelCp) cancelCp.addEventListener('click', closeModal);
+      wirePositionPicker('cpPosition', 'cpDeptWrap', 'cpDepartment');
+      document.getElementById('execPositionForm').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        try {
+          await fetchJSON(`/api/admin/executives/${exec.id}/position`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              positionKey: document.getElementById('cpPosition').value,
+              department: document.getElementById('cpDepartment').value
+            })
+          });
+          closeModal();
+          showToast('Position updated.', 'success');
+          renderExecutives();
+        } catch (err) {
+          setFormMsg('cpMsg', err.message || 'Could not change this position.', 'error');
+        }
+      });
+    });
+  });
+
   document.getElementById('execForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('execSubmitBtn');
@@ -1622,7 +1733,8 @@ async function renderExecutives() {
     btn.disabled = true; btn.textContent = 'Saving...';
     const formData = new FormData();
     formData.append('name', document.getElementById('execName').value);
-    formData.append('role', document.getElementById('execRole').value);
+    formData.append('positionKey', document.getElementById('execRole').value);
+    formData.append('department', document.getElementById('execDepartment').value);
     formData.append('bio', document.getElementById('execBio').value);
     formData.append('order', document.getElementById('execOrder').value);
     const fileInput = document.getElementById('execImage');
@@ -1666,6 +1778,7 @@ function execCardHtml(e) {
         <small>${escapeHtml(e.role || '')}</small>
         <div class="row-actions" style="margin-top:8px;">
           <button data-edit-exec="${e.id}">Edit</button>
+          <button data-position-exec="${e.id}">Position</button>
           <button class="danger" data-delete-exec="${e.id}">Delete</button>
         </div>
       </div>
@@ -1678,7 +1791,10 @@ function openExecEditForm(exec) {
     <h3>Edit Executive</h3>
     <form id="execEditForm">
       <div class="field"><label>Full Name</label><input type="text" id="editExecName" value="${escapeHtml(exec.name || '')}" required></div>
-      <div class="field"><label>Role / Position</label><input type="text" id="editExecRole" value="${escapeHtml(exec.role || '')}" required></div>
+      <div class="field"><label>Position</label>
+        <p style="margin:0; font-weight:600;">${escapeHtml(exec.role || 'Not set')}</p>
+        <small class="hint">Use the <strong>Position</strong> button on their card to change this — it decides what their portal opens.</small>
+      </div>
       <div class="field"><label>Bio / Credentials</label><textarea id="editExecBio">${escapeHtml(exec.bio || '')}</textarea></div>
       <div class="field"><label>Display Order</label><input type="number" id="editExecOrder" value="${exec.order || 0}"></div>
       <div class="field"><label>Replace Photo (optional)</label><input type="file" id="editExecImage" accept="image/*"></div>
@@ -1694,7 +1810,6 @@ function openExecEditForm(exec) {
     e.preventDefault();
     const formData = new FormData();
     formData.append('name', document.getElementById('editExecName').value);
-    formData.append('role', document.getElementById('editExecRole').value);
     formData.append('bio', document.getElementById('editExecBio').value);
     formData.append('order', document.getElementById('editExecOrder').value);
     const fileInput = document.getElementById('editExecImage');
@@ -2679,10 +2794,17 @@ function initCommandPalette() {
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  // This file is shared by admin.html and chapter.html, so nothing here may
+  // assume an element exists on both. It once did: chapter.html's submit
+  // button had no id, so this line threw before the request was ever sent and
+  // the Chapter Admin login silently did nothing at all. The button has its
+  // id now, and these stay optional so a missing one can never again cost
+  // somebody their way in.
   const btn = document.getElementById('loginBtn');
   const msg = document.getElementById('loginMsg');
-  btn.disabled = true; btn.textContent = 'Logging in...';
-  msg.textContent = ''; msg.className = 'form-msg';
+  const setMsg = (text, cls) => { if (msg) { msg.textContent = text; msg.className = cls; } };
+  if (btn) { btn.disabled = true; btn.textContent = 'Logging in...'; }
+  setMsg('', 'form-msg');
   try {
     await fetchJSON('/api/portal/login', {
       method: 'POST',
@@ -2694,10 +2816,9 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     });
     await checkAuth();
   } catch (err) {
-    msg.textContent = err.message || 'Could not log in.';
-    msg.className = 'form-msg error';
+    setMsg(err.message || 'Could not log in.', 'form-msg error');
   } finally {
-    btn.disabled = false; btn.textContent = 'Log In';
+    if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
   }
 });
 

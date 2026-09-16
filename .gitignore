@@ -3,3 +3,7 @@ node_modules/
 *.log
 .DS_Store
 .claude/
+
+# Captured console output from a local `npm test > ...` redirect. Never useful
+# to anyone else and easy to commit by accident.
+test-output.txt
