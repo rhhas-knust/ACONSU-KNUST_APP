@@ -527,12 +527,12 @@ const { fakeModels } = require('./harness.js');
 
   // A portfolio holder runs a department; an officer never does. Both halves
   // of that rule are enforced, not just the first.
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nodept', name: 'No Dept', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'music' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nodept', name: 'No Dept', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'music_director' });
   check('a portfolio holder must be given a department', r.status === 400, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.baddept', name: 'Officer With Dept', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'president', department: deptId });
   check('an officer is refused a department, since they answer for the whole chapter', r.status === 400, r.data);
 
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'music', department: deptId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'music_director', department: deptId });
   check('executive account created by promoting that member', r.status === 200 && r.data.item.memberId === amaMemberId, r.data);
   check('the promoted executive is given a one-year term of office', !!r.data.item.termEndsAt && !!r.data.item.termYear, r.data.item);
   r = await call('exec', 'POST', '/api/portal/login', { username: 'exec.ama', password: 'password123' });
@@ -541,8 +541,8 @@ const { fakeModels } = require('./harness.js');
   // Provisioning is one action: the roster card exists before they ever open
   // the profile form.
   r = await call('exec', 'GET', '/api/executive/me');
-  check('their roster card is provisioned with the account', r.status === 200 && r.data.item && r.data.item.positionKey === 'music', r.data);
-  check('the portal is told which position they hold', r.data.position && r.data.position.key === 'music' && r.data.position.kind === 'portfolio', r.data.position);
+  check('their roster card is provisioned with the account', r.status === 200 && r.data.item && r.data.item.positionKey === 'music_director', r.data);
+  check('the portal is told which position they hold', r.data.position && r.data.position.key === 'music_director' && r.data.position.kind === 'portfolio', r.data.position);
   check('a portfolio holder is granted their department panels',
     r.data.position.capabilities.includes('department') && r.data.position.capabilities.includes('department.members'), r.data.position);
   check('and is not granted the chapter-wide ones',
@@ -559,7 +559,7 @@ const { fakeModels } = require('./harness.js');
   const escalateData = await escalateRes.json();
   check('an executive can save their profile', escalateRes.status === 200, escalateData);
   check('but cannot promote themselves by typing a different position',
-    escalateData.item.positionKey === 'music' && escalateData.item.role === 'Music Director', escalateData.item);
+    escalateData.item.positionKey === 'music_director' && escalateData.item.role === 'Music Director', escalateData.item);
   r = await call('exec', 'GET', '/api/executive/chapter/pulse');
   check('so the chapter-wide screens stay shut to them', r.status === 403, r.data);
   r = await call('exec', 'GET', '/api/executive/chapter/finance');
@@ -594,13 +594,13 @@ const { fakeModels } = require('./harness.js');
   r = await call('exec', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'president' });
   check('an executive cannot reshuffle themselves', r.status === 401 || r.status === 403, r.data);
 
-  r = await call('admin', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'welfare', department: deptId });
-  check('the coordinator moves a sitting executive to another portfolio', r.status === 200 && r.data.item.positionKey === 'welfare', r.data);
+  r = await call('admin', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'welfare_head', department: deptId });
+  check('the coordinator moves a sitting executive to another portfolio', r.status === 200 && r.data.item.positionKey === 'welfare_head', r.data);
   check('the office they left is snapshotted into their history',
     (r.data.item.history || []).some(h => h.role === 'Music Director'), r.data.item);
   r = await call('anon', 'GET', `/api/departments/${deptId}`);
   check('and it follows the office, not a stale copy, when the position changes',
-    r.data.leaderRole === 'Welfare Coordinator', r.data);
+    r.data.leaderRole === 'Welfare Head', r.data);
 
   // Moving someone into an officer's seat has to release the department, and
   // the rule is enforced rather than silently patched over.
@@ -608,7 +608,7 @@ const { fakeModels } = require('./harness.js');
   check('an officer cannot keep hold of a department', r.status === 400, r.data);
 
   // Put them back where the rest of these checks expect them.
-  r = await call('admin', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'music', department: deptId });
+  r = await call('admin', 'PATCH', `/api/admin/executives/${amaCardId}/position`, { positionKey: 'music_director', department: deptId });
   check('and back again, with the department intact', r.status === 200 && r.data.item.department === deptId, r.data);
 
   // Put a member in the department so there is someone to see and to mark.
@@ -723,10 +723,173 @@ const { fakeModels } = require('./harness.js');
   check('the public roster ranks the President above a portfolio holder',
     rosterNames.indexOf('President') !== -1 && rosterNames.indexOf('President') < rosterNames.indexOf('Music Director'), rosterNames);
 
+  console.log('\n== every position on ACONSU\'s roster resolves ==');
+  // These are the titles as they are actually written on ACONSU's roster,
+  // misspellings and abbreviations included. Every one must land on a real
+  // position: an unresolved title means that executive signs in with almost
+  // nothing, so this is the migration guarantee, asserted rather than assumed.
+  {
+    const positionsLib = require('../lib/positions.js');
+    const roster = [
+      'Asstiant Media Head', 'Financial Secretary', 'Assitant M.O.G Head', 'Assitant Music Director',
+      'Shepherding Head', 'Vice - President', 'Campus Coordinator', 'Technical Head', 'Prayer Secertary',
+      'Publicity Head', 'PRESIDENT', 'Treasurer', 'Usher Head', 'General Secertary', 'M.O.G Head',
+      'Assistant Welfare Head', 'Ushering Head', 'Welfare Head', 'Bible Studies Coordinator', 'Media Head',
+      'Organising Secertary', 'Assistant L.O.S Head', 'Assistant General Secertary', 'Music Director',
+      'Ladies Of Substance Head(WOCOM)'
+    ];
+    const unresolved = roster.filter(t => positionsLib.resolvePosition('', t, false).kind === 'unknown');
+    check('every title on the real roster maps to a position', unresolved.length === 0, unresolved);
+
+    // A head and their assistant are different offices and must never collide,
+    // and "Vice President" must never fold into "President".
+    check('an assistant never resolves to their head\'s position',
+      positionsLib.resolvePosition('', 'Assistant Media Head', false).key === 'assistant_media_head'
+      && positionsLib.resolvePosition('', 'Media Head', false).key === 'media_head');
+    check('a Vice President is never resolved as the President',
+      positionsLib.resolvePosition('', 'Vice President', false).key === 'vice_president');
+
+    // Assistants act fully in their head's place, so the grants match exactly.
+    const head = positionsLib.positionByKey('welfare_head');
+    const deputy = positionsLib.positionByKey('assistant_welfare_head');
+    check('an Assistant Head holds exactly what the Head holds',
+      JSON.stringify(head.capabilities) === JSON.stringify(deputy.capabilities), { head: head.capabilities, deputy: deputy.capabilities });
+
+    // Ushering is the largest department and answers to the Organiser.
+    check('Ushering is recorded as answering to the Organising Secretary',
+      positionsLib.positionByKey('ushering_head').reportsTo === 'organising_secretary');
+
+    // The two money seats are deliberately different.
+    check('only the Financial Secretary writes the books, and only the Treasurer files',
+      positionsLib.hasCapability(positionsLib.positionByKey('financial_secretary'), 'finance.ledger')
+      && !positionsLib.hasCapability(positionsLib.positionByKey('financial_secretary'), 'treasury.report')
+      && positionsLib.hasCapability(positionsLib.positionByKey('treasurer'), 'treasury.report')
+      && !positionsLib.hasCapability(positionsLib.positionByKey('treasurer'), 'finance.ledger'));
+  }
+
+  console.log('\n== the money: Treasurer files, Financial Secretary records ==');
+  // ACONSU splits the money two ways: the Treasurer holds it and must account
+  // for every movement with evidence; the Financial Secretary keeps the books
+  // and is the only executive who writes to them.
+  const treasRegForm = new FormData();
+  treasRegForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 't.png');
+  treasRegForm.append('name', 'Kojo Treasurer');
+  treasRegForm.append('email', 'treasurer@test.com');
+  treasRegForm.append('password', 'secret123');
+  treasRegForm.append('chapterId', chapterId);
+  const treasMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: treasRegForm })).json()).member.id;
+
+  const finRegForm = new FormData();
+  finRegForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'f.png');
+  finRegForm.append('name', 'Abena FinSec');
+  finRegForm.append('email', 'finsec@test.com');
+  finRegForm.append('password', 'secret123');
+  finRegForm.append('chapterId', chapterId);
+  const finMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: finRegForm })).json()).member.id;
+
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.treasurer', name: 'Kojo Treasurer', role: 'executive', password: 'password123', memberId: treasMemberId, positionKey: 'treasurer' });
+  check('a Treasurer is appointed', r.status === 200, r.data);
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.finsec', name: 'Abena FinSec', role: 'executive', password: 'password123', memberId: finMemberId, positionKey: 'financial_secretary' });
+  check('a Financial Secretary is appointed', r.status === 200, r.data);
+  await call('treas', 'POST', '/api/portal/login', { username: 'exec.treasurer', password: 'password123' });
+  await call('finsec', 'POST', '/api/portal/login', { username: 'exec.finsec', password: 'password123' });
+
+  // The Treasurer holds the money but never writes the ledger.
+  r = await call('treas', 'GET', '/api/executive/finance/ledger');
+  check('the Treasurer cannot open the ledger', r.status === 403, r.data);
+  r = await call('treas', 'POST', '/api/executive/finance/ledger', { entryType: 'income', amount: 50, category: 'momo' });
+  check('nor record an entry directly', r.status === 403, r.data);
+  // And the Financial Secretary, who records, does not file on the Treasurer's behalf.
+  r = await call('finsec', 'GET', '/api/executive/treasury/reports');
+  check('the Financial Secretary does not file on the Treasurer\'s behalf', r.status === 403, r.data);
+
+  // Evidence is the point of the split, so a filing without it is refused.
+  const noEvidence = new FormData();
+  noEvidence.append('entryType', 'income');
+  noEvidence.append('amount', '120');
+  noEvidence.append('category', 'offertory');
+  let fileRes = await fetch(BASE + '/api/executive/treasury/report', { method: 'POST', headers: { cookie: jars.treas }, body: noEvidence });
+  check('a filing with no evidence is refused', fileRes.status === 400, await fileRes.json());
+
+  const filing = new FormData();
+  filing.append('receipt', new Blob([Buffer.from('receipt-bytes')], { type: 'image/png' }), 'r.png');
+  filing.append('entryType', 'income');
+  filing.append('amount', '120');
+  filing.append('category', 'offertory');
+  filing.append('date', '2026-05-04');
+  filing.append('description', 'Sunday offertory');
+  fileRes = await fetch(BASE + '/api/executive/treasury/report', { method: 'POST', headers: { cookie: jars.treas }, body: filing });
+  const filed = await fileRes.json();
+  check('the Treasurer files a movement with evidence', fileRes.status === 200, filed);
+  check('and it waits, rather than landing in the books', filed.item.approvalStatus === 'pending' && filed.item.source === 'treasury', filed.item);
+  check('with the evidence attached and the Treasurer named', !!filed.item.receiptFileId && filed.item.filedBy === 'Kojo Treasurer', filed.item);
+  const filingId = filed.item.id;
+
+  r = await call('finsec', 'GET', '/api/executive/finance/ledger');
+  check('it appears in the Financial Secretary\'s queue', r.status === 200 && r.data.awaiting.some(a => a.id === filingId), r.data);
+
+  // Sending something back has to say why, so the Treasurer can correct it.
+  r = await call('finsec', 'PATCH', `/api/executive/finance/ledger/${filingId}`, { decision: 'reject' });
+  check('sending a filing back without a reason is refused', r.status === 400, r.data);
+  r = await call('finsec', 'PATCH', `/api/executive/finance/ledger/${filingId}`, { decision: 'reject', reviewNote: 'Receipt is unreadable.' });
+  check('the Financial Secretary sends it back with a reason', r.status === 200 && r.data.item.approvalStatus === 'rejected', r.data);
+  r = await call('treas', 'GET', '/api/executive/treasury/reports');
+  check('and the Treasurer sees why', r.data.some(f => f.id === filingId && f.reviewNote === 'Receipt is unreadable.'), r.data);
+
+  // Once dealt with, a filing cannot be re-decided.
+  r = await call('finsec', 'PATCH', `/api/executive/finance/ledger/${filingId}`, { decision: 'record' });
+  check('a filing already dealt with cannot be decided twice', r.status === 400, r.data);
+
+  const filing2 = new FormData();
+  filing2.append('receipt', new Blob([Buffer.from('clear-receipt')], { type: 'image/png' }), 'r2.png');
+  filing2.append('entryType', 'expense');
+  filing2.append('amount', '75');
+  filing2.append('category', 'transport');
+  filing2.append('date', '2026-05-05');
+  const filed2 = await (await fetch(BASE + '/api/executive/treasury/report', { method: 'POST', headers: { cookie: jars.treas }, body: filing2 })).json();
+  r = await call('finsec', 'PATCH', `/api/executive/finance/ledger/${filed2.item.id}`, { decision: 'record' });
+  check('a good filing is recorded into the books', r.status === 200 && r.data.item.approvalStatus === 'recorded', r.data);
+  check('and the ledger names who recorded it, not just who filed it',
+    r.data.item.recordedBy === 'Abena FinSec' && r.data.item.filedBy === 'Kojo Treasurer', r.data.item);
+
+  // The Financial Secretary keeps the books, so they can enter directly too.
+  r = await call('finsec', 'POST', '/api/executive/finance/ledger', { entryType: 'income', amount: 200, category: 'tithe', date: '2026-05-06' });
+  check('the Financial Secretary records an entry directly', r.status === 200 && r.data.item.approvalStatus === 'recorded', r.data);
+  r = await call('finsec', 'POST', '/api/executive/finance/ledger', { entryType: 'income', amount: 200, category: 'not-a-category' });
+  check('an invalid income category is refused', r.status === 400, r.data);
+
+  console.log('\n== the daily verse ==');
+  const bsRegForm = new FormData();
+  bsRegForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'b.png');
+  bsRegForm.append('name', 'Esi Bible');
+  bsRegForm.append('email', 'bible@test.com');
+  bsRegForm.append('password', 'secret123');
+  bsRegForm.append('chapterId', chapterId);
+  const bsMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: bsRegForm })).json()).member.id;
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.bible', name: 'Esi Bible', role: 'executive', password: 'password123', memberId: bsMemberId, positionKey: 'bible_studies_coordinator', department: deptId });
+  check('a Bible Studies Coordinator is appointed', r.status === 200, r.data);
+  await call('bible', 'POST', '/api/portal/login', { username: 'exec.bible', password: 'password123' });
+
+  const today = new Date().toISOString().slice(0, 10);
+  r = await call('bible', 'POST', '/api/executive/daily-verses', { date: today, reference: 'Psalm 23:1', text: 'The Lord is my shepherd.' });
+  check('the Bible Studies Coordinator posts the daily verse', r.status === 200 && r.data.replaced === false, r.data);
+  r = await call('bible', 'POST', '/api/executive/daily-verses', { date: today, reference: 'Psalm 23:1-2', text: 'He makes me lie down.' });
+  check('posting again for the same day replaces it rather than stacking a second',
+    r.status === 200 && r.data.replaced === true, r.data);
+  r = await call('bible', 'GET', '/api/executive/daily-verses');
+  check('only one verse exists for that day', r.data.filter(v => v.date === today).length === 1, r.data);
+  r = await call('anon', 'GET', '/api/daily-verse');
+  check('and anyone opening the app sees it, signed in or not',
+    r.status === 200 && r.data.item && r.data.item.reference === 'Psalm 23:1-2', r.data);
+  r = await call('bible', 'POST', '/api/executive/daily-verses', { date: today, reference: '' });
+  check('a verse with no reference is refused', r.status === 400, r.data);
+  r = await call('exec', 'POST', '/api/executive/daily-verses', { date: today, reference: 'John 1:1' });
+  check('an executive without that office cannot post the daily verse', r.status === 403, r.data);
+
   r = await call('anon', 'GET', '/api/executive-positions');
   check('the position catalogue is available for the promotion screen',
     r.status === 200 && r.data.some(p => p.key === 'president' && p.requiresDepartment === false)
-      && r.data.some(p => p.key === 'music' && p.requiresDepartment === true), r.data);
+      && r.data.some(p => p.key === 'music_director' && p.requiresDepartment === true), r.data);
 
   // Editing a roster card must not let the displayed title drift away from the
   // position behind it — a card reading "President" with a Music Director's
@@ -740,7 +903,7 @@ const { fakeModels } = require('./harness.js');
   });
   const editData = await editRes.json();
   check('a card edit cannot rename the office out from under its position',
-    editRes.status === 200 && editData.item.role === 'Music Director' && editData.item.positionKey === 'music', editData.item);
+    editRes.status === 200 && editData.item.role === 'Music Director' && editData.item.positionKey === 'music_director', editData.item);
   check('and the edit still saves what it is meant to', editData.item.name === 'Ama Executive', editData.item);
 
   // Term of office. The deadline is compared against the live clock on every
@@ -1419,6 +1582,32 @@ const { fakeModels } = require('./harness.js');
       check(`${page} has #${id}, which admin.js drives`, pageHtml[page].includes(`id="${id}"`));
     }
   }
+  // Scripts loaded into the same page share ONE global scope, so a top-level
+  // `const` in one file collides with a `function` of the same name in
+  // another — and a collision is a SyntaxError that kills the whole file, so
+  // the portal renders nothing at all. node --check passes each file happily
+  // on its own, which is exactly why this has to be checked in combination.
+  // (Caught for real: executive.js declared `const money` while portal.js
+  // already had `function money`, and the executive portal went blank.)
+  {
+    const vm = require('vm');
+    const fs = require('fs');
+    const path = require('path');
+    const bundles = {
+      'executive.html': ['main.js', 'portal.js', 'executive.js'],
+      'coordinator.html': ['main.js', 'portal.js', 'coordinator.js'],
+      'admin.html': ['main.js', 'admin.js']
+    };
+    for (const [page, files] of Object.entries(bundles)) {
+      const combined = files
+        .map(f => fs.readFileSync(path.join(__dirname, '..', 'public', 'js', f), 'utf8'))
+        .join('\n;\n');
+      let error = '';
+      try { new vm.Script(combined); } catch (e) { error = e.message; }
+      check(`${page}'s scripts declare no clashing globals`, error === '', error);
+    }
+  }
+
   // The chapter name in the header is the portal's identity, so the element it
   // is written into has to exist on every portal that has a chapter.
   check('/chapter.html can show which chapter it belongs to', pageHtml['/chapter.html'].includes('id="adminBrandName"'));

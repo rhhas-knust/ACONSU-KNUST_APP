@@ -590,12 +590,13 @@ async function renderExecChapterDepartments(el) {
     <div class="portal-card">
       ${departments.length ? `
         <div class="table-wrap"><table class="portal-table">
-          <thead><tr><th>Department</th><th>Head</th><th>Members</th><th>Meets</th></tr></thead>
+          <thead><tr><th>Department</th><th>Head</th><th>Members</th><th>Answers to</th><th>Meets</th></tr></thead>
           <tbody>${departments.map(d => `
             <tr>
               <td><strong>${escapeHtml(d.name)}</strong>${d.tagline ? `<br><span class="tiny muted">${escapeHtml(d.tagline)}</span>` : ''}</td>
               <td>${d.headName ? `${escapeHtml(d.headName)}<br><span class="tiny muted">${escapeHtml(d.headRole || '')}</span>` : '<span class="muted">Vacant</span>'}</td>
               <td>${d.memberCount}</td>
+              <td>${d.reportsTo ? escapeHtml(d.reportsTo) : '<span class="muted">—</span>'}</td>
               <td>${escapeHtml([d.meetingDay, d.meetingTime].filter(Boolean).join(', ') || '—')}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">No departments yet.</p>'}
@@ -630,7 +631,6 @@ async function renderExecChapterAttendance(el) {
 
 async function renderExecFinance(el) {
   const d = await fetchJSON('/api/executive/chapter/finance');
-  const money = (n) => `GHS ${Number(n || 0).toFixed(2)}`;
   const categories = Object.entries(d.incomeByCategory || {}).sort((a, b) => b[1] - a[1]);
   el.innerHTML = `
     <div class="panel-head">
@@ -778,6 +778,280 @@ async function renderExecChapterAnnounce(el) {
   });
 }
 
+/* ---------- the money, and the daily verse ---------- */
+
+// Treasurer: files what was received or spent, with evidence. Never writes
+// the ledger — the filing waits for the Financial Secretary to record it.
+async function renderExecTreasury(el) {
+  const filings = await fetchJSON('/api/executive/treasury/reports');
+  const statusLabel = (f) => f.approvalStatus === 'recorded'
+    ? '<span class="tiny">Recorded</span>'
+    : f.approvalStatus === 'rejected'
+      ? `<span class="tiny" style="color:var(--danger,#b3261e);">Sent back</span>${f.reviewNote ? `<br><span class="tiny muted">${escapeHtml(f.reviewNote)}</span>` : ''}`
+      : '<span class="tiny muted">Waiting on the Financial Secretary</span>';
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Account for Money</h2>
+        <p class="sub">You hold the funds; the Financial Secretary keeps the books. File every movement here with evidence and they will record it.</p>
+      </div>
+    </div>
+    <div class="portal-card" style="max-width:520px;">
+      <form id="treasuryForm">
+        <div class="field-row">
+          <div class="field"><label>What happened</label>
+            <select id="tType" required>
+              <option value="income">Money received</option>
+              <option value="expense">Money spent</option>
+            </select>
+          </div>
+          <div class="field"><label>Amount (GHS)</label><input type="number" id="tAmount" step="0.01" min="0.01" required></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Category</label><input type="text" id="tCategory" list="incomeCats" required>
+            <datalist id="incomeCats">
+              <option value="momo"></option><option value="tithe"></option>
+              <option value="harvest"></option><option value="offertory"></option><option value="other"></option>
+            </datalist>
+            <small class="hint">For money received this must be one of: momo, tithe, harvest, offertory, other.</small>
+          </div>
+          <div class="field"><label>Date</label><input type="date" id="tDate" value="${todayISO()}" required></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>How</label>
+            <select id="tMethod">
+              <option value="cash">Cash</option><option value="momo">MoMo</option>
+              <option value="bank">Bank</option><option value="cheque">Cheque</option><option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field"><label>Reference</label><input type="text" id="tReference" placeholder="MoMo id, receipt no."></div>
+        </div>
+        <div class="field"><label>Who</label><input type="text" id="tPayee" placeholder="Who paid, or who was paid"></div>
+        <div class="field"><label>Description</label><textarea id="tDescription" rows="2"></textarea></div>
+        <div class="field"><label>Evidence</label><input type="file" id="tReceipt" accept="image/*" required>
+          <small class="hint">A receipt, transfer screenshot or photo. Required — a filing without evidence cannot be recorded.</small>
+        </div>
+        <button type="submit" class="btn btn-primary">File It</button>
+        <div class="form-msg" id="treasuryMsg"></div>
+      </form>
+    </div>
+    <div class="portal-card">
+      <h4 style="margin-top:0;">What you have filed</h4>
+      ${filings.length ? `
+        <div class="table-wrap"><table class="portal-table">
+          <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>${filings.map(f => `
+            <tr>
+              <td>${escapeHtml(f.date)}</td>
+              <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')}${f.description ? ' · ' + escapeHtml(f.description) : ''}</span></td>
+              <td>${money(f.amount)}</td>
+              <td>${statusLabel(f)}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">Nothing filed yet.</p>'}
+    </div>
+  `;
+  document.getElementById('treasuryForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const fd = new FormData();
+      fd.append('entryType', document.getElementById('tType').value);
+      fd.append('amount', document.getElementById('tAmount').value);
+      fd.append('category', document.getElementById('tCategory').value);
+      fd.append('date', document.getElementById('tDate').value);
+      fd.append('method', document.getElementById('tMethod').value);
+      fd.append('reference', document.getElementById('tReference').value);
+      fd.append('payee', document.getElementById('tPayee').value);
+      fd.append('description', document.getElementById('tDescription').value);
+      const receipt = document.getElementById('tReceipt').files[0];
+      if (receipt) fd.append('receipt', receipt);
+      await fetchJSON('/api/executive/treasury/report', { method: 'POST', body: fd });
+      showToast('Filed — the Financial Secretary will record it.', 'success');
+      openPanel('treasury');
+    } catch (err) {
+      setFormMsg('treasuryMsg', err.message || 'Could not file this.', 'error');
+    }
+  });
+}
+
+// Financial Secretary: keeps the books. Works the Treasurer's queue, and can
+// enter something directly.
+async function renderExecLedger(el) {
+  const { awaiting, ledger } = await fetchJSON('/api/executive/finance/ledger');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>The Books</h2>
+        <p class="sub">You keep the ledger. The Treasurer files what they received or spent, with evidence; recording it is yours.</p>
+      </div>
+      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newEntryBtn">+ Record an Entry</button></div>
+    </div>
+    <div class="portal-card">
+      <h4 style="margin-top:0;">Waiting on you (${awaiting.length})</h4>
+      ${awaiting.length ? `
+        <div class="table-wrap"><table class="portal-table">
+          <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>Evidence</th><th></th></tr></thead>
+          <tbody>${awaiting.map(f => `
+            <tr>
+              <td>${escapeHtml(f.date)}</td>
+              <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')} · filed by ${escapeHtml(f.filedBy || '—')}${f.description ? ' · ' + escapeHtml(f.description) : ''}</span></td>
+              <td>${money(f.amount)}</td>
+              <td>${f.receiptFileId ? `<a href="/api/files/${escapeHtml(f.receiptFileId)}" target="_blank" rel="noopener">View</a>` : '<span class="muted">—</span>'}</td>
+              <td><div class="row-actions">
+                <button data-record="${escapeHtml(f.id)}">Record</button>
+                <button class="danger" data-reject="${escapeHtml(f.id)}">Send back</button>
+              </div></td>
+            </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">Nothing waiting — the Treasurer has filed everything.</p>'}
+    </div>
+    <div class="portal-card">
+      <h4 style="margin-top:0;">The ledger</h4>
+      ${ledger.length ? `
+        <div class="table-wrap"><table class="portal-table">
+          <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>Recorded by</th></tr></thead>
+          <tbody>${ledger.map(f => `
+            <tr>
+              <td>${escapeHtml(f.date)}</td>
+              <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')}${f.source === 'treasury' ? ' · from the Treasurer' : ''}${f.approvalStatus === 'rejected' ? ' · sent back' : ''}</span></td>
+              <td>${money(f.amount)}</td>
+              <td>${escapeHtml(f.recordedBy || '—')}</td>
+            </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">Nothing recorded yet.</p>'}
+    </div>
+  `;
+
+  el.querySelectorAll('[data-record]').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+      await fetchJSON(`/api/executive/finance/ledger/${btn.dataset.record}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: 'record' })
+      });
+      showToast('Recorded in the ledger.', 'success');
+      openPanel('ledger');
+    } catch (err) { showToast(err.message || 'Could not record this.', 'error'); }
+  }));
+  el.querySelectorAll('[data-reject]').forEach(btn => btn.addEventListener('click', async () => {
+    const note = prompt('Why are you sending this back? The Treasurer will see this.');
+    if (!note) return;
+    try {
+      await fetchJSON(`/api/executive/finance/ledger/${btn.dataset.reject}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: 'reject', reviewNote: note })
+      });
+      showToast('Sent back to the Treasurer.', 'success');
+      openPanel('ledger');
+    } catch (err) { showToast(err.message || 'Could not send this back.', 'error'); }
+  }));
+
+  document.getElementById('newEntryBtn').addEventListener('click', () => {
+    showModal(`
+      <h3>Record an Entry</h3>
+      <form id="ledgerForm">
+        <div class="field-row">
+          <div class="field"><label>Type</label>
+            <select id="lType"><option value="income">Income</option><option value="expense">Expense</option></select>
+          </div>
+          <div class="field"><label>Amount (GHS)</label><input type="number" id="lAmount" step="0.01" min="0.01" required></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Category</label><input type="text" id="lCategory" required></div>
+          <div class="field"><label>Date</label><input type="date" id="lDate" value="${todayISO()}" required></div>
+        </div>
+        <div class="field"><label>Description</label><textarea id="lDescription" rows="2"></textarea></div>
+        <div style="display:flex; gap:10px; margin-top:22px;">
+          <button type="submit" class="btn btn-primary">Record</button>
+          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+        </div>
+        <div class="form-msg" id="ledgerMsg"></div>
+      </form>
+    `);
+    const cancelLedger = document.getElementById('cancelModalBtn');
+    if (cancelLedger) cancelLedger.addEventListener('click', closeModal);
+    document.getElementById('ledgerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await fetchJSON('/api/executive/finance/ledger', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entryType: document.getElementById('lType').value,
+            amount: document.getElementById('lAmount').value,
+            category: document.getElementById('lCategory').value,
+            date: document.getElementById('lDate').value,
+            description: document.getElementById('lDescription').value
+          })
+        });
+        closeModal();
+        showToast('Recorded.', 'success');
+        openPanel('ledger');
+      } catch (err) {
+        setFormMsg('ledgerMsg', err.message || 'Could not record this.', 'error');
+      }
+    });
+  });
+}
+
+// Bible Studies Coordinator: the daily scripture.
+async function renderExecDailyVerse(el) {
+  const verses = await fetchJSON('/api/executive/daily-verses');
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Daily Verse</h2>
+        <p class="sub">One scripture a day, shown on the app's home screen. Posting again for a date replaces that day's verse.</p>
+      </div>
+    </div>
+    <div class="portal-card" style="max-width:520px;">
+      <form id="verseForm">
+        <div class="field-row">
+          <div class="field"><label>Date</label><input type="date" id="vDate" value="${todayISO()}" required></div>
+          <div class="field"><label>Reference</label><input type="text" id="vRef" placeholder="e.g. James 2:14-26" required></div>
+        </div>
+        <div class="field"><label>The verse</label><textarea id="vText" rows="3"></textarea></div>
+        <div class="field"><label>A thought on it</label><textarea id="vReflection" rows="3"></textarea></div>
+        <button type="submit" class="btn btn-primary">Post It</button>
+        <div class="form-msg" id="verseMsg"></div>
+      </form>
+    </div>
+    <div class="portal-card">
+      <h4 style="margin-top:0;">Posted</h4>
+      ${verses.length ? `
+        <div class="table-wrap"><table class="portal-table">
+          <thead><tr><th>Date</th><th>Scripture</th><th></th></tr></thead>
+          <tbody>${verses.map(v => `
+            <tr>
+              <td>${escapeHtml(v.date)}</td>
+              <td><strong>${escapeHtml(v.reference)}</strong>${v.text ? `<br><span class="tiny muted">${escapeHtml(v.text.slice(0, 110))}${v.text.length > 110 ? '…' : ''}</span>` : ''}</td>
+              <td><div class="row-actions"><button class="danger" data-delete-verse="${escapeHtml(v.id)}">Remove</button></div></td>
+            </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="empty-state">No verses posted yet.</p>'}
+    </div>
+  `;
+  document.getElementById('verseForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const res = await fetchJSON('/api/executive/daily-verses', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: document.getElementById('vDate').value,
+          reference: document.getElementById('vRef').value,
+          text: document.getElementById('vText').value,
+          reflection: document.getElementById('vReflection').value
+        })
+      });
+      showToast(res.replaced ? "Replaced that day's verse." : 'Verse posted.', 'success');
+      openPanel('dailyVerse');
+    } catch (err) {
+      setFormMsg('verseMsg', err.message || 'Could not post this verse.', 'error');
+    }
+  });
+  el.querySelectorAll('[data-delete-verse]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Remove this verse?')) return;
+    try {
+      await fetchJSON(`/api/executive/daily-verses/${btn.dataset.deleteVerse}`, { method: 'DELETE' });
+      openPanel('dailyVerse');
+    } catch (err) { showToast(err.message || 'Could not remove it.', 'error'); }
+  }));
+}
+
 /* ---------- which panels this executive actually gets ---------- */
 // Every panel names the capability it needs. The list is filtered against the
 // grant the server sent, so the portal and the server can never disagree about
@@ -790,6 +1064,9 @@ const EXEC_PANELS = [
   { key: 'minutes',          label: 'Minutes',             capability: 'minutes',              render: renderExecMinutes },
   { key: 'chapterAttend',    label: 'Service Attendance',  capability: 'attendance.chapter',   render: renderExecChapterAttendance },
   { key: 'finance',          label: 'The Books',           capability: 'finance.summary',      render: renderExecFinance },
+  { key: 'ledger',           label: 'Keep the Ledger',     capability: 'finance.ledger',       render: renderExecLedger },
+  { key: 'treasury',         label: 'Account for Money',   capability: 'treasury.report',      render: renderExecTreasury },
+  { key: 'dailyVerse',       label: 'Daily Verse',         capability: 'dailyVerse',           render: renderExecDailyVerse },
   { key: 'chapterAnnounce',  label: 'Message Chapter',     capability: 'announce.chapter',     render: renderExecChapterAnnounce },
   { key: 'department',       label: 'My Department',       capability: 'department',           render: renderExecDepartment },
   { key: 'members',          label: 'Department Members',  capability: 'department.members',   render: renderExecDeptMembers },

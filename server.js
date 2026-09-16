@@ -3828,7 +3828,16 @@ app.get('/api/executive/chapter/departments', requireRole('executive'), requireC
     repo.getAll('members', filter),
     repo.getAll('executives', filter)
   ]);
-  const headByDept = new Map(execs.filter(e => e.department).map(e => [e.department, e]));
+  // A department can have a head and an assistant head; the head is the one
+  // named, so assistants never displace them in this view.
+  const headByDept = new Map();
+  execs.filter(e => e.department).forEach(e => {
+    const position = positions.resolvePosition(e.positionKey, e.role, true);
+    const existing = headByDept.get(e.department);
+    if (!existing || (existing.deputyOf && !position.deputyOf)) {
+      headByDept.set(e.department, { ...e, deputyOf: position.deputyOf || '', reportsTo: position.reportsTo || '' });
+    }
+  });
   const countByDept = members.reduce((acc, m) => {
     if (m.department) acc.set(m.department, (acc.get(m.department) || 0) + 1);
     return acc;
@@ -3836,12 +3845,15 @@ app.get('/api/executive/chapter/departments', requireRole('executive'), requireC
   res.json(departments
     .map(d => {
       const head = headByDept.get(d.id);
+      const reportsTo = head && head.reportsTo ? positions.positionByKey(head.reportsTo) : null;
       return {
         id: d.id, name: d.name, tagline: d.tagline || '',
         meetingDay: d.meetingDay || '', meetingTime: d.meetingTime || '',
         memberCount: countByDept.get(d.id) || 0,
         headName: head ? head.name : '',
-        headRole: head ? head.role : ''
+        headRole: head ? head.role : '',
+        // Which officer this department answers to, where ACONSU has said so.
+        reportsTo: reportsTo ? reportsTo.label : ''
       };
     })
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
@@ -3926,6 +3938,176 @@ app.get('/api/executive/chapter/finance', requireRole('executive'), requireCapab
     entryCount: entries.length,
     pendingApprovals: expense.filter(e => e.approvalStatus === 'pending').length
   });
+}));
+
+// ---------- the daily verse (Bible Studies Coordinator) ----------
+app.get('/api/executive/daily-verses', requireRole('executive'), requireCapability(CAP.DAILY_VERSE, async (req, res, { staff }) => {
+  const items = await repo.getAll('dailyVerses', { chapterId: staff.chapterId });
+  res.json(items.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 60));
+}));
+
+app.post('/api/executive/daily-verses', requireRole('executive'), requireCapability(CAP.DAILY_VERSE, async (req, res, { staff }) => {
+  const date = String(req.body.date || '').trim() || new Date().toISOString().slice(0, 10);
+  const reference = cleanText(req.body.reference || '');
+  if (!reference) return res.status(400).json({ error: 'A scripture reference is required.' });
+  const fields = {
+    chapterId: staff.chapterId, date, reference,
+    text: cleanText(req.body.text || ''),
+    reflection: cleanText(req.body.reflection || ''),
+    postedBy: actorName(req)
+  };
+  // One verse per chapter per day: posting again for a date replaces it,
+  // rather than leaving two and no way to say which one is today's.
+  const existing = await models.DailyVerse.findOne({ chapterId: staff.chapterId, date }).lean();
+  const item = existing
+    ? await repo.updateById('dailyVerses', existing.id, { ...existing, ...fields }, { chapterId: staff.chapterId })
+    : await repo.create('dailyVerses', fields, 'verse');
+  res.json({ success: true, item, replaced: !!existing });
+}));
+
+app.delete('/api/executive/daily-verses/:id', requireRole('executive'), requireCapability(CAP.DAILY_VERSE, async (req, res, { staff }) => {
+  const removed = await repo.removeById('dailyVerses', req.params.id, { chapterId: staff.chapterId });
+  if (!removed) return res.status(404).json({ error: 'That verse was not found.' });
+  res.json({ success: true });
+}));
+
+// Today's verse, for the app. Public on purpose — it is scripture, and the
+// home screen shows it before anyone signs in.
+app.get('/api/daily-verse', async (req, res) => {
+  try {
+    const filter = contentChapterFilter(req);
+    const today = new Date().toISOString().slice(0, 10);
+    const items = await repo.getAll('dailyVerses', filter);
+    // Today's if there is one, otherwise the most recent before today, so the
+    // screen is never blank because nobody posted this morning.
+    const past = items.filter(v => v.date <= today).sort((a, b) => (a.date < b.date ? 1 : -1));
+    res.json({ item: past[0] || null });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the daily verse' });
+  }
+});
+
+// ---------- the money: Treasurer files, Financial Secretary records ----------
+// ACONSU splits the money two ways on purpose. The Treasurer holds and
+// disburses it and must account for every movement with evidence attached;
+// the Financial Secretary keeps the books and is the only executive who
+// writes to them. So a Treasurer's filing lands as 'pending' and stays there
+// until the Financial Secretary records it — the person holding the funds is
+// never the person who records them.
+
+app.post('/api/executive/treasury/report', requireRole('executive'), upload.single('receipt'), requireCapability(CAP.TREASURY_REPORT, async (req, res, { staff }) => {
+  const entryType = req.body.entryType === 'expense' ? 'expense' : (req.body.entryType === 'income' ? 'income' : null);
+  if (!entryType) return res.status(400).json({ error: 'Say whether this was money received or money spent.' });
+  const amount = Number(req.body.amount);
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'Amount must be greater than zero' });
+  const category = cleanText(req.body.category || '');
+  if (!category) return res.status(400).json({ error: 'A category is required' });
+  if (entryType === 'income' && !INCOME_CATEGORIES.includes(category)) {
+    return res.status(400).json({ error: 'Invalid income category' });
+  }
+  // Evidence is the point of this route, so it is required rather than
+  // optional: an unevidenced filing is exactly what this split prevents.
+  if (!req.file) return res.status(400).json({ error: 'Attach the receipt, transfer screenshot or other evidence — a filing without evidence cannot be recorded.' });
+  const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+  const receiptFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+    category: 'receipt', placement: 'treasury', contentType: compressed.contentType,
+    title: `${category} — ${amount}`, chapterId: staff.chapterId
+  }));
+  const item = await repo.create('financeEntries', {
+    chapterId: staff.chapterId,
+    entryType, category, amount,
+    date: req.body.date || new Date().toISOString().slice(0, 10),
+    description: cleanText(req.body.description || ''),
+    method: ['cash', 'momo', 'bank', 'cheque', 'other'].includes(req.body.method) ? req.body.method : 'cash',
+    reference: cleanText(req.body.reference || ''),
+    payee: cleanText(req.body.payee || ''),
+    receiptFileId,
+    source: 'treasury',
+    filedBy: staff.name || '',
+    approvalStatus: 'pending',
+    recordedBy: ''
+  }, 'fin');
+  res.json({ success: true, item });
+}));
+
+// What the Treasurer filed, and what became of it.
+app.get('/api/executive/treasury/reports', requireRole('executive'), requireCapability(CAP.TREASURY_REPORT, async (req, res, { staff }) => {
+  const entries = await repo.getAll('financeEntries', { chapterId: staff.chapterId, source: 'treasury' });
+  res.json(entries
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .map(e => ({
+      id: e.id, date: e.date, entryType: e.entryType, category: e.category,
+      amount: e.amount, description: e.description || '',
+      approvalStatus: e.approvalStatus, reviewNote: e.reviewNote || '',
+      receiptFileId: e.receiptFileId || '', recordedBy: e.recordedBy || ''
+    })));
+}));
+
+// The Financial Secretary's books.
+app.get('/api/executive/finance/ledger', requireRole('executive'), requireCapability(CAP.FINANCE_LEDGER, async (req, res, { staff }) => {
+  const entries = await repo.getAll('financeEntries', { chapterId: staff.chapterId });
+  const shape = e => ({
+    id: e.id, date: e.date, entryType: e.entryType, category: e.category,
+    amount: e.amount, description: e.description || '', method: e.method || '',
+    reference: e.reference || '', payee: e.payee || '',
+    approvalStatus: e.approvalStatus, source: e.source || 'finance',
+    filedBy: e.filedBy || '', recordedBy: e.recordedBy || '',
+    reviewNote: e.reviewNote || '', receiptFileId: e.receiptFileId || ''
+  });
+  const byDate = (a, b) => (a.date < b.date ? 1 : -1);
+  res.json({
+    // What is waiting on them, first — this is the queue they work.
+    awaiting: entries.filter(e => e.source === 'treasury' && e.approvalStatus === 'pending').sort(byDate).map(shape),
+    ledger: entries.filter(e => e.approvalStatus !== 'pending').sort(byDate).slice(0, 100).map(shape)
+  });
+}));
+
+app.patch('/api/executive/finance/ledger/:id', requireRole('executive'), requireCapability(CAP.FINANCE_LEDGER, async (req, res, { staff }) => {
+  const decision = req.body && req.body.decision;
+  if (!['record', 'reject'].includes(decision)) {
+    return res.status(400).json({ error: 'Decision must be record or reject.' });
+  }
+  const filter = { chapterId: staff.chapterId };
+  const existing = await repo.getById('financeEntries', req.params.id, filter);
+  if (!existing) return res.status(404).json({ error: 'That filing was not found.' });
+  if (existing.approvalStatus !== 'pending') {
+    return res.status(400).json({ error: 'That filing has already been dealt with.' });
+  }
+  const note = cleanText((req.body && req.body.reviewNote) || '');
+  if (decision === 'reject' && !note) {
+    return res.status(400).json({ error: 'Say why you are sending this back, so the Treasurer can correct it.' });
+  }
+  const item = await repo.patchById('financeEntries', existing.id, decision === 'record'
+    ? { approvalStatus: 'recorded', recordedBy: actorName(req), reviewNote: '' }
+    : { approvalStatus: 'rejected', reviewNote: note }, filter);
+  res.json({ success: true, item });
+}));
+
+// The Financial Secretary keeps the books, so they can also enter something
+// directly rather than only reviewing what the Treasurer files.
+app.post('/api/executive/finance/ledger', requireRole('executive'), requireCapability(CAP.FINANCE_LEDGER, async (req, res, { staff }) => {
+  const entryType = req.body.entryType === 'expense' ? 'expense' : (req.body.entryType === 'income' ? 'income' : null);
+  if (!entryType) return res.status(400).json({ error: 'Say whether this is income or an expense.' });
+  const amount = Number(req.body.amount);
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'Amount must be greater than zero' });
+  const category = cleanText(req.body.category || '');
+  if (!category) return res.status(400).json({ error: 'A category is required' });
+  if (entryType === 'income' && !INCOME_CATEGORIES.includes(category)) {
+    return res.status(400).json({ error: 'Invalid income category' });
+  }
+  const item = await repo.create('financeEntries', {
+    chapterId: staff.chapterId,
+    entryType, category, amount,
+    date: req.body.date || new Date().toISOString().slice(0, 10),
+    description: cleanText(req.body.description || ''),
+    method: ['cash', 'momo', 'bank', 'cheque', 'other'].includes(req.body.method) ? req.body.method : 'cash',
+    reference: cleanText(req.body.reference || ''),
+    payee: cleanText(req.body.payee || ''),
+    source: 'finance',
+    approvalStatus: 'recorded',
+    recordedBy: actorName(req)
+  }, 'fin');
+  res.json({ success: true, item });
 }));
 
 // ---------- a chapter-wide announcement (President, Secretary) ----------
