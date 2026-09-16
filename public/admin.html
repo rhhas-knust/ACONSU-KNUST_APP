@@ -21,9 +21,6 @@
   .admin-topbar-right { display: flex; align-items: center; gap: 12px; }
   .mobile-nav-toggle, .mobile-actions-toggle { display: none; }
   .chapter-badge { background: rgba(255,255,255,0.16); padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; color: var(--flame-gold); letter-spacing: 0.02em; border: 1px solid rgba(232,151,30,0.3); }
-  .scope-select-wrap select { background: rgba(255,255,255,0.14); color: #fff; border: 1px solid rgba(255,255,255,0.28); border-radius: 8px; padding: 5px 10px; font-family: inherit; font-size: 0.78rem; font-weight: 700; max-width: 190px; }
-  .scope-select-wrap select option { color: var(--purple-ink, #3A1B54); background: #fff; }
-  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
   .cmd-trigger { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; font-family: inherit; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: background 0.15s ease; }
   .cmd-trigger:hover { background: rgba(255,255,255,0.22); }
   .cmd-trigger kbd { background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-family: monospace; border: 1px solid rgba(255,255,255,0.15); }
@@ -142,14 +139,8 @@
   <div class="admin-topbar">
     <div class="admin-topbar-left">
       <button type="button" class="mobile-nav-toggle" id="mobileNavBtn">☰</button>
-      <strong>ACONSU Admin</strong>
+      <strong id="adminBrandName">ACONSU Admin</strong>
       <span class="chapter-badge" id="adminChapterBadge">Loading Chapter...</span>
-      <!-- National actors only: which chapter am I looking at? Hidden for
-           chapter-scoped accounts, who are pinned to their own chapter. -->
-      <label class="scope-select-wrap" id="adminScopeWrap" style="display:none;">
-        <span class="sr-only">Viewing</span>
-        <select id="adminScopeSelect" title="Which chapter you are viewing"></select>
-      </label>
     </div>
     <div class="admin-topbar-right">
       <button type="button" class="mobile-actions-toggle" id="mobileQuickActionsBtn">⚡</button>
@@ -163,6 +154,12 @@
 
   <div class="admin-layout">
     <div class="admin-side" id="adminNav">
+      <!-- National actors, more than one chapter: shown in place of the
+           chapter-operations groups below (see applyNavScopeVisibility in
+           admin.js) — the wall of 22 panels is a chapter's, not National's. -->
+      <p class="tiny muted" id="adminNavScopeHint" hidden style="padding:0 14px 10px;">
+        Chapter operations are run by each chapter's own admin. This account controls the public app, national events and national-level work — see the National Portal for chapter oversight.
+      </p>
       <div class="nav-group open" data-nav-group="overview">
         <button type="button" class="nav-group-toggle" data-toggle-group="overview"><span>📊 Overview</span><span class="chev">›</span></button>
         <div class="nav-group-body">
@@ -173,51 +170,51 @@
       <div class="nav-group open" data-nav-group="people">
         <button type="button" class="nav-group-toggle" data-toggle-group="people"><span>👥 People &amp; Leadership</span><span class="chev">›</span></button>
         <div class="nav-group-body">
-          <button data-panel="members"><span class="nav-icon">👥</span> Members Roster</button>
-          <button data-panel="executives"><span class="nav-icon">🎓</span> Executives &amp; Verification</button>
-          <button data-panel="staff"><span class="nav-icon">🔑</span> Leadership Accounts</button>
-          <button data-panel="joinRequests"><span class="nav-icon">📥</span> Join Requests</button>
+          <button data-panel="members" data-scope="chapter"><span class="nav-icon">👥</span> Members Roster</button>
+          <button data-panel="executives" data-scope="chapter"><span class="nav-icon">🎓</span> Executives &amp; Verification</button>
+          <button data-panel="staff" data-scope="chapter"><span class="nav-icon">🔑</span> Leadership Accounts</button>
+          <button data-panel="joinRequests" data-scope="chapter"><span class="nav-icon">📥</span> Join Requests</button>
         </div>
       </div>
 
       <div class="nav-group open" data-nav-group="ministry">
         <button type="button" class="nav-group-toggle" data-toggle-group="ministry"><span>📖 Ministry &amp; Discipleship</span><span class="chev">›</span></button>
         <div class="nav-group-body">
-          <button data-panel="bibleStudies"><span class="nav-icon">📖</span> Bible Study</button>
-          <button data-panel="groups"><span class="nav-icon">👨‍👩‍👦</span> Small Groups &amp; Cells</button>
-          <button data-panel="prayerRequests"><span class="nav-icon">🙏</span> Prayer Requests</button>
-          <button data-panel="testimonies"><span class="nav-icon">✨</span> Testimonies</button>
-          <button data-panel="sermons"><span class="nav-icon">🎧</span> Sermons &amp; Media</button>
-          <button type="button" onclick="location.href='/content-manager.html'"><span class="nav-icon">📺</span> Media &amp; Content Hub</button>
+          <button data-panel="bibleStudies" data-scope="chapter"><span class="nav-icon">📖</span> Bible Study</button>
+          <button data-panel="groups" data-scope="chapter"><span class="nav-icon">👨‍👩‍👦</span> Small Groups &amp; Cells</button>
+          <button data-panel="prayerRequests" data-scope="chapter"><span class="nav-icon">🙏</span> Prayer Requests</button>
+          <button data-panel="testimonies" data-scope="chapter"><span class="nav-icon">✨</span> Testimonies</button>
+          <button data-panel="sermons" data-scope="chapter"><span class="nav-icon">🎧</span> Sermons &amp; Media</button>
+          <button type="button" data-scope="chapter" onclick="location.href='/content-manager.html'"><span class="nav-icon">📺</span> Media &amp; Content Hub</button>
         </div>
       </div>
 
       <div class="nav-group open" data-nav-group="operations">
         <button type="button" class="nav-group-toggle" data-toggle-group="operations"><span>🗓️ Operations &amp; Gatherings</span><span class="chev">›</span></button>
         <div class="nav-group-body">
-          <button data-panel="events"><span class="nav-icon">🗓️</span> Events &amp; Calendar</button>
-          <button data-panel="departments"><span class="nav-icon">🚪</span> Departments</button>
-          <button data-panel="notifications"><span class="nav-icon">🔔</span> Push Notifications</button>
-          <button data-panel="forms"><span class="nav-icon">🧩</span> Dynamic Form Builder</button>
+          <button data-panel="events" data-scope="chapter"><span class="nav-icon">🗓️</span> Events &amp; Calendar</button>
+          <button data-panel="departments" data-scope="chapter"><span class="nav-icon">🚪</span> Departments</button>
+          <button data-panel="notifications" data-scope="chapter"><span class="nav-icon">🔔</span> Push Notifications</button>
+          <button data-panel="forms" data-scope="chapter"><span class="nav-icon">🧩</span> Dynamic Form Builder</button>
         </div>
       </div>
 
       <div class="nav-group open" data-nav-group="care">
         <button type="button" class="nav-group-toggle" data-toggle-group="care"><span>🤝 Care &amp; Community</span><span class="chev">›</span></button>
         <div class="nav-group-body">
-          <button data-panel="welfare"><span class="nav-icon">❤️</span> Welfare Requests</button>
-          <button data-panel="chatModeration"><span class="nav-icon">💬</span> Chat Moderation</button>
-          <button data-panel="contactMessages"><span class="nav-icon">✉️</span> Contact Messages</button>
+          <button data-panel="welfare" data-scope="chapter"><span class="nav-icon">❤️</span> Welfare Requests</button>
+          <button data-panel="chatModeration" data-scope="chapter"><span class="nav-icon">💬</span> Chat Moderation</button>
+          <button data-panel="contactMessages" data-scope="chapter"><span class="nav-icon">✉️</span> Contact Messages</button>
         </div>
       </div>
 
       <div class="nav-group open" data-nav-group="settings">
         <button type="button" class="nav-group-toggle" data-toggle-group="settings"><span>⚙️ System &amp; Chapter Settings</span><span class="chev">›</span></button>
         <div class="nav-group-body">
-          <button data-panel="chapterSettings"><span class="nav-icon">🏢</span> Chapter Site Settings</button>
-          <button data-panel="pages"><span class="nav-icon">📄</span> Custom Pages</button>
-          <button data-panel="media"><span class="nav-icon">📁</span> Media Library</button>
-          <button data-panel="reports"><span class="nav-icon">📑</span> Reports &amp; PDF Export</button>
+          <button data-panel="chapterSettings" data-scope="chapter"><span class="nav-icon">🏢</span> Chapter Site Settings</button>
+          <button data-panel="pages" data-scope="chapter"><span class="nav-icon">📄</span> Custom Pages</button>
+          <button data-panel="media" data-scope="chapter"><span class="nav-icon">📁</span> Media Library</button>
+          <button data-panel="reports" data-scope="chapter"><span class="nav-icon">📑</span> Reports &amp; PDF Export</button>
           <button type="button" id="navNationalBtn" onclick="location.href='/national.html'" style="color:var(--purple-deep); background:var(--lilac-light); font-weight:800; display:none;"><span class="nav-icon">🌐</span> National Portal</button>
           <button data-panel="settings" id="navGlobalSettingsBtn" style="display:none;"><span class="nav-icon">⚙️</span> Global Settings</button>
         </div>

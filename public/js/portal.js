@@ -13,7 +13,8 @@ const PORTAL = {
   user: null,
   isAdmin: false,
   canEdit: false,
-  active: ''
+  active: '',
+  chapter: null // {id, name} — which chapter this account belongs to, if any (see renderPortalChrome)
 };
 
 // ---------- formatting ----------
@@ -125,6 +126,7 @@ async function refreshPortalSession() {
     const data = await fetchJSON('/api/portal/me');
     PORTAL.user = data.staff;
     PORTAL.isAdmin = data.isAdmin;
+    PORTAL.chapter = data.chapter;
     const access = (data.access && data.access[PORTAL.role]) || { view: false, edit: false };
     PORTAL.canEdit = access.edit;
     return access.view;
@@ -139,6 +141,12 @@ function renderPortalChrome() {
   const whoLabel = user ? `${user.name} · ${user.role}` : (PORTAL.isAdmin ? 'Signed in as Admin' : '');
   document.getElementById('portalWho').textContent = whoLabel;
   document.getElementById('portalRoleLabel').textContent = PORTAL.label;
+  // Which chapter this portal belongs to, front and center in the header —
+  // this account's chapter is the identity of the whole portal, not a detail
+  // buried in a badge. Pages with no chapter concept of their own (national)
+  // simply have no #portalBrandName element, so this is a no-op there.
+  const brand = document.getElementById('portalBrandName');
+  if (brand) brand.textContent = PORTAL.chapter ? `ACONSU — ${PORTAL.chapter.name}` : 'ACONSU';
 
   const nav = document.getElementById('portalNav');
   nav.innerHTML = PORTAL.panels.map(p => `

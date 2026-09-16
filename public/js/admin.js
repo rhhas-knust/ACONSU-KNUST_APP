@@ -1,18 +1,20 @@
 let CURRENT_SETTINGS = {};
 // Who's actually driving this dashboard — the legacy env admin (national-
-// equivalent, sees a chapter switcher on resource forms) or a chapter-scoped
-// Chapter Admin/Coordinator account (auto-scoped, no switcher needed). Set
-// by checkAuth() before the shell ever renders.
+// equivalent, sees only public-app/national panels once a second chapter
+// exists) or a chapter-scoped Chapter Admin/Coordinator account (runs their
+// own chapter's full operations). Set by checkAuth() before the shell ever
+// renders.
 let ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
 const ADMIN_NAV_STATE_KEY = 'aconsu_admin_nav_state';
-// The chapter a NATIONAL actor has deliberately chosen to look into, kept
-// separate from the public site's chapter picker. Without this separation a
-// national officer who had browsed the public KNUST site would arrive at the
-// dashboard silently scoped to KNUST, which is exactly the kind of invisible
-// scoping this change exists to remove. Empty means national scope.
-const ADMIN_SCOPE_KEY = 'aconsu_admin_scope_chapter';
+// How many active chapters exist — the only thing national scope needs to
+// know here now that this dashboard no longer offers a way to step into a
+// specific chapter's operations (that's each chapter's own admin's job; see
+// GOVERNANCE_TIER_REVIEW.md). Chapter oversight lives on the National Portal
+// instead (readiness rollup, national events) — see loadAdminChapterCount().
 let ADMIN_CHAPTERS = [];
-let OVERVIEW_REFRESH_TIMER = null;
+// The live push connection behind the operational dashboard (Phase 2) — see
+// closeOverviewStream() and GET /api/admin/overview/stream in server.js.
+let OVERVIEW_STREAM = null;
 
 function showModal(html, { bottomSheet = false } = {}) {
   document.getElementById('modalContent').innerHTML = html;
@@ -44,7 +46,11 @@ async function checkAuth() {
   try {
     const me = await fetchJSON('/api/portal/me');
     const role = me.staff && me.staff.role;
-    if (me.isNational || role === 'coordinator' || role === 'chapterAdmin' || role === 'executive') {
+    // Executives are deliberately not admitted here: this dashboard's panels
+    // are all gated on isChapterAdminOrAbove, which excludes them, so they
+    // used to land in a 22-panel shell where almost everything 401'd. Their
+    // own portal is /executive.html.
+    if (me.isNational || role === 'coordinator' || role === 'chapterAdmin') {
       ADMIN_SCOPE = {
         isNational: !!me.isNational,
         chapterId: (me.staff && me.staff.chapterId) || '',
@@ -58,84 +64,96 @@ async function checkAuth() {
   document.getElementById('adminShell').style.display = 'none';
 }
 
-function readAdminScopeChapter() {
-  try { return localStorage.getItem(ADMIN_SCOPE_KEY) || ''; } catch (e) { return ''; }
-}
-function writeAdminScopeChapter(id) {
-  try {
-    if (id) localStorage.setItem(ADMIN_SCOPE_KEY, id);
-    else localStorage.removeItem(ADMIN_SCOPE_KEY);
-  } catch (e) { /* private browsing — scope simply resets to national */ }
-}
-// fetchJSON attaches X-Chapter-Id from the shared chapter store, so the
-// admin's own choice is pushed into it on every load. That way the dashboard
-// never inherits a chapter left behind by the public site's picker.
-function applyAdminScope() {
-  if (!ADMIN_SCOPE.isNational) return;
-  setSelectedChapterId(readAdminScopeChapter());
-}
-function currentAdminScopeChapter() {
-  return ADMIN_SCOPE.isNational ? readAdminScopeChapter() : ADMIN_SCOPE.chapterId;
+// "National by default, chapter operations belong to chapters"
+// (GOVERNANCE_TIER_REVIEW.md). True once there's more than one active
+// chapter — deliberately inert with a single chapter (ADMIN_CHAPTERS.length
+// !== 1), the same "single chapter, zero friction" rule the server applies,
+// so nothing changes for ACONSU's current single-chapter deployment.
+function isTrueNationalScope() {
+  return ADMIN_SCOPE.isNational && ADMIN_CHAPTERS.length !== 1;
 }
 
-async function initChapterScopeSelector() {
-  const wrap = document.getElementById('adminScopeWrap');
-  const select = document.getElementById('adminScopeSelect');
-  const badge = document.getElementById('adminChapterBadge');
-  if (!wrap || !select || !ADMIN_SCOPE.isNational) return;
-
-  try {
-    ADMIN_CHAPTERS = await fetchJSON('/api/national/chapters');
-  } catch (e) {
-    ADMIN_CHAPTERS = [];
-  }
-  const chosen = readAdminScopeChapter();
-  select.innerHTML = `
-    <option value="">🌐 ACONSU National</option>
-    ${ADMIN_CHAPTERS.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === chosen ? 'selected' : ''}>📍 ${escapeHtml(c.name)}</option>`).join('')}
-  `;
-  wrap.style.display = 'inline-flex';
-  if (badge) {
-    const found = ADMIN_CHAPTERS.find(c => c.id === chosen);
-    badge.textContent = found ? `Viewing ${found.name}` : 'National scope';
-  }
-
-  select.addEventListener('change', () => {
-    writeAdminScopeChapter(select.value);
-    applyAdminScope();
-    const found = ADMIN_CHAPTERS.find(c => c.id === select.value);
-    if (badge) badge.textContent = found ? `Viewing ${found.name}` : 'National scope';
-    showToast(found ? `Now viewing ${found.name}` : 'Back to national scope', 'success');
-    const active = document.querySelector('.admin-panel.active');
-    loadPanel(active ? active.id.replace('panel-', '') : 'overview');
+// Phase D — the national actor's admin nav is a wall of 22 chapter-operations
+// panels that were never national's to begin with (see Finding 1). Panels
+// tagged data-scope="chapter" in admin.html are hidden at true national
+// scope; a group collapses entirely once every one of its panels is hidden.
+// Global Settings and the National Portal link are untagged and always
+// follow their own national-only visibility, set in showAdminShell.
+function applyNavScopeVisibility() {
+  const pruned = isTrueNationalScope();
+  document.querySelectorAll('#adminNav [data-scope="chapter"]').forEach(el => {
+    el.style.display = pruned ? 'none' : '';
   });
+  document.querySelectorAll('#adminNav .nav-group').forEach(group => {
+    const body = group.querySelector('.nav-group-body');
+    if (!body) return;
+    const anyVisible = Array.from(body.children).some(child => child.style.display !== 'none');
+    group.style.display = anyVisible ? '' : 'none';
+  });
+  const hint = document.getElementById('adminNavScopeHint');
+  if (hint) hint.hidden = !pruned;
+  return pruned;
 }
 
-function showAdminShell() {
+// Just enough to know whether a second chapter exists — this dashboard no
+// longer offers a way to step into one (chapter operations are that
+// chapter's own admin's job), so there's nothing else to fetch here.
+async function loadAdminChapterCount() {
+  if (!ADMIN_SCOPE.isNational) return;
+  try { ADMIN_CHAPTERS = await fetchJSON('/api/national/chapters'); }
+  catch (e) { ADMIN_CHAPTERS = []; }
+}
+
+async function showAdminShell() {
   document.getElementById('loginWrap').style.display = 'none';
   document.getElementById('adminShell').style.display = 'block';
 
-  // Chapter badge display in topbar
-  const badge = document.getElementById('adminChapterBadge');
-  if (badge) {
-    if (ADMIN_SCOPE.isNational) {
-      badge.textContent = 'National scope';
-      const natBtn = document.getElementById('navNationalBtn');
-      const globBtn = document.getElementById('navGlobalSettingsBtn');
-      if (natBtn) natBtn.style.display = 'flex';
-      if (globBtn) globBtn.style.display = 'flex';
-    } else if (ADMIN_SCOPE.chapterId) {
-      fetchJSON('/api/admin/chapter-settings')
-        .then(cs => { badge.textContent = `📍 ${cs.name || ADMIN_SCOPE.chapterId}`; })
-        .catch(() => { badge.textContent = `📍 ${ADMIN_SCOPE.chapterId}`; });
-    }
-  }
-
-  applyAdminScope();
   initAdminNav();
   initMobileAdminUi();
   initCommandPalette();
-  initChapterScopeSelector();
+  // Awaited so ADMIN_CHAPTERS is populated before the nav is pruned and the
+  // first panel loads — otherwise both would briefly judge scope off an
+  // empty chapter list and mis-render on the very first paint.
+  await loadAdminChapterCount();
+  applyNavScopeVisibility();
+
+  // Chapter badge + brand: national is its own identity; a chapter-scoped
+  // account's portal identity IS its chapter, front and center.
+  const badge = document.getElementById('adminChapterBadge');
+  const brand = document.getElementById('adminBrandName');
+  if (ADMIN_SCOPE.isNational) {
+    if (badge) badge.textContent = isTrueNationalScope() ? '🌐 National — Public App & Events' : '🌐 National Admin';
+    if (brand) brand.textContent = 'ACONSU Admin';
+    const natBtn = document.getElementById('navNationalBtn');
+    const globBtn = document.getElementById('navGlobalSettingsBtn');
+    if (natBtn) natBtn.style.display = 'flex';
+    if (globBtn) globBtn.style.display = 'flex';
+  } else if (ADMIN_SCOPE.chapterId) {
+    fetchJSON('/api/admin/chapter-settings')
+      .then(cs => {
+        const name = cs.name || ADMIN_SCOPE.chapterId;
+        if (badge) badge.textContent = `📍 ${name}`;
+        if (brand) brand.textContent = `ACONSU — ${name}`;
+      })
+      .catch(() => {
+        if (badge) badge.textContent = `📍 ${ADMIN_SCOPE.chapterId}`;
+        if (brand) brand.textContent = `ACONSU — ${ADMIN_SCOPE.chapterId}`;
+      });
+  }
+
+  // The Log Out button has always been in the markup but was never bound to
+  // anything, so clicking it did nothing at all. Bound once here, after the
+  // shell exists (admin.html and chapter.html both load this file).
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn && !logoutBtn.dataset.bound) {
+    logoutBtn.dataset.bound = '1';
+    logoutBtn.addEventListener('click', async () => {
+      closeOverviewStream();
+      await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
+      window.location.href = '/admin.html';
+    });
+  }
+
   loadPanel('overview');
 }
 
@@ -261,18 +279,124 @@ async function loadPanel(name) {
     chapterSettings: renderChapterSettings,
     settings: renderSettings
   };
+  // Navigating away from the overview panel leaves nothing listening for its
+  // pushes; renderOverview() re-opens the connection when it's shown again.
+  if (name !== 'overview') closeOverviewStream();
   if (handlers[name]) handlers[name]();
 }
 
 // ---------- overview ----------
+function closeOverviewStream() {
+  if (OVERVIEW_STREAM) { OVERVIEW_STREAM.close(); OVERVIEW_STREAM = null; }
+}
+
+function overviewTrendLabel(trend = {}) {
+  const symbol = trend.direction === 'up' ? '▲' : (trend.direction === 'down' ? '▼' : '•');
+  const pct = Math.abs(Number(trend.percent || 0));
+  const detail = pct ? `${pct}%` : 'no change';
+  return `${symbol} ${detail} vs previous week`;
+}
+function overviewActivityTime(value) {
+  if (!value) return 'Unknown time';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return 'Unknown time';
+  return d.toLocaleString();
+}
+
+// Pure render: builds the panel from one overview payload. Called for the
+// first paint (from fetchJSON below) and again for every live push the SSE
+// connection delivers, so a push looks exactly like a fresh load — no
+// separate "delta" shape to keep in sync with the server.
+function renderOverviewData(el, data) {
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2 style="margin:0;">Operational Dashboard</h2>
+        <p class="hint" style="margin:4px 0 0;">${escapeHtml((data.chapter && data.chapter.name) || 'Chapter')} • Live as of ${overviewActivityTime(data.generatedAt)}</p>
+      </div>
+      <div class="hint">Rule of 4 KPI view</div>
+    </div>
+    <div class="kpi-grid">
+      ${data.kpis.map((kpi, idx) => `
+        <button type="button" class="kpi-card" data-kpi-index="${idx}">
+          <div class="kpi-label">${escapeHtml(kpi.label)}</div>
+          <div class="kpi-value">${escapeHtml(String(kpi.value))}</div>
+          <div class="kpi-trend ${escapeHtml(kpi.trend.direction || 'flat')}">${escapeHtml(overviewTrendLabel(kpi.trend))}</div>
+        </button>
+      `).join('')}
+    </div>
+    <div class="overview-stream">
+      <div class="panel-head" style="margin-bottom:10px;">
+        <h3 style="margin:0;">Live Pastoral Care &amp; Activity Stream</h3>
+        <small class="hint">${data.activity.length} recent updates</small>
+      </div>
+      <ul>
+        ${data.activity.map((item) => `
+          <li>
+            <strong>${escapeHtml(item.label || 'Activity')}</strong> — ${escapeHtml(item.title || '')}<br>
+            <small>${escapeHtml(item.detail || '')}</small><br>
+            <small class="hint">${escapeHtml(overviewActivityTime(item.at))}</small><br>
+            ${item.panel ? `<button type="button" data-activity-panel="${escapeHtml(item.panel)}">Open ${escapeHtml(item.panel)}</button>` : ''}
+          </li>
+        `).join('') || '<li><span class="hint">No recent updates yet.</span></li>'}
+      </ul>
+    </div>
+  `;
+  el.querySelectorAll('[data-kpi-index]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const kpi = data.kpis[Number(btn.dataset.kpiIndex)];
+      const list = Array.isArray(kpi.drilldown) ? kpi.drilldown : [];
+      showModal(`
+        <h3 style="margin-top:0;">${escapeHtml(kpi.label)}</h3>
+        <p class="hint" style="margin-top:4px;">Current value: <strong>${escapeHtml(String(kpi.value))}</strong></p>
+        <div class="sheet-list">
+          ${list.map((row) => `
+            <div class="sheet-item">
+              <h4>${escapeHtml(row.title || row.name || row.date || 'Item')}</h4>
+              <p>${escapeHtml(row.detail || row.location || row.serviceType || row.level || '')}</p>
+            </div>
+          `).join('') || '<p class="hint">No drill-down rows yet.</p>'}
+        </div>
+        ${kpi.drilldownPanel ? `<button class="btn btn-primary btn-sm" data-open-kpi-panel="${escapeHtml(kpi.drilldownPanel)}" style="margin-top:12px;">Open ${escapeHtml(kpi.drilldownPanel)}</button>` : ''}
+      `, { bottomSheet: true });
+      const openBtn = document.querySelector('[data-open-kpi-panel]');
+      if (openBtn) {
+        openBtn.addEventListener('click', () => {
+          closeModal();
+          openAdminPanel(openBtn.dataset.openKpiPanel);
+        });
+      }
+    });
+  });
+  el.querySelectorAll('[data-activity-panel]').forEach((btn) => {
+    btn.addEventListener('click', () => openAdminPanel(btn.dataset.activityPanel));
+  });
+}
+
+// Opens (or replaces) the live push connection for one chapter's dashboard.
+// Native EventSource reconnects on its own after a drop, so there is no
+// client-side polling fallback to maintain alongside it.
+function subscribeOverviewStream(chapterId) {
+  closeOverviewStream();
+  if (!chapterId || typeof EventSource === 'undefined') return;
+  const es = new EventSource(`/api/admin/overview/stream?chapterId=${encodeURIComponent(chapterId)}`);
+  OVERVIEW_STREAM = es;
+  es.addEventListener('overview', (evt) => {
+    const panel = document.getElementById('panel-overview');
+    if (!panel || !panel.classList.contains('active') || es !== OVERVIEW_STREAM) return;
+    try { renderOverviewData(panel, JSON.parse(evt.data)); } catch (e) { /* wait for the next push */ }
+  });
+}
+
 async function renderOverview() {
   const el = document.getElementById('panel-overview');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
+  closeOverviewStream();
   // The operational dashboard is a chapter's dashboard — there is no
-  // meaningful cross-chapter version of "this week's attendance". A national
-  // actor picks a chapter for it, or goes to the National Portal for the
-  // aggregate view, rather than being shown a raw error.
-  if (ADMIN_SCOPE.isNational && !currentAdminScopeChapter() && ADMIN_CHAPTERS.length !== 1) {
+  // meaningful cross-chapter version of "this week's attendance", and running
+  // one is each chapter's own admin's job now, not national's. Point at the
+  // National Portal's aggregate/readiness view instead of a raw error.
+  if (isTrueNationalScope()) {
     el.innerHTML = `
       <div class="panel-head">
         <div>
@@ -281,95 +405,15 @@ async function renderOverview() {
         </div>
       </div>
       <p class="empty-state">
-        You are viewing at <strong>national scope</strong>. Choose a chapter from the selector in the top bar to see its
-        dashboard, or open the <a href="/national.html">National Portal</a> for the cross-chapter picture.
+        Chapter operations are run by each chapter's own admin. Open the <a href="/national.html">National Portal</a>
+        for chapter readiness and the cross-chapter picture.
       </p>`;
     return;
   }
   try {
     const data = await fetchJSON('/api/admin/overview');
-    if (OVERVIEW_REFRESH_TIMER) clearTimeout(OVERVIEW_REFRESH_TIMER);
-    OVERVIEW_REFRESH_TIMER = setTimeout(() => {
-      const panel = document.getElementById('panel-overview');
-      if (panel && panel.classList.contains('active')) renderOverview();
-    }, Math.max(10, Number(data.refreshEverySeconds || 30)) * 1000);
-
-    const trendLabel = (trend = {}) => {
-      const symbol = trend.direction === 'up' ? '▲' : (trend.direction === 'down' ? '▼' : '•');
-      const pct = Math.abs(Number(trend.percent || 0));
-      const detail = pct ? `${pct}%` : 'no change';
-      return `${symbol} ${detail} vs previous week`;
-    };
-    const formatActivityTime = (value) => {
-      if (!value) return 'Unknown time';
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return 'Unknown time';
-      return d.toLocaleString();
-    };
-
-    el.innerHTML = `
-      <div class="panel-head">
-        <div>
-          <h2 style="margin:0;">Operational Dashboard</h2>
-          <p class="hint" style="margin:4px 0 0;">${escapeHtml((data.chapter && data.chapter.name) || 'Chapter')} • Last refresh ${formatActivityTime(data.generatedAt)}</p>
-        </div>
-        <div class="hint">Rule of 4 KPI view</div>
-      </div>
-      <div class="kpi-grid">
-        ${data.kpis.map((kpi, idx) => `
-          <button type="button" class="kpi-card" data-kpi-index="${idx}">
-            <div class="kpi-label">${escapeHtml(kpi.label)}</div>
-            <div class="kpi-value">${escapeHtml(String(kpi.value))}</div>
-            <div class="kpi-trend ${escapeHtml(kpi.trend.direction || 'flat')}">${escapeHtml(trendLabel(kpi.trend))}</div>
-          </button>
-        `).join('')}
-      </div>
-      <div class="overview-stream">
-        <div class="panel-head" style="margin-bottom:10px;">
-          <h3 style="margin:0;">Live Pastoral Care &amp; Activity Stream</h3>
-          <small class="hint">${data.activity.length} recent updates</small>
-        </div>
-        <ul>
-          ${data.activity.map((item) => `
-            <li>
-              <strong>${escapeHtml(item.label || 'Activity')}</strong> — ${escapeHtml(item.title || '')}<br>
-              <small>${escapeHtml(item.detail || '')}</small><br>
-              <small class="hint">${escapeHtml(formatActivityTime(item.at))}</small><br>
-              ${item.panel ? `<button type="button" data-activity-panel="${escapeHtml(item.panel)}">Open ${escapeHtml(item.panel)}</button>` : ''}
-            </li>
-          `).join('') || '<li><span class="hint">No recent updates yet.</span></li>'}
-        </ul>
-      </div>
-    `;
-    el.querySelectorAll('[data-kpi-index]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const kpi = data.kpis[Number(btn.dataset.kpiIndex)];
-        const list = Array.isArray(kpi.drilldown) ? kpi.drilldown : [];
-        showModal(`
-          <h3 style="margin-top:0;">${escapeHtml(kpi.label)}</h3>
-          <p class="hint" style="margin-top:4px;">Current value: <strong>${escapeHtml(String(kpi.value))}</strong></p>
-          <div class="sheet-list">
-            ${list.map((row) => `
-              <div class="sheet-item">
-                <h4>${escapeHtml(row.title || row.name || row.date || 'Item')}</h4>
-                <p>${escapeHtml(row.detail || row.location || row.serviceType || row.level || '')}</p>
-              </div>
-            `).join('') || '<p class="hint">No drill-down rows yet.</p>'}
-          </div>
-          ${kpi.drilldownPanel ? `<button class="btn btn-primary btn-sm" data-open-kpi-panel="${escapeHtml(kpi.drilldownPanel)}" style="margin-top:12px;">Open ${escapeHtml(kpi.drilldownPanel)}</button>` : ''}
-        `, { bottomSheet: true });
-        const openBtn = document.querySelector('[data-open-kpi-panel]');
-        if (openBtn) {
-          openBtn.addEventListener('click', () => {
-            closeModal();
-            openAdminPanel(openBtn.dataset.openKpiPanel);
-          });
-        }
-      });
-    });
-    el.querySelectorAll('[data-activity-panel]').forEach((btn) => {
-      btn.addEventListener('click', () => openAdminPanel(btn.dataset.activityPanel));
-    });
+    renderOverviewData(el, data);
+    subscribeOverviewStream(data.chapter && data.chapter.id);
   } catch (e) {
     el.innerHTML = `<p class="empty-state">Could not load overview. ${escapeHtml(e.message || '')}</p>`;
   }
@@ -382,8 +426,9 @@ const DEPARTMENT_FIELDS = [
   { key: 'description', label: 'Description', type: 'textarea' },
   { key: 'meetingDay', label: 'Meeting Day', type: 'text' },
   { key: 'meetingTime', label: 'Meeting Time', type: 'text' },
-  { key: 'meetingLocation', label: 'Meeting Location', type: 'text' },
-  { key: 'leader', label: 'Department Leader', type: 'text' }
+  { key: 'meetingLocation', label: 'Meeting Location', type: 'text' }
+  // No leader field: who runs a department is the executive holding it (see
+  // attachDepartmentLeaders in server.js), not a name typed in here.
 ];
 const EVENT_FIELDS = [
   { key: 'title', label: 'Event Title', type: 'text', required: true },
@@ -443,12 +488,14 @@ async function renderResourcePanel(resource, fields, singular) {
                 ${item.headerImageFileId ? `<img src="/api/files/${item.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">` : 'none'}
               </div>
             </td>` : ''}
-            ${fields.slice(0, 3).map(f => `<td>${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
+            ${fields.slice(0, 3).map((f, idx) => `<td>${idx === 0 && resource === 'events' && item.isNational ? '<span class="badge" style="margin-right:6px;">National</span>' : ''}${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
             ${resource === 'events' ? `<td>${item.registrationEnabled ? `<button data-view-regs="${item.id}" data-title="${escapeHtml(item.title)}">View (${item.capacity > 0 ? `cap ${item.capacity}` : 'unlimited'})</button>` : '—'}</td>` : ''}
             <td class="row-actions">
-              ${resource === 'departments' ? `<button data-header-image="${item.id}">Header Image</button>` : ''}
-              <button data-edit="${item.id}">Edit</button>
-              <button class="danger" data-delete="${item.id}">Delete</button>
+              ${resource === 'events' && item.isNational ? `<span class="tiny muted">Managed from the National Portal</span>` : `
+                ${resource === 'departments' ? `<button data-header-image="${item.id}">Header Image</button>` : ''}
+                <button data-edit="${item.id}">Edit</button>
+                <button class="danger" data-delete="${item.id}">Delete</button>
+              `}
             </td>
           </tr>
         `).join('') || `<tr><td colspan="${fields.length + (resource === 'events' ? 2 : 1) + (resource === 'departments' ? 1 : 0)}">No ${singular.toLowerCase()}s yet.</td></tr>`}
@@ -561,12 +608,13 @@ const PORTAL_ROLES = [
   { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter — dashboard, chapters, announcements.', href: '/national.html' },
   { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority — oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
   { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — chapter-scoped dashboard.', href: '/chapter.html' },
-  { value: 'executive', label: 'Executive', blurb: 'Executive profile and event submissions.', href: '/executive.html' },
+  // Executive is deliberately absent: an executive is a member the Chapter
+  // Coordinator promotes, either by approving their application or from the
+  // Coordinator's own Leadership Accounts panel, which asks which member.
   { value: 'finance', label: 'Finance', blurb: 'Budgets, ledger, financial reports.', href: '/finance.html' },
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance, member care, contact messages.', href: '/shepherding.html' },
   { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' },
-  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' },
-  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department.', href: '/department.html' }
+  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' }
 ];
 // Only a National Coordinator may hand out these two — see /api/admin/staff.
 const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];
@@ -1476,7 +1524,7 @@ async function renderExecutives() {
             <td>${escapeHtml(a.scope || '—')}</td>
             <td><span class="status-pill ${a.executiveStatus === 'verified' ? 'done' : ''}">${escapeHtml(a.executiveStatus || 'pending')}</span></td>
             <td class="row-actions">${a.executiveStatus === 'pending' ? `
-              <button data-verify-exec="${a.memberId}">Verify</button>
+              <button data-verify-exec="${a.memberId}" data-exec-name="${escapeHtml(a.name || '')}">Verify</button>
               <button class="danger" data-reject-exec="${a.memberId}">Reject</button>` : '—'}</td>
           </tr>`).join('') || '<tr><td colspan="7">No executive applications yet.</td></tr>'}
         </tbody>
@@ -1503,15 +1551,67 @@ async function renderExecutives() {
     </div>
   `;
 
+  // Approving an executive is one action that promotes the member, issues
+  // their portal login for this academic year and creates their public
+  // roster card — so it asks for the sign-in details rather than leaving
+  // someone "verified" with no way in.
+  function approveExecutiveForm(memberIdToApprove, name) {
+    showModal(`
+      <h3>Approve ${escapeHtml(name || 'this executive')}</h3>
+      <p class="hint">This promotes them, creates their public roster card and issues their portal login for the current academic year. Their term ends with the academic year and can be renewed.</p>
+      <form id="approveExecForm">
+        <div class="field"><label>Username</label>
+          <input type="text" id="apUsername" autocomplete="off" required>
+          <small class="hint">They sign in with this. Lowercase, no spaces.</small>
+        </div>
+        <div class="field"><label>Password</label>
+          <input type="password" id="apPassword" minlength="8" autocomplete="new-password" required>
+          <small class="hint">At least 8 characters. Share it with them directly.</small>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:22px;">
+          <button type="submit" class="btn btn-primary">Approve &amp; Issue Login</button>
+          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+        </div>
+        <div class="form-msg" id="approveExecMsg"></div>
+      </form>
+    `);
+    const cancel = document.getElementById('cancelModalBtn');
+    if (cancel) cancel.addEventListener('click', closeModal);
+    document.getElementById('approveExecForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await fetchJSON(`/api/admin/executive-applications/${memberIdToApprove}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            decision: 'approve',
+            username: document.getElementById('apUsername').value,
+            password: document.getElementById('apPassword').value
+          })
+        });
+        closeModal();
+        showToast('Executive approved — login issued and roster card created.', 'success');
+        renderExecutives();
+      } catch (err) {
+        setFormMsg('approveExecMsg', err.message || 'Could not approve this executive.', 'error');
+      }
+    });
+  }
+
   el.querySelectorAll('[data-verify-exec], [data-reject-exec]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const decision = btn.dataset.verifyExec ? 'approve' : 'reject';
-      if (decision === 'reject' && !confirm('Reject this executive application?')) return;
-      await fetchJSON(`/api/admin/executive-applications/${btn.dataset.verifyExec || btn.dataset.rejectExec}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision })
-      });
-      showToast(decision === 'approve' ? 'Executive verified.' : 'Application rejected.', 'success');
-      renderExecutives();
+      if (decision === 'reject') {
+        if (!confirm('Reject this executive application?')) return;
+        await fetchJSON(`/api/admin/executive-applications/${btn.dataset.rejectExec}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision })
+        });
+        showToast('Application rejected.', 'success');
+        return renderExecutives();
+      }
+      // Approving promotes the member, issues their portal login for this
+      // academic year and creates their public roster card in one action —
+      // so it needs the sign-in details up front.
+      approveExecutiveForm(btn.dataset.verifyExec, btn.dataset.execName || '');
     });
   });
 

@@ -25,8 +25,7 @@ const APPOINTABLE_ROLES = [
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance registers, member care, contact inbox' },
   { value: 'publicity', label: 'Publicity Officer', blurb: 'Announcements, SMS, testimonies' },
   { value: 'welfare', label: 'Welfare Officer', blurb: 'Welfare requests and confidential case notes' },
-  { value: 'executive', label: 'Executive', blurb: 'An executive with their own portal account' },
-  { value: 'departmentLeader', label: 'Department Leader', blurb: 'Leads one department' }
+  { value: 'executive', label: 'Executive', blurb: 'An elected officer, promoted from a member, serving this academic year' }
 ];
 const ROLE_LABEL = APPOINTABLE_ROLES.reduce((acc, r) => { acc[r.value] = r.label; return acc; },
   { coordinator: 'Chapter Coordinator', nationalCoordinator: 'National Coordinator' });
@@ -230,6 +229,12 @@ function staffForm(existing) {
         </select>
         <small class="hint" id="sfRoleBlurb"></small>
       </div>
+      ${isEdit ? '' : `
+        <div class="field" id="sfMemberWrap" hidden>
+          <label>Member being promoted</label>
+          <select id="sfMemberId"><option value="">Loading members…</option></select>
+          <small class="hint">An executive is an elected member of this chapter, so the office is attached to their member record. You can appoint someone at any point in the year — their term runs to <strong>${escapeHtml(academicYearEndLabel())}</strong>, when the whole executive body hands over together.</small>
+        </div>`}
       <div class="field"><label>${isEdit ? 'New Password (optional)' : 'Password'}</label>
         <input type="password" id="sfPassword" minlength="8" autocomplete="new-password" ${isEdit ? '' : 'required'}>
         <small class="hint">At least 8 characters.</small>
@@ -244,12 +249,26 @@ function staffForm(existing) {
 
   const roleSelect = document.getElementById('sfRole');
   const blurb = document.getElementById('sfRoleBlurb');
+  const memberWrap = document.getElementById('sfMemberWrap');
+  const memberSelect = document.getElementById('sfMemberId');
   const showBlurb = () => {
     const found = APPOINTABLE_ROLES.find(r => r.value === roleSelect.value);
     blurb.textContent = found ? found.blurb : '';
+    if (memberWrap) memberWrap.hidden = roleSelect.value !== 'executive';
   };
   roleSelect.addEventListener('change', showBlurb);
   showBlurb();
+
+  // Only the executive office needs a member to promote, so the roster is
+  // fetched once, lazily, rather than on every appointment.
+  if (memberSelect) {
+    fetchJSON('/api/admin/members')
+      .then(members => {
+        memberSelect.innerHTML = '<option value="">Choose the member being promoted</option>'
+          + members.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.email || m.id)}</option>`).join('');
+      })
+      .catch(() => { memberSelect.innerHTML = '<option value="">Could not load members</option>'; });
+  }
 
   document.getElementById('staffForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -259,7 +278,10 @@ function staffForm(existing) {
       role: roleSelect.value
     };
     if (password) payload.password = password;
-    if (!isEdit) payload.username = document.getElementById('sfUsername').value;
+    if (!isEdit) {
+      payload.username = document.getElementById('sfUsername').value;
+      if (roleSelect.value === 'executive') payload.memberId = memberSelect ? memberSelect.value : '';
+    }
     try {
       await fetchJSON(isEdit ? `/api/admin/staff/${existing.id}` : '/api/admin/staff', {
         method: isEdit ? 'PUT' : 'POST',
@@ -275,11 +297,29 @@ function staffForm(existing) {
   });
 }
 
+// The academic year turns over on 1 August, matching the server
+// (academicYearEndsAt). Shown when appointing so a Coordinator filling a
+// seat mid-year can see exactly how long the term they're granting runs.
+function academicYearEndLabel() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const end = new Date(Date.UTC(now.getMonth() + 1 >= 8 ? year + 1 : year, 7, 1));
+  return end.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// Only the executive office carries a term; every other account runs until
+// it's disabled, so their cell stays quiet rather than saying "no term".
+function termCell(staff) {
+  if (!staff.termEndsAt) return '<span class="tiny muted">—</span>';
+  const ended = new Date(staff.termEndsAt) <= new Date();
+  return `${pill(ended ? 'ended' : 'current', ended ? 'red' : 'green')}<br><small class="tiny muted">${escapeHtml(staff.termYear || '')}${staff.termYear ? ' · ' : ''}to ${shortDate(String(staff.termEndsAt).slice(0, 10))}</small>`;
+}
+
 async function renderLeadershipAccounts(el) {
   const staff = await fetchJSON('/api/admin/staff');
   const appointable = staff.filter(s => s.role !== 'nationalCoordinator');
   const filled = new Set(appointable.filter(s => s.active).map(s => s.role));
-  const unfilled = APPOINTABLE_ROLES.filter(r => !filled.has(r.value) && r.value !== 'departmentLeader' && r.value !== 'executive');
+  const unfilled = APPOINTABLE_ROLES.filter(r => !filled.has(r.value) && r.value !== 'executive');
 
   el.innerHTML = `
     <div class="panel-head">
@@ -302,17 +342,21 @@ async function renderLeadershipAccounts(el) {
 
     <div class="table-wrap">
       <table class="portal-table">
-        <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Term</th><th>Last sign-in</th><th></th></tr></thead>
         <tbody>
           ${appointable.map(s => `
             <tr>
               <td><strong>${escapeHtml(s.name || s.username)}</strong><br><small class="muted">${escapeHtml(s.username)}</small></td>
               <td>${escapeHtml(ROLE_LABEL[s.role] || s.role)}</td>
               <td>${pill(s.active ? 'active' : 'disabled', s.active ? 'green' : 'grey')}</td>
+              <td>${termCell(s)}</td>
               <td class="tiny muted">${s.lastLoginAt ? dateTimeLabel(s.lastLoginAt) : 'never'}</td>
               <td>
                 <div class="row-actions">
                   ${s.role === 'coordinator' ? '<span class="tiny muted">assigned by National</span>' : `
+                    ${s.role === 'executive' ? `<button data-renew-staff="${s.id}">Renew term</button>` : ''}
+                    ${s.role === 'executive' && s.termEndsAt && new Date(s.termEndsAt) > new Date()
+                      ? `<button data-endterm-staff="${s.id}">End term</button>` : ''}
                     <button data-edit-staff="${s.id}">Edit</button>
                     <button data-toggle-staff="${s.id}" data-active="${s.active ? '1' : '0'}">${s.active ? 'Disable' : 'Enable'}</button>
                     <button data-delete-staff="${s.id}" class="danger">Remove</button>
@@ -320,7 +364,7 @@ async function renderLeadershipAccounts(el) {
                 </div>
               </td>
             </tr>
-          `).join('') || emptyRow(5, 'No chapter accounts yet — appoint your Chapter Admin first.')}
+          `).join('') || emptyRow(6, 'No chapter accounts yet — appoint your Chapter Admin first.')}
         </tbody>
       </table>
     </div>
@@ -335,6 +379,28 @@ async function renderLeadershipAccounts(el) {
   el.querySelectorAll('[data-edit-staff]').forEach(btn => btn.addEventListener('click', () =>
     staffForm(appointable.find(s => s.id === btn.dataset.editStaff))
   ));
+  el.querySelectorAll('[data-endterm-staff]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('End this executive\'s term now? They are signed out immediately and their office closes until you renew it.')) return;
+    try {
+      await fetchJSON(`/api/admin/staff/${btn.dataset.endtermStaff}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endTerm: true })
+      });
+      showToast('Term ended — they have been signed out', 'success');
+      openPanel('accounts');
+    } catch (err) { showToast(err.message || 'Could not end this term.', 'error'); }
+  }));
+  el.querySelectorAll('[data-renew-staff]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Renew this executive for the current academic year?')) return;
+    try {
+      await fetchJSON(`/api/admin/staff/${btn.dataset.renewStaff}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ renewTerm: true })
+      });
+      showToast('Term renewed for this academic year', 'success');
+      openPanel('accounts');
+    } catch (err) { showToast(err.message || 'Could not renew this term.', 'error'); }
+  }));
   el.querySelectorAll('[data-toggle-staff]').forEach(btn => btn.addEventListener('click', async () => {
     try {
       await fetchJSON(`/api/admin/staff/${btn.dataset.toggleStaff}`, {

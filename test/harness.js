@@ -146,6 +146,7 @@ const fakeModels = {
   }),
   GroupPost: makeModel({ chapterId: '', authorMemberId: '', authorName: '', isAnnouncement: false }),
   GroupMeeting: makeModel({ chapterId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
+  DepartmentMeeting: makeModel({ chapterId: '', departmentId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
   ChatTopic: makeModel({ chapterId: '', createdByMemberId: '', createdByName: '', locked: false }),
   ChatMessage: makeModel({ chapterId: '', authorMemberId: '', authorName: '', reportCount: 0, hidden: false, hiddenBy: '' }),
   VolunteerAssignment: makeModel({ chapterId: '', memberName: '', status: 'assigned', notes: '', assignedBy: '' }),
@@ -224,6 +225,6 @@ function stub(relPath, exports) {
 
 stub('lib/models.js', fakeModels);
 stub('lib/gridfs.js', fakeGridfs);
-stub('lib/db.js', { connectDB: () => Promise.resolve({}) });
+stub('lib/db.js', { connectDB: () => Promise.resolve({}), createSessionStore: () => undefined });
 
 module.exports = { fakeModels, fakeGridfs };

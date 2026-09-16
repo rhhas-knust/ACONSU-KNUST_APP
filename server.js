@@ -6,8 +6,9 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
-const { connectDB } = require('./lib/db');
+const { connectDB, createSessionStore } = require('./lib/db');
 const repo = require('./lib/repo');
+const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
 const models = require('./lib/models');
 const rolesLib = require('./lib/roles');
@@ -36,12 +37,35 @@ const isProd = process.env.NODE_ENV === 'production';
 // Needed for secure cookies and correct client IPs for rate limiting.
 app.set('trust proxy', 1);
 
+// The fallbacks below this line exist so a developer can clone and run
+// without ceremony. In production they are a way in: 'changeme' signs you in
+// as the national administrator, and a known session secret lets anyone mint
+// a session cookie for any account. So production refuses to start on them
+// rather than running quietly wide open — a deploy that fails loudly is a far
+// smaller problem than one nobody notices.
+if (isProd) {
+  const insecure = [
+    !process.env.ADMIN_PASSWORD && 'ADMIN_PASSWORD (defaults to "changeme")',
+    !process.env.SESSION_SECRET && 'SESSION_SECRET (defaults to a public value, so session cookies could be forged)'
+  ].filter(Boolean);
+  if (insecure.length) {
+    console.error('Refusing to start in production with default credentials still in place:');
+    insecure.forEach((item) => console.error(`  - ${item} is not set`));
+    console.error('Set these in the environment (Render → Environment) and redeploy.');
+    process.exit(1);
+  }
+}
+
 app.use(helmet({
   contentSecurityPolicy: false // keep simple for now; the app has no user-supplied scripts
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
+  // Stored in MongoDB (see createSessionStore) so a restart or deploy no
+  // longer signs everybody out. Undefined falls back to the in-memory store,
+  // which is what the test harness runs on.
+  store: typeof createSessionStore === 'function' ? createSessionStore() : undefined,
   secret: process.env.SESSION_SECRET || 'dev_secret_change_me',
   resave: false,
   saveUninitialized: false,
@@ -83,6 +107,19 @@ function requireAdmin(req, res, next) {
 }
 
 // ---------- auth routes ----------
+// One session carries every identity this browser holds — the env admin flag,
+// a staff record, the shepherd flag, a member id — and the portals' own login
+// form can set two of them at once (see /api/portal/login, where the env admin
+// credentials set isAdmin *and* staff). So a logout that deletes only its own
+// key leaves the person signed in through another door: clearing `staff` while
+// `isAdmin` survives is exactly why logging out of a portal appeared to do
+// nothing. Logging out means the session ends — every endpoint below shares
+// this, which also matters on the shared campus devices this runs on.
+function endSession(req, res) {
+  if (!req.session) return res.json({ success: true });
+  req.session.destroy(() => res.json({ success: true }));
+}
+
 app.post('/api/admin/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
   const adminUser = process.env.ADMIN_USERNAME || 'admin';
@@ -94,9 +131,7 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
   return res.status(401).json({ error: 'Invalid credentials' });
 });
 
-app.post('/api/admin/logout', (req, res) => {
-  req.session.destroy(() => res.json({ success: true }));
-});
+app.post('/api/admin/logout', (req, res) => endSession(req, res));
 
 app.get('/api/admin/check', (req, res) => {
   res.json({ isAdmin: !!(req.session && req.session.isAdmin) });
@@ -126,10 +161,7 @@ app.post('/api/shepherd/login', loginLimiter, (req, res) => {
   return res.status(401).json({ error: 'Invalid credentials' });
 });
 
-app.post('/api/shepherd/logout', (req, res) => {
-  delete req.session.isShepherd;
-  res.json({ success: true });
-});
+app.post('/api/shepherd/logout', (req, res) => endSession(req, res));
 
 app.get('/api/shepherd/check', (req, res) => {
   res.json({ isShepherd: hasRole(req, 'shepherding') });
@@ -154,11 +186,88 @@ app.get('/api/shepherd/check', (req, res) => {
 // data this session may touch" — these helpers only answer "which role".
 const PORTAL_ROLES = [
   'nationalCoordinator', 'coordinator', 'chapterAdmin', 'executive',
-  'finance', 'shepherding', 'publicity', 'welfare', 'departmentLeader'
+  'finance', 'shepherding', 'publicity', 'welfare'
 ];
 
+// An executive serves one academic year (section 9). The term deadline rides
+// in the session alongside the rest of the staff record, and is compared
+// against the clock here — the one place every permission check and every
+// require* middleware already funnels through. That means a term lapses
+// mid-session the moment the date passes, and a route written years from now
+// inherits the rule for free. Deliberately not a nightly sweep that flips
+// `active`: a sweep is only correct if it ran, and derived state can't drift.
+function isTermExpired(staff) {
+  return !!(staff && staff.termEndsAt && new Date(staff.termEndsAt) <= new Date());
+}
+
+// Ending someone's term early, disabling or deleting their account, or
+// changing their role or password has to take effect NOW, not whenever they
+// next happen to sign out. A session carries the authority it was stamped
+// with at login, so the way to reach one already in flight is a revocation
+// list: the moment an account is changed against its holder, anything issued
+// before that moment stops counting.
+//
+// Held in memory for the check itself, which has to stay synchronous, but
+// written to the account too: sessions now live in MongoDB and outlive a
+// restart, so a revocation that existed only in this process's memory would
+// be forgotten while the session it revoked came back. loadStaffRevocations()
+// rebuilds the map from the database before the server accepts a request.
+const STAFF_REVOCATIONS = new Map();
+const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 8;
+
+function rememberRevocation(staffId, at) {
+  const now = Date.now();
+  STAFF_REVOCATIONS.set(String(staffId), at);
+  // No session older than the cookie's own lifetime can still be valid, so
+  // the entries guarding them have nothing left to do.
+  STAFF_REVOCATIONS.forEach((ts, id) => {
+    if (now - ts > SESSION_MAX_AGE_MS) STAFF_REVOCATIONS.delete(id);
+  });
+}
+
+function revokeStaffSessions(staffId) {
+  if (!staffId) return Promise.resolve();
+  const at = Date.now();
+  rememberRevocation(staffId, at);
+  return repo.patchById('staffUsers', String(staffId), { sessionsRevokedAt: new Date(at) })
+    .catch(() => { /* the in-memory entry still holds for this process */ });
+}
+
+// Rebuilt at boot and refreshed periodically, the same belt-and-braces
+// pattern refreshSoleActiveChapter() uses for its own cached answer.
+async function loadStaffRevocations() {
+  try {
+    const cutoff = Date.now() - SESSION_MAX_AGE_MS;
+    const staff = await repo.getAll('staffUsers');
+    staff.forEach((user) => {
+      if (!user.sessionsRevokedAt) return;
+      const at = new Date(user.sessionsRevokedAt).getTime();
+      if (at > cutoff) STAFF_REVOCATIONS.set(String(user.id), at);
+    });
+  } catch (e) {
+    // Leave whatever is already cached rather than dropping revocations.
+  }
+}
+
+function isSessionRevoked(staff) {
+  if (!staff || !staff.id) return false; // env admin / shepherd logins carry no account id
+  const revokedAt = STAFF_REVOCATIONS.get(String(staff.id));
+  return !!(revokedAt && (!staff.issuedAt || staff.issuedAt <= revokedAt));
+}
+
 function currentStaff(req) {
-  return (req.session && req.session.staff) || null;
+  const staff = (req.session && req.session.staff) || null;
+  if (isTermExpired(staff) || isSessionRevoked(staff)) return null;
+  return staff;
+}
+
+// The academic year turns over on 1 August, matching
+// currentAcademicYearLabel() — so every executive in a chapter serves the
+// same year and hands over together, however far into it they were elected.
+function academicYearEndsAt() {
+  const now = new Date();
+  const year = now.getFullYear();
+  return new Date(Date.UTC(now.getMonth() + 1 >= 8 ? year + 1 : year, 7, 1));
 }
 
 // Who to stamp on a record they just created. Records outlive sessions, so this
@@ -194,6 +303,20 @@ function requireRole(role) {
     if (hasRole(req, role)) return next();
     return res.status(401).json({ error: 'Not authenticated' });
   };
+}
+
+// The portals that are one person's own workspace rather than a tier of
+// oversight. National and Coordinator are deliberately absent: the admin IS
+// the national tier, and a Coordinator running their own chapter's portal is
+// the point of it. See the access map in /api/portal/me.
+const OFFICE_PORTAL_ROLES = ['finance', 'shepherding', 'publicity', 'welfare', 'executive'];
+
+function holdsOfficePortal(req, role) {
+  const staff = currentStaff(req);
+  if (!staff) return false;
+  if (staff.role === role) return true;                  // the holder themselves
+  if (staff.role === 'coordinator') return canView(req, role); // oversees their own chapter's offices
+  return false;
 }
 
 function requireViewRole(role) {
@@ -285,10 +408,20 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     if (!user || !user.active) return res.status(401).json({ error: 'Invalid credentials' });
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+    // A lapsed term is not a wrong password — say so, so the outgoing
+    // executive knows to ask their Coordinator rather than retyping.
+    if (isTermExpired(user)) {
+      return res.status(403).json({
+        error: `Your ${user.termYear || 'executive'} term of office has ended. Your Chapter Coordinator can renew it or hand the office over.`
+      });
+    }
 
     req.session.staff = {
       id: user.id, username: user.username, name: user.name || user.username,
-      role: user.role, chapterId: user.chapterId || ''
+      role: user.role, chapterId: user.chapterId || '',
+      memberId: user.memberId || '',
+      termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
+      issuedAt: Date.now() // what a later revocation is measured against
     };
     models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
     res.json({ success: true, staff: req.session.staff });
@@ -297,13 +430,7 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/portal/logout', (req, res) => {
-  if (req.session) {
-    delete req.session.staff;
-    delete req.session.isShepherd;
-  }
-  res.json({ success: true });
-});
+app.post('/api/portal/logout', (req, res) => endSession(req, res));
 
 // Tells a portal page who is signed in and which areas they may open.
 app.get('/api/portal/me', async (req, res) => {
@@ -319,8 +446,17 @@ app.get('/api/portal/me', async (req, res) => {
     isAdmin,
     isNational: scope.isNational,
     chapter: chapter ? { id: chapter.id, name: chapter.name } : null,
+    // Holding an office is not the same as outranking it. The env admin and a
+    // National Coordinator outrank every office — that's why hasRole() lets
+    // them through the API guards, and that stays — but an office portal is
+    // the holder's own workspace. Seating the admin in it automatically meant
+    // every portal opened as "the admin", and the office's own sign-in screen
+    // became unreachable without clearing cookies. So entry to those portals
+    // asks whether you hold the office (or oversee it as that chapter's
+    // Coordinator), not whether you outrank it.
     access: PORTAL_ROLES.reduce((acc, role) => {
-      acc[role] = { view: canView(req, role), edit: hasRole(req, role) };
+      const entitled = OFFICE_PORTAL_ROLES.includes(role) ? holdsOfficePortal(req, role) : canView(req, role);
+      acc[role] = { view: entitled, edit: entitled && hasRole(req, role) };
       return acc;
     }, {})
   });
@@ -563,10 +699,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', (req, res) => {
-  delete req.session.memberId;
-  res.json({ success: true });
-});
+app.post('/api/auth/logout', (req, res) => endSession(req, res));
 
 // ---------- password reset ----------
 app.post('/api/auth/forgot-password', loginLimiter, async (req, res) => {
@@ -1853,6 +1986,31 @@ app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => 
 });
 */
 
+// Who runs a department is the executive holding it — the roster card
+// carrying this department — rather than a name typed into the department
+// record itself. Those were two separate answers that could disagree, and
+// the typed one went stale the moment an office changed hands. Derived on
+// read so it is always whoever currently holds the office, with no second
+// field to keep in step.
+async function attachDepartmentLeaders(departments) {
+  const many = Array.isArray(departments);
+  const list = many ? departments : [departments];
+  if (!list.length || !list[0]) return departments;
+  const execs = await repo.getAll('executives');
+  const key = (chapterId, departmentId) => `${chapterId || ''}::${departmentId}`;
+  const holders = new Map();
+  execs.forEach((exec) => {
+    if (!exec.department) return;
+    const k = key(exec.chapterId, exec.department);
+    if (!holders.has(k)) holders.set(k, exec);
+  });
+  const decorate = (dept) => {
+    const holder = holders.get(key(dept.chapterId, dept.id));
+    return { ...dept, leaderName: holder ? holder.name || '' : '', leaderRole: holder ? holder.role || '' : '' };
+  };
+  return many ? list.map(decorate) : decorate(list[0]);
+}
+
 ['departments', 'sermons', 'testimonies'].forEach((resource) => {
   app.get(`/api/${resource}`, async (req, res) => {
     try {
@@ -1861,7 +2019,7 @@ app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => 
       if (resource === 'testimonies') {
         return res.json(items.filter((t) => t.published));
       }
-      res.json(items);
+      res.json(resource === 'departments' ? await attachDepartmentLeaders(items) : items);
     } catch (e) {
       res.status(500).json({ error: 'Could not load data' });
     }
@@ -1938,7 +2096,7 @@ app.get('/api/search', async (req, res) => {
     const modules = await featureModules();
 
     const [departments, sermons, events, pages, contentItems] = await Promise.all([
-      repo.getAll('departments', baseScope),
+      repo.getAll('departments', baseScope).then(attachDepartmentLeaders),
       repo.getAll('sermons', baseScope),
       repo.getAll('events', eventFilter),
       repo.getAll('pages', baseScope),
@@ -1968,7 +2126,7 @@ app.get('/api/search', async (req, res) => {
         subtitle: item.tagline,
         description: item.description,
         href: `/department.html?id=${encodeURIComponent(item.id)}&${querySuffix}`,
-        extraSearch: [item.meetingDay, item.meetingTime, item.meetingLocation, item.leader],
+        extraSearch: [item.meetingDay, item.meetingTime, item.meetingLocation, item.leaderName],
         meta: { id: item.id }
       })),
       ...events.map((item) => buildPublicSearchResult({
@@ -2301,7 +2459,7 @@ app.get('/api/departments/:id', async (req, res) => {
   try {
     const dept = await repo.getById('departments', req.params.id);
     if (!dept) return res.status(404).json({ error: 'Department not found' });
-    res.json(dept);
+    res.json(await attachDepartmentLeaders(dept));
   } catch (e) {
     res.status(500).json({ error: 'Could not load department' });
   }
@@ -2366,15 +2524,77 @@ app.get('/api/admin/executive-applications', requireChapterAdmin, async (req, re
   }
 });
 
-app.patch('/api/admin/executive-applications/:memberId', requireChapterAdmin, async (req, res) => {
+// Vetting an executive is the Chapter Coordinator's call (the "Chapter
+// approvals" row of the responsibility matrix), and approving is one action
+// that provisions the whole person: the member is promoted, their portal
+// login is issued for this academic year, and their public roster card is
+// created — all linked by memberId. Before this, approval flipped a flag and
+// stopped, leaving "verified" executives with no way in and roster cards
+// belonging to nobody.
+app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinator, async (req, res) => {
   try {
-    const { decision, scope } = req.body || {};
+    const { decision, scope, username, password } = req.body || {};
     const filter = rolesLib.chapterFilter(req, { required: false });
     const member = await repo.getById('members', req.params.memberId, filter);
     if (!member) return res.status(404).json({ error: 'Member not found' });
     if (!['approve', 'reject'].includes(decision)) {
       return res.status(400).json({ error: 'Decision must be approve or reject' });
     }
+
+    let account = null;
+    let issuedLogin = false;
+    if (decision === 'approve') {
+      // Renew in place if this member already holds the office, so a
+      // re-elected executive keeps their account, card and history rather
+      // than collecting a second set.
+      account = await models.StaffUser.findOne({ memberId: member.id, role: 'executive' }).lean();
+      if (account) {
+        account = await repo.patchById('staffUsers', account.id, {
+          active: true, termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
+        });
+      } else {
+        const clean = String(username || '').toLowerCase().trim();
+        if (!clean || !password) {
+          return res.status(400).json({ error: 'A username and password are required to issue this executive their portal login.' });
+        }
+        if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        if (await models.StaffUser.findOne({ username: clean })) {
+          return res.status(400).json({ error: 'That username is already taken' });
+        }
+        account = await repo.create('staffUsers', {
+          username: clean, name: member.name || clean, role: 'executive',
+          chapterId: member.chapterId, memberId: member.id,
+          passwordHash: await bcrypt.hash(String(password), 10), active: true,
+          termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
+        }, 'staff');
+        issuedLogin = true;
+      }
+
+      // The public roster card, created here rather than waiting for the
+      // executive to discover the profile form.
+      const existingCard = await models.Executive.findOne({ staffId: account.id, chapterId: member.chapterId }).lean();
+      if (!existingCard) {
+        await repo.create('executives', {
+          chapterId: member.chapterId, staffId: account.id,
+          name: member.name || '', role: member.executiveRole || '',
+          department: member.executiveDepartment || '',
+          bio: '', contact: { phone: member.phone || '', email: member.email || '' },
+          imageFileId: member.profileImageFileId || '', history: []
+        }, 'exec');
+      }
+    }
+
+    // Withdrawing a verification from someone who already held the office
+    // closes it: ending the term and the session they are using, rather than
+    // leaving a rejected executive with a working login.
+    if (decision === 'reject') {
+      const held = await models.StaffUser.findOne({ memberId: member.id, role: 'executive' }).lean();
+      if (held) {
+        await repo.patchById('staffUsers', held.id, { termEndsAt: new Date() });
+        revokeStaffSessions(held.id);
+      }
+    }
+
     const nextStatus = decision === 'approve' ? 'verified' : 'rejected';
     const updated = await repo.updateById('members', member.id, {
       ...member,
@@ -2391,7 +2611,9 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterAdmin, as
       isExecutive: !!updated.isExecutive,
       scope: updated.executiveScope,
       role: updated.executiveRole,
-      department: updated.executiveDepartment
+      department: updated.executiveDepartment,
+      account: account ? { id: account.id, username: account.username, termYear: account.termYear, termEndsAt: account.termEndsAt } : null,
+      issuedLogin
     }});
   } catch (e) {
     res.status(500).json({ error: 'Could not update executive application' });
@@ -3835,6 +4057,13 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
     if (!department) {
       return res.status(400).json({ error: 'Please choose a department for your executive office.' });
     }
+    // It has to be a real department in their own chapter: this id is what
+    // every "my department" screen resolves against, and what the public
+    // department page links to, so a free-typed value would leave them
+    // holding an office that doesn't exist.
+    if (!await repo.getById('departments', department, { chapterId: staff.chapterId })) {
+      return res.status(400).json({ error: 'That department is not in your chapter — pick one from the list.' });
+    }
 
     // A real position/department change gets snapshotted into history first
     // (section 9: "updated every academic year"), same pattern as a
@@ -3909,12 +4138,114 @@ app.post('/api/executive/events', requireRole('executive'), async (req, res) => 
 app.get('/api/executive/events', requireRole('executive'), async (req, res) => {
   try {
     const staff = currentStaff(req);
-    const items = await repo.getAll('events', { submittedByStaffId: staff.id });
+    const items = await repo.getAll('events', { submittedByStaffId: staff.id, chapterId: staff.chapterId });
     res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
   } catch (e) {
     res.status(500).json({ error: 'Could not load your submitted events' });
   }
 });
+
+// ---------- an executive's own department ----------
+// Everything below is scoped by the department on the executive's own roster
+// card, resolved here rather than taken from the request — so an executive
+// can only ever run the department they actually hold, and only inside their
+// own chapter. Returns null when they haven't chosen a department yet, which
+// the portal turns into a prompt rather than an error.
+async function findOwnDepartment(req) {
+  const staff = currentStaff(req);
+  const record = await findOwnExecutiveRecord(req);
+  if (!staff || !record || !record.department) return null;
+  return repo.getById('departments', record.department, { chapterId: staff.chapterId });
+}
+
+function requireOwnDepartment(handler) {
+  return async (req, res) => {
+    try {
+      const department = await findOwnDepartment(req);
+      if (!department) {
+        return res.status(400).json({ error: 'Choose your department on your profile first — that is what this section belongs to.' });
+      }
+      return await handler(req, res, department, currentStaff(req));
+    } catch (e) {
+      res.status(500).json({ error: 'Could not load your department right now.' });
+    }
+  };
+}
+
+app.get('/api/executive/department', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const [members, meetings] = await Promise.all([
+    repo.getAll('members', { chapterId: staff.chapterId, department: department.id }),
+    repo.getAll('departmentMeetings', { chapterId: staff.chapterId, departmentId: department.id })
+  ]);
+  const recent = [...meetings].sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null;
+  res.json({
+    department,
+    memberCount: members.length,
+    meetingCount: meetings.length,
+    lastMeeting: recent ? { date: recent.date, topic: recent.topic, present: (recent.attendeeMemberIds || []).length } : null
+  });
+}));
+
+app.put('/api/executive/department', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  // Name stays out: renaming a department is a chapter-level decision, and
+  // its id is referenced by members and executives alike.
+  const next = { ...department };
+  ['tagline', 'description', 'meetingDay', 'meetingTime', 'meetingLocation'].forEach((key) => {
+    if (hasOwn(req.body, key)) next[key] = cleanText(req.body[key]);
+  });
+  const updated = await repo.updateById('departments', department.id, next, { chapterId: staff.chapterId });
+  res.json({ success: true, item: updated });
+}));
+
+app.get('/api/executive/department/members', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  res.json(members
+    .map(m => ({
+      id: m.id, name: m.name, email: m.email, phone: m.phone || '',
+      level: m.level || '', programme: m.programme || '', membershipStage: m.membershipStage
+    }))
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
+}));
+
+app.get('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const meetings = await repo.getAll('departmentMeetings', { chapterId: staff.chapterId, departmentId: department.id });
+  res.json(meetings.sort((a, b) => (a.date < b.date ? 1 : -1)));
+}));
+
+// Mobile-first register: open, tap whoever is present, save. Attendance is
+// confined to this department's own members, so a mistyped or guessed id
+// can't pull someone else's record into the count.
+app.post('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  const ownIds = new Set(members.map(m => m.id));
+  const attendeeMemberIds = Array.isArray(req.body.attendeeMemberIds)
+    ? req.body.attendeeMemberIds.filter(id => ownIds.has(id))
+    : [];
+  const item = await repo.create('departmentMeetings', {
+    chapterId: staff.chapterId,
+    departmentId: department.id,
+    date: req.body.date || new Date().toISOString().slice(0, 10),
+    topic: cleanText(req.body.topic || ''),
+    location: cleanText(req.body.location || department.meetingLocation || ''),
+    attendeeMemberIds,
+    notes: cleanText(req.body.notes || ''),
+    recordedBy: actorName(req)
+  }, 'dmeet');
+  res.json({ success: true, item });
+}));
+
+// An announcement to this department's own members, not the whole chapter —
+// chapter-wide announcements stay with the Coordinator and Publicity.
+app.post('/api/executive/department/announcement', requireRole('executive'), requireOwnDepartment(async (req, res, department, staff) => {
+  const title = cleanText(req.body.title || '');
+  const body = cleanText(req.body.body || '');
+  if (!title || !body) return res.status(400).json({ error: 'A title and message are required' });
+  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  const item = await createNotification(
+    `${department.name}: ${title}`, body, '/department.html?id=' + department.id, 'department', staff.chapterId
+  );
+  res.json({ success: true, item, reached: members.length });
+}));
 
 // ---------- Publicity: event review queue (section 9, continued) ----------
 app.get('/api/publicity/events/queue', requireViewRole('publicity'), async (req, res) => {
@@ -4184,12 +4515,18 @@ app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNation
 // National dashboard: chapter counts, aggregated (never individually
 // identifying) membership/attendance/finance/welfare figures across every
 // chapter, plus a per-chapter breakdown for comparison (section 3, 38).
+// Offices a chapter needs staffed to run day to day (the "Staff chapter
+// offices" row in GOVERNANCE_TIER_REVIEW.md's responsibility matrix) — a
+// deliberately shorter list than every appointable role: executive is a
+// whole elected body, per-person, not one office to fill.
+const READINESS_OFFICE_ROLES = ['finance', 'shepherding', 'publicity', 'welfare'];
+
 app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) => {
   try {
-    const [chapters, members, events, financeEntries, attendance, shepherdingRecords, executives] = await Promise.all([
+    const [chapters, members, events, financeEntries, attendance, shepherdingRecords, executives, staffUsers] = await Promise.all([
       repo.getAll('chapters'), repo.getAll('members'), repo.getAll('events'),
       repo.getAll('financeEntries'), repo.getAll('attendanceRecords'),
-      repo.getAll('shepherdingRecords'), repo.getAll('executives')
+      repo.getAll('shepherdingRecords'), repo.getAll('executives'), repo.getAll('staffUsers')
     ]);
     const now = new Date();
     const byChapter = chapters.map((c) => {
@@ -4197,6 +4534,15 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
       const chFinance = financeEntries.filter(f => f.chapterId === c.id);
       const chAttendance = attendance.filter(a => a.chapterId === c.id);
       const recent = [...chAttendance].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+      // Chapter readiness rollup (Phase C, item 6) — a national oversight
+      // signal that never opens the chapter's own records: who's appointed
+      // and what's configured, not what anyone in the chapter is doing.
+      const chStaff = staffUsers.filter(s => s.chapterId === c.id && s.active);
+      const officesStaffed = Object.fromEntries(READINESS_OFFICE_ROLES.map(role => [role, chStaff.some(s => s.role === role)]));
+      const lastStaffLoginAt = chStaff.reduce((latest, s) =>
+        (s.lastLoginAt && (!latest || new Date(s.lastLoginAt) > new Date(latest))) ? s.lastLoginAt : latest, null);
+      const lastActivityAt = [recent && recent.createdAt, lastStaffLoginAt]
+        .filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
       return {
         id: c.id, name: c.name, status: c.status,
         memberCount: chMembers.filter(m => isActivatedMember(m)).length,
@@ -4205,7 +4551,17 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
         executiveCount: executives.filter(e => e.chapterId === c.id).length,
         upcomingEvents: events.filter(e => e.chapterId === c.id && new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
         lastServiceAttendance: recent ? recent.marks.filter(m => m.status === 'present').length + (recent.visitorCount || 0) : null,
-        balance: financeTotals(chFinance).balance
+        balance: financeTotals(chFinance).balance,
+        readiness: {
+          coordinatorAssigned: !!c.coordinatorStaffId,
+          adminAppointed: chStaff.some(s => s.role === 'chapterAdmin'),
+          officesStaffed,
+          officesStaffedCount: READINESS_OFFICE_ROLES.filter(role => officesStaffed[role]).length,
+          officesTotal: READINESS_OFFICE_ROLES.length,
+          settingsComplete: !!(c.tagline && c.serviceTimes && c.serviceTimes.length
+            && c.contact && (c.contact.phone || c.contact.email || c.contact.whatsapp)),
+          lastActivityAt
+        }
       };
     });
     res.json({
@@ -4370,11 +4726,28 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   if (NATIONAL_ONLY_ROLES.includes(role) && !scope.isNational) {
     return res.status(403).json({ error: 'Only the National Coordinator can assign this role.' });
   }
+  // Promotion to the executive body is the Chapter Coordinator's call — a
+  // Chapter Admin runs the chapter's operations, but doesn't elect its
+  // officers.
+  if (role === 'executive' && !isChapterCoordinatorOrAbove(req)) {
+    return res.status(403).json({ error: 'Only the Chapter Coordinator can promote a member to the executive body.' });
+  }
   // A chapter-scoped admin can only ever create accounts for their own
   // chapter, regardless of what the request body claims.
   const chapterId = role === 'nationalCoordinator' ? '' : await resolveChapterIdForWrite(req, req.body.chapterId);
   if (role !== 'nationalCoordinator' && !chapterId) {
     return res.status(400).json({ error: 'A chapter is required for this role — this deployment now has more than one, please specify which.' });
+  }
+  // An executive is a promoted member, vetted by the Coordinator — so the
+  // office is always attached to a real member record, never a free-floating
+  // login. That link is what makes the one-year term and their own
+  // appointment history mean anything.
+  let memberId = '';
+  if (role === 'executive') {
+    memberId = String(req.body.memberId || '').trim();
+    if (!memberId) return res.status(400).json({ error: 'Choose the member being promoted — an executive account belongs to a member.' });
+    const member = await repo.getById('members', memberId, chapterId ? { chapterId } : undefined);
+    if (!member) return res.status(400).json({ error: 'That member is not in this chapter.' });
   }
   try {
     if (chapterId) {
@@ -4385,8 +4758,9 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     const existing = await models.StaffUser.findOne({ username: clean });
     if (existing) return res.status(400).json({ error: 'That username is already taken' });
     const user = await repo.create('staffUsers', {
-      username: clean, name: name || clean, role, chapterId,
-      passwordHash: await bcrypt.hash(password, 10), active: true
+      username: clean, name: name || clean, role, chapterId, memberId,
+      passwordHash: await bcrypt.hash(password, 10), active: true,
+      ...(role === 'executive' ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
     }, 'staff');
     const { passwordHash, ...safe } = user;
     res.json({ success: true, item: safe });
@@ -4409,13 +4783,30 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
     if (!scope.isNational && (NATIONAL_ONLY_ROLES.includes(existing.role) || (role && NATIONAL_ONLY_ROLES.includes(role)))) {
       return res.status(403).json({ error: 'Only the National Coordinator can change this role.' });
     }
+    // Renewing an executive for the new academic year — re-election keeps the
+    // same account, card and history rather than starting a person over.
+    const isExecutive = (role || existing.role) === 'executive';
+    const renewTerm = req.body.renewTerm === true && isExecutive;
+    // Ending a term early: someone stepping down, or being stood down,
+    // before the academic year is out.
+    const endTerm = req.body.endTerm === true && isExecutive;
     const updated = await repo.updateById('staffUsers', req.params.id, {
       ...existing,
       name: name !== undefined ? name : existing.name,
       role: role || existing.role,
       active: active !== undefined ? !!active : existing.active,
-      passwordHash: password ? await bcrypt.hash(password, 10) : existing.passwordHash
+      passwordHash: password ? await bcrypt.hash(password, 10) : existing.passwordHash,
+      ...(renewTerm ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {}),
+      ...(endTerm ? { termEndsAt: new Date() } : {})
     });
+    // Anything that takes authority away, or hands it to a different person,
+    // has to reach the session they are using right now — not wait for them
+    // to sign out. A rename is left alone: it changes nothing they can do.
+    const authorityChanged = endTerm
+      || (active !== undefined && !active)
+      || (role && role !== existing.role)
+      || !!password;
+    if (authorityChanged) revokeStaffSessions(existing.id);
     const { passwordHash, ...safe } = updated;
     res.json({ success: true, item: safe });
   } catch (e) {
@@ -4435,6 +4826,9 @@ app.delete('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
       return res.status(403).json({ error: 'Only the National Coordinator can remove this role.' });
     }
     await repo.removeById('staffUsers', req.params.id);
+    // "Their sign-in stops working immediately" is what the confirmation
+    // promises, so it has to be true of the session they hold right now.
+    revokeStaffSessions(existing.id);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete this account' });
@@ -4519,10 +4913,11 @@ function trendSummary(current, previous) {
   return { current, previous, delta, percent, direction };
 }
 
-app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
-  try {
-    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
-    if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to view this dashboard.' });
+// Builds the operational dashboard payload for one chapter — shared by the
+// plain GET (first paint) and the SSE stream below (every push after that),
+// so there is exactly one place that computes the Rule-of-4 KPIs and the
+// activity feed, not two copies that can drift.
+async function buildChapterOverview(chapterId) {
     const filter = { chapterId };
     const [chapter, members, events, attendance, joinRequests, prayerRequests, contactMessages, shepherdingRecords, financeEntries, notifications] = await Promise.all([
       repo.getById('chapters', chapterId),
@@ -4614,10 +5009,9 @@ app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
       .sort((a, b) => new Date(b.at) - new Date(a.at))
       .slice(0, 25);
 
-    res.json({
+    return {
       chapter: chapter ? { id: chapter.id, name: chapter.name } : { id: chapterId, name: chapterId },
       generatedAt: new Date().toISOString(),
-      refreshEverySeconds: 30,
       monthNet,
       kpis: [
         {
@@ -4661,10 +5055,60 @@ app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
         }
       ],
       activity
-    });
+    };
+}
+
+app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to view this dashboard.' });
+    res.json(await buildChapterOverview(chapterId));
   } catch (e) {
     res.status(500).json({ error: 'Could not load admin overview' });
   }
+});
+
+// Live push for the operational dashboard (Phase 2) — replaces the previous
+// client-side poll. One SSE connection per open dashboard; the server pushes
+// a freshly rebuilt overview whenever activityBus reports something in this
+// chapter changed (see repo.create() in lib/repo.js), instead of the client
+// re-fetching on a timer. Plain GET above still serves the first paint —
+// this only carries updates after that.
+app.get('/api/admin/overview/stream', requireChapterAdmin, async (req, res) => {
+  const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+  if (!chapterId) return res.status(400).json({ error: 'Pick a chapter to view this dashboard.' });
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no' // nginx/Render: don't buffer the stream away
+  });
+  res.write('retry: 5000\n\n');
+
+  let closed = false;
+  const push = async () => {
+    if (closed) return;
+    try {
+      const overview = await buildChapterOverview(chapterId);
+      res.write(`event: overview\ndata: ${JSON.stringify(overview)}\n\n`);
+    } catch (e) {
+      // A build failure shouldn't take the connection down — the next
+      // activity event, or the client's own reconnect, tries again.
+    }
+  };
+  const onActivity = (payload) => { if (payload.chapterId === chapterId) push(); };
+  activityBus.on('activity', onActivity);
+
+  // Comment-only ping so proxies/load balancers don't time out an otherwise
+  // silent connection during a quiet chapter.
+  const heartbeat = setInterval(() => { if (!closed) res.write(': ping\n\n'); }, 25000);
+
+  req.on('close', () => {
+    closed = true;
+    clearInterval(heartbeat);
+    activityBus.off('activity', onActivity);
+  });
 });
 
 app.get('/api/admin/join-requests', requireChapterAdmin, async (req, res) => {
@@ -5445,10 +5889,15 @@ async function refreshSoleActiveChapter() {
 }
 
 connectDB()
+  // Revocations are loaded BEFORE the first request is served: sessions
+  // survive a restart now, so a session revoked before the restart must not
+  // get a window where it works again.
+  .then(() => loadStaffRevocations())
   .then(() => {
     app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);
     });
+    setInterval(loadStaffRevocations, 5 * 60 * 1000);
     refreshSoleActiveChapter();
     setInterval(refreshSoleActiveChapter, 5 * 60 * 1000); // belt and braces against drift
     checkBirthdaysAndNotify();

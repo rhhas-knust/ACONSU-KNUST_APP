@@ -69,24 +69,75 @@ const { fakeModels } = require('./harness.js');
     r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123' });
     check(`create ${role} account`, r.status === 200, r.data);
   }
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.bible', name: 'Bible Study Exec', role: 'executive', password: 'password123' });
-  check('create executive account', r.status === 200, r.data);
+  // An executive is a promoted member, so the office can't be created out of
+  // thin air — the promotion itself is exercised further down, once members
+  // exist (see "executive portal + event workflow").
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nomember', name: 'No Member', role: 'executive', password: 'password123' });
+  check('an executive account cannot be created without a member to promote', r.status === 400, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.ama', name: 'dupe', role: 'finance', password: 'password123' });
   check('duplicate username rejected', r.status === 400, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'weak', name: 'weak', role: 'finance', password: 'short' });
   check('short password rejected', r.status === 400, r.data);
 
-  for (const [jar, user] of Object.entries({ fin: 'fin.ama', shep: 'shep.kojo', pub: 'pub.esi', coord: 'coord.yaw', bibleExec: 'exec.bible' })) {
+  for (const [jar, user] of Object.entries({ fin: 'fin.ama', shep: 'shep.kojo', pub: 'pub.esi', coord: 'coord.yaw' })) {
     r = await call(jar, 'POST', '/api/portal/login', { username: user, password: 'password123' });
     check(`${user} signs in`, r.status === 200, r.data);
   }
   r = await call('bad', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'wrong' });
   check('wrong password rejected', r.status === 401, r.data);
 
-  console.log('\n== national coordinator ==');
-  r = await call('bibleExec', 'POST', '/api/admin/bible-studies', { topic: 'Faith in Action', date: '2026-02-01', scriptureReference: 'James 2:14-26', studyMaterial: 'Test study' });
-  check('executive can manage Bible studies', r.status === 200 && r.data.item.topic === 'Faith in Action', r.data);
+  console.log('\n== the admin no longer takes over every office portal ==');
+  // Reported from the live site: whichever portal you opened, the admin was
+  // already sitting in it, and the office's own sign-in was unreachable.
+  r = await call('adminPortals', 'POST', '/api/portal/login', { username: 'admin', password: 'admin123' });
+  check('the admin signs in', r.status === 200, r.data);
+  r = await call('adminPortals', 'GET', '/api/portal/me');
+  const adminAccess = r.data.access || {};
+  check('the office portals now ask for the office holder instead of seating the admin',
+    ['finance', 'shepherding', 'publicity', 'welfare', 'executive'].every(role => adminAccess[role].view === false), adminAccess);
+  check('while the national portal, which is genuinely theirs, still opens',
+    adminAccess.nationalCoordinator.view === true, adminAccess);
+  check('and the coordinator portal is deliberately left alone',
+    adminAccess.coordinator.view === true, adminAccess);
 
+  // The people who actually hold the offices are unaffected.
+  r = await call('fin', 'GET', '/api/portal/me');
+  check('the finance officer still opens their own portal', r.data.access.finance.view === true, r.data.access);
+  check('but is not handed somebody else\'s office', r.data.access.publicity.view === false, r.data.access);
+  r = await call('coord', 'GET', '/api/portal/me');
+  check('a chapter coordinator still oversees their own chapter\'s offices',
+    r.data.access.finance.view === true && r.data.access.welfare.view === true, r.data.access);
+
+  // The admin keeps its API reach — this changed which portal opens, not who
+  // can do what once inside.
+  r = await call('adminPortals', 'GET', '/api/finance/summary');
+  check('the admin still has its API authority over finance', r.status === 200, r.data);
+
+  console.log('\n== logging out actually logs you out ==');
+  // The env admin signing in through a portal form gets BOTH isAdmin and a
+  // staff record, so a logout that only cleared `staff` left them signed in —
+  // which is what made the portals feel impossible to leave.
+  r = await call('logoutTest', 'POST', '/api/portal/login', { username: 'admin', password: 'admin123' });
+  check('the env admin can sign in through a portal login form', r.status === 200, r.data);
+  r = await call('logoutTest', 'GET', '/api/admin/check');
+  check('and is recognised as admin while signed in', r.data.isAdmin === true, r.data);
+  r = await call('logoutTest', 'POST', '/api/portal/logout');
+  check('portal logout succeeds', r.status === 200, r.data);
+  r = await call('logoutTest', 'GET', '/api/admin/check');
+  check('the admin flag is gone after logging out, not just the staff record', r.data.isAdmin === false, r.data);
+  r = await call('logoutTest', 'GET', '/api/portal/me');
+  check('and the portal no longer recognises them at all', !r.data.staff && r.data.isAdmin === false, r.data);
+
+  // A member signed in on the same browser is signed out too, rather than
+  // being left behind on a shared device.
+  r = await call('logoutTest2', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+  check('a staff account signs in', r.status === 200, r.data);
+  r = await call('logoutTest2', 'POST', '/api/auth/logout');
+  check('the member-side logout ends the session too', r.status === 200, r.data);
+  r = await call('logoutTest2', 'GET', '/api/portal/me');
+  check('leaving no staff identity behind on a shared device', !r.data.staff, r.data);
+
+  console.log('\n== national coordinator ==');
   r = await call('admin', 'GET', '/api/admin/image-placements');
   check('homepage header placement is available to the media library', r.status === 200 && r.data.placements.some(p => p.value === 'home-header'), r.data);
 
@@ -455,8 +506,23 @@ const { fakeModels } = require('./harness.js');
   check('finance cannot view form submissions', r.status === 401, r.data);
 
   console.log('\n== executive portal + event workflow (section 9) ==');
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123' });
-  check('executive account created', r.status === 200, r.data);
+  // Registration needs a photo, so this goes through multipart like the real
+  // form does. An executive is a promoted member, so one is registered here
+  // purely to be promoted.
+  const execRegForm = new FormData();
+  execRegForm.append('profileImage', new Blob([Buffer.from('fake-photo-bytes')], { type: 'image/png' }), 'exec.png');
+  execRegForm.append('name', 'Ama Exec');
+  execRegForm.append('email', 'exec.ama@test.com');
+  execRegForm.append('password', 'secret123');
+  execRegForm.append('chapterId', chapterId);
+  const execRegRes = await fetch(BASE + '/api/auth/register', { method: 'POST', body: execRegForm });
+  const execRegData = await execRegRes.json();
+  check('a member registers, ready to be promoted to executive', execRegRes.status === 200, execRegData);
+  const amaMemberId = execRegData.member.id;
+
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123', memberId: amaMemberId });
+  check('executive account created by promoting that member', r.status === 200 && r.data.item.memberId === amaMemberId, r.data);
+  check('the promoted executive is given a one-year term of office', !!r.data.item.termEndsAt && !!r.data.item.termYear, r.data.item);
   r = await call('exec', 'POST', '/api/portal/login', { username: 'exec.ama', password: 'password123' });
   check('executive signs in', r.status === 200, r.data);
 
@@ -480,10 +546,74 @@ const { fakeModels } = require('./harness.js');
   const execForm = new FormData();
   execForm.append('name', 'Ama Executive');
   execForm.append('role', 'Financial Secretary');
-  execForm.append('department', 'welfare');
+  execForm.append('department', deptId);
   const execRes = await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: execForm });
   const execData = await execRes.json();
   check('executive saves their own profile', execRes.status === 200 && execData.item.role === 'Financial Secretary', execData);
+
+  r = await call('exec', 'POST', '/api/admin/bible-studies', { topic: 'Faith in Action', date: '2026-02-01', scriptureReference: 'James 2:14-26', studyMaterial: 'Test study' });
+  check('executive can manage Bible studies', r.status === 200 && r.data.item.topic === 'Faith in Action', r.data);
+
+  console.log('\n== an executive runs their own department ==');
+  // Their department comes from their own roster card, never the request.
+  r = await call('exec', 'GET', '/api/executive/department');
+  check('an executive sees the department they actually hold', r.status === 200 && r.data.department.id === deptId, r.data);
+
+  r = await call('exec', 'PUT', '/api/executive/department', {
+    tagline: 'Caring for one another', meetingDay: 'Saturdays', meetingTime: '4:00 PM', meetingLocation: 'Room 12'
+  });
+  check('they keep their own department page current', r.status === 200 && r.data.item.meetingDay === 'Saturdays', r.data);
+  r = await call('anon', 'GET', '/api/departments');
+  check('and that reaches the public department listing',
+    Array.isArray(r.data) && r.data.some(d => d.id === deptId && d.meetingTime === '4:00 PM'), r.data);
+
+  // Who leads a department is derived from whoever holds the office, so there
+  // is no typed-in name left to go stale when it changes hands.
+  check('the department names its leader from the executive holding it',
+    r.data.some(d => d.id === deptId && d.leaderName === 'Ama Executive' && d.leaderRole === 'Financial Secretary'), r.data);
+  r = await call('anon', 'GET', `/api/departments/${deptId}`);
+  check('the department\'s own page names them too', r.data.leaderName === 'Ama Executive', r.data);
+
+  const handedOver = new FormData();
+  handedOver.append('name', 'Ama Executive');
+  handedOver.append('role', 'Organising Secretary');
+  handedOver.append('department', deptId);
+  await fetch(BASE + '/api/executive/me', { method: 'PUT', headers: { cookie: jars.exec }, body: handedOver });
+  r = await call('anon', 'GET', `/api/departments/${deptId}`);
+  check('and it follows the office, not a stale copy, when the position changes',
+    r.data.leaderRole === 'Organising Secretary', r.data);
+
+  // Put a member in the department so there is someone to see and to mark.
+  r = await call('admin', 'PUT', `/api/admin/members/${amaMemberId}`, { department: deptId });
+  check('a member is assigned to the department', r.status === 200, r.data);
+
+  r = await call('exec', 'GET', '/api/executive/department/members');
+  check('the executive sees their department\'s members', r.status === 200 && r.data.some(m => m.id === amaMemberId), r.data);
+
+  r = await call('exec', 'POST', '/api/executive/department/meetings', {
+    date: '2026-03-07', topic: 'Welfare planning', attendeeMemberIds: [amaMemberId, memberId]
+  });
+  check('the executive logs a department meeting register', r.status === 200, r.data);
+  check('marking is confined to their own department\'s members, whatever ids are sent',
+    r.data.item.attendeeMemberIds.length === 1 && r.data.item.attendeeMemberIds[0] === amaMemberId, r.data.item);
+
+  r = await call('exec', 'GET', '/api/executive/department/meetings');
+  check('past meetings are listed back', r.status === 200 && r.data.length === 1, r.data);
+
+  // The point of a separate register: department meetings must not quietly
+  // inflate the chapter's service attendance figures.
+  r = await call('shep', 'GET', '/api/shepherd/attendance');
+  check('a department meeting never lands in the chapter\'s service register',
+    Array.isArray(r.data) && !r.data.some(a => a.date === '2026-03-07'), r.data);
+
+  r = await call('exec', 'POST', '/api/executive/department/announcement', { title: 'Meeting moved', body: 'We now meet at 5pm.' });
+  check('the executive messages their own department', r.status === 200 && r.data.reached >= 1, r.data);
+  r = await call('exec', 'POST', '/api/executive/department/announcement', { title: '', body: '' });
+  check('an empty announcement is refused', r.status === 400, r.data);
+
+  // A different chapter's executive must never reach this department.
+  r = await call('coord2', 'GET', '/api/executive/department');
+  check('a chapter 2 account cannot read chapter 1\'s department through this route', r.status === 401, r.data);
 
   r = await call('member', 'POST', '/api/member/executive-interest', {
     role: 'Treasurer', department: 'finance', scope: 'chapter'
@@ -492,7 +622,83 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', '/api/admin/executive-applications');
   check('executive applications are visible to admin', r.status === 200 && Array.isArray(r.data) && r.data.some(a => a.id === memberId), r.data);
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, { decision: 'approve', scope: 'chapter' });
+  check('approving without a login to issue is refused, rather than half-provisioning', r.status === 400, r.data);
+  r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, {
+    decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password123'
+  });
   check('chapter executive application is approved', r.status === 200 && r.data.item.executiveStatus === 'verified', r.data);
+  check('approval issues the portal login in the same action', r.data.item.issuedLogin === true && !!r.data.item.account.termEndsAt, r.data.item);
+
+  // The whole point of provisioning in one action: the approved executive can
+  // sign in and already has a public roster card, with nothing done by hand.
+  r = await call('newExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('the newly approved executive can sign straight in', r.status === 200, r.data);
+  r = await call('newExec', 'GET', '/api/executive/me');
+  check('their public roster card already exists', r.status === 200 && r.data.item && r.data.item.staffId, r.data);
+
+  // Term of office. The deadline is compared against the live clock on every
+  // check, so a term that runs out mid-session ends that session's authority
+  // there and then — no sweep job has to have run. Proved here by signing in
+  // with a deadline a second away and letting it pass.
+  const lapsed = fakeModels.StaffUser._docs.find(s => s.username === 'exec.kwabena');
+  lapsed.termEndsAt = new Date(Date.now() + 1200);
+  r = await call('expiring', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('an executive signs in while their term still has time to run', r.status === 200, r.data);
+  r = await call('expiring', 'GET', '/api/executive/me');
+  check('and works normally right up to the deadline', r.status === 200, r.data);
+  await new Promise(res => setTimeout(res, 1400));
+  r = await call('expiring', 'GET', '/api/executive/me');
+  check('the moment the term runs out, that live session loses its authority', r.status === 401, r.data);
+
+  lapsed.termEndsAt = new Date(Date.now() - 86400000);
+  r = await call('lapsedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('a lapsed executive is refused at login, and told why', r.status === 403 && /term of office has ended/.test(r.data.error || ''), r.data);
+
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { renewTerm: true });
+  check('the coordinator renews the term for the new year', r.status === 200 && new Date(r.data.item.termEndsAt) > new Date(), r.data);
+  r = await call('renewedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('the renewed executive signs in again, same account and card', r.status === 200, r.data);
+
+  // Appointing mid-year: the term runs to the same academic-year boundary as
+  // everyone else's, so the whole body still hands over together.
+  check('a mid-year appointment still ends with the academic year',
+    new Date(lapsed.termEndsAt).getUTCMonth() === 7 && new Date(lapsed.termEndsAt).getUTCDate() === 1, lapsed.termEndsAt);
+
+  console.log('\n== ending an office reaches the session already in use ==');
+  // The gap this closes: a term ended, an account disabled or deleted used to
+  // leave whoever held it working away in a session stamped before the change.
+  r = await call('renewedExec', 'GET', '/api/executive/me');
+  check('the executive is working normally before anything changes', r.status === 200, r.data);
+
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { endTerm: true });
+  check('the coordinator ends their term early', r.status === 200, r.data);
+  r = await call('renewedExec', 'GET', '/api/executive/me');
+  check('their live session stops working at once, without signing out', r.status === 401, r.data);
+  r = await call('endedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('and they cannot sign back in', r.status === 403, r.data);
+
+  // Sessions live in the database now and outlive a restart, so the record
+  // that revokes them has to as well — an in-memory-only list would be
+  // forgotten while the session it revoked came back.
+  check('the revocation is written to the account, not just held in memory',
+    !!fakeModels.StaffUser._docs.find(s => s.id === lapsed.id).sessionsRevokedAt,
+    fakeModels.StaffUser._docs.find(s => s.id === lapsed.id));
+
+  // Disabling an account reaches a live session the same way.
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { renewTerm: true });
+  r = await call('reinstated', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('reinstated once the coordinator renews the term', r.status === 200, r.data);
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { active: false });
+  r = await call('reinstated', 'GET', '/api/executive/me');
+  check('disabling an account also ends the session it is being used in', r.status === 401, r.data);
+
+  // A rename is not a loss of authority, so it must not sign anyone out.
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { active: true });
+  r = await call('renamed', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  check('re-enabled and signed in again', r.status === 200, r.data);
+  r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { name: 'Kwabena Renamed' });
+  r = await call('renamed', 'GET', '/api/executive/me');
+  check('but simply renaming them does not throw them out mid-session', r.status === 200, r.data);
 
   r = await call('exec', 'POST', '/api/executive/events', { title: 'Campus Outreach', date: '2026-10-10' });
   check('executive submits an event', r.status === 200 && r.data.item.status === 'submitted', r.data);
@@ -868,6 +1074,59 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', '/api/admin/overview?chapterId=' + chapterId);
   check('national admin can load a selected chapter operational dashboard', r.status === 200 && r.data.chapter.id === chapterId, r.data);
 
+  console.log('\n== operational dashboard: live push, not polling (Phase 2, SSE) ==');
+  {
+    const streamHeaders = (cookieJar) => (jars[cookieJar] ? { cookie: jars[cookieJar] } : {});
+    const anonStream = await fetch(BASE + '/api/admin/overview/stream?chapterId=' + chapterId);
+    check('the live dashboard stream requires authentication', anonStream.status === 401, anonStream.status);
+
+    // A helper that reads SSE chunks off a real, open connection until a
+    // marker string shows up or the deadline passes — this is exercising the
+    // actual push transport, not a stand-in for it.
+    const readUntil = async (reader, decoder, marker, timeoutMs) => {
+      const deadline = Date.now() + timeoutMs;
+      let buffer = '';
+      while (Date.now() < deadline) {
+        const remaining = deadline - Date.now();
+        const { value, done } = await Promise.race([
+          reader.read(),
+          new Promise((resolve) => setTimeout(() => resolve({ done: false, value: undefined, timeout: true }), Math.max(50, remaining)))
+        ]);
+        if (done) return { found: false, buffer };
+        if (value) buffer += decoder.decode(value, { stream: true });
+        if (buffer.includes(marker)) return { found: true, buffer };
+      }
+      return { found: false, buffer };
+    };
+
+    const ch1 = new AbortController();
+    const ch1Res = await fetch(BASE + '/api/admin/overview/stream?chapterId=' + chapterId, { headers: streamHeaders('coord'), signal: ch1.signal });
+    check('the live dashboard stream opens for an authenticated chapter admin',
+      ch1Res.status === 200 && (ch1Res.headers.get('content-type') || '').includes('text/event-stream'), ch1Res.status);
+
+    const ch2 = new AbortController();
+    const ch2Res = await fetch(BASE + '/api/admin/overview/stream?chapterId=test-chapter-2', { headers: streamHeaders('coord2'), signal: ch2.signal });
+    const ch1Reader = ch1Res.body.getReader();
+    const ch2Reader = ch2Res.body.getReader();
+    const decoder1 = new TextDecoder();
+    const decoder2 = new TextDecoder();
+
+    const marker = 'SSE push marker ' + Date.now();
+    const posted = await fetch(BASE + '/api/contact', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-chapter-id': chapterId },
+      body: JSON.stringify({ name: marker, email: 'sse-test@example.com', message: 'live push check' })
+    });
+    check('a public contact message is accepted (the activity this push is about)', posted.status === 200, posted.status);
+
+    const ch1Result = await readUntil(ch1Reader, decoder1, marker, 4000);
+    check('the chapter\'s own dashboard stream pushes the new activity, unprompted', ch1Result.found, ch1Result.buffer.slice(0, 300));
+
+    const ch2Result = await readUntil(ch2Reader, decoder2, marker, 800);
+    check('a different chapter\'s stream never receives another chapter\'s activity', !ch2Result.found, ch2Result.buffer.slice(0, 300));
+
+    ch1.abort(); ch2.abort();
+  }
+
   console.log('\n== governance tiers: national by default, chapter by selection ==');
   // With more than one chapter in play, an unscoped national read must mean
   // "ACONSU nationally", not "every chapter merged into one list" — that
@@ -900,6 +1159,39 @@ const { fakeModels } = require('./harness.js');
   check('the scope-selector header narrows a national actor the same way',
     Array.isArray(r.data) && r.data.every(e => e.chapterId === 'test-chapter-2'), r.data);
 
+  console.log('\n== national events: open to the public, not any chapter\'s ==');
+  r = await call('admin', 'POST', '/api/admin/events', {
+    title: 'National Youth Conference', date: '2026-12-01', time: '09:00', location: 'National Auditorium',
+    isNational: true
+  });
+  check('national coordinator creates a national event', r.status === 200 && r.data.item.chapterId === '' && r.data.item.isNational === true, r.data);
+  const nationalEventId = r.data.item.id;
+
+  r = await call('anon', 'GET', '/api/events');
+  check('an anonymous visitor sees the national event on the public site',
+    Array.isArray(r.data) && r.data.some(e => e.id === nationalEventId), r.data);
+
+  r = await call('admin', 'GET', '/api/events');
+  check('national scope sees only national events, never a chapter\'s own merged in',
+    Array.isArray(r.data) && r.data.every(e => e.isNational), r.data);
+
+  r = await call('coord', 'GET', '/api/events');
+  check('a chapter\'s own events view includes the national event alongside its own',
+    Array.isArray(r.data) && r.data.some(e => e.id === nationalEventId) && r.data.some(e => e.chapterId === chapterId), r.data);
+
+  await call('coord', 'DELETE', `/api/admin/events/${nationalEventId}`);
+  r = await call('admin', 'GET', '/api/events');
+  check('a chapter admin cannot delete a national event by guessing its id',
+    Array.isArray(r.data) && r.data.some(e => e.id === nationalEventId), r.data);
+
+  r = await call('admin', 'PUT', `/api/admin/events/${nationalEventId}`, { title: 'National Youth Conference (Updated)' });
+  check('national coordinator edits the national event', r.status === 200 && r.data.item.title === 'National Youth Conference (Updated)', r.data);
+
+  await call('admin', 'DELETE', `/api/admin/events/${nationalEventId}`);
+  r = await call('admin', 'GET', '/api/events');
+  check('national coordinator removes the national event',
+    Array.isArray(r.data) && !r.data.some(e => e.id === nationalEventId), r.data);
+
   console.log('\n== delegation: a coordinator staffs their own chapter ==');
   r = await call('coord', 'POST', '/api/admin/staff',
     { username: 'delegated-admin', name: 'Delegated Admin', role: 'chapterAdmin', password: 'password123' });
@@ -914,6 +1206,11 @@ const { fakeModels } = require('./harness.js');
   r = await call('coord', 'POST', '/api/admin/staff',
     { username: 'nope', name: 'Nope', role: 'nationalCoordinator', password: 'password123' });
   check('a coordinator still cannot mint a National Coordinator', r.status === 403, r.data);
+
+  // Electing officers is the Coordinator's call, not the Chapter Admin's.
+  r = await call('delegated', 'POST', '/api/admin/staff',
+    { username: 'exec.sneak', name: 'Sneak Exec', role: 'executive', password: 'password123', memberId });
+  check('a Chapter Admin cannot promote a member to the executive body', r.status === 403, r.data);
 
   r = await call('coord2', 'GET', '/api/admin/staff');
   check('chapter 2 never sees chapter 1\'s newly appointed staff',
@@ -948,6 +1245,43 @@ const { fakeModels } = require('./harness.js');
 
   r = await call('admin', 'GET', '/api/national/dashboard');
   check('national keeps the aggregate financial picture', r.status === 200 && r.data.financialOverview, r.data);
+
+  console.log('\n== chapter readiness rollup (Phase D): oversight without interference ==');
+  r = await call('admin', 'POST', '/api/national/chapters', { id: 'readiness-ch', name: 'ACONSU-Readiness', institution: 'Readiness U' });
+  check('a fresh chapter is created for readiness checks', r.status === 200, r.data);
+
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  let readinessCh = (r.data.chapters || []).find(c => c.id === 'readiness-ch');
+  check('a brand-new chapter starts with nothing staffed, no coordinator and incomplete settings',
+    !!readinessCh && !readinessCh.readiness.coordinatorAssigned && !readinessCh.readiness.adminAppointed &&
+    readinessCh.readiness.officesStaffedCount === 0 && !readinessCh.readiness.settingsComplete &&
+    readinessCh.readiness.lastActivityAt === null, readinessCh);
+
+  r = await call('admin', 'POST', '/api/national/chapters/readiness-ch/assign-coordinator',
+    { username: 'readiness-coord', name: 'Readiness Coordinator', password: 'password123' });
+  check('national assigns the new chapter its own coordinator', r.status === 200 && r.data.chapter.coordinatorStaffId, r.data);
+
+  r = await call('readiness-coord', 'POST', '/api/portal/login', { username: 'readiness-coord', password: 'password123' });
+  check('the new coordinator signs in', r.status === 200, r.data);
+  r = await call('readiness-coord', 'POST', '/api/admin/staff',
+    { username: 'readiness-fin', name: 'Readiness Finance', role: 'finance', password: 'password123' });
+  check('the coordinator staffs the finance office', r.status === 200, r.data);
+
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  readinessCh = (r.data.chapters || []).find(c => c.id === 'readiness-ch');
+  check('readiness now shows a coordinator and exactly one of four offices staffed', !!readinessCh &&
+    readinessCh.readiness.coordinatorAssigned && !readinessCh.readiness.adminAppointed &&
+    readinessCh.readiness.officesStaffedCount === 1 && readinessCh.readiness.officesStaffed.finance === true &&
+    readinessCh.readiness.officesStaffed.welfare === false, readinessCh);
+
+  r = await call('readiness-coord', 'PUT', '/api/admin/chapter-settings',
+    { tagline: 'Readiness Test Tagline', serviceTimes: ['Sundays 9AM'], contact: { phone: '0000000000' } });
+  check('the coordinator completes the chapter\'s settings', r.status === 200, r.data);
+
+  r = await call('admin', 'GET', '/api/national/dashboard');
+  readinessCh = (r.data.chapters || []).find(c => c.id === 'readiness-ch');
+  check('readiness reflects settings now being complete, without national ever reading chapter content',
+    !!readinessCh && readinessCh.readiness.settingsComplete, readinessCh);
 
   console.log('\n== static pages ==');
   for (const page of [
