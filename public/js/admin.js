@@ -2794,10 +2794,17 @@ function initCommandPalette() {
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  // This file is shared by admin.html and chapter.html, so nothing here may
+  // assume an element exists on both. It once did: chapter.html's submit
+  // button had no id, so this line threw before the request was ever sent and
+  // the Chapter Admin login silently did nothing at all. The button has its
+  // id now, and these stay optional so a missing one can never again cost
+  // somebody their way in.
   const btn = document.getElementById('loginBtn');
   const msg = document.getElementById('loginMsg');
-  btn.disabled = true; btn.textContent = 'Logging in...';
-  msg.textContent = ''; msg.className = 'form-msg';
+  const setMsg = (text, cls) => { if (msg) { msg.textContent = text; msg.className = cls; } };
+  if (btn) { btn.disabled = true; btn.textContent = 'Logging in...'; }
+  setMsg('', 'form-msg');
   try {
     await fetchJSON('/api/portal/login', {
       method: 'POST',
@@ -2809,10 +2816,9 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     });
     await checkAuth();
   } catch (err) {
-    msg.textContent = err.message || 'Could not log in.';
-    msg.className = 'form-msg error';
+    setMsg(err.message || 'Could not log in.', 'form-msg error');
   } finally {
-    btn.disabled = false; btn.textContent = 'Log In';
+    if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
   }
 });
 

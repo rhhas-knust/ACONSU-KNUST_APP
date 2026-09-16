@@ -1403,6 +1403,28 @@ const { fakeModels } = require('./harness.js');
     check(`${page} served`, res.status === 200);
   }
 
+  // A shared script may only touch elements that exist on every page loading
+  // it. admin.js is loaded by both admin.html and chapter.html, and its login
+  // handler disables #loginBtn before sending the request — chapter.html had
+  // no such id, so the handler threw on the first line and the Chapter Admin
+  // login silently did nothing at all. These assert the contract directly, so
+  // the next page to share a script cannot quietly drop an id its script needs.
+  console.log('\n== shared scripts only touch elements their pages actually have ==');
+  const pageHtml = {};
+  for (const page of ['/admin.html', '/chapter.html', '/executive.html', '/coordinator.html']) {
+    pageHtml[page] = await (await fetch(BASE + page)).text();
+  }
+  for (const page of ['/admin.html', '/chapter.html']) {
+    for (const id of ['loginForm', 'loginBtn', 'loginMsg', 'loginWrap', 'adminShell', 'logoutBtn']) {
+      check(`${page} has #${id}, which admin.js drives`, pageHtml[page].includes(`id="${id}"`));
+    }
+  }
+  // The chapter name in the header is the portal's identity, so the element it
+  // is written into has to exist on every portal that has a chapter.
+  check('/chapter.html can show which chapter it belongs to', pageHtml['/chapter.html'].includes('id="adminBrandName"'));
+  check('/executive.html can show which chapter it belongs to', pageHtml['/executive.html'].includes('id="portalBrandName"'));
+  check('/coordinator.html can show which chapter it belongs to', pageHtml['/coordinator.html'].includes('id="portalBrandName"'));
+
   // The send loop only ticks once a minute, so this one is opt-in: run it with
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
   if (process.env.SMOKE_SLOW === '1') {
