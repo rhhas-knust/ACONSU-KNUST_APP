@@ -282,13 +282,23 @@ function actorName(req) {
   return '';
 }
 
+// Some elected offices ARE the office portal. ACONSU's Publicity Head is the
+// person who sends the chapter's announcements, so they open the Publicity
+// portal directly rather than the chapter having to keep a second, separate
+// publicity staff login alongside the elected holder.
+const POSITION_OPENS_OFFICE = { publicity_head: 'publicity' };
+
 function hasRole(req, role) {
   if (!req.session) return false;
   if (req.session.isAdmin) return true;
   const staff = currentStaff(req);
   if (staff && staff.role === 'nationalCoordinator') return true; // national outranks every office
   if (role === 'shepherding' && req.session.isShepherd) return true;
-  return !!(staff && staff.role === role);
+  if (staff && staff.role === role) return true;
+  // An elected holder who IS that office acts in it, rather than only looking
+  // at it — the Publicity Head sends the chapter's announcements, which is the
+  // whole reason they hold the office (see POSITION_OPENS_OFFICE).
+  return !!(staff && staff.positionKey && POSITION_OPENS_OFFICE[staff.positionKey] === role);
 }
 
 // Read access: the role itself, or the coordinator who oversees all of them
@@ -317,6 +327,7 @@ function holdsOfficePortal(req, role) {
   const staff = currentStaff(req);
   if (!staff) return false;
   if (staff.role === role) return true;                  // the holder themselves
+  if (staff.positionKey && POSITION_OPENS_OFFICE[staff.positionKey] === role) return true;
   if (staff.role === 'coordinator') return canView(req, role); // oversees their own chapter's offices
   return false;
 }
@@ -418,10 +429,24 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       });
     }
 
+    // An executive's position is stamped into the session at sign-in rather
+    // than looked up per request: the office-portal guards are synchronous and
+    // run on every call, so a database read there would cost a query each
+    // time. A position change revokes the holder's sessions (see the reshuffle
+    // route), which is what stops a stamped value going stale.
+    let positionKey = '';
+    if (user.role === 'executive') {
+      const card = await models.Executive.findOne({ staffId: user.id, chapterId: user.chapterId || '' }).lean();
+      positionKey = positions.resolvePosition(
+        card && card.positionKey, card && card.role, !!(card && card.department)
+      ).key;
+    }
+
     req.session.staff = {
       id: user.id, username: user.username, name: user.name || user.username,
       role: user.role, chapterId: user.chapterId || '',
       memberId: user.memberId || '',
+      positionKey,
       termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
       issuedAt: Date.now() // what a later revocation is measured against
     };
@@ -3312,7 +3337,8 @@ app.get('/api/publicity/overview', requireViewRole('publicity'), async (req, res
       testimoniesPublished: testimonies.filter(t => t.published).length,
       smsSent: smsLogs.filter(s => s.status === 'sent').length,
       smsFailed: smsLogs.filter(s => s.status === 'failed').length,
-      smsConfigured: sms.isConfigured(),
+      // Per chapter now: one chapter can be set up to send while another is not.
+      smsConfigured: await sms.isConfigured(rolesLib.getActingScope(req).chapterId || ''),
       pushConfigured: push.ensureConfigured(),
       upcomingEvents: events.filter(e => new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
       recent: notifications
@@ -3335,7 +3361,7 @@ app.get('/api/publicity/audiences', requireViewRole('publicity'), async (req, re
     const withCounts = await Promise.all(options.map(async (o) => ({
       ...o, reachable: (await sms.resolveAudience(o.value, chapterId)).length
     })));
-    res.json({ audiences: withCounts, smsConfigured: sms.isConfigured() });
+    res.json({ audiences: withCounts, smsConfigured: await sms.isConfigured(chapterId) });
   } catch (e) {
     res.status(500).json({ error: 'Could not load audiences' });
   }
@@ -5041,6 +5067,91 @@ app.get('/api/admin/testimonies', requireChapterAdmin, async (req, res) => {
 });
 app.get('/api/admin/contact-messages', requireChapterAdmin, async (req, res) => {
   res.json(await repo.getAll('contactMessages', rolesLib.chapterFilter(req, { required: false })));
+});
+
+// ---------- a chapter's own SMS credentials ----------
+// Each chapter runs its own mNotify account, so the bill, the credit balance
+// and the sender name members see are all theirs, and no chapter can spend or
+// send on another's. Kept off the general chapter-settings route because the
+// API key is a live secret with its own read rules.
+
+// The key is never returned. A client needs to know whether one is set and
+// roughly which it is, never the value — anyone who can open this screen could
+// otherwise walk away with a credential that spends the chapter's money.
+function maskedSmsConfig(chapter) {
+  const sms = (chapter && chapter.sms) || {};
+  const key = sms.apiKey || '';
+  return {
+    provider: sms.provider || 'mnotify',
+    senderId: sms.senderId || '',
+    hasApiKey: !!key,
+    apiKeyHint: key ? `••••${key.slice(-4)}` : ''
+  };
+}
+
+app.get('/api/admin/chapter-sms', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+    res.json({
+      ...maskedSmsConfig(chapter),
+      // Says whether this chapter can actually send right now, which is not
+      // the same question as whether it has its own credentials: a single
+      // shared server account may still be covering it.
+      canSend: await sms.isConfigured(chapterId),
+      usingSharedFallback: !(chapter.sms && chapter.sms.apiKey && chapter.sms.senderId)
+        && await sms.isConfigured(chapterId)
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load this chapter\'s SMS setup' });
+  }
+});
+
+app.put('/api/admin/chapter-sms', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+
+    const senderId = cleanText(req.body.senderId || '');
+    // mNotify registers sender IDs and rejects anything longer, so this is
+    // caught here rather than as an opaque provider error after a failed send.
+    if (senderId && senderId.length > 11) {
+      return res.status(400).json({ error: 'A sender ID can be at most 11 characters — that is the provider\'s limit.' });
+    }
+
+    const existing = (chapter.sms && chapter.sms.apiKey) || '';
+    // A blank key means "leave the stored one alone", so the form can be saved
+    // to change only the sender ID without re-typing a secret it never sees.
+    const submitted = String(req.body.apiKey || '').trim();
+    const apiKey = submitted || existing;
+
+    const updated = await repo.patchById('chapters', chapterId, {
+      sms: { provider: 'mnotify', apiKey, senderId }
+    });
+    res.json({ success: true, ...maskedSmsConfig(updated), canSend: await sms.isConfigured(chapterId) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save this chapter\'s SMS setup' });
+  }
+});
+
+// Clearing credentials is its own action rather than saving a blank key, so
+// "I did not want to retype it" can never silently wipe a working setup.
+app.delete('/api/admin/chapter-sms', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body && req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const updated = await repo.patchById('chapters', chapterId, {
+      sms: { provider: 'mnotify', apiKey: '', senderId: '' }
+    });
+    if (!updated) return res.status(404).json({ error: 'Chapter not found' });
+    res.json({ success: true, ...maskedSmsConfig(updated) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not clear this chapter\'s SMS setup' });
+  }
 });
 
 app.get('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => {

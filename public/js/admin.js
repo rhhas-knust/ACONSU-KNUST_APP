@@ -2346,7 +2346,10 @@ async function renderChapterSettings() {
   const el = document.getElementById('panel-chapterSettings');
   el.innerHTML = '<p class="empty-state">Loading Chapter Settings...</p>';
   try {
-    const data = await fetchJSON('/api/admin/chapter-settings');
+    const [data, smsSetup] = await Promise.all([
+      fetchJSON('/api/admin/chapter-settings'),
+      fetchJSON('/api/admin/chapter-sms').catch(() => null)
+    ]);
     const contact = data.contact || {};
     const payment = data.payment || {};
     const about = data.about || {};
@@ -2539,7 +2542,75 @@ async function renderChapterSettings() {
         <button type="submit" class="btn btn-primary btn-block" id="saveChapterSettingsBtn" style="margin-top:20px;">Save Chapter Settings</button>
         <div class="form-msg" id="chapterSettingsMsg"></div>
       </form>
+
+      ${smsSetup ? `
+      <form class="form-card" id="chapterSmsForm" style="max-width:780px; margin:22px 0 0;">
+        <h3 style="margin:0 0 4px;">SMS Setup</h3>
+        <p style="color:#7a6288; font-size:0.88rem; margin:0 0 16px;">
+          Your chapter's own mNotify account. The credit is yours and the sender name is yours,
+          so no other chapter can send on it or spend it. Get an API key at
+          <a href="https://mnotify.com" target="_blank" rel="noopener">mnotify.com</a> and register your sender ID there first.
+        </p>
+        ${smsSetup.usingSharedFallback ? `
+          <div class="portal-card" style="border-color: var(--flame-gold); background:#FFF8EC; margin-bottom:14px;">
+            <strong>Currently sending on the shared server account.</strong>
+            <span class="muted"> Add your own credentials below to send under your chapter's name and credit.</span>
+          </div>` : ''}
+        <div class="field">
+          <label for="smsSenderId">Sender ID</label>
+          <input type="text" id="smsSenderId" maxlength="11" value="${escapeHtml(smsSetup.senderId || '')}" placeholder="e.g. ACONSUKN">
+          <small class="hint">What members see as the sender. Maximum 11 characters, and it must be registered with mNotify.</small>
+        </div>
+        <div class="field">
+          <label for="smsApiKey">API Key</label>
+          <input type="password" id="smsApiKey" autocomplete="off" placeholder="${smsSetup.hasApiKey ? `Saved (${escapeHtml(smsSetup.apiKeyHint)}) — leave blank to keep it` : 'Paste your mNotify API key'}">
+          <small class="hint">Stored on the server and never shown again. Leave blank to keep the saved one.</small>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:18px;">
+          <button type="submit" class="btn btn-primary">Save SMS Setup</button>
+          ${smsSetup.hasApiKey ? '<button type="button" class="btn btn-outline" id="clearSmsBtn">Remove Credentials</button>' : ''}
+        </div>
+        <div class="form-msg" id="chapterSmsMsg"></div>
+      </form>` : ''}
     `;
+
+    const smsForm = document.getElementById('chapterSmsForm');
+    if (smsForm) {
+      smsForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('chapterSmsMsg');
+        try {
+          const saved = await fetchJSON('/api/admin/chapter-sms', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              senderId: document.getElementById('smsSenderId').value,
+              apiKey: document.getElementById('smsApiKey').value
+            })
+          });
+          msg.textContent = saved.canSend
+            ? 'Saved. This chapter can now send SMS under its own name.'
+            : 'Saved. Add both a sender ID and an API key before SMS can send.';
+          msg.className = 'form-msg success';
+          renderChapterSettings();
+        } catch (err) {
+          msg.textContent = err.message || 'Could not save your SMS setup.';
+          msg.className = 'form-msg error';
+        }
+      });
+      const clearBtn = document.getElementById('clearSmsBtn');
+      if (clearBtn) {
+        clearBtn.addEventListener('click', async () => {
+          if (!confirm('Remove this chapter\'s SMS credentials? It will stop sending until new ones are added.')) return;
+          try {
+            await fetchJSON('/api/admin/chapter-sms', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            showToast('SMS credentials removed.', 'success');
+            renderChapterSettings();
+          } catch (err) {
+            showToast(err.message || 'Could not remove them.', 'error');
+          }
+        });
+      }
+    }
 
     // Banner upload handler
     document.getElementById('uploadChapterBannerBtn').addEventListener('click', async () => {

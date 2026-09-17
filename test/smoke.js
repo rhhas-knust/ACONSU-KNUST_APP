@@ -403,7 +403,43 @@ const { fakeModels } = require('./harness.js');
 
   r = await call('pub', 'POST', '/api/publicity/notifications', { title: 'Service at 9', body: 'Come early', channels: ['app', 'sms'] });
   check('announcement sends on both channels', r.status === 200 && /posted to the app/.test(r.data.result), r.data);
-  check('SMS reports itself unconfigured rather than failing', /not configured/.test(r.data.result), r.data);
+  check('SMS reports itself unconfigured rather than failing', /not set up for this chapter/.test(r.data.result), r.data);
+
+  console.log('\n== each chapter\'s own SMS credentials ==');
+  // A chapter runs its own mNotify account, so the bill, the credit and the
+  // sender name members see are all theirs.
+  r = await call('admin', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
+  check('a chapter starts with no SMS credentials of its own', r.status === 200 && r.data.hasApiKey === false, r.data);
+
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId, apiKey: 'live-key-abcd1234', senderId: 'ACONSUKN' });
+  check('the chapter saves its own key and sender ID', r.status === 200 && r.data.senderId === 'ACONSUKN', r.data);
+  check('and can send once it has them', r.data.canSend === true, r.data);
+
+  // The key is a live secret that spends the chapter's money, so it must never
+  // come back out — only whether one is set, and enough to recognise it.
+  r = await call('admin', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
+  check('the API key is never returned to the client',
+    r.data.hasApiKey === true && !JSON.stringify(r.data).includes('live-key-abcd1234'), r.data);
+  check('only a hint of it is shown', r.data.apiKeyHint === '••••1234', r.data);
+
+  // The provider rejects a longer sender ID, so it is caught here rather than
+  // as an opaque error after a failed send.
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId, senderId: 'WAY-TOO-LONG-NAME' });
+  check('a sender ID over the provider limit is refused', r.status === 400, r.data);
+
+  // Saving without re-typing the secret must not wipe it.
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId, senderId: 'ACONSU' });
+  check('saving without re-typing the key keeps the stored one', r.status === 200 && r.data.hasApiKey === true && r.data.senderId === 'ACONSU', r.data);
+
+  // Clearing is its own action, so "I did not retype it" can never wipe a
+  // working setup by accident. (Cross-chapter isolation is proved in the
+  // chapter-isolation section below, where a second chapter already exists —
+  // creating one here would switch the whole deployment out of "single
+  // chapter, zero friction" mode and change behaviour for every later test.)
+  r = await call('admin', 'DELETE', '/api/admin/chapter-sms', { chapterId });
+  check('credentials can be cleared deliberately', r.status === 200 && r.data.hasApiKey === false, r.data);
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId, apiKey: 'live-key-abcd1234', senderId: 'ACONSU' });
+  check('and set again afterwards', r.status === 200 && r.data.hasApiKey === true, r.data);
 
   r = await call('pub', 'GET', '/api/publicity/sms-logs');
   check('SMS attempt is logged even when skipped', r.data.length === 1 && r.data[0].status === 'skipped', r.data);
@@ -1207,6 +1243,25 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', '/api/national/dashboard');
   check('national dashboard now counts two chapters', r.data.totalChapters === 2, r.data);
 
+  // SMS credentials are per chapter for the same reason finance is: a chapter's
+  // own mNotify account, its own credit, its own registered sender name. This
+  // is the guarantee that one chapter can never spend or send on another's.
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId: 'test-chapter-2', apiKey: 'other-key-9999', senderId: 'ACONSU2' });
+  check('chapter 2 sets its own SMS credentials', r.status === 200 && r.data.senderId === 'ACONSU2', r.data);
+  r = await call('admin', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
+  check('which leaves chapter 1\'s credentials untouched',
+    r.data.senderId === 'ACONSU' && r.data.apiKeyHint === '••••1234', r.data);
+
+  {
+    const smsLib = require('../lib/sms.js');
+    const c1 = await smsLib.resolveConfig(chapterId);
+    const c2 = await smsLib.resolveConfig('test-chapter-2');
+    check('each chapter resolves to its own SMS account, never the other\'s',
+      c1.apiKey === 'live-key-abcd1234' && c2.apiKey === 'other-key-9999', { c1: c1.apiKey, c2: c2.apiKey });
+    check('so a batch is signed with that chapter\'s own sender ID',
+      c1.senderId === 'ACONSU' && c2.senderId === 'ACONSU2', { c1: c1.senderId, c2: c2.senderId });
+  }
+
   r = await call('admin', 'POST', '/api/admin/departments', { name: 'Chapter 1 Only Dept', chapterId });
   check('explicit chapterId still works now that a default can no longer be assumed', r.status === 200, r.data);
   r = await call('admin', 'POST', '/api/admin/departments', { name: 'No Chapter Given' });
@@ -1301,6 +1356,14 @@ const { fakeModels } = require('./harness.js');
   r = await call('coord2', 'GET', '/api/admin/chapter-settings');
   check('chapter 2 coordinator reads chapter 2 settings', r.status === 200 && r.data.chapterId === 'test-chapter-2', r.data);
   check('chapter 2 settings do not have chapter 1 tagline', r.data.tagline !== 'Empowered for Impact', r.data);
+
+  // The chapter 2 Coordinator passes requireChapterAdmin, so this genuinely
+  // exercises the chapter scoping rather than bouncing off the role guard:
+  // asking for chapter 1's SMS credentials by id must still answer with their
+  // own chapter's, never chapter 1's key hint.
+  r = await call('coord2', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
+  check('a chapter 2 coordinator cannot read chapter 1\'s SMS credentials',
+    r.status !== 200 || r.data.apiKeyHint !== '••••1234', { status: r.status, data: r.data });
 
   r = await call('coord', 'PUT', '/api/admin/settings', { tagline: 'Should not be allowed' });
   check('chapter coordinator cannot overwrite global settings', r.status === 401, r.data);
