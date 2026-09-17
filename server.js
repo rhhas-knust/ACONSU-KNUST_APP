@@ -844,7 +844,11 @@ app.get('/api/auth/me', async (req, res) => {
   try {
     const member = await repo.getById('members', req.session.memberId);
     if (!member) return res.json({ member: null });
-    const { passwordHash, ...safe } = member;
+    // Only passwordHash was being stripped, so every page load also shipped the
+    // member's password-reset token hash and their QR token to the browser.
+    // None of it is needed here: the digital card has its own endpoint, and the
+    // reset token is credential material that should never leave the server.
+    const { passwordHash, resetTokenHash, resetTokenExpires, qrToken, ...safe } = member;
     res.json({ member: safe });
   } catch (e) {
     res.json({ member: null });
@@ -965,6 +969,73 @@ app.post('/api/member/bible-read', requireMember, async (req, res) => {
 // ---------- engagement: badges ----------
 // Computed live from real activity rather than stored as a separate ledger —
 // always accurate, and there's nothing to keep in sync if data changes later.
+// Where a member stands: the department they belong to, how far along the
+// membership journey they are, and who is shepherding them.
+//
+// All of this already existed server-side — it drives Shepherding's whole
+// workflow — but the member themselves could never see any of it. They
+// registered, became a 'visitor', and nothing in the app told them what that
+// meant or what happened next.
+const MEMBERSHIP_JOURNEY = [
+  { stage: 'visitor', label: 'Visitor', blurb: 'You have registered, and we are glad you are here. Someone from Shepherding will reach out to welcome you.' },
+  { stage: 'under_review', label: 'Being welcomed', blurb: 'Shepherding is getting to know you. They will be in touch about becoming a full member.' },
+  { stage: 'accepted', label: 'Accepted', blurb: 'You have been accepted into the chapter. A shepherd will be assigned to walk with you.' },
+  { stage: 'active', label: 'Member', blurb: 'You are a full member of the chapter.' },
+  { stage: 'worker', label: 'Worker', blurb: 'You serve in a department — thank you for giving your time.' },
+  { stage: 'executive', label: 'Executive', blurb: 'You hold office in the chapter.' },
+  { stage: 'alumni', label: 'Alumni', blurb: 'You have finished your studies. You are always part of the family.' }
+];
+
+app.get('/api/member/standing', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    const stage = member.membershipStage || 'visitor';
+    const index = MEMBERSHIP_JOURNEY.findIndex(s => s.stage === stage);
+    const current = MEMBERSHIP_JOURNEY[index] || MEMBERSHIP_JOURNEY[0];
+    // Alumni is an ending rather than a rung, so nothing is "next" from there.
+    const next = (stage === 'alumni' || index < 0) ? null : MEMBERSHIP_JOURNEY[index + 1] || null;
+
+    let department = null;
+    if (member.department) {
+      const found = await repo.getById('departments', member.department, { chapterId: member.chapterId || '' });
+      if (found) {
+        // Who heads it is derived from whoever holds the office, so it can
+        // never go stale the way a typed-in name would.
+        const execs = await repo.getAll('executives', { chapterId: member.chapterId || '', department: found.id });
+        const head = execs
+          .map(e => ({ e, position: positions.resolvePosition(e.positionKey, e.role, true) }))
+          .filter(x => !x.position.deputyOf)[0] || null;
+        department = {
+          id: found.id,
+          name: found.name,
+          tagline: found.tagline || '',
+          meetingDay: found.meetingDay || '',
+          meetingTime: found.meetingTime || '',
+          meetingLocation: found.meetingLocation || '',
+          headName: head ? head.e.name : '',
+          headRole: head ? head.e.role : ''
+        };
+      }
+    }
+
+    res.json({
+      stage: { key: current.stage, label: current.label, blurb: current.blurb },
+      next: next ? { key: next.stage, label: next.label } : null,
+      journey: MEMBERSHIP_JOURNEY.map(s => ({ key: s.stage, label: s.label })),
+      membershipNumber: member.membershipNumber || '',
+      shepherdName: member.shepherdName || '',
+      department,
+      // Said plainly, because "no department" is a thing to act on rather than
+      // an error: it is how someone finds where they fit.
+      needsDepartment: !member.department
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load where you stand right now.' });
+  }
+});
+
 app.get('/api/member/badges', requireMember, async (req, res) => {
   try {
     const member = await models.Member.findOne({ id: req.session.memberId }).lean();
@@ -2916,7 +2987,9 @@ app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
 // -> ACTIVE (section 7). Every registration already starts as 'visitor';
 // everything from here on is Shepherding moving someone forward (or, in
 // principle, back — e.g. correcting a mistaken acceptance).
-const MEMBERSHIP_STAGES = ['visitor', 'under_review', 'accepted', 'active', 'worker', 'executive', 'alumni'];
+// Derived from MEMBERSHIP_JOURNEY rather than typed again, so the stages
+// Shepherding can set and the journey a member is shown can never drift apart.
+const MEMBERSHIP_STAGES = MEMBERSHIP_JOURNEY.map(s => s.stage);
 
 app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) => {
   try {

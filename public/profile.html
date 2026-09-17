@@ -52,6 +52,7 @@
       <p class="empty-state">Loading your profile...</p>
     </div>
 
+    <div id="memberStanding"></div>
     <div id="quickPills"></div>
     <div id="streakCardWrap"></div>
     <div id="volunteerAssignments"></div>
@@ -146,6 +147,7 @@ let CURRENT_MEMBER = null;
   CURRENT_MEMBER = authRes.member;
   await initLayout('/profile.html');
   renderProfileTopRow();
+  renderMemberStanding();
   renderQuickPills();
   fillDetailsForm();
   loadBadgesAndStreak();
@@ -199,6 +201,71 @@ function renderProfileTopRow() {
         </div>
         <label class="avatar-camera-btn" for="profileImage" title="Change photo">📷</label>
       </div>
+    </div>
+  `;
+}
+
+// Where this member stands: which department they belong to, how far along the
+// membership journey they are, and who is shepherding them. All of it already
+// existed server-side and drove Shepherding's workflow; none of it was ever
+// shown to the member it was about.
+async function renderMemberStanding() {
+  const el = document.getElementById('memberStanding');
+  if (!el) return;
+  let d;
+  try {
+    d = await fetchJSON('/api/member/standing');
+  } catch (e) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const reached = d.journey.findIndex(j => j.key === d.stage.key);
+  const steps = d.journey
+    .filter(j => j.key !== 'alumni' || d.stage.key === 'alumni')
+    .map((j, i) => {
+      const done = i <= reached;
+      return `<span style="display:inline-flex; align-items:center; gap:6px; font-size:0.78rem;
+        color:${done ? 'var(--purple-deep)' : '#a993b3'}; font-weight:${j.key === d.stage.key ? '700' : '500'};">
+        <span style="width:9px; height:9px; border-radius:50%; background:${done ? 'var(--flame-gold)' : '#ddd3e4'};"></span>
+        ${escapeHtml(j.label)}
+      </span>`;
+    }).join('<span style="color:#ddd3e4; margin:0 2px;">›</span>');
+
+  el.innerHTML = `
+    <div class="form-card" style="margin-bottom:18px;">
+      <h3 style="margin:0 0 4px;">Where You Stand</h3>
+      <p style="margin:0 0 12px; color:#5a4468; font-size:0.9rem;">${escapeHtml(d.stage.blurb)}</p>
+      <div style="display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-bottom:${d.membershipNumber || d.shepherdName ? '14px' : '0'};">
+        ${steps}
+      </div>
+      ${(d.membershipNumber || d.shepherdName) ? `
+        <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:#5a4468;">
+          ${d.membershipNumber ? `<div><strong>Membership no.</strong><br>${escapeHtml(d.membershipNumber)}</div>` : ''}
+          ${d.shepherdName ? `<div><strong>Your shepherd</strong><br>${escapeHtml(d.shepherdName)}</div>` : ''}
+        </div>` : ''}
+    </div>
+
+    <div class="form-card" style="margin-bottom:18px;">
+      <h3 style="margin:0 0 10px;">Your Department</h3>
+      ${d.department ? `
+        <p style="margin:0 0 6px; font-size:1.05rem; font-weight:700; color:var(--purple-deep);">
+          ${escapeHtml(d.department.name)}
+        </p>
+        ${d.department.tagline ? `<p style="margin:0 0 10px; color:#5a4468; font-size:0.88rem;">${escapeHtml(d.department.tagline)}</p>` : ''}
+        <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:#5a4468;">
+          ${(d.department.meetingDay || d.department.meetingTime) ? `
+            <div><strong>Meets</strong><br>${escapeHtml([d.department.meetingDay, d.department.meetingTime].filter(Boolean).join(', '))}</div>` : ''}
+          ${d.department.meetingLocation ? `<div><strong>Where</strong><br>${escapeHtml(d.department.meetingLocation)}</div>` : ''}
+          ${d.department.headName ? `<div><strong>Led by</strong><br>${escapeHtml(d.department.headName)}${d.department.headRole ? `<br><span style="font-size:0.78rem; color:#a993b3;">${escapeHtml(d.department.headRole)}</span>` : ''}</div>` : ''}
+        </div>
+        <a href="/department.html?id=${encodeURIComponent(d.department.id)}" class="btn btn-outline btn-sm" style="margin-top:14px;">Open ${escapeHtml(d.department.name)}</a>
+      ` : `
+        <p style="margin:0 0 12px; color:#5a4468; font-size:0.9rem;">
+          You are not in a department yet. It is where most of the friendships and the serving happen — have a look and tell your Shepherd where you would like to fit.
+        </p>
+        <a href="/departments.html" class="btn btn-primary btn-sm">Find Your Department</a>
+      `}
     </div>
   `;
 }

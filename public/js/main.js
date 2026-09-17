@@ -323,6 +323,36 @@ function renderBottomNav(activePath, customPages, member) {
 }
 
 
+// The verse on the home screen. Two things can fill it, and the more specific
+// one wins: today's verse from the chapter's Bible Studies Coordinator if they
+// have posted one, otherwise the Verse of the Week an admin typed into Site
+// Settings. Before this, the Coordinator could post a daily verse that nothing
+// in the app ever showed.
+async function renderVerseOfDay(settings) {
+  const verseEl = document.getElementById('verseStrip');
+  if (!verseEl) return;
+
+  const daily = await fetchJSON('/api/daily-verse').then(r => r && r.item).catch(() => null);
+  if (daily && daily.reference) {
+    verseEl.textContent = daily.text
+      ? `"${daily.text}" — ${daily.reference}`
+      : daily.reference;
+    // The reflection is the Coordinator's own thought on it, so it is shown
+    // under the verse rather than folded into the quote itself.
+    const card = document.getElementById('verseOfDayCard');
+    if (card && daily.reflection && !card.querySelector('.verse-reflection')) {
+      const note = document.createElement('p');
+      note.className = 'verse-reflection';
+      note.style.cssText = 'margin:10px 0 0; font-size:0.85rem; opacity:0.85;';
+      note.textContent = daily.reflection;
+      verseEl.insertAdjacentElement('afterend', note);
+    }
+    return;
+  }
+
+  if (settings && settings.verseOfTheWeek) verseEl.textContent = settings.verseOfTheWeek;
+}
+
 const NAV_LINKS = [
   { href: '/index.html', label: 'Home' },
   { href: '/about.html', label: 'About' },
@@ -441,8 +471,7 @@ async function initLayout(activePath) {
   try {
     const settings = await fetchJSON('/api/settings');
     renderFooter(settings);
-    const verseEl = document.getElementById('verseStrip');
-    if (verseEl && settings.verseOfTheWeek) verseEl.textContent = settings.verseOfTheWeek;
+    await renderVerseOfDay(settings);
     return settings;
   } catch (e) {
     renderFooter({});

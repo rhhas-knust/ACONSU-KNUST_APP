@@ -67,7 +67,26 @@ function makeModel(defaults) {
   return {
     _docs: docs,
     find(query) { return result(docs.filter(d => matches(d, query || {})).map(clone)); },
-    findOne(query) { const d = docs.find(x => matches(x, query)); return result(d ? clone(d) : null); },
+    // Mongoose's findOne() (without .lean()) hands back a real document with a
+    // .save() on it, and some routes mutate that document and save it rather
+    // than going through repo. Returning a bare object here meant any such
+    // route threw on .save() and 500'd under test only — so the member streak
+    // could never be exercised by the suite at all. The copy stays a copy:
+    // .save() writes it back to the store, exactly as Mongoose would.
+    findOne(query) {
+      const d = docs.find(x => matches(x, query));
+      if (!d) return result(null);
+      const copy = clone(d);
+      Object.defineProperty(copy, 'save', {
+        enumerable: false,
+        value: function save() {
+          const live = docs.find(x => matches(x, query));
+          if (live) Object.assign(live, JSON.parse(JSON.stringify(this)), { updatedAt: new Date().toISOString() });
+          return Promise.resolve(this);
+        }
+      });
+      return result(copy);
+    },
     countDocuments(query) { return Promise.resolve(docs.filter(d => matches(d, query || {})).length); },
     create(data) {
       const doc = { _id: `oid${++counter}`, ...defaults, ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };

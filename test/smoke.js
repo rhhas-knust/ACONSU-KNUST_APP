@@ -1027,6 +1027,102 @@ const { fakeModels } = require('./harness.js');
   check('a published event is now public', r.data.some(e => e.id === execEventId), r.data);
 
   console.log('\n== digital membership card + QR attendance (sections 13, 14) ==');
+  console.log('\n== the member streak ==');
+  // This route mutates a Mongoose document and saves it, so until the harness
+  // grew a .save() it 500'd under test and the streak was never exercised once.
+  r = await call('member', 'POST', '/api/member/checkin');
+  check('a first check-in starts the streak at one', r.status === 200 && r.data.currentStreak === 1, r.data);
+  r = await call('member', 'POST', '/api/member/checkin');
+  check('checking in twice on the same day does not inflate it', r.status === 200 && r.data.currentStreak === 1, r.data);
+
+  {
+    // Yesterday's check-in continues the streak; an older one restarts it.
+    const doc = fakeModels.Member._docs.find(m => m.id === memberId);
+    const dayBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    doc.lastActiveDate = dayBefore;
+    doc.currentStreak = 4;
+    r = await call('member', 'POST', '/api/member/checkin');
+    check('checking in the day after continues the streak', r.status === 200 && r.data.currentStreak === 5, r.data);
+    check('and the longest streak keeps up with it', r.data.longestStreak >= 5, r.data);
+
+    // A long streak, then a gap. longestStreak is set alongside it here because
+    // that is what real use produces: it is raised on every check-in as the
+    // streak grows, so by the time a gap happens it already holds the peak.
+    doc.lastActiveDate = '2020-01-01';
+    doc.currentStreak = 9;
+    doc.longestStreak = 9;
+    r = await call('member', 'POST', '/api/member/checkin');
+    check('a gap restarts the streak at one', r.status === 200 && r.data.currentStreak === 1, r.data);
+    check('but the longest streak is remembered', r.data.longestStreak === 9, r.data);
+  }
+
+  console.log('\n== a member can see where they stand ==');
+  // All of this already drove Shepherding's workflow; none of it was ever
+  // shown to the member it was about.
+  r = await call('member', 'GET', '/api/member/standing');
+  check('a member can see where they stand', r.status === 200 && !!r.data.stage, r.data);
+
+  // The journey a member is shown and the stages Shepherding can actually set
+  // must be the same list, or someone could be put at a stage the app has no
+  // words for. Asserted against the real route rather than a typed-out copy.
+  {
+    const shown = r.data.journey.map(j => j.key);
+    const rejected = [];
+    for (const stage of shown) {
+      const res = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage });
+      if (res.status !== 200) rejected.push({ stage, status: res.status });
+    }
+    check('every stage the member can be shown is one Shepherding can set', rejected.length === 0, rejected);
+    const unknown = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'not_a_stage' });
+    check('and a stage outside that list is refused', unknown.status === 400, unknown.data);
+    // Put them back where the checks below expect them.
+    await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active' });
+    r = await call('member', 'GET', '/api/member/standing');
+  }
+  check('their stage is explained in plain words, not a database value',
+    r.data.stage.key !== r.data.stage.label && r.data.stage.blurb.length > 20, r.data.stage);
+  check('and the journey shows what comes next', Array.isArray(r.data.journey) && r.data.journey.length > 1, r.data.journey);
+
+  // A member with no department is told so plainly, because it is a thing to
+  // act on rather than an error.
+  check('a member with no department is told how to find one', r.data.needsDepartment === true && r.data.department === null, r.data);
+
+  r = await call('admin', 'PUT', `/api/admin/members/${memberId}`, { department: deptId });
+  check('the member is placed in a department', r.status === 200, r.data);
+  r = await call('member', 'GET', '/api/member/standing');
+  check('and now sees which department they belong to',
+    r.data.department && r.data.department.id === deptId, r.data.department);
+  check('with when it meets and who leads it',
+    r.data.department.meetingDay === 'Saturdays' && !!r.data.department.headName, r.data.department);
+  // A deputy must not displace the head as the named leader — which only means
+  // something if an assistant is actually sitting in the same department.
+  const asstRegForm = new FormData();
+  asstRegForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'a.png');
+  asstRegForm.append('name', 'Kofi Assistant');
+  asstRegForm.append('email', 'kofi.assistant@test.com');
+  asstRegForm.append('password', 'secret123');
+  asstRegForm.append('chapterId', chapterId);
+  const asstMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: asstRegForm })).json()).member.id;
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.asstmusic', name: 'Kofi Assistant', role: 'executive', password: 'password123', memberId: asstMemberId, positionKey: 'assistant_music_director', department: deptId });
+  check('an Assistant Head is appointed to the same department', r.status === 200, r.data);
+  r = await call('member', 'GET', '/api/member/standing');
+  check('the head is named, not their assistant',
+    !/Assistant/i.test(r.data.department.headRole || '') && !!r.data.department.headName,
+    r.data.department);
+
+  // Standing is your own. It must never answer for anyone else.
+  r = await call('anon', 'GET', '/api/member/standing');
+  check('standing is refused to someone not signed in', r.status === 401, r.data);
+
+  // The session endpoint must not hand the browser credential material.
+  r = await call('member', 'GET', '/api/auth/me');
+  check('the member session carries no reset token or QR token',
+    r.status === 200 && r.data.member
+    && !('resetTokenHash' in r.data.member)
+    && !('resetTokenExpires' in r.data.member)
+    && !('qrToken' in r.data.member)
+    && !('passwordHash' in r.data.member), Object.keys(r.data.member || {}));
+
   r = await call('member', 'GET', '/api/member/card');
   check('an active member gets a real digital card with a QR code', r.status === 200 && r.data.ready === true && !!r.data.qrDataUrl, { ready: r.data.ready });
 
