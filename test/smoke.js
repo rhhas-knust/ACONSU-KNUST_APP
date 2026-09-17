@@ -1211,6 +1211,26 @@ const { fakeModels } = require('./harness.js');
     !/Assistant/i.test(r.data.department.headRole || '') && !!r.data.department.headName,
     r.data.department);
 
+  // Saving your own profile must not quietly cost you your department. The
+  // profile form sends name/phone/level/birthday and no department field at
+  // all, so a handler that writes `req.body.department || ''` resets it to
+  // blank every time a member edits their phone number — and nothing tells
+  // them it happened.
+  {
+    const beforeDept = (await call('member', 'GET', '/api/member/standing')).data.department;
+    const profileForm = new FormData();
+    profileForm.append('name', 'Ama Test');
+    profileForm.append('phone', '0270000000');
+    const saved = await fetch(BASE + '/api/member/profile', {
+      method: 'PUT', headers: { cookie: jars['member'] }, body: profileForm
+    });
+    check('a member can save their own profile', saved.status === 200, saved.status);
+    r = await call('member', 'GET', '/api/member/standing');
+    check('and saving it does not wipe the department they belong to',
+      r.data.department && r.data.department.id === (beforeDept && beforeDept.id),
+      { before: beforeDept && beforeDept.id, after: r.data.department && r.data.department.id });
+  }
+
   // Standing is your own. It must never answer for anyone else.
   r = await call('anon', 'GET', '/api/member/standing');
   check('standing is refused to someone not signed in', r.status === 401, r.data);

@@ -911,7 +911,13 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
       programme: req.body.programme !== undefined ? req.body.programme : existing.programme,
       hostel,
       academicHistory,
-      department: req.body.department || '',
+      // Deliberately NOT taken from the request. This form sends no department
+      // field, so `req.body.department || ''` silently blanked a member's
+      // department every time they edited their phone number. Belonging to a
+      // department is also not a thing to grant yourself in passing — it is
+      // decided by the people who lead it, so it changes through its own route
+      // and never as a side effect of saving a profile.
+      department: existing.department || '',
       profileImageFileId,
       birthdayMonth: month,
       birthdayDay: day
