@@ -38,4 +38,12 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Shepherding scans a member's QR code to record attendance, which calls
+         getUserMedia({ video: ... }) in the WebView (see public/js/shepherd.js).
+         Without this the camera is refused and the scanner silently fails on a
+         device, while working in a desktop browser. Declared not-required so a
+         device with no camera can still install the app and use everything else. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continuance — ACONSU Launch Screen</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* Anthropic Brand Colors */
+        :root {
+            --anthropic-dark: #141413;
+            --anthropic-light: #faf9f5;
+            --anthropic-mid-gray: #b0aea5;
+            --anthropic-light-gray: #e8e6dc;
+            --anthropic-orange: #d97757;
+            --anthropic-blue: #6a9bcc;
+            --anthropic-green: #788c5d;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, var(--anthropic-light) 0%, #f5f3ee 100%);
+            min-height: 100vh;
+            color: var(--anthropic-dark);
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(20, 20, 19, 0.1);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .sidebar h1 {
+            font-family: 'Lora', serif;
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--anthropic-dark);
+            margin-bottom: 8px;
+        }
+
+        .sidebar .subtitle {
+            color: var(--anthropic-mid-gray);
+            font-size: 14px;
+            margin-bottom: 32px;
+            line-height: 1.4;
+        }
+
+        /* Control Sections */
+        .control-section {
+            margin-bottom: 32px;
+        }
+
+        .control-section h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--anthropic-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-section h3::before {
+            content: '•';
+            color: var(--anthropic-orange);
+            font-weight: bold;
+        }
+
+        /* Seed Controls */
+        .seed-input {
+            width: 100%;
+            background: var(--anthropic-light);
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin-bottom: 12px;
+            border: 1px solid var(--anthropic-light-gray);
+            text-align: center;
+        }
+
+        .seed-input:focus {
+            outline: none;
+            border-color: var(--anthropic-orange);
+            box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.1);
+            background: white;
+        }
+
+        .seed-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .regen-button {
+            margin-bottom: 0;
+        }
+
+        /* Parameter Controls */
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--anthropic-dark);
+            margin-bottom: 8px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slider-container input[type="range"] {
+            flex: 1;
+            height: 4px;
+            background: var(--anthropic-light-gray);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--anthropic-orange);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .slider-container input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            background: #c86641;
+        }
+
+        .slider-container input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: var(--anthropic-orange);
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .value-display {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--anthropic-mid-gray);
+            min-width: 60px;
+            text-align: right;
+        }
+
+        /* Color Pickers */
+        .color-group {
+            margin-bottom: 16px;
+        }
+
+        .color-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--anthropic-mid-gray);
+            margin-bottom: 4px;
+        }
+
+        .color-picker-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .color-picker-container input[type="color"] {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: none;
+            padding: 0;
+        }
+
+        .color-value {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--anthropic-mid-gray);
+        }
+
+        /* Buttons */
+        .button {
+            background: var(--anthropic-orange);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .button:hover {
+            background: #c86641;
+            transform: translateY(-1px);
+        }
+
+        .button:active {
+            transform: translateY(0);
+        }
+
+        .button.secondary {
+            background: var(--anthropic-blue);
+        }
+
+        .button.secondary:hover {
+            background: #5a8bb8;
+        }
+
+        .button.tertiary {
+            background: var(--anthropic-green);
+        }
+
+        .button.tertiary:hover {
+            background: #6b7b52;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .button-row .button {
+            flex: 1;
+        }
+
+        .progress-note {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--anthropic-mid-gray);
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        /* Canvas Area */
+        .canvas-area {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+        }
+
+        #canvas-container {
+            width: 100%;
+            max-width: 1000px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(20, 20, 19, 0.1);
+            background: white;
+        }
+
+        #canvas-container canvas {
+            display: block;
+            width: 100% !important;
+            height: auto !important;
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: var(--anthropic-mid-gray);
+        }
+
+        /* Responsive - Stack on mobile */
+        @media (max-width: 600px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+            }
+
+            .canvas-area {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Control Sidebar -->
+        <div class="sidebar">
+            <h1>Continuance</h1>
+            <div class="subtitle">
+                Generations of light inherit their ancestors' resting places, never their momentum.
+                Gold marks only the instant of handover.
+            </div>
+
+            <!-- Seed Section -->
+            <div class="control-section">
+                <h3>Seed</h3>
+                <input type="number" id="seed-input" class="seed-input" value="12345" onchange="updateSeed()">
+                <div class="seed-controls">
+                    <button class="button secondary" onclick="previousSeed()">← Prev</button>
+                    <button class="button secondary" onclick="nextSeed()">Next →</button>
+                </div>
+                <button class="button tertiary regen-button" onclick="randomSeedAndUpdate()">↻ Random</button>
+            </div>
+
+            <!-- Parameters Section -->
+            <div class="control-section">
+                <h3>Parameters</h3>
+
+                <div class="control-group">
+                    <label>Generations</label>
+                    <div class="slider-container">
+                        <input type="range" id="generations" min="3" max="14" step="1" value="8" oninput="updateParam('generations', this.value)">
+                        <span class="value-display" id="generations-value">8</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Cohort Size</label>
+                    <div class="slider-container">
+                        <input type="range" id="cohortSize" min="150" max="1400" step="50" value="600" oninput="updateParam('cohortSize', this.value)">
+                        <span class="value-display" id="cohortSize-value">600</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Lifespan</label>
+                    <div class="slider-container">
+                        <input type="range" id="lifespan" min="20" max="220" step="10" value="110" oninput="updateParam('lifespan', this.value)">
+                        <span class="value-display" id="lifespan-value">110</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Field Detail</label>
+                    <div class="slider-container">
+                        <input type="range" id="fieldScale" min="0.0006" max="0.006" step="0.0002" value="0.0018" oninput="updateParam('fieldScale', this.value)">
+                        <span class="value-display" id="fieldScale-value">0.0018</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Inheritance Turn °</label>
+                    <div class="slider-container">
+                        <input type="range" id="turnPerGen" min="0" max="24" step="0.5" value="7" oninput="updateParam('turnPerGen', this.value)">
+                        <span class="value-display" id="turnPerGen-value">7</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Drift Speed</label>
+                    <div class="slider-container">
+                        <input type="range" id="driftSpeed" min="0.3" max="3.0" step="0.1" value="1.3" oninput="updateParam('driftSpeed', this.value)">
+                        <span class="value-display" id="driftSpeed-value">1.3</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Successors per Death</label>
+                    <div class="slider-container">
+                        <input type="range" id="successors" min="1" max="3" step="1" value="2" oninput="updateParam('successors', this.value)">
+                        <span class="value-display" id="successors-value">2</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Trail Weight</label>
+                    <div class="slider-container">
+                        <input type="range" id="trailWeight" min="0.4" max="2.4" step="0.1" value="1.1" oninput="updateParam('trailWeight', this.value)">
+                        <span class="value-display" id="trailWeight-value">1.1</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Handover Glow</label>
+                    <div class="slider-container">
+                        <input type="range" id="handoverGlow" min="0" max="2.5" step="0.1" value="1.0" oninput="updateParam('handoverGlow', this.value)">
+                        <span class="value-display" id="handoverGlow-value">1.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Colors Section -->
+            <div class="control-section">
+                <h3>Colors</h3>
+
+                <div class="color-group">
+                    <label>Ground (oldest)</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="color1" value="#241530" onchange="updateColor('color1', this.value)">
+                        <span class="color-value" id="color1-value">#241530</span>
+                    </div>
+                </div>
+
+                <div class="color-group">
+                    <label>Lineage (newest)</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="color2" value="#F6EEFB" onchange="updateColor('color2', this.value)">
+                        <span class="color-value" id="color2-value">#F6EEFB</span>
+                    </div>
+                </div>
+
+                <div class="color-group">
+                    <label>Handover</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="color3" value="#E8971E" onchange="updateColor('color3', this.value)">
+                        <span class="color-value" id="color3-value">#E8971E</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Section -->
+            <div class="control-section">
+                <h3>Actions</h3>
+                <div class="button-row">
+                    <button class="button" onclick="regenerate()">Regenerate</button>
+                    <button class="button" onclick="resetParameters()">Reset</button>
+                </div>
+                <div class="button-row" style="margin-top:8px;">
+                    <button class="button secondary" onclick="downloadPNG()">Download PNG</button>
+                </div>
+                <div class="progress-note" id="progress-note">—</div>
+            </div>
+        </div>
+
+        <!-- Main Canvas Area -->
+        <div class="canvas-area">
+            <div id="canvas-container">
+                <div class="loading">Initializing generative art...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════════════
+        // CONTINUANCE — parameters
+        //
+        // Sized 1080×1920: the real dimensions of an Android portrait launch
+        // screen, so what is seen here is what ships.
+        // ═══════════════════════════════════════════════════════════════════════
+
+        const CANVAS_W = 1080;
+        const CANVAS_H = 1920;
+
+        let params = {
+            seed: 12345,
+            generations: 8,
+            cohortSize: 600,
+            lifespan: 110,
+            fieldScale: 0.0018,
+            turnPerGen: 7,
+            driftSpeed: 1.3,
+            successors: 2,
+            trailWeight: 1.1,
+            handoverGlow: 1.0,
+            colorPalette: ['#241530', '#F6EEFB', '#E8971E']
+        };
+
+        let defaultParams = JSON.parse(JSON.stringify(params));
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // THE SYSTEM
+        //
+        // A cohort drifts through a curl-shaped noise field, laying trails at
+        // very low alpha so brightness accumulates only where lineages agree.
+        // When a particle's life ends it seeds its successors at the point it
+        // came to rest — position inherited, momentum never — and the field is
+        // turned a few degrees before the next cohort wakes. That rotation is
+        // what makes lineages fan into arcs instead of redrawing one thick line.
+        // ═══════════════════════════════════════════════════════════════════════
+
+        let cohort = [];
+        let seedPoints = [];      // where the NEXT generation will be born
+        let handovers = [];       // points to mark in gold, drawn after the trails
+        let generation = 0;
+        let fieldRotation = 0;
+        let ground, lineage, handoverColor;
+        let finished = false;
+
+        function setup() {
+            const canvas = createCanvas(CANVAS_W, CANVAS_H);
+            canvas.parent('canvas-container');
+            const loading = document.querySelector('.loading');
+            if (loading) loading.style.display = 'none';
+            initializeSystem();
+        }
+
+        function initializeSystem() {
+            randomSeed(params.seed);
+            noiseSeed(params.seed);
+
+            ground = color(params.colorPalette[0]);
+            lineage = color(params.colorPalette[1]);
+            handoverColor = color(params.colorPalette[2]);
+
+            generation = 0;
+            fieldRotation = 0;
+            finished = false;
+            handovers = [];
+            seedPoints = [];
+
+            paintGround();
+            cohort = firstCohort();
+            loop();
+        }
+
+        // A soft radial lift from the ground colour, so the composition has a
+        // centre for the light to gather around rather than an even black field.
+        function paintGround() {
+            background(ground);
+            noStroke();
+            const cx = width * 0.5;
+            const cy = height * 0.42;
+            const maxR = max(width, height) * 0.75;
+            for (let r = maxR; r > 0; r -= 6) {
+                const t = 1 - (r / maxR);
+                const glow = lerpColor(ground, color('#3A1B54'), pow(t, 2.2) * 0.85);
+                fill(red(glow), green(glow), blue(glow), 18);
+                ellipse(cx, cy, r * 2, r * 2);
+            }
+        }
+
+        // The founding generation is scattered with a bias toward the centre,
+        // so the first lineages have somewhere to grow outward from.
+        function firstCohort() {
+            const born = [];
+            for (let i = 0; i < params.cohortSize; i++) {
+                const a = random(TWO_PI);
+                const r = pow(random(), 0.6) * min(width, height) * 0.46;
+                born.push(new Mote(width * 0.5 + cos(a) * r, height * 0.42 + sin(a) * r * 1.25, 0));
+            }
+            return born;
+        }
+
+        // Curl-shaped flow: sampling noise at two offsets and taking the
+        // difference gives a divergence-free field, which is what keeps the
+        // trails circulating instead of piling into the corners.
+        // The reference dimension the parameters are tuned against. Noise is
+        // sampled in pixel space, so without this a small canvas would cover a
+        // far smaller slice of the field and come out sparse and lopsided —
+        // the composition has to hold at 320px and at 1920px alike.
+        const REFERENCE = 1280;
+        function relativeScale() {
+            return REFERENCE / max(1, min(width, height));
+        }
+
+        function fieldAngle(x, y) {
+            const s = params.fieldScale * relativeScale();
+            const e = 24;
+            const n1 = noise((x + e) * s, y * s, fieldRotation * 0.35);
+            const n2 = noise((x - e) * s, y * s, fieldRotation * 0.35);
+            const n3 = noise(x * s, (y + e) * s, fieldRotation * 0.35);
+            const n4 = noise(x * s, (y - e) * s, fieldRotation * 0.35);
+            const curl = createVector(n3 - n4, -(n1 - n2));
+            return curl.heading() + fieldRotation;
+        }
+
+        class Mote {
+            constructor(x, y, gen) {
+                this.pos = createVector(x, y);
+                // Momentum is never inherited: each generation finds its own.
+                this.vel = createVector(0, 0);
+                this.life = params.lifespan * random(0.75, 1.25);
+                this.age = 0;
+                this.gen = gen;
+                this.dead = false;
+            }
+
+            step() {
+                const a = fieldAngle(this.pos.x, this.pos.y);
+                // Speed scales with the canvas too, so a trail covers the same
+                // fraction of the frame whatever the density being rendered.
+                const speed = params.driftSpeed / relativeScale();
+                const force = p5.Vector.fromAngle(a).mult(0.22 / relativeScale());
+                this.vel.add(force).limit(speed);
+
+                const prev = this.pos.copy();
+                this.pos.add(this.vel);
+                this.age++;
+
+                this.drawSegment(prev, this.pos);
+
+                const out = this.pos.x < -40 || this.pos.x > width + 40
+                         || this.pos.y < -40 || this.pos.y > height + 40;
+                if (this.age >= this.life || out) this.dead = true;
+            }
+
+            // Colour encodes time, not position: each generation is lifted a
+            // measured step from ground toward lineage, so dark reads as old.
+            drawSegment(a, b) {
+                const t = params.generations > 1 ? this.gen / (params.generations - 1) : 1;
+                const hue = lerpColor(color('#5B2C82'), lineage, pow(t, 0.85));
+                // Fading in and out over a life keeps trails from ending abruptly.
+                const envelope = sin(PI * (this.age / this.life));
+                stroke(red(hue), green(hue), blue(hue), 8 + 26 * envelope * t);
+                strokeWeight(max(0.35, params.trailWeight * (0.6 + 0.9 * t) / relativeScale()));
+                line(a.x, a.y, b.x, b.y);
+            }
+        }
+
+        function draw() {
+            if (finished) return;
+
+            // A slice of the cohort per frame, so the bloom is watchable rather
+            // than appearing all at once.
+            for (let pass = 0; pass < 3; pass++) {
+                let alive = 0;
+                for (const m of cohort) {
+                    if (m.dead) continue;
+                    m.step();
+                    alive++;
+                    if (m.dead && m.pos.x > 0 && m.pos.x < width && m.pos.y > 0 && m.pos.y < height) {
+                        // The handover: this is the only thing gold is for.
+                        seedPoints.push({ x: m.pos.x, y: m.pos.y, gen: m.gen });
+                        handovers.push({ x: m.pos.x, y: m.pos.y, gen: m.gen });
+                    }
+                }
+                if (alive === 0) { nextGeneration(); break; }
+            }
+
+            const note = document.getElementById('progress-note');
+            if (note) note.textContent = finished
+                ? 'complete · ' + handovers.length + ' handovers'
+                : 'generation ' + (generation + 1) + ' of ' + params.generations;
+        }
+
+        function nextGeneration() {
+            generation++;
+            if (generation >= params.generations || seedPoints.length === 0) {
+                drawHandovers();
+                finished = true;
+                noLoop();
+                return;
+            }
+
+            // The field turns before the successors wake, so no generation
+            // inhabits quite the world its predecessor did.
+            fieldRotation += radians(params.turnPerGen);
+
+            const born = [];
+            // Successors are drawn from the seed points, capped so a runaway
+            // generation cannot grow without bound.
+            const cap = min(params.cohortSize * 1.6, seedPoints.length * params.successors);
+            for (let i = 0; i < cap; i++) {
+                const s = seedPoints[floor(random(seedPoints.length))];
+                const jitter = params.trailWeight * 3;
+                born.push(new Mote(
+                    s.x + random(-jitter, jitter),
+                    s.y + random(-jitter, jitter),
+                    generation
+                ));
+            }
+            seedPoints = [];
+            cohort = born;
+        }
+
+        // Drawn last, over the trails, so the handovers read as points of light
+        // rather than being buried under later generations.
+        function drawHandovers() {
+            if (params.handoverGlow <= 0) return;
+            noStroke();
+            for (const h of handovers) {
+                const t = params.generations > 1 ? h.gen / (params.generations - 1) : 1;
+                // Later handovers burn brighter: the line is still being passed.
+                const strength = (0.25 + 0.75 * t) * params.handoverGlow;
+                const rMax = max(3, round(7 / relativeScale()));
+                for (let r = rMax; r >= 1; r--) {
+                    const a = (r === 1 ? 190 : 12) * strength;
+                    fill(red(handoverColor), green(handoverColor), blue(handoverColor), a);
+                    ellipse(h.x, h.y, r * 1.7, r * 1.7);
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // UI CONTROL HANDLERS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        function updateParam(name, value) {
+            params[name] = parseFloat(value);
+            const display = document.getElementById(name + '-value');
+            if (display) display.textContent = value;
+            initializeSystem();
+        }
+
+        function updateColor(colorId, value) {
+            const index = { color1: 0, color2: 1, color3: 2 }[colorId];
+            params.colorPalette[index] = value;
+            const display = document.getElementById(colorId + '-value');
+            if (display) display.textContent = value;
+            initializeSystem();
+        }
+
+        function regenerate() {
+            initializeSystem();
+        }
+
+        function downloadPNG() {
+            saveCanvas('aconsu-continuance-seed-' + params.seed, 'png');
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // SEED CONTROL FUNCTIONS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        function updateSeedDisplay() {
+            document.getElementById('seed-input').value = params.seed;
+        }
+
+        function updateSeed() {
+            const input = document.getElementById('seed-input');
+            const newSeed = parseInt(input.value);
+            if (newSeed && newSeed > 0) {
+                params.seed = newSeed;
+                initializeSystem();
+            } else {
+                updateSeedDisplay();
+            }
+        }
+
+        function previousSeed() {
+            params.seed = Math.max(1, params.seed - 1);
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function nextSeed() {
+            params.seed = params.seed + 1;
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function randomSeedAndUpdate() {
+            params.seed = Math.floor(Math.random() * 999999) + 1;
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function resetParameters() {
+            const keptSeed = params.seed;
+            params = JSON.parse(JSON.stringify(defaultParams));
+            params.seed = keptSeed;
+
+            ['generations', 'cohortSize', 'lifespan', 'fieldScale', 'turnPerGen',
+             'driftSpeed', 'successors', 'trailWeight', 'handoverGlow'].forEach((k) => {
+                const input = document.getElementById(k);
+                const display = document.getElementById(k + '-value');
+                if (input) input.value = params[k];
+                if (display) display.textContent = params[k];
+            });
+
+            ['color1', 'color2', 'color3'].forEach((id, i) => {
+                const input = document.getElementById(id);
+                const display = document.getElementById(id + '-value');
+                if (input) input.value = params.colorPalette[i];
+                if (display) display.textContent = params.colorPalette[i];
+            });
+
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        window.addEventListener('load', function () {
+            updateSeedDisplay();
+        });
+    </script>
+</body>
+</html>
