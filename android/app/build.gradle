@@ -1,5 +1,21 @@
 apply plugin: 'com.android.application'
 
+// Release signing. The keystore and its passwords are read from
+// android/keystore.properties, which is NOT in the repository — see
+// keystore.properties.example for what it must contain.
+//
+// A debug build needs none of this and still works. A release build without the
+// file falls back to unsigned, so a missing keystore is an obvious failure at
+// upload time rather than a silent one that ships the wrong signature.
+//
+// Guard this key like the domain name: Play ties the listing to it, and losing
+// it means the app can never be updated under the same listing again.
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.aconsu.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +32,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystoreProperties.containsKey('storeFile')) {
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
+            // Only applied when the keystore is actually configured, so a
+            // checkout without it still builds rather than failing to configure.
+            if (keystoreProperties.containsKey('storeFile')) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    ACONSU's own palette, matching public/css/style.css.
+
+    Without this file the app inherited Capacitor's defaults — Material indigo
+    (#3F51B5) and a pink accent (#FF4081) — which drove the status bar and every
+    themed control. A library's resources merge into the app's namespace, so the
+    build succeeded and nothing looked broken; it simply was not the union's
+    brand. Defining the same names here overrides them.
+-->
+<resources>
+    <color name="colorPrimary">#5B2C82</color>      <!-- purple-deep -->
+    <color name="colorPrimaryDark">#3A1B54</color>  <!-- purple-rich: the status bar -->
+    <color name="colorAccent">#E8971E</color>       <!-- flame-gold -->
+
+    <!-- The ground colour of the launch artwork. Used as the Android 12+
+         splash background so there is no pale flash before it appears. -->
+    <color name="splashBackground">#241530</color>
+</resources>

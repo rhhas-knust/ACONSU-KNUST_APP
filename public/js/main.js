@@ -429,6 +429,7 @@ function renderFooter(settings) {
           <a href="/departments.html">Join a Department</a>
           <a href="/prayer.html">Submit a Prayer Request</a>
           <a href="/contact.html">Contact Us</a>
+          <a href="/privacy.html">Privacy Policy</a>
         </div>
         <div>
           <h4>Reach Us</h4>
