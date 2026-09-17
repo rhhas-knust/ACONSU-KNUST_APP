@@ -26,9 +26,12 @@ const { registerMemberServiceRoutes } = require('./routes/member-services');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
+// 30MB per file — covers most ebook PDFs and photos. Named rather than inlined
+// so the limit and the message a rejected upload gets can never disagree.
+const UPLOAD_LIMIT_BYTES = 30 * 1024 * 1024;
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 30 * 1024 * 1024 } // 30MB per file (covers most ebook PDFs and photos)
+  limits: { fileSize: UPLOAD_LIMIT_BYTES }
 });
 
 const app = express();
@@ -6135,6 +6138,33 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(__dirname, 'public', '404.html'), (err) => {
     if (err) res.status(404).send('Not found');
   });
+});
+
+// ---------- upload failures ----------
+// A rejected upload used to fall through to Express's default handler, which
+// answers with an HTML page carrying a full stack trace and absolute server
+// paths — to a client that asked for JSON and will try to parse it as JSON.
+// So an oversized photo showed the member nothing useful, and told anyone
+// looking exactly where the code lives on disk.
+//
+// Registered after every route, because that is where an error thrown by an
+// upload middleware arrives.
+app.use((err, req, res, next) => {
+  if (!(err instanceof multer.MulterError)) return next(err);
+
+  const limitMb = Math.round(UPLOAD_LIMIT_BYTES / (1024 * 1024));
+  const messages = {
+    // 413 rather than 400: the request was well-formed, it was simply too big.
+    LIMIT_FILE_SIZE: [413, `That file is larger than ${limitMb}MB. Please choose a smaller one.`],
+    LIMIT_UNEXPECTED_FILE: [400, 'That file was sent under a name this form does not expect.'],
+    LIMIT_FILE_COUNT: [400, 'Too many files were sent at once.'],
+    LIMIT_PART_COUNT: [400, 'That upload had too many parts.'],
+    LIMIT_FIELD_KEY: [400, 'One of the field names in that upload is too long.'],
+    LIMIT_FIELD_VALUE: [400, 'One of the values in that upload is too long.'],
+    LIMIT_FIELD_COUNT: [400, 'That upload had too many fields.']
+  };
+  const [status, message] = messages[err.code] || [400, 'That upload could not be accepted.'];
+  res.status(status).json({ error: message });
 });
 
 // ---------- automatic daily birthday check ----------

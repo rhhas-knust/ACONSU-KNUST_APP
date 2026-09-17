@@ -1048,6 +1048,42 @@ const { fakeModels } = require('./harness.js');
   check('a published event is now public', r.data.some(e => e.id === execEventId), r.data);
 
   console.log('\n== digital membership card + QR attendance (sections 13, 14) ==');
+  console.log('\n== uploads that cannot be accepted ==');
+  // A rejected upload used to fall through to Express's default handler: an
+  // HTML page with a full stack trace and absolute server paths, sent to a
+  // client that asked for JSON. The member saw nothing useful and anyone
+  // looking learned where the code lives on disk.
+  {
+    const tooBig = new FormData();
+    tooBig.append('profileImage', new Blob([Buffer.alloc(31 * 1024 * 1024, 7)], { type: 'image/png' }), 'huge.png');
+    tooBig.append('name', 'Too Big');
+    tooBig.append('email', 'toobig@test.com');
+    tooBig.append('password', 'secret123');
+    tooBig.append('chapterId', chapterId);
+    const res = await fetch(BASE + '/api/auth/register', { method: 'POST', body: tooBig });
+    const text = await res.text();
+    let parsed = null;
+    try { parsed = JSON.parse(text); } catch (e) { /* left null, which is the failure */ }
+    check('an oversized upload is refused with 413, not 500', res.status === 413, { status: res.status, text: text.slice(0, 120) });
+    check('and answers in JSON, as the client asked', !!parsed && !!parsed.error, text.slice(0, 120));
+    check('saying plainly what went wrong', /larger than 30MB/.test((parsed && parsed.error) || ''), parsed);
+    check('and never leaking a stack trace or server paths',
+      !/at \s|\/home\/|node_modules|MulterError/.test(text), text.slice(0, 160));
+  }
+  {
+    const wrongField = new FormData();
+    wrongField.append('notTheField', new Blob([Buffer.alloc(512)], { type: 'image/png' }), 'x.png');
+    wrongField.append('name', 'Wrong Field');
+    wrongField.append('email', 'wrongfield@test.com');
+    wrongField.append('password', 'secret123');
+    wrongField.append('chapterId', chapterId);
+    const res = await fetch(BASE + '/api/auth/register', { method: 'POST', body: wrongField });
+    const text = await res.text();
+    check('a file sent under an unexpected name is refused with 400', res.status === 400, { status: res.status, text: text.slice(0, 120) });
+    check('also in JSON, also without a stack trace',
+      /^\{/.test(text.trim()) && !/node_modules|MulterError/.test(text), text.slice(0, 160));
+  }
+
   console.log('\n== the events a member signed up for ==');
   // Registering worked; seeing what you had signed up for did not, and event
   // registration had no coverage at all.
