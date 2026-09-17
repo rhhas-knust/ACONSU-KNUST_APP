@@ -20,6 +20,12 @@ function matches(doc, query) {
       return true;
     }
     if (cond instanceof Date) return new Date(value).getTime() === cond.getTime();
+    // Mongo matches a scalar against an array field by containment: a query of
+    // { departments: 'choir' } finds every doc whose departments array holds
+    // 'choir'. Without this the double would answer "no" to a query the real
+    // database answers "yes" to, and a roster query would look broken in tests
+    // while working in production — or, worse, look fine here and be wrong there.
+    if (Array.isArray(value)) return value.includes(cond);
     return value === cond;
   });
 }
@@ -134,6 +140,7 @@ const fakeModels = {
   }),
   FeatureFlags: makeModel({ modules: {} }),
   Department: makeModel({ chapterId: '', headerImageFileId: '' }),
+  DepartmentRequest: makeModel({ chapterId: '', memberId: '', departmentId: '', status: 'pending', note: '', decidedByStaffId: '', decidedByName: '', decidedAt: null }),
   Event: makeModel({
     chapterId: '', isNational: false, registrationEnabled: false, capacity: 0, registrationDeadline: '',
     category: '', videoUrl: '', flyerFileId: '', registrationFormId: '',
@@ -194,7 +201,7 @@ const fakeModels = {
     createdBy: '', approvedBy: '', approvedAt: null, notes: ''
   }),
   Member: makeModel({
-    chapterId: '', phone: '', level: '', programme: '', hostel: '', academicHistory: [], department: '',
+    chapterId: '', phone: '', level: '', programme: '', hostel: '', academicHistory: [], department: '', departments: [],
     profileImageFileId: '', membershipStage: 'visitor', membershipNumber: '', qrToken: '',
     shepherdStaffId: '', shepherdName: '', graduationYear: '', chatRestricted: false,
     currentStreak: 0, longestStreak: 0, bibleChaptersRead: 0, birthdayMonth: null, birthdayDay: null

@@ -1046,6 +1046,59 @@ app.get('/api/member/events', requireMember, async (req, res) => {
   }
 });
 
+// ---------- where a member serves ----------
+// A member serves in as many departments as they actually serve in. `departments`
+// is the list and is the truth; `department` is the single field this started
+// with. Live records written before the list existed still carry only the old
+// field, and there is no migration step, so every read goes through here and
+// every write sets both. That way nothing has to be converted up front and an
+// unmigrated record is never quietly treated as belonging to nothing.
+function memberDepartmentIds(member) {
+  if (!member) return [];
+  const list = Array.isArray(member.departments) ? member.departments.filter(Boolean).map(String) : [];
+  if (list.length) return [...new Set(list)];
+  return member.department ? [String(member.department)] : [];
+}
+
+// Finding the members of a department has to look at both fields for the same
+// reason: a member who has not been rewritten since the list was introduced is
+// still in that department, and a roster that missed them would be wrong.
+function departmentMemberFilter(chapterId, departmentId) {
+  return {
+    chapterId: chapterId || '',
+    $or: [{ departments: departmentId }, { department: departmentId }]
+  };
+}
+
+async function setMemberDepartments(memberId, ids, filter) {
+  const unique = [...new Set((ids || []).filter(Boolean).map(String))];
+  return repo.patchById('members', memberId, {
+    departments: unique,
+    // Kept in step so anything still reading the single field sees the primary
+    // one rather than a stale value from before the change.
+    department: unique[0] || ''
+  }, filter);
+}
+
+// The shape the member-facing pages render, with the head derived from whoever
+// currently holds the office rather than a name typed in once and left behind.
+async function describeDepartmentForMember(found, chapterId) {
+  const execs = await repo.getAll('executives', { chapterId: chapterId || '', department: found.id });
+  const head = execs
+    .map(e => ({ e, position: positions.resolvePosition(e.positionKey, e.role, true) }))
+    .filter(x => !x.position.deputyOf)[0] || null;
+  return {
+    id: found.id,
+    name: found.name,
+    tagline: found.tagline || '',
+    meetingDay: found.meetingDay || '',
+    meetingTime: found.meetingTime || '',
+    meetingLocation: found.meetingLocation || '',
+    headName: head ? head.e.name : '',
+    headRole: head ? head.e.role : ''
+  };
+}
+
 app.get('/api/member/standing', requireMember, async (req, res) => {
   try {
     const member = await repo.getById('members', req.session.memberId);
@@ -1057,37 +1110,33 @@ app.get('/api/member/standing', requireMember, async (req, res) => {
     // Alumni is an ending rather than a rung, so nothing is "next" from there.
     const next = (stage === 'alumni' || index < 0) ? null : MEMBERSHIP_JOURNEY[index + 1] || null;
 
-    let department = null;
-    if (member.department) {
-      const found = await repo.getById('departments', member.department, { chapterId: member.chapterId || '' });
-      if (found) {
-        // Who heads it is derived from whoever holds the office, so it can
-        // never go stale the way a typed-in name would.
-        const execs = await repo.getAll('executives', { chapterId: member.chapterId || '', department: found.id });
-        const head = execs
-          .map(e => ({ e, position: positions.resolvePosition(e.positionKey, e.role, true) }))
-          .filter(x => !x.position.deputyOf)[0] || null;
-        department = {
-          id: found.id,
-          name: found.name,
-          tagline: found.tagline || '',
-          meetingDay: found.meetingDay || '',
-          meetingTime: found.meetingTime || '',
-          meetingLocation: found.meetingLocation || '',
-          headName: head ? head.e.name : '',
-          headRole: head ? head.e.role : ''
-        };
-      }
+    const departmentIds = memberDepartmentIds(member);
+    const departments = [];
+    for (const departmentId of departmentIds) {
+      const found = await repo.getById('departments', departmentId, { chapterId: member.chapterId || '' });
+      // A department that has since been deleted simply drops out rather than
+      // rendering as a blank card the member cannot do anything about.
+      if (found) departments.push(await describeDepartmentForMember(found, member.chapterId));
     }
+    // The first one is the member's primary placement. `department` stays in
+    // the response because the profile page and the membership card still read
+    // it; it is the head of the same list, never a separate answer.
+    const department = departments[0] || null;
+
+    // Requests they have made that nobody has decided yet, so the page can say
+    // "waiting on the head" instead of looking as though the tap did nothing.
+    const pendingRequests = (await repo.getAll('departmentRequests', {
+      chapterId: member.chapterId || '', memberId: member.id, status: 'pending'
+    })).map(reqDoc => ({ id: reqDoc.id, departmentId: reqDoc.departmentId, createdAt: reqDoc.createdAt }));
 
     // What their department has actually said to them. A department
     // announcement used to exist only as a push notification, so anyone who
     // had notifications turned off, or simply missed it, had no way back to it.
     let departmentNotices = [];
-    if (member.department) {
+    if (departmentIds.length) {
       const notices = await repo.getAll('notifications', {
         chapterId: member.chapterId || '',
-        departmentId: member.department
+        departmentId: { $in: departmentIds }
       });
       departmentNotices = notices
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -1103,12 +1152,121 @@ app.get('/api/member/standing', requireMember, async (req, res) => {
       membershipNumber: member.membershipNumber || '',
       shepherdName: member.shepherdName || '',
       department,
+      departments,
+      pendingRequests,
       // Said plainly, because "no department" is a thing to act on rather than
       // an error: it is how someone finds where they fit.
-      needsDepartment: !member.department
+      needsDepartment: departments.length === 0
     });
   } catch (e) {
     res.status(500).json({ error: 'Could not load where you stand right now.' });
+  }
+});
+
+// ---------- joining a department ----------
+// Everything a member needs to decide where to serve: their own chapter's
+// departments, which ones they are already in, and which they have asked
+// about. The chapter comes from their own account, so nobody is asked to pick
+// a chapter they already belong to.
+app.get('/api/member/departments', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const chapterId = member.chapterId || '';
+    const [all, myRequests] = await Promise.all([
+      repo.getAll('departments', { chapterId }),
+      repo.getAll('departmentRequests', { chapterId, memberId: member.id })
+    ]);
+    const mine = new Set(memberDepartmentIds(member));
+    const pendingBy = new Map(myRequests.filter(r => r.status === 'pending').map(r => [r.departmentId, r]));
+    const declinedBy = new Map(myRequests.filter(r => r.status === 'declined').map(r => [r.departmentId, r]));
+
+    const items = await Promise.all(all.map(async (d) => {
+      const described = await describeDepartmentForMember(d, chapterId);
+      const pending = pendingBy.get(d.id);
+      return {
+        ...described,
+        headerImageFileId: d.headerImageFileId || '',
+        joined: mine.has(d.id),
+        pendingRequestId: pending ? pending.id : '',
+        declined: !pendingBy.has(d.id) && declinedBy.has(d.id)
+      };
+    }));
+    items.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+    res.json({ chapterId, departments: items });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the departments in your chapter.' });
+  }
+});
+
+app.post('/api/member/departments/:id/request', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const chapterId = member.chapterId || '';
+    // Scoped to the member's own chapter, so a department id from another
+    // chapter cannot be used to get onto its roster.
+    const department = await repo.getById('departments', req.params.id, { chapterId });
+    if (!department) return res.status(404).json({ error: 'That department is not one of your chapter\'s.' });
+
+    if (memberDepartmentIds(member).includes(department.id)) {
+      return res.status(400).json({ error: `You are already serving in ${department.name}.` });
+    }
+    const existing = await repo.getAll('departmentRequests', {
+      chapterId, memberId: member.id, departmentId: department.id, status: 'pending'
+    });
+    // Asking twice is a double tap or an impatient second try, not a second
+    // request — the head should see one row, not a growing pile.
+    if (existing.length) return res.json({ success: true, item: existing[0], alreadyPending: true });
+
+    const item = await repo.create('departmentRequests', {
+      chapterId, memberId: member.id, departmentId: department.id,
+      note: cleanText(String(req.body.note || '')).slice(0, 500),
+      status: 'pending'
+    }, 'dreq');
+
+    // Deliberately no chapter or department announcement here. A notification
+    // carrying departmentId goes to everyone in that department, which would
+    // tell the whole of Ushering who had applied and why. The head sees it as
+    // a waiting request in their own portal instead, which is where they would
+    // act on it anyway.
+
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not send your request.' });
+  }
+});
+
+app.delete('/api/member/departments/:id/request', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const chapterId = member.chapterId || '';
+    const pending = await repo.getAll('departmentRequests', {
+      chapterId, memberId: member.id, departmentId: req.params.id, status: 'pending'
+    });
+    if (!pending.length) return res.status(404).json({ error: 'You have no request waiting for that department.' });
+    await repo.patchById('departmentRequests', pending[0].id, { status: 'withdrawn', decidedAt: new Date() }, { chapterId });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not withdraw your request.' });
+  }
+});
+
+// Leaving is the member's own to do — being let in needs the head, stepping
+// back out does not.
+app.delete('/api/member/departments/:id', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const current = memberDepartmentIds(member);
+    if (!current.includes(req.params.id)) {
+      return res.status(400).json({ error: 'You are not serving in that department.' });
+    }
+    await setMemberDepartments(member.id, current.filter(id => id !== req.params.id));
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update your departments.' });
   }
 });
 
@@ -1239,12 +1397,15 @@ app.get('/api/notifications', async (req, res) => {
     // A department's own announcement belongs to that department. Everyone
     // else in the chapter is simply not its audience, so it is filtered out
     // here rather than shown to people it was never addressed to.
-    let ownDepartment = '';
+    let ownDepartments = [];
     if (req.session && req.session.memberId) {
       const me = await repo.getById('members', req.session.memberId);
-      ownDepartment = (me && me.department) || '';
+      ownDepartments = memberDepartmentIds(me);
     }
-    const forMe = items.filter(n => !n.departmentId || n.departmentId === ownDepartment);
+    // Someone serving in Choir and Ushering is the audience for both, so this
+    // asks whether the notice belongs to any department they are in — reading
+    // a single field here would have shown them only their primary one.
+    const forMe = items.filter(n => !n.departmentId || ownDepartments.includes(n.departmentId));
 
     res.json(forMe.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 40));
   } catch (e) {
@@ -3942,7 +4103,7 @@ function requireOwnDepartment(capability, handler) {
 
 app.get('/api/executive/department', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT, async (req, res, department, staff) => {
   const [members, meetings] = await Promise.all([
-    repo.getAll('members', { chapterId: staff.chapterId, department: department.id }),
+    repo.getAll('members', departmentMemberFilter(staff.chapterId, department.id)),
     repo.getAll('departmentMeetings', { chapterId: staff.chapterId, departmentId: department.id })
   ]);
   const recent = [...meetings].sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null;
@@ -3966,13 +4127,88 @@ app.put('/api/executive/department', requireRole('executive'), requireOwnDepartm
 }));
 
 app.get('/api/executive/department/members', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT_MEMBERS, async (req, res, department, staff) => {
-  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  const members = await repo.getAll('members', departmentMemberFilter(staff.chapterId, department.id));
   res.json(members
     .map(m => ({
       id: m.id, name: m.name, email: m.email, phone: m.phone || '',
       level: m.level || '', programme: m.programme || '', membershipStage: m.membershipStage
     }))
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
+}));
+
+// Who has asked to serve here, and the head's decision on each. Sits behind
+// DEPARTMENT_MEMBERS: deciding a roster is the same authority as seeing one.
+app.get('/api/executive/department/requests', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT_MEMBERS, async (req, res, department, staff) => {
+  const requests = await repo.getAll('departmentRequests', {
+    chapterId: staff.chapterId, departmentId: department.id, status: 'pending'
+  });
+  const items = await Promise.all(requests.map(async (r) => {
+    const m = await repo.getById('members', r.memberId, { chapterId: staff.chapterId });
+    return {
+      id: r.id,
+      memberId: r.memberId,
+      name: m ? (m.name || 'Member') : 'Member (account removed)',
+      level: m ? (m.level || '') : '',
+      programme: m ? (m.programme || '') : '',
+      profileImageFileId: m ? (m.profileImageFileId || '') : '',
+      note: r.note || '',
+      createdAt: r.createdAt
+    };
+  }));
+  res.json(items.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
+}));
+
+app.post('/api/executive/department/requests/:id/decide', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT_MEMBERS, async (req, res, department, staff) => {
+  const decision = String(req.body.decision || '').toLowerCase();
+  if (decision !== 'approved' && decision !== 'declined') {
+    return res.status(400).json({ error: 'A request is either approved or declined.' });
+  }
+  // Scoped to this head's own department as well as their chapter, so one
+  // department's head can never decide another's roster.
+  const request = await repo.getById('departmentRequests', req.params.id, {
+    chapterId: staff.chapterId, departmentId: department.id
+  });
+  if (!request) return res.status(404).json({ error: 'That request is not one of yours to decide.' });
+  if (request.status !== 'pending') {
+    return res.status(400).json({ error: 'That request has already been decided.' });
+  }
+
+  const member = await repo.getById('members', request.memberId, { chapterId: staff.chapterId });
+  if (!member) return res.status(404).json({ error: 'That member no longer has an account.' });
+
+  await repo.patchById('departmentRequests', request.id, {
+    status: decision,
+    decidedByStaffId: staff.id || '',
+    decidedByName: staff.name || '',
+    decidedAt: new Date()
+  }, { chapterId: staff.chapterId });
+
+  if (decision === 'approved') {
+    // Added to what they already serve in rather than replacing it — joining
+    // the Choir does not take someone out of Ushering.
+    await setMemberDepartments(member.id, [...memberDepartmentIds(member), department.id]);
+    createNotification(
+      `You're in: ${department.name}`,
+      `${staff.name || 'The department head'} accepted your request to serve in ${department.name}.`,
+      '/profile.html', 'department', staff.chapterId,
+      { departmentId: department.id, memberIds: [member.id] }
+    ).catch(() => {});
+  } else {
+    // Not a feed entry: the only audience a departmental notice has is the
+    // department, and someone who was declined is not in it. Sent to them
+    // directly instead, so it reaches the one person it concerns.
+    push.sendPushToAll(
+      {
+        title: `About ${department.name}`,
+        body: `Your request to serve in ${department.name} was not taken up this time. Your department head can tell you more.`,
+        url: '/departments.html'
+      },
+      staff.chapterId,
+      [member.id]
+    ).catch(() => {});
+  }
+
+  res.json({ success: true, decision });
 }));
 
 app.get('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT_ATTENDANCE, async (req, res, department, staff) => {
@@ -3984,7 +4220,7 @@ app.get('/api/executive/department/meetings', requireRole('executive'), requireO
 // confined to this department's own members, so a mistyped or guessed id
 // can't pull someone else's record into the count.
 app.post('/api/executive/department/meetings', requireRole('executive'), requireOwnDepartment(CAP.DEPARTMENT_ATTENDANCE, async (req, res, department, staff) => {
-  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  const members = await repo.getAll('members', departmentMemberFilter(staff.chapterId, department.id));
   const ownIds = new Set(members.map(m => m.id));
   const attendeeMemberIds = Array.isArray(req.body.attendeeMemberIds)
     ? req.body.attendeeMemberIds.filter(id => ownIds.has(id))
@@ -4008,7 +4244,7 @@ app.post('/api/executive/department/announcement', requireRole('executive'), req
   const title = cleanText(req.body.title || '');
   const body = cleanText(req.body.body || '');
   if (!title || !body) return res.status(400).json({ error: 'A title and message are required' });
-  const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
+  const members = await repo.getAll('members', departmentMemberFilter(staff.chapterId, department.id));
   const item = await createNotification(
     `${department.name}: ${title}`, body, '/department.html?id=' + department.id, 'department', staff.chapterId,
     { departmentId: department.id, memberIds: members.map(m => m.id) }
