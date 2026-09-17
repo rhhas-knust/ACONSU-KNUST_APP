@@ -188,7 +188,10 @@ app.get('/api/shepherd/check', (req, res) => {
 // data this session may touch" — these helpers only answer "which role".
 const PORTAL_ROLES = [
   'nationalCoordinator', 'coordinator', 'chapterAdmin', 'executive',
-  'finance', 'shepherding', 'publicity', 'welfare'
+  'finance', 'shepherding', 'publicity', 'welfare',
+  // A Patron holds no office portal of their own — their seat is on the
+  // national council, and that is the whole of what the account is for.
+  'patron'
 ];
 
 // An executive serves one academic year (section 9). The term deadline rides
@@ -282,13 +285,23 @@ function actorName(req) {
   return '';
 }
 
+// Some elected offices ARE the office portal. ACONSU's Publicity Head is the
+// person who sends the chapter's announcements, so they open the Publicity
+// portal directly rather than the chapter having to keep a second, separate
+// publicity staff login alongside the elected holder.
+const POSITION_OPENS_OFFICE = { publicity_head: 'publicity' };
+
 function hasRole(req, role) {
   if (!req.session) return false;
   if (req.session.isAdmin) return true;
   const staff = currentStaff(req);
   if (staff && staff.role === 'nationalCoordinator') return true; // national outranks every office
   if (role === 'shepherding' && req.session.isShepherd) return true;
-  return !!(staff && staff.role === role);
+  if (staff && staff.role === role) return true;
+  // An elected holder who IS that office acts in it, rather than only looking
+  // at it — the Publicity Head sends the chapter's announcements, which is the
+  // whole reason they hold the office (see POSITION_OPENS_OFFICE).
+  return !!(staff && staff.positionKey && POSITION_OPENS_OFFICE[staff.positionKey] === role);
 }
 
 // Read access: the role itself, or the coordinator who oversees all of them
@@ -317,6 +330,7 @@ function holdsOfficePortal(req, role) {
   const staff = currentStaff(req);
   if (!staff) return false;
   if (staff.role === role) return true;                  // the holder themselves
+  if (staff.positionKey && POSITION_OPENS_OFFICE[staff.positionKey] === role) return true;
   if (staff.role === 'coordinator') return canView(req, role); // oversees their own chapter's offices
   return false;
 }
@@ -331,6 +345,48 @@ function requireViewRole(role) {
 const requireFinance = requireRole('finance');
 const requirePublicity = requireRole('publicity');
 const requireCoordinator = requireRole('coordinator');
+
+// ---------- the national council ----------
+// The one body where the whole union sits together: the National Coordinator,
+// every Chapter Coordinator, every Chapter President, and the Patrons —
+// national and chapter alike.
+//
+// Membership grants exactly two things: reading the council and speaking in
+// it. It grants NOTHING about another chapter. A Chapter President on this
+// council still cannot see another chapter's members, money or welfare cases,
+// because nothing below ever widens chapterFilter — the council's own posts
+// are simply not chapter-scoped data in the first place.
+const COUNCIL_SEATS = {
+  nationalCoordinator: 'National Coordinator',
+  coordinator: 'Chapter Coordinator',
+  patron: 'Patron'
+};
+
+// Which seat this account speaks from, or null if they hold none. A Chapter
+// President earns their seat through the position on their roster card, which
+// is stamped into the session at sign-in.
+function councilSeat(req) {
+  if (req.session && req.session.isAdmin) return 'National Coordinator';
+  const staff = currentStaff(req);
+  if (!staff) return null;
+  if (staff.role === 'patron') return staff.chapterId ? 'Chapter Patron' : 'National Patron';
+  if (COUNCIL_SEATS[staff.role]) return COUNCIL_SEATS[staff.role];
+  if (staff.role === 'executive' && staff.positionKey === 'president') return 'Chapter President';
+  return null;
+}
+
+function requireCouncil(req, res, next) {
+  if (councilSeat(req)) return next();
+  return res.status(401).json({ error: 'The council is for the National Coordinator, Chapter Coordinators, Chapter Presidents and the Patrons.' });
+}
+
+// Only the National Coordinator convenes the council, so only they set the
+// meeting link and the standing notice.
+function requireCouncilChair(req, res, next) {
+  const scope = rolesLib.getActingScope(req);
+  if (scope.isNational) return next();
+  return res.status(403).json({ error: 'Only the National Coordinator can set the council meeting.' });
+}
 
 // ---------- chapter hierarchy helpers ----------
 // Chapter Admin (or above): the operational tier from section 5 — manages
@@ -418,10 +474,24 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       });
     }
 
+    // An executive's position is stamped into the session at sign-in rather
+    // than looked up per request: the office-portal guards are synchronous and
+    // run on every call, so a database read there would cost a query each
+    // time. A position change revokes the holder's sessions (see the reshuffle
+    // route), which is what stops a stamped value going stale.
+    let positionKey = '';
+    if (user.role === 'executive') {
+      const card = await models.Executive.findOne({ staffId: user.id, chapterId: user.chapterId || '' }).lean();
+      positionKey = positions.resolvePosition(
+        card && card.positionKey, card && card.role, !!(card && card.department)
+      ).key;
+    }
+
     req.session.staff = {
       id: user.id, username: user.username, name: user.name || user.username,
       role: user.role, chapterId: user.chapterId || '',
       memberId: user.memberId || '',
+      positionKey,
       termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
       issuedAt: Date.now() // what a later revocation is measured against
     };
@@ -456,11 +526,23 @@ app.get('/api/portal/me', async (req, res) => {
     // became unreachable without clearing cookies. So entry to those portals
     // asks whether you hold the office (or oversee it as that chapter's
     // Coordinator), not whether you outrank it.
-    access: PORTAL_ROLES.reduce((acc, role) => {
-      const entitled = OFFICE_PORTAL_ROLES.includes(role) ? holdsOfficePortal(req, role) : canView(req, role);
-      acc[role] = { view: entitled, edit: entitled && hasRole(req, role) };
+    // The seat this account holds on the national council, or null. Sent here
+    // so the council page can admit its members through the same shell every
+    // other portal uses.
+    councilSeat: councilSeat(req),
+    access: (() => {
+      const acc = PORTAL_ROLES.reduce((out, role) => {
+        const entitled = OFFICE_PORTAL_ROLES.includes(role) ? holdsOfficePortal(req, role) : canView(req, role);
+        out[role] = { view: entitled, edit: entitled && hasRole(req, role) };
+        return out;
+      }, {});
+      // The council is not an office, so it is not in PORTAL_ROLES — but the
+      // portal shell decides admission from this map, so its seat belongs
+      // here alongside them. Everyone who holds a seat may also speak.
+      const seat = councilSeat(req);
+      acc.council = { view: !!seat, edit: !!seat };
       return acc;
-    }, {})
+    })()
   });
 });
 
@@ -3312,7 +3394,8 @@ app.get('/api/publicity/overview', requireViewRole('publicity'), async (req, res
       testimoniesPublished: testimonies.filter(t => t.published).length,
       smsSent: smsLogs.filter(s => s.status === 'sent').length,
       smsFailed: smsLogs.filter(s => s.status === 'failed').length,
-      smsConfigured: sms.isConfigured(),
+      // Per chapter now: one chapter can be set up to send while another is not.
+      smsConfigured: await sms.isConfigured(rolesLib.getActingScope(req).chapterId || ''),
       pushConfigured: push.ensureConfigured(),
       upcomingEvents: events.filter(e => new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
       recent: notifications
@@ -3335,7 +3418,7 @@ app.get('/api/publicity/audiences', requireViewRole('publicity'), async (req, re
     const withCounts = await Promise.all(options.map(async (o) => ({
       ...o, reachable: (await sms.resolveAudience(o.value, chapterId)).length
     })));
-    res.json({ audiences: withCounts, smsConfigured: sms.isConfigured() });
+    res.json({ audiences: withCounts, smsConfigured: await sms.isConfigured(chapterId) });
   } catch (e) {
     res.status(500).json({ error: 'Could not load audiences' });
   }
@@ -4120,6 +4203,180 @@ app.post('/api/executive/chapter/announcement', requireRole('executive'), requir
   res.json({ success: true, item, reached: members.length });
 }));
 
+// ---------- council: roster, meeting, discussion ----------
+
+// Who sits on the council, built from the accounts that actually hold those
+// offices rather than a typed list that would drift the moment anyone changed.
+async function buildCouncilRoster() {
+  const [staff, chapters, executives] = await Promise.all([
+    models.StaffUser.find({ active: { $ne: false } }).lean(),
+    repo.getAll('chapters', {}),
+    repo.getAll('executives', {})
+  ]);
+  const chapterName = new Map(chapters.map(c => [c.id, c.name]));
+  const seats = [];
+
+  staff.forEach((u) => {
+    let seat = null;
+    if (u.role === 'nationalCoordinator') seat = 'National Coordinator';
+    else if (u.role === 'coordinator') seat = 'Chapter Coordinator';
+    else if (u.role === 'patron') seat = u.chapterId ? 'Chapter Patron' : 'National Patron';
+    if (seat) {
+      seats.push({ name: u.name || u.username, seat, chapterId: u.chapterId || '', chapterName: chapterName.get(u.chapterId) || '' });
+    }
+  });
+
+  // Chapter Presidents sit by virtue of their position, so they are read from
+  // the roster cards rather than from the account's role.
+  executives.forEach((e) => {
+    const position = positions.resolvePosition(e.positionKey, e.role, !!e.department);
+    if (position.key === 'president') {
+      seats.push({ name: e.name || '', seat: 'Chapter President', chapterId: e.chapterId || '', chapterName: chapterName.get(e.chapterId) || '', imageFileId: e.imageFileId || '' });
+    }
+  });
+
+  const rank = { 'National Coordinator': 1, 'National Patron': 2, 'Chapter Patron': 3, 'Chapter Coordinator': 4, 'Chapter President': 5 };
+  return seats.sort((a, b) => (rank[a.seat] || 9) - (rank[b.seat] || 9)
+    || String(a.chapterName).localeCompare(String(b.chapterName))
+    || String(a.name).localeCompare(String(b.name)));
+}
+
+app.get('/api/council', requireCouncil, async (req, res) => {
+  try {
+    const [settings, posts, roster] = await Promise.all([
+      repo.getSettings(),
+      repo.getAll('councilPosts', {}),
+      buildCouncilRoster()
+    ]);
+    const council = (settings && settings.council) || {};
+    const byNewest = (a, b) => new Date(b.createdAt) - new Date(a.createdAt);
+    const replies = posts.filter(p => p.parentId);
+    const threads = posts
+      .filter(p => !p.parentId)
+      .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || byNewest(a, b))
+      .map(p => ({
+        ...p,
+        replies: replies
+          .filter(r => r.parentId === p.id)
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      }));
+    res.json({
+      seat: councilSeat(req),
+      isChair: rolesLib.getActingScope(req).isNational,
+      meeting: {
+        url: council.meetingUrl || '',
+        label: council.meetingLabel || '',
+        at: council.meetingAt || '',
+        notice: council.notice || ''
+      },
+      roster,
+      threads
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the council right now.' });
+  }
+});
+
+app.put('/api/council/meeting', requireCouncil, requireCouncilChair, async (req, res) => {
+  try {
+    const url = cleanText(req.body.meetingUrl || '');
+    // A meeting link is something council members will click, so only real
+    // http(s) links are accepted — never a javascript: or data: URL typed in.
+    if (url && !/^https:\/\/[^\s]+$/i.test(url)) {
+      return res.status(400).json({ error: 'The meeting link must be a full https:// address.' });
+    }
+    const settings = await repo.getSettings();
+    const saved = await repo.setSettings({
+      ...settings,
+      council: {
+        meetingUrl: url,
+        meetingLabel: cleanText(req.body.meetingLabel || ''),
+        meetingAt: cleanText(req.body.meetingAt || ''),
+        notice: cleanText(req.body.notice || '')
+      }
+    });
+    res.json({ success: true, meeting: (saved && saved.council) || {} });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save the council meeting.' });
+  }
+});
+
+app.post('/api/council/posts', requireCouncil, async (req, res) => {
+  try {
+    const body = cleanText(req.body.body || '');
+    if (!body) return res.status(400).json({ error: 'Say something before posting.' });
+
+    // A reply must attach to a real top-level post, and replies never nest.
+    let parentId = String(req.body.parentId || '').trim();
+    if (parentId) {
+      const parent = await repo.getById('councilPosts', parentId);
+      if (!parent) return res.status(400).json({ error: 'That discussion no longer exists.' });
+      if (parent.parentId) parentId = parent.parentId; // keep threads one level deep
+    }
+
+    const staff = currentStaff(req) || {};
+    const chapterId = staff.chapterId || '';
+    const chapter = chapterId ? await repo.getById('chapters', chapterId) : null;
+    const item = await repo.create('councilPosts', {
+      parentId,
+      body,
+      authorStaffId: staff.id || '',
+      authorName: actorName(req),
+      authorRole: councilSeat(req) || '',
+      authorChapterId: chapterId,
+      authorChapterName: chapter ? chapter.name : ''
+    }, 'cpost');
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not post that.' });
+  }
+});
+
+// Anyone may retract their own words; the chair may remove anything, since
+// they answer for the council.
+app.delete('/api/council/posts/:id', requireCouncil, async (req, res) => {
+  try {
+    const post = await repo.getById('councilPosts', req.params.id);
+    if (!post) return res.status(404).json({ error: 'That post was not found.' });
+    const staff = currentStaff(req) || {};
+    const isChair = rolesLib.getActingScope(req).isNational;
+    if (!isChair && post.authorStaffId !== staff.id) {
+      return res.status(403).json({ error: 'You can only remove your own posts.' });
+    }
+    await repo.removeById('councilPosts', post.id);
+    // A thread's replies go with it, rather than being left orphaned.
+    if (!post.parentId) {
+      const replies = await repo.getAll('councilPosts', { parentId: post.id });
+      await Promise.all(replies.map(r => repo.removeById('councilPosts', r.id)));
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove that post.' });
+  }
+});
+
+app.patch('/api/council/posts/:id/pin', requireCouncil, requireCouncilChair, async (req, res) => {
+  try {
+    const post = await repo.getById('councilPosts', req.params.id);
+    if (!post) return res.status(404).json({ error: 'That post was not found.' });
+    if (post.parentId) return res.status(400).json({ error: 'Only a discussion can be pinned, not a reply.' });
+    const item = await repo.patchById('councilPosts', post.id, { pinned: !post.pinned });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not pin that.' });
+  }
+});
+
+// The council roster, public. These are the union's national executives and
+// belong on the global app whether or not anyone is signed in.
+app.get('/api/national/executives', async (req, res) => {
+  try {
+    res.json(await buildCouncilRoster());
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the national executives' });
+  }
+});
+
 // ---------- Publicity: event review queue (section 9, continued) ----------
 app.get('/api/publicity/events/queue', requireViewRole('publicity'), async (req, res) => {
   try {
@@ -4605,10 +4862,22 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   if (role === 'executive' && !isChapterCoordinatorOrAbove(req)) {
     return res.status(403).json({ error: 'Only the Chapter Coordinator can promote a member to the executive body.' });
   }
+  // A National Patron belongs to the union rather than to any chapter, so they
+  // are the one other account that legitimately has no chapterId. Saying so
+  // takes the explicit NATIONAL_SCOPE token — the same deliberate statement a
+  // national executive card takes — and only a national actor may make it.
+  const wantsNationalPatron = role === 'patron'
+    && String(req.body.chapterId || '') === rolesLib.NATIONAL_SCOPE;
+  if (wantsNationalPatron && !scope.isNational) {
+    return res.status(403).json({ error: 'Only the National Coordinator can appoint the National Patron.' });
+  }
+
   // A chapter-scoped admin can only ever create accounts for their own
   // chapter, regardless of what the request body claims.
-  const chapterId = role === 'nationalCoordinator' ? '' : await resolveChapterIdForWrite(req, req.body.chapterId);
-  if (role !== 'nationalCoordinator' && !chapterId) {
+  const chapterId = (role === 'nationalCoordinator' || wantsNationalPatron)
+    ? ''
+    : await resolveChapterIdForWrite(req, req.body.chapterId);
+  if (role !== 'nationalCoordinator' && !wantsNationalPatron && !chapterId) {
     return res.status(400).json({ error: 'A chapter is required for this role — this deployment now has more than one, please specify which.' });
   }
   // An executive is a promoted member, vetted by the Coordinator — so the
@@ -5041,6 +5310,91 @@ app.get('/api/admin/testimonies', requireChapterAdmin, async (req, res) => {
 });
 app.get('/api/admin/contact-messages', requireChapterAdmin, async (req, res) => {
   res.json(await repo.getAll('contactMessages', rolesLib.chapterFilter(req, { required: false })));
+});
+
+// ---------- a chapter's own SMS credentials ----------
+// Each chapter runs its own mNotify account, so the bill, the credit balance
+// and the sender name members see are all theirs, and no chapter can spend or
+// send on another's. Kept off the general chapter-settings route because the
+// API key is a live secret with its own read rules.
+
+// The key is never returned. A client needs to know whether one is set and
+// roughly which it is, never the value — anyone who can open this screen could
+// otherwise walk away with a credential that spends the chapter's money.
+function maskedSmsConfig(chapter) {
+  const sms = (chapter && chapter.sms) || {};
+  const key = sms.apiKey || '';
+  return {
+    provider: sms.provider || 'mnotify',
+    senderId: sms.senderId || '',
+    hasApiKey: !!key,
+    apiKeyHint: key ? `••••${key.slice(-4)}` : ''
+  };
+}
+
+app.get('/api/admin/chapter-sms', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+    res.json({
+      ...maskedSmsConfig(chapter),
+      // Says whether this chapter can actually send right now, which is not
+      // the same question as whether it has its own credentials: a single
+      // shared server account may still be covering it.
+      canSend: await sms.isConfigured(chapterId),
+      usingSharedFallback: !(chapter.sms && chapter.sms.apiKey && chapter.sms.senderId)
+        && await sms.isConfigured(chapterId)
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load this chapter\'s SMS setup' });
+  }
+});
+
+app.put('/api/admin/chapter-sms', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+
+    const senderId = cleanText(req.body.senderId || '');
+    // mNotify registers sender IDs and rejects anything longer, so this is
+    // caught here rather than as an opaque provider error after a failed send.
+    if (senderId && senderId.length > 11) {
+      return res.status(400).json({ error: 'A sender ID can be at most 11 characters — that is the provider\'s limit.' });
+    }
+
+    const existing = (chapter.sms && chapter.sms.apiKey) || '';
+    // A blank key means "leave the stored one alone", so the form can be saved
+    // to change only the sender ID without re-typing a secret it never sees.
+    const submitted = String(req.body.apiKey || '').trim();
+    const apiKey = submitted || existing;
+
+    const updated = await repo.patchById('chapters', chapterId, {
+      sms: { provider: 'mnotify', apiKey, senderId }
+    });
+    res.json({ success: true, ...maskedSmsConfig(updated), canSend: await sms.isConfigured(chapterId) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save this chapter\'s SMS setup' });
+  }
+});
+
+// Clearing credentials is its own action rather than saving a blank key, so
+// "I did not want to retype it" can never silently wipe a working setup.
+app.delete('/api/admin/chapter-sms', requireChapterAdmin, async (req, res) => {
+  try {
+    const chapterId = await resolveChapterIdForWrite(req, req.body && req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
+    const updated = await repo.patchById('chapters', chapterId, {
+      sms: { provider: 'mnotify', apiKey: '', senderId: '' }
+    });
+    if (!updated) return res.status(404).json({ error: 'Chapter not found' });
+    res.json({ success: true, ...maskedSmsConfig(updated) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not clear this chapter\'s SMS setup' });
+  }
 });
 
 app.get('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => {

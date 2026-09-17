@@ -403,7 +403,43 @@ const { fakeModels } = require('./harness.js');
 
   r = await call('pub', 'POST', '/api/publicity/notifications', { title: 'Service at 9', body: 'Come early', channels: ['app', 'sms'] });
   check('announcement sends on both channels', r.status === 200 && /posted to the app/.test(r.data.result), r.data);
-  check('SMS reports itself unconfigured rather than failing', /not configured/.test(r.data.result), r.data);
+  check('SMS reports itself unconfigured rather than failing', /not set up for this chapter/.test(r.data.result), r.data);
+
+  console.log('\n== each chapter\'s own SMS credentials ==');
+  // A chapter runs its own mNotify account, so the bill, the credit and the
+  // sender name members see are all theirs.
+  r = await call('admin', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
+  check('a chapter starts with no SMS credentials of its own', r.status === 200 && r.data.hasApiKey === false, r.data);
+
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId, apiKey: 'live-key-abcd1234', senderId: 'ACONSUKN' });
+  check('the chapter saves its own key and sender ID', r.status === 200 && r.data.senderId === 'ACONSUKN', r.data);
+  check('and can send once it has them', r.data.canSend === true, r.data);
+
+  // The key is a live secret that spends the chapter's money, so it must never
+  // come back out — only whether one is set, and enough to recognise it.
+  r = await call('admin', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
+  check('the API key is never returned to the client',
+    r.data.hasApiKey === true && !JSON.stringify(r.data).includes('live-key-abcd1234'), r.data);
+  check('only a hint of it is shown', r.data.apiKeyHint === '••••1234', r.data);
+
+  // The provider rejects a longer sender ID, so it is caught here rather than
+  // as an opaque error after a failed send.
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId, senderId: 'WAY-TOO-LONG-NAME' });
+  check('a sender ID over the provider limit is refused', r.status === 400, r.data);
+
+  // Saving without re-typing the secret must not wipe it.
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId, senderId: 'ACONSU' });
+  check('saving without re-typing the key keeps the stored one', r.status === 200 && r.data.hasApiKey === true && r.data.senderId === 'ACONSU', r.data);
+
+  // Clearing is its own action, so "I did not retype it" can never wipe a
+  // working setup by accident. (Cross-chapter isolation is proved in the
+  // chapter-isolation section below, where a second chapter already exists —
+  // creating one here would switch the whole deployment out of "single
+  // chapter, zero friction" mode and change behaviour for every later test.)
+  r = await call('admin', 'DELETE', '/api/admin/chapter-sms', { chapterId });
+  check('credentials can be cleared deliberately', r.status === 200 && r.data.hasApiKey === false, r.data);
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId, apiKey: 'live-key-abcd1234', senderId: 'ACONSU' });
+  check('and set again afterwards', r.status === 200 && r.data.hasApiKey === true, r.data);
 
   r = await call('pub', 'GET', '/api/publicity/sms-logs');
   check('SMS attempt is logged even when skipped', r.data.length === 1 && r.data[0].status === 'skipped', r.data);
@@ -1207,6 +1243,25 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', '/api/national/dashboard');
   check('national dashboard now counts two chapters', r.data.totalChapters === 2, r.data);
 
+  // SMS credentials are per chapter for the same reason finance is: a chapter's
+  // own mNotify account, its own credit, its own registered sender name. This
+  // is the guarantee that one chapter can never spend or send on another's.
+  r = await call('admin', 'PUT', '/api/admin/chapter-sms', { chapterId: 'test-chapter-2', apiKey: 'other-key-9999', senderId: 'ACONSU2' });
+  check('chapter 2 sets its own SMS credentials', r.status === 200 && r.data.senderId === 'ACONSU2', r.data);
+  r = await call('admin', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
+  check('which leaves chapter 1\'s credentials untouched',
+    r.data.senderId === 'ACONSU' && r.data.apiKeyHint === '••••1234', r.data);
+
+  {
+    const smsLib = require('../lib/sms.js');
+    const c1 = await smsLib.resolveConfig(chapterId);
+    const c2 = await smsLib.resolveConfig('test-chapter-2');
+    check('each chapter resolves to its own SMS account, never the other\'s',
+      c1.apiKey === 'live-key-abcd1234' && c2.apiKey === 'other-key-9999', { c1: c1.apiKey, c2: c2.apiKey });
+    check('so a batch is signed with that chapter\'s own sender ID',
+      c1.senderId === 'ACONSU' && c2.senderId === 'ACONSU2', { c1: c1.senderId, c2: c2.senderId });
+  }
+
   r = await call('admin', 'POST', '/api/admin/departments', { name: 'Chapter 1 Only Dept', chapterId });
   check('explicit chapterId still works now that a default can no longer be assumed', r.status === 200, r.data);
   r = await call('admin', 'POST', '/api/admin/departments', { name: 'No Chapter Given' });
@@ -1301,6 +1356,14 @@ const { fakeModels } = require('./harness.js');
   r = await call('coord2', 'GET', '/api/admin/chapter-settings');
   check('chapter 2 coordinator reads chapter 2 settings', r.status === 200 && r.data.chapterId === 'test-chapter-2', r.data);
   check('chapter 2 settings do not have chapter 1 tagline', r.data.tagline !== 'Empowered for Impact', r.data);
+
+  // The chapter 2 Coordinator passes requireChapterAdmin, so this genuinely
+  // exercises the chapter scoping rather than bouncing off the role guard:
+  // asking for chapter 1's SMS credentials by id must still answer with their
+  // own chapter's, never chapter 1's key hint.
+  r = await call('coord2', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
+  check('a chapter 2 coordinator cannot read chapter 1\'s SMS credentials',
+    r.status !== 200 || r.data.apiKeyHint !== '••••1234', { status: r.status, data: r.data });
 
   r = await call('coord', 'PUT', '/api/admin/settings', { tagline: 'Should not be allowed' });
   check('chapter coordinator cannot overwrite global settings', r.status === 401, r.data);
@@ -1553,6 +1616,122 @@ const { fakeModels } = require('./harness.js');
   check('readiness reflects settings now being complete, without national ever reading chapter content',
     !!readinessCh && readinessCh.readiness.settingsComplete, readinessCh);
 
+  console.log('\n== the national council ==');
+  // The one body where the whole union sits together. A seat grants exactly
+  // two things — reading the council and speaking in it — and nothing at all
+  // about another chapter.
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'patron.nat', name: 'Nana Patron', role: 'patron', password: 'password123', chapterId: '__national__' });
+  check('the National Patron is appointed', r.status === 200 && r.data.item.chapterId === '', r.data);
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'patron.ch', name: 'Chapter Patron', role: 'patron', password: 'password123', chapterId });
+  check('a Chapter Patron is appointed to their own chapter', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
+  r = await call('coord2', 'POST', '/api/admin/staff', { username: 'patron.sneak', name: 'Sneak', role: 'patron', password: 'password123', chapterId: '__national__' });
+  check('a chapter coordinator cannot appoint the National Patron', r.status === 403, r.data);
+
+  await call('patron', 'POST', '/api/portal/login', { username: 'patron.nat', password: 'password123' });
+  r = await call('patron', 'GET', '/api/portal/me');
+  check('the Patron is seated on the council', r.data.councilSeat === 'National Patron' && r.data.access.council.view === true, r.data.councilSeat);
+
+  // The Chapter President earns a seat through their position, not their role.
+  // A fresh President is appointed here rather than reusing the one above,
+  // whose term this suite deliberately expires and whose sessions it revokes.
+  const presRegForm = new FormData();
+  presRegForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+  presRegForm.append('name', 'Yaw President');
+  presRegForm.append('email', 'yaw.president@test.com');
+  presRegForm.append('password', 'secret123');
+  presRegForm.append('chapterId', chapterId);
+  const presMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: presRegForm })).json()).member.id;
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password123', memberId: presMemberId, positionKey: 'president', chapterId });
+  check('a sitting Chapter President is appointed', r.status === 200, r.data);
+  await call('pres', 'POST', '/api/portal/login', { username: 'exec.president', password: 'password123' });
+
+  r = await call('pres', 'GET', '/api/portal/me');
+  check('a Chapter President is seated by virtue of their position', r.data.councilSeat === 'Chapter President', r.data.councilSeat);
+  r = await call('coord', 'GET', '/api/portal/me');
+  check('a Chapter Coordinator is seated too', r.data.councilSeat === 'Chapter Coordinator', r.data.councilSeat);
+  // An executive who is not the President has no seat.
+  r = await call('exec', 'GET', '/api/portal/me');
+  check('an ordinary executive holds no council seat', !r.data.councilSeat && r.data.access.council.view === false, r.data.councilSeat);
+  r = await call('exec', 'GET', '/api/council');
+  check('and cannot open the council at all', r.status === 401, r.data);
+
+  // Everyone with a seat sees the same discussion, across chapters.
+  r = await call('pres', 'POST', '/api/council/posts', { body: 'Proposing a joint retreat next semester.' });
+  check('a Chapter President raises a matter', r.status === 200 && r.data.item.authorRole === 'Chapter President', r.data);
+  const threadId = r.data.item.id;
+  r = await call('patron', 'POST', '/api/council/posts', { body: 'The patrons support this.', parentId: threadId });
+  check('the Patron replies to it', r.status === 200 && r.data.item.parentId === threadId, r.data);
+  r = await call('coord2', 'GET', '/api/council');
+  check('a different chapter\'s Coordinator sees the same discussion',
+    r.status === 200 && r.data.threads.some(t => t.id === threadId && t.replies.length === 1), r.data.threads);
+
+  // Threads stay one level deep, so a discussion stays readable.
+  const replyId = (await call('coord2', 'GET', '/api/council')).data.threads
+    .find(t => t.id === threadId).replies[0].id;
+  r = await call('coord', 'POST', '/api/council/posts', { body: 'Replying to a reply.', parentId: replyId });
+  check('a reply to a reply is folded back into the same thread',
+    r.status === 200 && r.data.item.parentId === threadId, r.data.item);
+  r = await call('coord', 'POST', '/api/council/posts', { body: '' });
+  check('an empty post is refused', r.status === 400, r.data);
+
+  // THE POINT: a council seat is not a key to another chapter. Chapter 2 gets
+  // a member with an unmistakable name, and the President — who sits on the
+  // council beside chapter 2's Coordinator — must never see them, even when
+  // asking for chapter 2 by name.
+  const otherRegForm = new FormData();
+  otherRegForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+  otherRegForm.append('name', 'Chapter Two Only Member');
+  otherRegForm.append('email', 'chaptertwo.only@test.com');
+  otherRegForm.append('password', 'secret123');
+  otherRegForm.append('chapterId', 'test-chapter-2');
+  await fetch(BASE + '/api/auth/register', { method: 'POST', body: otherRegForm });
+
+  r = await call('pres', 'GET', '/api/executive/chapter/members');
+  check('a President on the council still only ever sees their own chapter',
+    r.status === 200 && r.data.length > 0 && !r.data.some(m => m.name === 'Chapter Two Only Member'),
+    r.data.map(m => m.name));
+  r = await call('pres', 'GET', '/api/executive/chapter/members?chapterId=test-chapter-2');
+  check('and asking for another chapter by name changes nothing',
+    r.status === 200 && !r.data.some(m => m.name === 'Chapter Two Only Member'), r.data.map(m => m.name));
+  r = await call('pres', 'GET', '/api/executive/chapter/members', null, false, { 'X-Chapter-Id': 'test-chapter-2' });
+  check('nor does asking through a chapter header',
+    r.status === 200 && !r.data.some(m => m.name === 'Chapter Two Only Member'), r.data.map(m => m.name));
+  r = await call('patron', 'GET', '/api/admin/members');
+  check('a Patron administers nothing — not even their own chapter\'s members', r.status === 401, r.data);
+  r = await call('patron', 'GET', '/api/finance/summary');
+  check('and cannot reach any chapter\'s finances', r.status === 401, r.data);
+  r = await call('patron', 'PUT', '/api/council/meeting', { meetingUrl: 'https://zoom.us/j/123' });
+  check('only the National Coordinator convenes the council', r.status === 403, r.data);
+
+  // The meeting link is something people click, so it must be a real https URL.
+  r = await call('admin', 'PUT', '/api/council/meeting', { meetingUrl: 'javascript:alert(1)' });
+  check('a meeting link that is not a real https address is refused', r.status === 400, r.data);
+  r = await call('admin', 'PUT', '/api/council/meeting', {
+    meetingUrl: 'https://zoom.us/j/9876543210', meetingLabel: 'Monthly Council', meetingAt: 'First Saturday, 7:00 PM'
+  });
+  check('the National Coordinator sets the meeting', r.status === 200 && /zoom\.us/.test(r.data.meeting.meetingUrl), r.data);
+  r = await call('pres', 'GET', '/api/council');
+  check('and every seat can see it', r.data.meeting.url === 'https://zoom.us/j/9876543210', r.data.meeting);
+
+  // Removing posts: your own always, anyone's only as chair.
+  r = await call('coord2', 'DELETE', `/api/council/posts/${threadId}`);
+  check('you cannot remove someone else\'s post', r.status === 403, r.data);
+  r = await call('admin', 'PATCH', `/api/council/posts/${threadId}/pin`);
+  check('the chair pins a matter', r.status === 200 && r.data.item.pinned === true, r.data);
+  r = await call('admin', 'DELETE', `/api/council/posts/${threadId}`);
+  check('the chair can remove a thread', r.status === 200, r.data);
+  r = await call('admin', 'GET', '/api/council');
+  check('and its replies go with it, rather than being orphaned',
+    !r.data.threads.some(t => t.id === threadId), r.data.threads);
+
+  // The roster is public: these are the union's national executives.
+  r = await call('anon', 'GET', '/api/national/executives');
+  check('the national executives are listed publicly', r.status === 200 && Array.isArray(r.data) && r.data.length > 0, r.data);
+  check('with the National Coordinator ranked first', r.data[0].seat === 'National Coordinator' || r.data[0].seat === 'National Patron', r.data[0]);
+  check('and Chapter Presidents named among them', r.data.some(x => x.seat === 'Chapter President'), r.data.map(x => x.seat));
+  r = await call('anon', 'GET', '/api/council');
+  check('but the discussion itself is not public', r.status === 401, r.data);
+
   console.log('\n== static pages ==');
   for (const page of [
     '/more.html', '/admin.html', '/national.html', '/finance.html', '/coordinator.html', '/publicity.html', '/shepherding.html',
@@ -1560,7 +1739,8 @@ const { fakeModels } = require('./harness.js');
     '/events.html', '/index.html',
     '/groups.html', '/group.html', '/chat.html', '/welfare.html', '/welfare-portal.html', '/give.html',
     '/content.html', '/content-manager.html',
-    '/js/portal.js', '/js/national.js', '/js/executive.js', '/js/welfare-portal.js', '/css/portal.css'
+    '/council.html',
+    '/js/portal.js', '/js/national.js', '/js/executive.js', '/js/welfare-portal.js', '/js/council.js', '/css/portal.css'
   ]) {
     const res = await fetch(BASE + page);
     check(`${page} served`, res.status === 200);
@@ -1613,6 +1793,20 @@ const { fakeModels } = require('./harness.js');
   check('/chapter.html can show which chapter it belongs to', pageHtml['/chapter.html'].includes('id="adminBrandName"'));
   check('/executive.html can show which chapter it belongs to', pageHtml['/executive.html'].includes('id="portalBrandName"'));
   check('/coordinator.html can show which chapter it belongs to', pageHtml['/coordinator.html'].includes('id="portalBrandName"'));
+
+  // council.html is built from the same shell, so it must satisfy the same
+  // contract and its scripts must not clash in one global scope either.
+  {
+    const vm = require('vm');
+    const fs = require('fs');
+    const path = require('path');
+    const combined = ['main.js', 'portal.js', 'council.js']
+      .map(f => fs.readFileSync(path.join(__dirname, '..', 'public', 'js', f), 'utf8'))
+      .join('\n;\n');
+    let error = '';
+    try { new vm.Script(combined); } catch (e) { error = e.message; }
+    check("council.html's scripts declare no clashing globals", error === '', error);
+  }
 
   // The send loop only ticks once a minute, so this one is opt-in: run it with
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
