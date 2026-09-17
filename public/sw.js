@@ -1,10 +1,11 @@
 // ACONSU service worker — enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v8';
+const CACHE_NAME = 'aconsu-v9';
 
 const APP_SHELL = [
   '/index.html',
+  '/offline.html',
   '/about.html',
   '/departments.html',
   '/department.html',
@@ -48,6 +49,14 @@ const APP_SHELL = [
   '/icons/icon-maskable-512.png'
 ];
 
+// Responses that describe *who you are* are never written to the cache. Serving
+// a stale identity offline is worse than serving nothing: the page would render
+// as though the previous user were still signed in.
+const NEVER_CACHE_API = [
+  '/api/auth/me',
+  '/api/portal/me'
+];
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => {
@@ -79,8 +88,13 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((res) => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          // Only ever store a success. Caching a 401/403/500 would mean that
+          // once offline we'd confidently serve back an error we were told
+          // once, instead of the last good data we actually have.
+          if (res && res.status === 200 && !NEVER_CACHE_API.some((p) => url.pathname.startsWith(p))) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          }
           return res;
         })
         .catch(() => caches.match(request))
@@ -120,7 +134,7 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => caches.match(request).then((cached) => cached || caches.match('/404.html')))
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('/offline.html')))
     );
     return;
   }
@@ -136,9 +150,28 @@ self.addEventListener('fetch', (event) => {
           }
           return res;
         })
-        .catch(() => cached || caches.match('/404.html'));
+        .catch(() => cached);
       return cached || networkFetch;
     })
+  );
+});
+
+// A signed-out device must not keep one person's records where the next person
+// to open the app offline would be shown them. The page posts this the moment a
+// logout succeeds; we drop every cached /api/ response and leave the static
+// shell alone, so the app still opens offline — just with nobody's data in it.
+self.addEventListener('message', (event) => {
+  if (!event.data || event.data.type !== 'CLEAR_API_CACHE') return;
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      cache.keys().then((keys) =>
+        Promise.all(
+          keys
+            .filter((req) => new URL(req.url).pathname.startsWith('/api/'))
+            .map((req) => cache.delete(req))
+        )
+      )
+    )
   );
 });
 

@@ -1211,6 +1211,134 @@ const { fakeModels } = require('./harness.js');
     !/Assistant/i.test(r.data.department.headRole || '') && !!r.data.department.headName,
     r.data.department);
 
+  // Saving your own profile must not quietly cost you your department. The
+  // profile form sends name/phone/level/birthday and no department field at
+  // all, so a handler that writes `req.body.department || ''` resets it to
+  // blank every time a member edits their phone number — and nothing tells
+  // them it happened.
+  {
+    const beforeDept = (await call('member', 'GET', '/api/member/standing')).data.department;
+    const profileForm = new FormData();
+    profileForm.append('name', 'Ama Test');
+    profileForm.append('phone', '0270000000');
+    const saved = await fetch(BASE + '/api/member/profile', {
+      method: 'PUT', headers: { cookie: jars['member'] }, body: profileForm
+    });
+    check('a member can save their own profile', saved.status === 200, saved.status);
+    r = await call('member', 'GET', '/api/member/standing');
+    check('and saving it does not wipe the department they belong to',
+      r.data.department && r.data.department.id === (beforeDept && beforeDept.id),
+      { before: beforeDept && beforeDept.id, after: r.data.department && r.data.department.id });
+  }
+
+  console.log('\n== joining a department: the member asks, the head decides ==');
+  {
+    // A second department, so "joining one" can be told apart from "replacing
+    // the one you had" — the member is already in Choir at this point.
+    r = await call('admin', 'POST', '/api/admin/departments', { name: 'Ushering', tagline: 'Welcome' });
+    const usheringId = r.data.item.id;
+
+    r = await call('member', 'GET', '/api/member/departments');
+    check('a member sees their own chapter\'s departments without picking a chapter',
+      r.status === 200 && r.data.departments.some(d => d.id === usheringId) && r.data.departments.some(d => d.id === deptId), r.data);
+    check('and which ones they are already serving in',
+      (r.data.departments.find(d => d.id === deptId) || {}).joined === true, r.data.departments);
+
+    r = await call('member', 'POST', `/api/member/departments/${usheringId}/request`, { note: 'I would like to serve.' });
+    check('a member can ask to join a department', r.status === 200, r.data);
+    const requestId = r.data.item.id;
+
+    // Asking is not joining: nothing changes until the head decides.
+    r = await call('member', 'GET', '/api/member/standing');
+    check('asking does not put them in it yet',
+      !r.data.departments.some(d => d.id === usheringId), r.data.departments);
+    check('but the page can show the request is waiting',
+      (r.data.pendingRequests || []).some(p => p.departmentId === usheringId), r.data.pendingRequests);
+
+    r = await call('member', 'POST', `/api/member/departments/${usheringId}/request`, {});
+    check('tapping again does not stack up a second request',
+      r.status === 200 && r.data.alreadyPending === true && r.data.item.id === requestId, r.data);
+
+    // A join request must not be announced to the department: it would tell
+    // everyone in Ushering who had applied, and why.
+    r = await call('member', 'GET', '/api/notifications');
+    check('asking to join is not broadcast to the department',
+      !r.data.some(n => /wants to join/i.test(n.title || '')), r.data.map(n => n.title));
+
+    // The head of Choir must not be able to decide Ushering's roster.
+    r = await call('exec', 'GET', '/api/executive/department/requests');
+    check("a head sees only their own department's requests",
+      r.status === 200 && !r.data.some(x => x.id === requestId), r.data);
+    r = await call('exec', 'POST', `/api/executive/department/requests/${requestId}/decide`, { decision: 'approved' });
+    check("and cannot decide another department's request", r.status === 404, r.data);
+
+    // Now give Ushering a head of its own.
+    const ushRegForm = new FormData();
+    ushRegForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'u.png');
+    ushRegForm.append('name', 'Yaw Usher');
+    ushRegForm.append('email', 'yaw.usher@test.com');
+    ushRegForm.append('password', 'secret123');
+    ushRegForm.append('chapterId', chapterId);
+    const ushMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: ushRegForm })).json()).member.id;
+    r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ushering', name: 'Yaw Usher', role: 'executive', password: 'password123', memberId: ushMemberId, positionKey: 'ushering_head', department: usheringId });
+    check('an Ushering head is appointed', r.status === 200, r.data);
+    r = await call('ushead', 'POST', '/api/portal/login', { username: 'exec.ushering', password: 'password123' });
+    check('the Ushering head signs in', r.status === 200, r.data);
+
+    r = await call('ushead', 'GET', '/api/executive/department/requests');
+    check('the right head does see the request waiting',
+      r.status === 200 && r.data.some(x => x.id === requestId), r.data);
+    check('with enough about the member to decide',
+      (r.data.find(x => x.id === requestId) || {}).note === 'I would like to serve.', r.data);
+
+    r = await call('ushead', 'POST', `/api/executive/department/requests/${requestId}/decide`, { decision: 'approved' });
+    check('the head can approve it', r.status === 200, r.data);
+
+    // The whole point of the choice: joining Ushering must not remove them
+    // from Choir.
+    r = await call('member', 'GET', '/api/member/standing');
+    const joined = (r.data.departments || []).map(d => d.id);
+    check('the member is now in BOTH departments, not moved between them',
+      joined.includes(deptId) && joined.includes(usheringId), joined);
+    check('and no longer has it listed as waiting',
+      !(r.data.pendingRequests || []).some(p => p.departmentId === usheringId), r.data.pendingRequests);
+
+    // Deciding twice would double-add them.
+    r = await call('ushead', 'POST', `/api/executive/department/requests/${requestId}/decide`, { decision: 'declined' });
+    check('a decided request cannot be decided again', r.status === 400, r.data);
+
+    // Both heads must now see them, which is what the roster query change is for.
+    r = await call('ushead', 'GET', '/api/executive/department/members');
+    check('the Ushering roster includes them', r.data.some(m => m.id === memberId), r.data.map(m => m.id));
+    r = await call('exec', 'GET', '/api/executive/department/members');
+    check('and the Choir roster still does too', r.data.some(m => m.id === memberId), r.data.map(m => m.id));
+
+    // Announcements from either department must reach them.
+    r = await call('ushead', 'POST', '/api/executive/department/announcement', { title: 'Early call', body: 'Be there at 7.' });
+    check('the Ushering head can announce to their department', r.status === 200, r.data);
+    r = await call('member', 'GET', '/api/notifications');
+    check('a member of two departments hears from both',
+      r.data.some(n => n.title === 'Ushering: Early call') && r.data.some(n => n.title === 'Choir: Meeting moved'),
+      r.data.map(n => n.title));
+
+    // Leaving is theirs to do.
+    r = await call('member', 'DELETE', `/api/member/departments/${usheringId}`);
+    check('a member can step back out of a department', r.status === 200, r.data);
+    r = await call('member', 'GET', '/api/member/standing');
+    check('which leaves the other one untouched',
+      (r.data.departments || []).map(d => d.id).join(',') === deptId, r.data.departments);
+
+    // A department that does not exist is refused rather than creating a
+    // dangling request. (The cross-chapter case is checked further down, once
+    // the suite has a second chapter — creating one here would end the
+    // single-chapter defaulting that every test in between relies on.)
+    r = await call('member', 'POST', '/api/member/departments/depa_not_a_real_id/request', {});
+    check('asking to join a department that does not exist is refused', r.status === 404, r.data);
+
+    r = await call('anon', 'GET', '/api/member/departments');
+    check('and none of this is open to someone not signed in', r.status === 401, r.data);
+  }
+
   // Standing is your own. It must never answer for anyone else.
   r = await call('anon', 'GET', '/api/member/standing');
   check('standing is refused to someone not signed in', r.status === 401, r.data);
@@ -1448,6 +1576,17 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'GET', `/api/admin/chapter-sms?chapterId=${chapterId}`);
   check('which leaves chapter 1\'s credentials untouched',
     r.data.senderId === 'ACONSU' && r.data.apiKeyHint === '••••1234', r.data);
+
+  // Departments are chapter property too: a member of chapter 1 must not be
+  // able to put themselves on chapter 2's roster by quoting its id.
+  r = await call('admin', 'POST', '/api/admin/departments', { name: 'Other Choir', chapterId: 'test-chapter-2' });
+  check("chapter 2 gets a department of its own", r.status === 200, r.data);
+  const otherChapterDeptId = r.data.item.id;
+  r = await call('member', 'POST', `/api/member/departments/${otherChapterDeptId}/request`, {});
+  check("a member cannot ask to join another chapter's department", r.status === 404, r.data);
+  r = await call('member', 'GET', '/api/member/departments');
+  check("and another chapter's departments are not even listed to them",
+    !(r.data.departments || []).some(d => d.id === otherChapterDeptId), r.data.departments);
 
   {
     const smsLib = require('../lib/sms.js');
@@ -1961,6 +2100,69 @@ const { fakeModels } = require('./harness.js');
     check('and tells people how to have it deleted', /delete your account/i.test(policyText));
     const contact = await fetch(BASE + '/contact.html');
     check('the contact page a deletion request goes through also loads signed out', contact.status === 200, contact.status);
+  }
+
+  console.log('\n== PWA: installability and what happens with no network ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+
+    const manifest = JSON.parse(pub('manifest.json'));
+    // The implicit manifest id is start_url. If a declared id ever disagrees with
+    // it, everyone who already installed the app gets a SECOND icon rather than an
+    // update to the one they have — silent, and unfixable after the fact.
+    check('the manifest id matches start_url, so existing installs are not duplicated',
+      manifest.id === manifest.start_url, { id: manifest.id, start_url: manifest.start_url });
+    check('the manifest still declares a maskable icon',
+      manifest.icons.some(i => i.purpose === 'maskable'), manifest.icons.map(i => i.purpose));
+
+    const sw = pub('sw.js');
+    const offline = await fetch(BASE + '/offline.html');
+    check('the offline page is actually served', offline.status === 200, offline.status);
+    const offlineText = await offline.text();
+    // It is shown precisely when the network is gone, so anything it links out
+    // to could be the very thing that failed. It has to stand on its own bytes.
+    check('the offline page pulls in no stylesheet or script it could not load',
+      !/<link[^>]+rel=["']stylesheet["']/.test(offlineText) && !/<script[^>]+src=/.test(offlineText));
+    check('the offline page is in the cached shell', sw.includes("'/offline.html'"));
+    check('a document that is missing offline falls back to it, not to "page not found"',
+      sw.includes("caches.match('/offline.html')") && !sw.includes("caches.match('/404.html')"));
+
+    // A shared phone: one member signs out, the next opens the app with no data.
+    // Without this the service worker hands over the first member's cached records.
+    check('the service worker can be told to drop cached account data',
+      sw.includes('CLEAR_API_CACHE'));
+    check('and never caches who-you-are responses in the first place',
+      sw.includes('NEVER_CACHE_API') && sw.includes("'/api/auth/me'"));
+    check('and only ever caches a successful API response',
+      /res\.status === 200 && !NEVER_CACHE_API/.test(sw));
+    for (const [page, file] of [['profile.html', 'profile.html'], ['more.html', 'more.html']]) {
+      check(`${page} clears cached account data when signing out`,
+        pub(file).includes('clearCachedAccountData()'));
+    }
+    check('the portals clear cached account data when signing out',
+      pub('js/portal.js').includes('clearCachedAccountData()'));
+
+    const main = pub('js/main.js');
+    // Safari fires no install event at all, and we are not on the App Store, so
+    // Add to Home Screen is the only route an iPhone member has.
+    // Checked as "defined AND called", not as a bare substring: a plain
+    // includes('isIosSafari') still passes after the function is renamed to
+    // isIosSafariXX, which is a test that cannot fail.
+    check('iOS gets install instructions, since Safari fires no install prompt',
+      /function isIosSafari\s*\(/.test(main) && /[^\w]isIosSafari\(\)/.test(main) && /Add to Home Screen/i.test(main));
+    check('and browsers on iOS that cannot install are not told to try',
+      /CriOS\|FxiOS/.test(main));
+    check('an already-installed app is not asked to install again',
+      /function isStandalone\s*\(/.test(main) && /[^\w]isStandalone\(\)/.test(main) && main.includes('display-mode: standalone'));
+    check('a slow request explains the wait instead of showing a dead screen',
+      /function showSlowBanner\s*\(/.test(main) && main.includes('SLOW_REQUEST_MS'));
+    // Registration requires a photo, and a photo on mobile data is routinely
+    // slower than the cold-start threshold. Calling that "waking the server up"
+    // would be wrong, to a brand-new member, at their first moment in the app.
+    check('a slow upload is not mistaken for a sleeping server',
+      main.includes('opts.body instanceof FormData') && /Still uploading/.test(main));
   }
 
   console.log('\n== shared scripts only touch elements their pages actually have ==');

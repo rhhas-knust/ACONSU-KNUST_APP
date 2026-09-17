@@ -9,10 +9,87 @@ async function fetchJSON(url, options) {
     const chapterId = getSelectedChapterId();
     if (chapterId) opts.headers = { ...(opts.headers || {}), 'X-Chapter-Id': chapterId };
   }
-  const res = await fetch(url, opts);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request failed');
-  return data;
+  // An upload that is slow is not a sleeping server — it is a big photo on a
+  // mobile connection, which is the normal case at registration. Telling those
+  // two apart decides which message is honest.
+  const done = beginRequest(opts.body instanceof FormData);
+  try {
+    const res = await fetch(url, opts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  } finally {
+    done();
+  }
+}
+
+// ---------- slow first request (free-tier cold start) ----------
+// The server sleeps when nobody has used it for a while, and the request that
+// wakes it can take the better part of a minute. To a member that is a dead
+// screen, and a dead screen reads as a broken app — so say what is happening
+// rather than leaving them to guess. Only shown when a request is genuinely
+// slow, so a warm server never shows it at all.
+const SLOW_REQUEST_MS = 4000;
+let inFlight = 0;
+let slowTimer = null;
+
+function beginRequest(isUpload) {
+  inFlight++;
+  if (inFlight === 1) {
+    slowTimer = setTimeout(() => showSlowBanner(isUpload), SLOW_REQUEST_MS);
+  }
+  let settled = false;
+  return function finish() {
+    if (settled) return; // a caller finishing twice must not unbalance the count
+    settled = true;
+    inFlight = Math.max(0, inFlight - 1);
+    if (inFlight === 0) {
+      clearTimeout(slowTimer);
+      slowTimer = null;
+      hideSlowBanner();
+    }
+  };
+}
+
+function showSlowBanner(isUpload) {
+  if (document.getElementById('wakingBanner')) return;
+  const message = isUpload
+    ? 'Still uploading — a photo can take a while on mobile data.'
+    : 'Waking the server up — this can take a moment the first time today.';
+  const el = document.createElement('div');
+  el.id = 'wakingBanner';
+  el.setAttribute('role', 'status');
+  el.innerHTML = `
+    <span style="width:14px; height:14px; border:2px solid rgba(255,255,255,0.32); border-top-color:#E8971E; border-radius:50%; display:inline-block; animation:aconsuSpin 0.8s linear infinite; flex-shrink:0;"></span>
+    <span></span>
+  `;
+  el.lastElementChild.textContent = message;
+  el.style.cssText = 'position:fixed; left:16px; right:16px; top:16px; z-index:395; background:#3A1B54; color:#fff; border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:11px; box-shadow:0 12px 30px rgba(0,0,0,0.26); max-width:440px; margin:0 auto; font-family:Manrope,sans-serif; font-size:0.84rem; font-weight:600;';
+  if (!document.getElementById('aconsuSpinKeyframes')) {
+    const style = document.createElement('style');
+    style.id = 'aconsuSpinKeyframes';
+    style.textContent = '@keyframes aconsuSpin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+  }
+  document.body.appendChild(el);
+}
+
+function hideSlowBanner() {
+  const el = document.getElementById('wakingBanner');
+  if (el) el.remove();
+}
+
+// ---------- signing out ----------
+// Clearing the session cookie is not enough on a shared phone. The service
+// worker has been keeping /api/ responses so the app works offline, and those
+// responses are the departing member's records. Drop them before the next
+// person opens the app.
+async function clearCachedAccountData() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.ready;
+    if (reg && reg.active) reg.active.postMessage({ type: 'CLEAR_API_CACHE' });
+  } catch (e) { /* signing out must never be blocked by cache cleanup */ }
 }
 
 // ---------- chapter selection ----------
@@ -528,6 +605,8 @@ if ('serviceWorker' in navigator) {
   });
 }
 
+window.addEventListener('load', maybeOfferIosInstall);
+
 let deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
@@ -540,9 +619,74 @@ window.addEventListener('appinstalled', () => {
   if (banner) banner.remove();
 });
 
+// Safari never fires `beforeinstallprompt` — there is no programmatic install on
+// iOS at all. Since we are not shipping through the App Store, Add to Home Screen
+// is the *only* way an iPhone member can get the app, and Apple surfaces it
+// nowhere obvious. Without this, every iOS visitor stays on a browser tab
+// forever and never sees a home-screen icon or a full-screen app.
+function isIosSafari() {
+  const ua = navigator.userAgent || '';
+  // iPadOS 13+ reports itself as a Mac; the touch-point count is what gives it away.
+  const isIpadOs = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  const isIos = /iPad|iPhone|iPod/.test(ua) || isIpadOs;
+  if (!isIos) return false;
+  // Chrome, Firefox and Edge on iOS cannot install to the home screen at all,
+  // so pointing their users at a Share menu that lacks the option is worse than
+  // saying nothing. Only Safari proper gets the prompt.
+  return !/CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
+}
+
+function isStandalone() {
+  return window.navigator.standalone === true ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+
+function showIosInstallSheet() {
+  if (document.getElementById('iosInstallSheet')) return;
+  if (localStorage.getItem('aconsu_install_dismissed') === '1') return;
+
+  const sheet = document.createElement('div');
+  sheet.id = 'iosInstallSheet';
+  sheet.innerHTML = `
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
+      <img src="/icons/icon-72.png" alt="" style="width:44px; height:44px; border-radius:12px; flex-shrink:0;">
+      <div>
+        <strong style="display:block; font-size:0.95rem;">Add ACONSU to your Home Screen</strong>
+        <span style="font-size:0.78rem; opacity:0.8;">Opens full screen and works offline</span>
+      </div>
+      <button id="iosInstallDismiss" aria-label="Dismiss" style="margin-left:auto; background:none; color:#fff; border:none; font-size:1.4rem; line-height:1; cursor:pointer; opacity:0.75; flex-shrink:0;">&times;</button>
+    </div>
+    <ol style="margin:0; padding-left:20px; font-size:0.85rem; line-height:1.85; opacity:0.92;">
+      <li>Tap the <strong>Share</strong> button <span aria-hidden="true">&#x2191;</span> at the bottom of Safari</li>
+      <li>Scroll down and tap <strong>Add to Home Screen</strong></li>
+      <li>Tap <strong>Add</strong></li>
+    </ol>
+  `;
+  sheet.style.cssText = 'position:fixed; left:16px; right:16px; bottom:16px; z-index:390; background:#3A1B54; color:#fff; border-radius:16px; padding:16px 18px; box-shadow:0 16px 40px rgba(0,0,0,0.32); max-width:420px; margin:0 auto; font-family:Manrope,sans-serif;';
+  document.body.appendChild(sheet);
+
+  document.getElementById('iosInstallDismiss').addEventListener('click', () => {
+    try { localStorage.setItem('aconsu_install_dismissed', '1'); } catch (e) { /* private mode */ }
+    sheet.remove();
+  });
+}
+
+// Don't ambush a first-time visitor with this before they know what the app is.
+// Show it once they've come back, or once they've been reading for a while.
+function maybeOfferIosInstall() {
+  if (!isIosSafari() || isStandalone()) return;
+  let visits = 0;
+  try {
+    visits = parseInt(localStorage.getItem('aconsu_visits') || '0', 10) + 1;
+    localStorage.setItem('aconsu_visits', String(visits));
+  } catch (e) { return; } // no storage means no way to stop nagging, so don't start
+  if (visits >= 2) setTimeout(showIosInstallSheet, 2500);
+}
+
 function showInstallBanner() {
   if (document.getElementById('installBanner')) return;
   if (localStorage.getItem('aconsu_install_dismissed') === '1') return;
+  if (isStandalone()) return;
   const banner = document.createElement('div');
   banner.id = 'installBanner';
   banner.innerHTML = `

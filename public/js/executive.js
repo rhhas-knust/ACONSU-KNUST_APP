@@ -256,9 +256,14 @@ async function renderExecDepartment(el) {
 }
 
 async function renderExecDeptMembers(el) {
-  let members;
+  let members, requests;
   try {
-    members = await fetchJSON('/api/executive/department/members');
+    // The roster and the queue to join it belong together: a head looking at
+    // who is in the department is exactly who should be deciding who comes in.
+    [members, requests] = await Promise.all([
+      fetchJSON('/api/executive/department/members'),
+      fetchJSON('/api/executive/department/requests')
+    ]);
   } catch (err) {
     return departmentPrompt(el, err.message || 'Choose your department on your profile first.');
   }
@@ -270,6 +275,30 @@ async function renderExecDeptMembers(el) {
       </div>
       <div class="panel-actions"><span class="tiny muted">${members.length} member${members.length === 1 ? '' : 's'}</span></div>
     </div>
+
+    ${requests.length ? `
+      <div class="card" style="margin-bottom:18px; border-left:3px solid #E8971E;">
+        <h3 style="margin:0 0 4px; font-size:1rem;">Waiting on you</h3>
+        <p class="sub" style="margin:0 0 14px;">${requests.length} ${requests.length === 1 ? 'person has' : 'people have'} asked to serve here.</p>
+        <div class="table-wrap">
+          <table class="portal-table">
+            <thead><tr><th>Name</th><th>Level / Programme</th><th>Why</th><th></th></tr></thead>
+            <tbody>
+              ${requests.map(rq => `
+                <tr>
+                  <td><strong>${escapeHtml(rq.name || '—')}</strong></td>
+                  <td class="tiny muted">${escapeHtml([rq.level, rq.programme].filter(Boolean).join(' · ') || '—')}</td>
+                  <td class="tiny muted">${escapeHtml(rq.note || '—')}</td>
+                  <td style="white-space:nowrap;">
+                    <button class="btn btn-primary btn-sm dept-req" data-id="${escapeHtml(rq.id)}" data-decision="approved">Accept</button>
+                    <button class="btn btn-outline btn-sm dept-req" data-id="${escapeHtml(rq.id)}" data-decision="declined">Decline</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>` : ''}
     <div class="table-wrap">
       <table class="portal-table">
         <thead><tr><th>Name</th><th>Level / Programme</th><th>Contact</th><th>Stage</th></tr></thead>
@@ -286,6 +315,23 @@ async function renderExecDeptMembers(el) {
       </table>
     </div>
   `;
+
+  el.querySelectorAll('.dept-req').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const decision = btn.dataset.decision;
+      el.querySelectorAll('.dept-req').forEach(b => { b.disabled = true; });
+      btn.textContent = decision === 'approved' ? 'Accepting…' : 'Declining…';
+      try {
+        await fetchJSON(`/api/executive/department/requests/${encodeURIComponent(btn.dataset.id)}/decide`,
+          { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ decision }) });
+        showToast(decision === 'approved' ? 'They are in.' : 'Request declined.', 'success');
+        await renderExecDeptMembers(el);
+      } catch (err) {
+        showToast(err.message || 'Could not record that decision.', 'error');
+        el.querySelectorAll('.dept-req').forEach(b => { b.disabled = false; });
+      }
+    });
+  });
 }
 
 async function renderExecDeptAttendance(el) {
