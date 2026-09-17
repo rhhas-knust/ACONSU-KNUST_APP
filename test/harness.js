@@ -149,6 +149,7 @@ const fakeModels = {
   DepartmentMeeting: makeModel({ chapterId: '', departmentId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
   ExecutiveMinute: makeModel({ chapterId: '', date: '', title: '', presentExecutiveIds: [], presentNames: [], apologies: '', body: '', decisions: '', status: 'draft', adoptedBy: '', adoptedAt: null, recordedBy: '' }),
   DailyVerse: makeModel({ chapterId: '', date: '', reference: '', text: '', reflection: '', postedBy: '' }),
+  CouncilPost: makeModel({ parentId: '', body: '', authorStaffId: '', authorName: '', authorRole: '', authorChapterId: '', authorChapterName: '', pinned: false }),
   ChatTopic: makeModel({ chapterId: '', createdByMemberId: '', createdByName: '', locked: false }),
   ChatMessage: makeModel({ chapterId: '', authorMemberId: '', authorName: '', reportCount: 0, hidden: false, hiddenBy: '' }),
   VolunteerAssignment: makeModel({ chapterId: '', memberName: '', status: 'assigned', notes: '', assignedBy: '' }),

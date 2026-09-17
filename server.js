@@ -188,7 +188,10 @@ app.get('/api/shepherd/check', (req, res) => {
 // data this session may touch" — these helpers only answer "which role".
 const PORTAL_ROLES = [
   'nationalCoordinator', 'coordinator', 'chapterAdmin', 'executive',
-  'finance', 'shepherding', 'publicity', 'welfare'
+  'finance', 'shepherding', 'publicity', 'welfare',
+  // A Patron holds no office portal of their own — their seat is on the
+  // national council, and that is the whole of what the account is for.
+  'patron'
 ];
 
 // An executive serves one academic year (section 9). The term deadline rides
@@ -343,6 +346,48 @@ const requireFinance = requireRole('finance');
 const requirePublicity = requireRole('publicity');
 const requireCoordinator = requireRole('coordinator');
 
+// ---------- the national council ----------
+// The one body where the whole union sits together: the National Coordinator,
+// every Chapter Coordinator, every Chapter President, and the Patrons —
+// national and chapter alike.
+//
+// Membership grants exactly two things: reading the council and speaking in
+// it. It grants NOTHING about another chapter. A Chapter President on this
+// council still cannot see another chapter's members, money or welfare cases,
+// because nothing below ever widens chapterFilter — the council's own posts
+// are simply not chapter-scoped data in the first place.
+const COUNCIL_SEATS = {
+  nationalCoordinator: 'National Coordinator',
+  coordinator: 'Chapter Coordinator',
+  patron: 'Patron'
+};
+
+// Which seat this account speaks from, or null if they hold none. A Chapter
+// President earns their seat through the position on their roster card, which
+// is stamped into the session at sign-in.
+function councilSeat(req) {
+  if (req.session && req.session.isAdmin) return 'National Coordinator';
+  const staff = currentStaff(req);
+  if (!staff) return null;
+  if (staff.role === 'patron') return staff.chapterId ? 'Chapter Patron' : 'National Patron';
+  if (COUNCIL_SEATS[staff.role]) return COUNCIL_SEATS[staff.role];
+  if (staff.role === 'executive' && staff.positionKey === 'president') return 'Chapter President';
+  return null;
+}
+
+function requireCouncil(req, res, next) {
+  if (councilSeat(req)) return next();
+  return res.status(401).json({ error: 'The council is for the National Coordinator, Chapter Coordinators, Chapter Presidents and the Patrons.' });
+}
+
+// Only the National Coordinator convenes the council, so only they set the
+// meeting link and the standing notice.
+function requireCouncilChair(req, res, next) {
+  const scope = rolesLib.getActingScope(req);
+  if (scope.isNational) return next();
+  return res.status(403).json({ error: 'Only the National Coordinator can set the council meeting.' });
+}
+
 // ---------- chapter hierarchy helpers ----------
 // Chapter Admin (or above): the operational tier from section 5 — manages
 // users/content/events/forms/attendance/reports for their own chapter.
@@ -481,11 +526,23 @@ app.get('/api/portal/me', async (req, res) => {
     // became unreachable without clearing cookies. So entry to those portals
     // asks whether you hold the office (or oversee it as that chapter's
     // Coordinator), not whether you outrank it.
-    access: PORTAL_ROLES.reduce((acc, role) => {
-      const entitled = OFFICE_PORTAL_ROLES.includes(role) ? holdsOfficePortal(req, role) : canView(req, role);
-      acc[role] = { view: entitled, edit: entitled && hasRole(req, role) };
+    // The seat this account holds on the national council, or null. Sent here
+    // so the council page can admit its members through the same shell every
+    // other portal uses.
+    councilSeat: councilSeat(req),
+    access: (() => {
+      const acc = PORTAL_ROLES.reduce((out, role) => {
+        const entitled = OFFICE_PORTAL_ROLES.includes(role) ? holdsOfficePortal(req, role) : canView(req, role);
+        out[role] = { view: entitled, edit: entitled && hasRole(req, role) };
+        return out;
+      }, {});
+      // The council is not an office, so it is not in PORTAL_ROLES — but the
+      // portal shell decides admission from this map, so its seat belongs
+      // here alongside them. Everyone who holds a seat may also speak.
+      const seat = councilSeat(req);
+      acc.council = { view: !!seat, edit: !!seat };
       return acc;
-    }, {})
+    })()
   });
 });
 
@@ -4146,6 +4203,180 @@ app.post('/api/executive/chapter/announcement', requireRole('executive'), requir
   res.json({ success: true, item, reached: members.length });
 }));
 
+// ---------- council: roster, meeting, discussion ----------
+
+// Who sits on the council, built from the accounts that actually hold those
+// offices rather than a typed list that would drift the moment anyone changed.
+async function buildCouncilRoster() {
+  const [staff, chapters, executives] = await Promise.all([
+    models.StaffUser.find({ active: { $ne: false } }).lean(),
+    repo.getAll('chapters', {}),
+    repo.getAll('executives', {})
+  ]);
+  const chapterName = new Map(chapters.map(c => [c.id, c.name]));
+  const seats = [];
+
+  staff.forEach((u) => {
+    let seat = null;
+    if (u.role === 'nationalCoordinator') seat = 'National Coordinator';
+    else if (u.role === 'coordinator') seat = 'Chapter Coordinator';
+    else if (u.role === 'patron') seat = u.chapterId ? 'Chapter Patron' : 'National Patron';
+    if (seat) {
+      seats.push({ name: u.name || u.username, seat, chapterId: u.chapterId || '', chapterName: chapterName.get(u.chapterId) || '' });
+    }
+  });
+
+  // Chapter Presidents sit by virtue of their position, so they are read from
+  // the roster cards rather than from the account's role.
+  executives.forEach((e) => {
+    const position = positions.resolvePosition(e.positionKey, e.role, !!e.department);
+    if (position.key === 'president') {
+      seats.push({ name: e.name || '', seat: 'Chapter President', chapterId: e.chapterId || '', chapterName: chapterName.get(e.chapterId) || '', imageFileId: e.imageFileId || '' });
+    }
+  });
+
+  const rank = { 'National Coordinator': 1, 'National Patron': 2, 'Chapter Patron': 3, 'Chapter Coordinator': 4, 'Chapter President': 5 };
+  return seats.sort((a, b) => (rank[a.seat] || 9) - (rank[b.seat] || 9)
+    || String(a.chapterName).localeCompare(String(b.chapterName))
+    || String(a.name).localeCompare(String(b.name)));
+}
+
+app.get('/api/council', requireCouncil, async (req, res) => {
+  try {
+    const [settings, posts, roster] = await Promise.all([
+      repo.getSettings(),
+      repo.getAll('councilPosts', {}),
+      buildCouncilRoster()
+    ]);
+    const council = (settings && settings.council) || {};
+    const byNewest = (a, b) => new Date(b.createdAt) - new Date(a.createdAt);
+    const replies = posts.filter(p => p.parentId);
+    const threads = posts
+      .filter(p => !p.parentId)
+      .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || byNewest(a, b))
+      .map(p => ({
+        ...p,
+        replies: replies
+          .filter(r => r.parentId === p.id)
+          .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
+      }));
+    res.json({
+      seat: councilSeat(req),
+      isChair: rolesLib.getActingScope(req).isNational,
+      meeting: {
+        url: council.meetingUrl || '',
+        label: council.meetingLabel || '',
+        at: council.meetingAt || '',
+        notice: council.notice || ''
+      },
+      roster,
+      threads
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the council right now.' });
+  }
+});
+
+app.put('/api/council/meeting', requireCouncil, requireCouncilChair, async (req, res) => {
+  try {
+    const url = cleanText(req.body.meetingUrl || '');
+    // A meeting link is something council members will click, so only real
+    // http(s) links are accepted — never a javascript: or data: URL typed in.
+    if (url && !/^https:\/\/[^\s]+$/i.test(url)) {
+      return res.status(400).json({ error: 'The meeting link must be a full https:// address.' });
+    }
+    const settings = await repo.getSettings();
+    const saved = await repo.setSettings({
+      ...settings,
+      council: {
+        meetingUrl: url,
+        meetingLabel: cleanText(req.body.meetingLabel || ''),
+        meetingAt: cleanText(req.body.meetingAt || ''),
+        notice: cleanText(req.body.notice || '')
+      }
+    });
+    res.json({ success: true, meeting: (saved && saved.council) || {} });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save the council meeting.' });
+  }
+});
+
+app.post('/api/council/posts', requireCouncil, async (req, res) => {
+  try {
+    const body = cleanText(req.body.body || '');
+    if (!body) return res.status(400).json({ error: 'Say something before posting.' });
+
+    // A reply must attach to a real top-level post, and replies never nest.
+    let parentId = String(req.body.parentId || '').trim();
+    if (parentId) {
+      const parent = await repo.getById('councilPosts', parentId);
+      if (!parent) return res.status(400).json({ error: 'That discussion no longer exists.' });
+      if (parent.parentId) parentId = parent.parentId; // keep threads one level deep
+    }
+
+    const staff = currentStaff(req) || {};
+    const chapterId = staff.chapterId || '';
+    const chapter = chapterId ? await repo.getById('chapters', chapterId) : null;
+    const item = await repo.create('councilPosts', {
+      parentId,
+      body,
+      authorStaffId: staff.id || '',
+      authorName: actorName(req),
+      authorRole: councilSeat(req) || '',
+      authorChapterId: chapterId,
+      authorChapterName: chapter ? chapter.name : ''
+    }, 'cpost');
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not post that.' });
+  }
+});
+
+// Anyone may retract their own words; the chair may remove anything, since
+// they answer for the council.
+app.delete('/api/council/posts/:id', requireCouncil, async (req, res) => {
+  try {
+    const post = await repo.getById('councilPosts', req.params.id);
+    if (!post) return res.status(404).json({ error: 'That post was not found.' });
+    const staff = currentStaff(req) || {};
+    const isChair = rolesLib.getActingScope(req).isNational;
+    if (!isChair && post.authorStaffId !== staff.id) {
+      return res.status(403).json({ error: 'You can only remove your own posts.' });
+    }
+    await repo.removeById('councilPosts', post.id);
+    // A thread's replies go with it, rather than being left orphaned.
+    if (!post.parentId) {
+      const replies = await repo.getAll('councilPosts', { parentId: post.id });
+      await Promise.all(replies.map(r => repo.removeById('councilPosts', r.id)));
+    }
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove that post.' });
+  }
+});
+
+app.patch('/api/council/posts/:id/pin', requireCouncil, requireCouncilChair, async (req, res) => {
+  try {
+    const post = await repo.getById('councilPosts', req.params.id);
+    if (!post) return res.status(404).json({ error: 'That post was not found.' });
+    if (post.parentId) return res.status(400).json({ error: 'Only a discussion can be pinned, not a reply.' });
+    const item = await repo.patchById('councilPosts', post.id, { pinned: !post.pinned });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not pin that.' });
+  }
+});
+
+// The council roster, public. These are the union's national executives and
+// belong on the global app whether or not anyone is signed in.
+app.get('/api/national/executives', async (req, res) => {
+  try {
+    res.json(await buildCouncilRoster());
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the national executives' });
+  }
+});
+
 // ---------- Publicity: event review queue (section 9, continued) ----------
 app.get('/api/publicity/events/queue', requireViewRole('publicity'), async (req, res) => {
   try {
@@ -4631,10 +4862,22 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   if (role === 'executive' && !isChapterCoordinatorOrAbove(req)) {
     return res.status(403).json({ error: 'Only the Chapter Coordinator can promote a member to the executive body.' });
   }
+  // A National Patron belongs to the union rather than to any chapter, so they
+  // are the one other account that legitimately has no chapterId. Saying so
+  // takes the explicit NATIONAL_SCOPE token — the same deliberate statement a
+  // national executive card takes — and only a national actor may make it.
+  const wantsNationalPatron = role === 'patron'
+    && String(req.body.chapterId || '') === rolesLib.NATIONAL_SCOPE;
+  if (wantsNationalPatron && !scope.isNational) {
+    return res.status(403).json({ error: 'Only the National Coordinator can appoint the National Patron.' });
+  }
+
   // A chapter-scoped admin can only ever create accounts for their own
   // chapter, regardless of what the request body claims.
-  const chapterId = role === 'nationalCoordinator' ? '' : await resolveChapterIdForWrite(req, req.body.chapterId);
-  if (role !== 'nationalCoordinator' && !chapterId) {
+  const chapterId = (role === 'nationalCoordinator' || wantsNationalPatron)
+    ? ''
+    : await resolveChapterIdForWrite(req, req.body.chapterId);
+  if (role !== 'nationalCoordinator' && !wantsNationalPatron && !chapterId) {
     return res.status(400).json({ error: 'A chapter is required for this role — this deployment now has more than one, please specify which.' });
   }
   // An executive is a promoted member, vetted by the Coordinator — so the
