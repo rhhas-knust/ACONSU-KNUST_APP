@@ -25,6 +25,7 @@ const APP_SHELL = [
   '/more.html',
   '/prayer.html',
   '/contact.html',
+  '/privacy.html',
   '/login.html',
   '/register.html',
   '/forgot-password.html',
@@ -99,6 +100,7 @@ self.addEventListener('fetch', (event) => {
     '/national.html',
     '/executive.html',
     '/welfare-portal.html',
+    '/council.html',
     '/content-manager.html'
   ];
   if (LIVE_ONLY.some((p) => url.pathname.startsWith(p)) || url.pathname.startsWith('/js/portal.js') || url.pathname.startsWith('/css/portal.css')) {

@@ -1936,7 +1936,7 @@ const { fakeModels } = require('./harness.js');
     '/events.html', '/index.html',
     '/groups.html', '/group.html', '/chat.html', '/welfare.html', '/welfare-portal.html', '/give.html',
     '/content.html', '/content-manager.html',
-    '/council.html',
+    '/council.html', '/privacy.html',
     '/js/portal.js', '/js/national.js', '/js/executive.js', '/js/welfare-portal.js', '/js/council.js', '/css/portal.css'
   ]) {
     const res = await fetch(BASE + page);
@@ -1949,6 +1949,20 @@ const { fakeModels } = require('./harness.js');
   // no such id, so the handler threw on the first line and the Chapter Admin
   // login silently did nothing at all. These assert the contract directly, so
   // the next page to share a script cannot quietly drop an id its script needs.
+  // Google Play and the App Store both open the privacy policy while signed
+  // out, and reject a listing whose policy URL does not load. The same is true
+  // of the page a data-deletion request is made from.
+  {
+    const policy = await fetch(BASE + '/privacy.html');
+    const policyText = await policy.text();
+    check('the privacy policy loads without signing in', policy.status === 200, policy.status);
+    check('and says what is actually collected',
+      /prayer request/i.test(policyText) && /welfare/i.test(policyText) && /hostel/i.test(policyText), policyText.length);
+    check('and tells people how to have it deleted', /delete your account/i.test(policyText));
+    const contact = await fetch(BASE + '/contact.html');
+    check('the contact page a deletion request goes through also loads signed out', contact.status === 200, contact.status);
+  }
+
   console.log('\n== shared scripts only touch elements their pages actually have ==');
   const pageHtml = {};
   for (const page of ['/admin.html', '/chapter.html', '/executive.html', '/coordinator.html']) {

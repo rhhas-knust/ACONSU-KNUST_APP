@@ -7,3 +7,8 @@ node_modules/
 # Captured console output from a local `npm test > ...` redirect. Never useful
 # to anyone else and easy to commit by accident.
 test-output.txt
+
+# Android release signing — holds the passwords to the app signing key.
+android/keystore.properties
+*.jks
+*.keystore
