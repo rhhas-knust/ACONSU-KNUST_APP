@@ -662,11 +662,20 @@ function isActivatedMember(member) {
 // triggers (new event, new sermon, birthdays).
 // `chapterId` blank = national broadcast, visible in every chapter's feed —
 // pass a real chapter id to keep an announcement inside one chapter.
-async function createNotification(title, body, url, source, chapterId) {
+// `audience` (optional) confines an announcement to one department:
+// { departmentId, memberIds }. Without it this is a chapter-wide notice, which
+// is what every caller but the department announcement wants.
+async function createNotification(title, body, url, source, chapterId, audience) {
+  const departmentId = (audience && audience.departmentId) || '';
   const notif = await repo.create('notifications', {
-    chapterId: chapterId || '', title, body, url: url || '/index.html', source: source || 'admin'
+    chapterId: chapterId || '', title, body, url: url || '/index.html',
+    source: source || 'admin', departmentId
   }, 'notif');
-  push.sendPushToAll({ title, body, url: url || '/index.html' }, chapterId).catch(() => {});
+  push.sendPushToAll(
+    { title, body, url: url || '/index.html' },
+    chapterId,
+    audience ? (audience.memberIds || []) : undefined
+  ).catch(() => {});
   return notif;
 }
 
@@ -844,7 +853,11 @@ app.get('/api/auth/me', async (req, res) => {
   try {
     const member = await repo.getById('members', req.session.memberId);
     if (!member) return res.json({ member: null });
-    const { passwordHash, ...safe } = member;
+    // Only passwordHash was being stripped, so every page load also shipped the
+    // member's password-reset token hash and their QR token to the browser.
+    // None of it is needed here: the digital card has its own endpoint, and the
+    // reset token is credential material that should never leave the server.
+    const { passwordHash, resetTokenHash, resetTokenExpires, qrToken, ...safe } = member;
     res.json({ member: safe });
   } catch (e) {
     res.json({ member: null });
@@ -965,6 +978,131 @@ app.post('/api/member/bible-read', requireMember, async (req, res) => {
 // ---------- engagement: badges ----------
 // Computed live from real activity rather than stored as a separate ledger —
 // always accurate, and there's nothing to keep in sync if data changes later.
+// Where a member stands: the department they belong to, how far along the
+// membership journey they are, and who is shepherding them.
+//
+// All of this already existed server-side — it drives Shepherding's whole
+// workflow — but the member themselves could never see any of it. They
+// registered, became a 'visitor', and nothing in the app told them what that
+// meant or what happened next.
+const MEMBERSHIP_JOURNEY = [
+  { stage: 'visitor', label: 'Visitor', blurb: 'You have registered, and we are glad you are here. Someone from Shepherding will reach out to welcome you.' },
+  { stage: 'under_review', label: 'Being welcomed', blurb: 'Shepherding is getting to know you. They will be in touch about becoming a full member.' },
+  { stage: 'accepted', label: 'Accepted', blurb: 'You have been accepted into the chapter. A shepherd will be assigned to walk with you.' },
+  { stage: 'active', label: 'Member', blurb: 'You are a full member of the chapter.' },
+  { stage: 'worker', label: 'Worker', blurb: 'You serve in a department — thank you for giving your time.' },
+  { stage: 'executive', label: 'Executive', blurb: 'You hold office in the chapter.' },
+  { stage: 'alumni', label: 'Alumni', blurb: 'You have finished your studies. You are always part of the family.' }
+];
+
+// What this member has signed up for. Registering was possible; seeing what
+// you had signed up for was not — the profile's "My Events" went to the same
+// events page everyone else sees.
+app.get('/api/member/events', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    const all = await repo.getAll('eventRegistrations', { chapterId: member.chapterId || '' });
+    // Matched on the member id where it was stamped, and on email otherwise,
+    // so registrations made before the id existed still show up.
+    const email = String(member.email || '').toLowerCase();
+    const mine = all.filter(r => (r.memberId && r.memberId === member.id)
+      || (!r.memberId && String(r.email || '').toLowerCase() === email));
+    if (!mine.length) return res.json([]);
+
+    const events = await repo.getAll('events', { chapterId: member.chapterId || '' });
+    const byId = new Map(events.map(e => [e.id, e]));
+    const today = new Date().toISOString().slice(0, 10);
+
+    res.json(mine
+      .map(r => {
+        const event = byId.get(r.eventId);
+        if (!event) return null;
+        return {
+          registrationId: r.id,
+          id: event.id,
+          title: event.title,
+          date: event.date,
+          time: event.time || '',
+          location: event.location || '',
+          status: event.status,
+          past: !!(event.date && event.date < today)
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => String(a.date).localeCompare(String(b.date))));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the events you signed up for.' });
+  }
+});
+
+app.get('/api/member/standing', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+
+    const stage = member.membershipStage || 'visitor';
+    const index = MEMBERSHIP_JOURNEY.findIndex(s => s.stage === stage);
+    const current = MEMBERSHIP_JOURNEY[index] || MEMBERSHIP_JOURNEY[0];
+    // Alumni is an ending rather than a rung, so nothing is "next" from there.
+    const next = (stage === 'alumni' || index < 0) ? null : MEMBERSHIP_JOURNEY[index + 1] || null;
+
+    let department = null;
+    if (member.department) {
+      const found = await repo.getById('departments', member.department, { chapterId: member.chapterId || '' });
+      if (found) {
+        // Who heads it is derived from whoever holds the office, so it can
+        // never go stale the way a typed-in name would.
+        const execs = await repo.getAll('executives', { chapterId: member.chapterId || '', department: found.id });
+        const head = execs
+          .map(e => ({ e, position: positions.resolvePosition(e.positionKey, e.role, true) }))
+          .filter(x => !x.position.deputyOf)[0] || null;
+        department = {
+          id: found.id,
+          name: found.name,
+          tagline: found.tagline || '',
+          meetingDay: found.meetingDay || '',
+          meetingTime: found.meetingTime || '',
+          meetingLocation: found.meetingLocation || '',
+          headName: head ? head.e.name : '',
+          headRole: head ? head.e.role : ''
+        };
+      }
+    }
+
+    // What their department has actually said to them. A department
+    // announcement used to exist only as a push notification, so anyone who
+    // had notifications turned off, or simply missed it, had no way back to it.
+    let departmentNotices = [];
+    if (member.department) {
+      const notices = await repo.getAll('notifications', {
+        chapterId: member.chapterId || '',
+        departmentId: member.department
+      });
+      departmentNotices = notices
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 5)
+        .map(n => ({ id: n.id, title: n.title, body: n.body, createdAt: n.createdAt }));
+    }
+
+    res.json({
+      departmentNotices,
+      stage: { key: current.stage, label: current.label, blurb: current.blurb },
+      next: next ? { key: next.stage, label: next.label } : null,
+      journey: MEMBERSHIP_JOURNEY.map(s => ({ key: s.stage, label: s.label })),
+      membershipNumber: member.membershipNumber || '',
+      shepherdName: member.shepherdName || '',
+      department,
+      // Said plainly, because "no department" is a thing to act on rather than
+      // an error: it is how someone finds where they fit.
+      needsDepartment: !member.department
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load where you stand right now.' });
+  }
+});
+
 app.get('/api/member/badges', requireMember, async (req, res) => {
   try {
     const member = await models.Member.findOne({ id: req.session.memberId }).lean();
@@ -1088,7 +1226,18 @@ app.get('/api/notifications', async (req, res) => {
     // chapter's own — a national announcement should reach every chapter.
     const filter = base.chapterId ? { $or: [{ chapterId: base.chapterId }, { chapterId: '' }] } : base;
     const items = await repo.getAll('notifications', filter);
-    res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 40));
+
+    // A department's own announcement belongs to that department. Everyone
+    // else in the chapter is simply not its audience, so it is filtered out
+    // here rather than shown to people it was never addressed to.
+    let ownDepartment = '';
+    if (req.session && req.session.memberId) {
+      const me = await repo.getById('members', req.session.memberId);
+      ownDepartment = (me && me.department) || '';
+    }
+    const forMe = items.filter(n => !n.departmentId || n.departmentId === ownDepartment);
+
+    res.json(forMe.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 40));
   } catch (e) {
     res.status(500).json({ error: 'Could not load notifications' });
   }
@@ -2416,7 +2565,9 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
       }
     }
     await repo.create('eventRegistrations', {
-      chapterId: event.chapterId || '', eventId: event.id, name, email, phone: phone || ''
+      chapterId: event.chapterId || '', eventId: event.id, name, email, phone: phone || '',
+      // Only when they are signed in — the form stays open to anyone.
+      memberId: (req.session && req.session.memberId) || ''
     }, 'reg');
     res.json({ success: true });
   } catch (e) {
@@ -2916,7 +3067,9 @@ app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
 // -> ACTIVE (section 7). Every registration already starts as 'visitor';
 // everything from here on is Shepherding moving someone forward (or, in
 // principle, back — e.g. correcting a mistaken acceptance).
-const MEMBERSHIP_STAGES = ['visitor', 'under_review', 'accepted', 'active', 'worker', 'executive', 'alumni'];
+// Derived from MEMBERSHIP_JOURNEY rather than typed again, so the stages
+// Shepherding can set and the journey a member is shown can never drift apart.
+const MEMBERSHIP_STAGES = MEMBERSHIP_JOURNEY.map(s => s.stage);
 
 app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) => {
   try {
@@ -3848,7 +4001,8 @@ app.post('/api/executive/department/announcement', requireRole('executive'), req
   if (!title || !body) return res.status(400).json({ error: 'A title and message are required' });
   const members = await repo.getAll('members', { chapterId: staff.chapterId, department: department.id });
   const item = await createNotification(
-    `${department.name}: ${title}`, body, '/department.html?id=' + department.id, 'department', staff.chapterId
+    `${department.name}: ${title}`, body, '/department.html?id=' + department.id, 'department', staff.chapterId,
+    { departmentId: department.id, memberIds: members.map(m => m.id) }
   );
   res.json({ success: true, item, reached: members.length });
 }));

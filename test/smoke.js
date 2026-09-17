@@ -672,8 +672,29 @@ const { fakeModels } = require('./harness.js');
 
   r = await call('exec', 'POST', '/api/executive/department/announcement', { title: 'Meeting moved', body: 'We now meet at 5pm.' });
   check('the executive messages their own department', r.status === 200 && r.data.reached >= 1, r.data);
+  // It belongs to the department, not the chapter. Before this it was stored
+  // chapter-wide, so it reached everyone while reporting only the department.
+  check('and the announcement is addressed to that department, not the chapter',
+    r.data.item.departmentId === deptId, r.data.item);
   r = await call('exec', 'POST', '/api/executive/department/announcement', { title: '', body: '' });
   check('an empty announcement is refused', r.status === 400, r.data);
+
+  // Someone outside the department must never see it in their notifications.
+  const outsiderForm = new FormData();
+  outsiderForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'o.png');
+  outsiderForm.append('name', 'Outside Thedept');
+  outsiderForm.append('email', 'outside.dept@test.com');
+  outsiderForm.append('password', 'secret123');
+  outsiderForm.append('chapterId', chapterId);
+  const outsiderRes = await fetch(BASE + '/api/auth/register', { method: 'POST', body: outsiderForm });
+  jars.outsider = (outsiderRes.headers.getSetCookie ? outsiderRes.headers.getSetCookie() : []).map(c => c.split(';')[0]).join('; ');
+
+  r = await call('outsider', 'GET', '/api/notifications');
+  check('a member outside the department never sees its announcement',
+    !r.data.some(n => n.title === 'Choir: Meeting moved'), r.data.map(n => n.title));
+  // And a chapter-wide notice still reaches everyone, so the filter has not
+  // simply hidden everything.
+  check('while chapter-wide notices still reach them', r.data.length > 0, r.data.map(n => n.title));
 
   // A different chapter's executive must never reach this department.
   r = await call('coord2', 'GET', '/api/executive/department');
@@ -1027,6 +1048,146 @@ const { fakeModels } = require('./harness.js');
   check('a published event is now public', r.data.some(e => e.id === execEventId), r.data);
 
   console.log('\n== digital membership card + QR attendance (sections 13, 14) ==');
+  console.log('\n== the events a member signed up for ==');
+  // Registering worked; seeing what you had signed up for did not, and event
+  // registration had no coverage at all.
+  r = await call('admin', 'POST', '/api/admin/events', {
+    title: 'Members Retreat', date: '2027-03-12', time: '09:00', location: 'Retreat Centre',
+    chapterId, status: 'published', registrationEnabled: true, capacity: 2
+  });
+  const retreatId = r.data.item.id;
+  check('an event open for registration is published', r.status === 200 && r.data.item.registrationEnabled === true, r.data);
+
+  r = await call('member', 'GET', '/api/member/events');
+  check('a member who has signed up for nothing gets an empty list', r.status === 200 && r.data.length === 0, r.data);
+
+  r = await call('member', 'POST', `/api/events/${retreatId}/register`, { name: 'Ama Test', email: 'member@test.com', phone: '0240000000' });
+  check('a signed-in member registers for it', r.status === 200, r.data);
+  r = await call('member', 'GET', '/api/member/events');
+  check('and can now see what they signed up for',
+    r.status === 200 && r.data.some(e => e.id === retreatId), r.data);
+  check('with the date, time and place they will need',
+    r.data[0].date === '2027-03-12' && r.data[0].time === '09:00' && r.data[0].location === 'Retreat Centre', r.data[0]);
+  check('and it is listed as still to come, not already attended', r.data[0].past === false, r.data[0]);
+
+  // One member's registrations are their own.
+  r = await call('outsider', 'GET', '/api/member/events');
+  check('another member does not see it among theirs', r.status === 200 && !r.data.some(e => e.id === retreatId), r.data);
+  r = await call('anon', 'GET', '/api/member/events');
+  check('and it is refused to someone not signed in', r.status === 401, r.data);
+
+  // Capacity is enforced, which is the point of setting one.
+  await call('outsider', 'POST', `/api/events/${retreatId}/register`, { name: 'Outside Thedept', email: 'outside.dept@test.com' });
+  r = await call('anon', 'POST', `/api/events/${retreatId}/register`, { name: 'Walk In', email: 'walkin@test.com' });
+  check('registration closes once the event is full', r.status === 400 && /fully booked/i.test(r.data.error || ''), r.data);
+
+  console.log('\n== the member streak ==');
+  // This route mutates a Mongoose document and saves it, so until the harness
+  // grew a .save() it 500'd under test and the streak was never exercised once.
+  r = await call('member', 'POST', '/api/member/checkin');
+  check('a first check-in starts the streak at one', r.status === 200 && r.data.currentStreak === 1, r.data);
+  r = await call('member', 'POST', '/api/member/checkin');
+  check('checking in twice on the same day does not inflate it', r.status === 200 && r.data.currentStreak === 1, r.data);
+
+  {
+    // Yesterday's check-in continues the streak; an older one restarts it.
+    const doc = fakeModels.Member._docs.find(m => m.id === memberId);
+    const dayBefore = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    doc.lastActiveDate = dayBefore;
+    doc.currentStreak = 4;
+    r = await call('member', 'POST', '/api/member/checkin');
+    check('checking in the day after continues the streak', r.status === 200 && r.data.currentStreak === 5, r.data);
+    check('and the longest streak keeps up with it', r.data.longestStreak >= 5, r.data);
+
+    // A long streak, then a gap. longestStreak is set alongside it here because
+    // that is what real use produces: it is raised on every check-in as the
+    // streak grows, so by the time a gap happens it already holds the peak.
+    doc.lastActiveDate = '2020-01-01';
+    doc.currentStreak = 9;
+    doc.longestStreak = 9;
+    r = await call('member', 'POST', '/api/member/checkin');
+    check('a gap restarts the streak at one', r.status === 200 && r.data.currentStreak === 1, r.data);
+    check('but the longest streak is remembered', r.data.longestStreak === 9, r.data);
+  }
+
+  console.log('\n== a member can see where they stand ==');
+  // All of this already drove Shepherding's workflow; none of it was ever
+  // shown to the member it was about.
+  r = await call('member', 'GET', '/api/member/standing');
+  check('a member can see where they stand', r.status === 200 && !!r.data.stage, r.data);
+
+  // The journey a member is shown and the stages Shepherding can actually set
+  // must be the same list, or someone could be put at a stage the app has no
+  // words for. Asserted against the real route rather than a typed-out copy.
+  {
+    const shown = r.data.journey.map(j => j.key);
+    const rejected = [];
+    for (const stage of shown) {
+      const res = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage });
+      if (res.status !== 200) rejected.push({ stage, status: res.status });
+    }
+    check('every stage the member can be shown is one Shepherding can set', rejected.length === 0, rejected);
+    const unknown = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'not_a_stage' });
+    check('and a stage outside that list is refused', unknown.status === 400, unknown.data);
+    // Put them back where the checks below expect them.
+    await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active' });
+    r = await call('member', 'GET', '/api/member/standing');
+  }
+  check('their stage is explained in plain words, not a database value',
+    r.data.stage.key !== r.data.stage.label && r.data.stage.blurb.length > 20, r.data.stage);
+  check('and the journey shows what comes next', Array.isArray(r.data.journey) && r.data.journey.length > 1, r.data.journey);
+
+  // A member with no department is told so plainly, because it is a thing to
+  // act on rather than an error.
+  check('a member with no department is told how to find one', r.data.needsDepartment === true && r.data.department === null, r.data);
+
+  r = await call('admin', 'PUT', `/api/admin/members/${memberId}`, { department: deptId });
+  check('the member is placed in a department', r.status === 200, r.data);
+  r = await call('member', 'GET', '/api/member/standing');
+  check('and now sees which department they belong to',
+    r.data.department && r.data.department.id === deptId, r.data.department);
+  check('with when it meets and who leads it',
+    r.data.department.meetingDay === 'Saturdays' && !!r.data.department.headName, r.data.department);
+
+  // The other half of the audience rule: the department's own members must
+  // still receive it, both in their notifications and on their profile, where
+  // they can find it again after the push has gone.
+  r = await call('member', 'GET', '/api/notifications');
+  check('a member of the department does see its announcement',
+    r.data.some(n => n.title === 'Choir: Meeting moved'), r.data.map(n => n.title));
+  r = await call('member', 'GET', '/api/member/standing');
+  check('and can read it back on their profile, not only as a push',
+    (r.data.departmentNotices || []).some(n => n.title === 'Choir: Meeting moved'),
+    (r.data.departmentNotices || []).map(n => n.title));
+  // A deputy must not displace the head as the named leader — which only means
+  // something if an assistant is actually sitting in the same department.
+  const asstRegForm = new FormData();
+  asstRegForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'a.png');
+  asstRegForm.append('name', 'Kofi Assistant');
+  asstRegForm.append('email', 'kofi.assistant@test.com');
+  asstRegForm.append('password', 'secret123');
+  asstRegForm.append('chapterId', chapterId);
+  const asstMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: asstRegForm })).json()).member.id;
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.asstmusic', name: 'Kofi Assistant', role: 'executive', password: 'password123', memberId: asstMemberId, positionKey: 'assistant_music_director', department: deptId });
+  check('an Assistant Head is appointed to the same department', r.status === 200, r.data);
+  r = await call('member', 'GET', '/api/member/standing');
+  check('the head is named, not their assistant',
+    !/Assistant/i.test(r.data.department.headRole || '') && !!r.data.department.headName,
+    r.data.department);
+
+  // Standing is your own. It must never answer for anyone else.
+  r = await call('anon', 'GET', '/api/member/standing');
+  check('standing is refused to someone not signed in', r.status === 401, r.data);
+
+  // The session endpoint must not hand the browser credential material.
+  r = await call('member', 'GET', '/api/auth/me');
+  check('the member session carries no reset token or QR token',
+    r.status === 200 && r.data.member
+    && !('resetTokenHash' in r.data.member)
+    && !('resetTokenExpires' in r.data.member)
+    && !('qrToken' in r.data.member)
+    && !('passwordHash' in r.data.member), Object.keys(r.data.member || {}));
+
   r = await call('member', 'GET', '/api/member/card');
   check('an active member gets a real digital card with a QR code', r.status === 200 && r.data.ready === true && !!r.data.qrDataUrl, { ready: r.data.ready });
 
