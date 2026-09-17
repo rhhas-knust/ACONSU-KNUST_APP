@@ -1963,6 +1963,69 @@ const { fakeModels } = require('./harness.js');
     check('the contact page a deletion request goes through also loads signed out', contact.status === 200, contact.status);
   }
 
+  console.log('\n== PWA: installability and what happens with no network ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+
+    const manifest = JSON.parse(pub('manifest.json'));
+    // The implicit manifest id is start_url. If a declared id ever disagrees with
+    // it, everyone who already installed the app gets a SECOND icon rather than an
+    // update to the one they have — silent, and unfixable after the fact.
+    check('the manifest id matches start_url, so existing installs are not duplicated',
+      manifest.id === manifest.start_url, { id: manifest.id, start_url: manifest.start_url });
+    check('the manifest still declares a maskable icon',
+      manifest.icons.some(i => i.purpose === 'maskable'), manifest.icons.map(i => i.purpose));
+
+    const sw = pub('sw.js');
+    const offline = await fetch(BASE + '/offline.html');
+    check('the offline page is actually served', offline.status === 200, offline.status);
+    const offlineText = await offline.text();
+    // It is shown precisely when the network is gone, so anything it links out
+    // to could be the very thing that failed. It has to stand on its own bytes.
+    check('the offline page pulls in no stylesheet or script it could not load',
+      !/<link[^>]+rel=["']stylesheet["']/.test(offlineText) && !/<script[^>]+src=/.test(offlineText));
+    check('the offline page is in the cached shell', sw.includes("'/offline.html'"));
+    check('a document that is missing offline falls back to it, not to "page not found"',
+      sw.includes("caches.match('/offline.html')") && !sw.includes("caches.match('/404.html')"));
+
+    // A shared phone: one member signs out, the next opens the app with no data.
+    // Without this the service worker hands over the first member's cached records.
+    check('the service worker can be told to drop cached account data',
+      sw.includes('CLEAR_API_CACHE'));
+    check('and never caches who-you-are responses in the first place',
+      sw.includes('NEVER_CACHE_API') && sw.includes("'/api/auth/me'"));
+    check('and only ever caches a successful API response',
+      /res\.status === 200 && !NEVER_CACHE_API/.test(sw));
+    for (const [page, file] of [['profile.html', 'profile.html'], ['more.html', 'more.html']]) {
+      check(`${page} clears cached account data when signing out`,
+        pub(file).includes('clearCachedAccountData()'));
+    }
+    check('the portals clear cached account data when signing out',
+      pub('js/portal.js').includes('clearCachedAccountData()'));
+
+    const main = pub('js/main.js');
+    // Safari fires no install event at all, and we are not on the App Store, so
+    // Add to Home Screen is the only route an iPhone member has.
+    // Checked as "defined AND called", not as a bare substring: a plain
+    // includes('isIosSafari') still passes after the function is renamed to
+    // isIosSafariXX, which is a test that cannot fail.
+    check('iOS gets install instructions, since Safari fires no install prompt',
+      /function isIosSafari\s*\(/.test(main) && /[^\w]isIosSafari\(\)/.test(main) && /Add to Home Screen/i.test(main));
+    check('and browsers on iOS that cannot install are not told to try',
+      /CriOS\|FxiOS/.test(main));
+    check('an already-installed app is not asked to install again',
+      /function isStandalone\s*\(/.test(main) && /[^\w]isStandalone\(\)/.test(main) && main.includes('display-mode: standalone'));
+    check('a slow request explains the wait instead of showing a dead screen',
+      /function showSlowBanner\s*\(/.test(main) && main.includes('SLOW_REQUEST_MS'));
+    // Registration requires a photo, and a photo on mobile data is routinely
+    // slower than the cold-start threshold. Calling that "waking the server up"
+    // would be wrong, to a brand-new member, at their first moment in the app.
+    check('a slow upload is not mistaken for a sleeping server',
+      main.includes('opts.body instanceof FormData') && /Still uploading/.test(main));
+  }
+
   console.log('\n== shared scripts only touch elements their pages actually have ==');
   const pageHtml = {};
   for (const page of ['/admin.html', '/chapter.html', '/executive.html', '/coordinator.html']) {

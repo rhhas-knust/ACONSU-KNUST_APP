@@ -273,6 +273,7 @@ async function initPortal(config) {
   });
   document.getElementById('portalLogoutBtn').addEventListener('click', async () => {
     await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
+    await clearCachedAccountData();
     PORTAL.user = null;
     window.location.reload();
   });

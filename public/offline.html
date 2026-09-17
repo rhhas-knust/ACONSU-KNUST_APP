@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>You're Offline — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<!-- Deliberately self-contained: no stylesheet, no /js/main.js, no API calls.
+     This page is what a visitor sees when the network is gone, so it must
+     render from its own bytes alone. Anything it linked out to could itself
+     be the thing that failed to load. -->
+<style>
+  :root {
+    --purple-deep: #5B2C82;
+    --purple-rich: #3A1B54;
+    --purple-ink: #241530;
+    --lilac-light: #F6EEFB;
+    --flame-gold: #E8971E;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 28px 20px;
+    background: var(--purple-ink);
+    color: #fff;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    text-align: center;
+  }
+  .wrap { max-width: 460px; width: 100%; }
+  .mark {
+    width: 72px; height: 72px; border-radius: 20px; margin: 0 auto 22px;
+    background: var(--purple-deep);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 14px 34px rgba(0,0,0,0.42);
+  }
+  .mark svg { width: 34px; height: 34px; }
+  .eyebrow {
+    text-transform: uppercase; letter-spacing: 0.16em;
+    font-size: 0.7rem; font-weight: 700; color: var(--flame-gold);
+    margin: 0 0 10px;
+  }
+  h1 { font-size: 1.5rem; margin: 0 0 12px; font-weight: 700; line-height: 1.3; }
+  p { color: rgba(255,255,255,0.74); line-height: 1.65; margin: 0 0 22px; font-size: 0.95rem; }
+  .btn {
+    display: inline-block; border: none; cursor: pointer;
+    background: var(--flame-gold); color: var(--purple-ink);
+    padding: 13px 30px; border-radius: 999px;
+    font-weight: 700; font-size: 0.92rem; font-family: inherit;
+    text-decoration: none;
+  }
+  .btn.ghost {
+    background: none; color: rgba(255,255,255,0.82);
+    border: 1px solid rgba(255,255,255,0.28);
+    margin-left: 8px;
+  }
+  .saved {
+    margin-top: 30px; padding-top: 22px;
+    border-top: 1px solid rgba(255,255,255,0.14);
+  }
+  .saved h2 {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.14em;
+    color: rgba(255,255,255,0.5); margin: 0 0 14px; font-weight: 700;
+  }
+  .saved ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+  .saved a {
+    display: block; padding: 12px 16px; border-radius: 11px;
+    background: rgba(255,255,255,0.07); color: #fff;
+    text-decoration: none; font-size: 0.9rem; font-weight: 600;
+    text-align: left;
+  }
+  .status {
+    margin-top: 24px; font-size: 0.82rem; color: rgba(255,255,255,0.46);
+  }
+  .status.back { color: #7BD4A0; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mark" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#E8971E" stroke-width="2" stroke-linecap="round">
+      <path d="M1 1l22 22"/>
+      <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+      <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+      <path d="M10.71 5.05A16 16 0 0 1 22.58 9"/>
+      <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+      <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+      <line x1="12" y1="20" x2="12.01" y2="20"/>
+    </svg>
+  </div>
+
+  <p class="eyebrow">No Connection</p>
+  <h1>You're offline</h1>
+  <p>
+    This page hasn't been saved to your device yet, so there's nothing to show you
+    until you're back on the network. Pages you've already opened will still work.
+  </p>
+
+  <button class="btn" id="retryBtn">Try Again</button>
+  <a class="btn ghost" href="/index.html">Home</a>
+
+  <div class="saved">
+    <h2>Usually available offline</h2>
+    <ul>
+      <li><a href="/card.html">Your membership card</a></li>
+      <li><a href="/bible.html">Bible reader</a></li>
+      <li><a href="/sermon-notes.html">Sermon notes</a></li>
+      <li><a href="/index.html">Home</a></li>
+    </ul>
+  </div>
+
+  <p class="status" id="status">Waiting for a connection…</p>
+
+</div>
+
+<script>
+  var statusEl = document.getElementById('status');
+
+  document.getElementById('retryBtn').addEventListener('click', function () {
+    location.reload();
+  });
+
+  // When the device comes back, say so and reload on its own — someone who
+  // walked back into signal shouldn't have to work out that they should tap
+  // anything.
+  window.addEventListener('online', function () {
+    statusEl.textContent = 'Back online — reloading…';
+    statusEl.className = 'status back';
+    setTimeout(function () { location.reload(); }, 700);
+  });
+
+  if (navigator.onLine) {
+    statusEl.textContent = 'Your device says it has a connection, but the page could not be reached.';
+  }
+</script>
+</body>
+</html>
