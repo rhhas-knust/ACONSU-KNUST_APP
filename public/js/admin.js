@@ -307,6 +307,24 @@ function overviewActivityTime(value) {
 // first paint (from fetchJSON below) and again for every live push the SSE
 // connection delivers, so a push looks exactly like a fresh load — no
 // separate "delta" shape to keep in sync with the server.
+// Panels are referred to by their internal key ('prayerRequests',
+// 'chatModeration'), which is fine in code and wrong on a button — the
+// dashboard was offering "Open prayerRequests" to a Chapter Admin. The nav
+// already holds the human name for every panel, so it is read from there
+// rather than kept in a second list that would drift from it. Falls back to
+// spacing out the key if a panel is somehow not in this page's nav.
+function panelLabel(panelKey) {
+  const btn = document.querySelector(`#adminNav button[data-panel="${panelKey}"]`);
+  if (btn) {
+    const icon = btn.querySelector('.nav-icon');
+    const text = (btn.textContent || '').replace(icon ? icon.textContent : '', '').trim();
+    if (text) return text;
+  }
+  return String(panelKey)
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
 function renderOverviewData(el, data) {
   el.innerHTML = `
     <div class="panel-head">
@@ -314,7 +332,7 @@ function renderOverviewData(el, data) {
         <h2 style="margin:0;">Operational Dashboard</h2>
         <p class="hint" style="margin:4px 0 0;">${escapeHtml((data.chapter && data.chapter.name) || 'Chapter')} • Live as of ${overviewActivityTime(data.generatedAt)}</p>
       </div>
-      <div class="hint">Rule of 4 KPI view</div>
+      <div class="hint">Tap any figure to see what is behind it</div>
     </div>
     <div class="kpi-grid">
       ${data.kpis.map((kpi, idx) => `
@@ -336,7 +354,7 @@ function renderOverviewData(el, data) {
             <strong>${escapeHtml(item.label || 'Activity')}</strong> — ${escapeHtml(item.title || '')}<br>
             <small>${escapeHtml(item.detail || '')}</small><br>
             <small class="hint">${escapeHtml(overviewActivityTime(item.at))}</small><br>
-            ${item.panel ? `<button type="button" data-activity-panel="${escapeHtml(item.panel)}">Open ${escapeHtml(item.panel)}</button>` : ''}
+            ${item.panel ? `<button type="button" class="btn btn-outline btn-sm" data-activity-panel="${escapeHtml(item.panel)}">Open ${escapeHtml(panelLabel(item.panel))}</button>` : ''}
           </li>
         `).join('') || '<li><span class="hint">No recent updates yet.</span></li>'}
       </ul>
@@ -357,7 +375,7 @@ function renderOverviewData(el, data) {
             </div>
           `).join('') || '<p class="hint">No drill-down rows yet.</p>'}
         </div>
-        ${kpi.drilldownPanel ? `<button class="btn btn-primary btn-sm" data-open-kpi-panel="${escapeHtml(kpi.drilldownPanel)}" style="margin-top:12px;">Open ${escapeHtml(kpi.drilldownPanel)}</button>` : ''}
+        ${kpi.drilldownPanel ? `<button class="btn btn-primary btn-sm" data-open-kpi-panel="${escapeHtml(kpi.drilldownPanel)}" style="margin-top:12px;">Open ${escapeHtml(panelLabel(kpi.drilldownPanel))}</button>` : ''}
       `, { bottomSheet: true });
       const openBtn = document.querySelector('[data-open-kpi-panel]');
       if (openBtn) {
@@ -2257,14 +2275,21 @@ async function renderFormsAdmin() {
 
 async function renderReportsPanel() {
   const el = document.getElementById('panel-reports');
+  // Pastoral records and the chapter's books are confidential offices: the
+  // server gates these four behind canView('shepherding'|'finance'), which a
+  // Chapter Coordinator passes and a delegated Chapter Admin does not. That is
+  // deliberate, so the answer is not to widen it — it is to stop offering a
+  // download that would answer 401. The two portal links stay for everyone;
+  // those portals do their own gating at their own front door.
+  const seesConfidential = ADMIN_SCOPE.isNational || ADMIN_SCOPE.role === 'coordinator';
   const cards = [
-    { title: 'Membership Report', desc: 'Download the latest membership PDF from the shepherding tools.', href: '/api/shepherd/members/report.pdf', cta: 'Download PDF' },
-    { title: 'Attendance Summary', desc: 'Export chapter attendance percentage summaries as PDF.', href: '/api/shepherd/attendance-summary.pdf', cta: 'Download PDF' },
-    { title: 'Finance Ledger PDF', desc: 'Generate a printable PDF version of the finance ledger.', href: '/api/finance/export.pdf', cta: 'Download PDF' },
-    { title: 'Finance Ledger CSV', desc: 'Download the finance ledger as CSV for spreadsheets and reporting.', href: '/api/finance/export.csv', cta: 'Download CSV' },
+    { title: 'Membership Report', desc: 'Download the latest membership PDF from the shepherding tools.', href: '/api/shepherd/members/report.pdf', cta: 'Download PDF', confidential: true },
+    { title: 'Attendance Summary', desc: 'Export chapter attendance percentage summaries as PDF.', href: '/api/shepherd/attendance-summary.pdf', cta: 'Download PDF', confidential: true },
+    { title: 'Finance Ledger PDF', desc: 'Generate a printable PDF version of the finance ledger.', href: '/api/finance/export.pdf', cta: 'Download PDF', confidential: true },
+    { title: 'Finance Ledger CSV', desc: 'Download the finance ledger as CSV for spreadsheets and reporting.', href: '/api/finance/export.csv', cta: 'Download CSV', confidential: true },
     { title: 'Open Shepherding Portal', desc: 'Use the shepherding portal for attendance registers and pastoral care workflows.', href: '/shepherding.html', cta: 'Open Portal' },
     { title: 'Open Finance Portal', desc: 'Use the finance portal for budgets, entries, and ledger filtering before export.', href: '/finance.html', cta: 'Open Portal' }
-  ];
+  ].filter(card => seesConfidential || !card.confidential);
   el.innerHTML = `
     <div class="panel-head">
       <div>

@@ -1872,6 +1872,25 @@ const { fakeModels } = require('./harness.js');
   r = await call('delegated', 'GET', '/api/admin/chapter-settings');
   check('the appointed Chapter Admin carries on the chapter work', r.status === 200, r.data);
 
+  // /chapter.html now offers the same panels as /admin.html, so what the
+  // Chapter Admin signed in there can actually reach has to be checked rather
+  // than assumed — a nav button that answers 401 is worse than no button.
+  r = await call('delegated', 'GET', '/api/admin/forms');
+  check('the Chapter Admin can use the form builder offered in their nav', r.status === 200, r.data);
+  const financeCsv = await call('delegated', 'GET', '/api/finance/export.csv');
+  check('and the chapter finance ledger stays shut to that role too',
+    financeCsv.status === 401, financeCsv.status);
+  // The two shepherding exports go through canView('shepherding'), which passes
+  // for a Coordinator but not for the chapterAdmin role. Asserted rather than
+  // glossed over: the Reports panel is honest for a Coordinator and partly
+  // closed for a delegated Chapter Admin, and that is a permissions decision
+  // to make deliberately, not a thing to discover from a broken download.
+  const shepherdReport = await call('delegated', 'GET', '/api/shepherd/members/report.pdf');
+  check('the membership PDF is NOT open to the delegated Chapter Admin role',
+    shepherdReport.status === 401, shepherdReport.status);
+  const coordReport = await call('coord', 'GET', '/api/shepherd/members/report.pdf');
+  check('but a Chapter Coordinator can pull it', coordReport.status === 200, coordReport.status);
+
   r = await call('coord', 'POST', '/api/admin/staff',
     { username: 'nope', name: 'Nope', role: 'nationalCoordinator', password: 'password123' });
   check('a coordinator still cannot mint a National Coordinator', r.status === 403, r.data);
@@ -2163,6 +2182,60 @@ const { fakeModels } = require('./harness.js');
     // would be wrong, to a brand-new member, at their first moment in the app.
     check('a slow upload is not mistaken for a sleeping server',
       main.includes('opts.body instanceof FormData') && /Still uploading/.test(main));
+  }
+
+  console.log('\n== the two admin portals are one portal ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const chapterHtml = pub('chapter.html');
+    const adminHtml = pub('admin.html');
+
+    // /admin.html and /chapter.html render the SAME markup from js/admin.js.
+    // They each used to carry their own inline copy of its styles, the copies
+    // drifted, and the Chapter Admin's dashboard lost its KPI cards and its
+    // activity-stream button to rules that only existed on the other page.
+    for (const [name, html] of [['chapter.html', chapterHtml], ['admin.html', adminHtml]]) {
+      check(`${name} takes the admin shell styles from the shared stylesheet`,
+        html.includes('/css/admin.css'));
+      check(`${name} keeps no private inline copy of them`, !/<style>/.test(html));
+    }
+
+    // js/admin.js calls these unconditionally; each bails silently when its
+    // markup is absent, which is exactly how chapter.html lost the command
+    // palette and the mobile drawer without anything appearing to break.
+    for (const id of ['cmdPaletteBackdrop', 'cmdInput', 'cmdList', 'cmdPaletteBtn',
+                      'mobileNavBtn', 'adminSideBackdrop', 'adminChapterBadge', 'adminNav']) {
+      check(`chapter.html has #${id}, which admin.js drives`, chapterHtml.includes(`id="${id}"`));
+    }
+    check('chapter.html groups its nav rather than listing 20 flat buttons',
+      (chapterHtml.match(/class="nav-group /g) || []).length >= 5);
+    check('and every nav button names a panel that exists on the page',
+      [...chapterHtml.matchAll(/data-panel="([a-zA-Z]+)"/g)]
+        .every(m => chapterHtml.includes(`id="panel-${m[1]}"`)),
+      [...chapterHtml.matchAll(/data-panel="([a-zA-Z]+)"/g)].map(m => m[1]));
+
+    // Global Settings writes site-wide config behind requireNational. The
+    // chapter portal used to offer it as "Site Settings", so a Chapter Admin
+    // could fill the form in and only discover on save that it was never
+    // theirs. Chapter Site Settings is the one that is.
+    check('chapter.html offers Chapter Site Settings, not the national one',
+      chapterHtml.includes('data-panel="chapterSettings"') && !chapterHtml.includes('data-panel="settings"'));
+    check('and does not link the National Portal', !chapterHtml.includes('national.html'));
+
+    // Internal names leaking onto buttons a Chapter Admin reads.
+    check('no development phase number is used as a nav label', !/Phase \d/.test(chapterHtml));
+    const adminJs = pub('js/admin.js');
+    check('panels are offered by their human name, not their internal key',
+      adminJs.includes('panelLabel(item.panel)') && adminJs.includes('panelLabel(kpi.drilldownPanel)'));
+    check('and the dashboard does not show internal design jargon',
+      !/Rule of 4/.test(adminJs));
+    check('the activity-stream button is styled rather than a bare browser button',
+      /data-activity-panel[\s\S]{0,40}class="btn|class="btn[^"]*"[^>]*data-activity-panel/.test(adminJs));
+    // Confidential exports are filtered client-side to match the server guard.
+    check('confidential exports are only offered to accounts the server lets through',
+      adminJs.includes('seesConfidential') && adminJs.includes("ADMIN_SCOPE.role === 'coordinator'"));
   }
 
   console.log('\n== shared scripts only touch elements their pages actually have ==');
