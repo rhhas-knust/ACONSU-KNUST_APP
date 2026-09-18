@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alumni Connect — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:22px; }
+  .filters input[type="search"] { flex:1; min-width:200px; padding:11px 15px; border:1px solid var(--line); border-radius:999px; font-family:inherit; font-size:0.9rem; }
+  .filters select { padding:11px 15px; border:1px solid var(--line); border-radius:999px; font-family:inherit; font-size:0.9rem; background:#fff; }
+  .chip-toggle { border:1px solid var(--line); background:#fff; color:var(--purple-rich); border-radius:999px; padding:10px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:inherit; }
+  .chip-toggle.on { background:var(--purple-deep); color:#fff; border-color:var(--purple-deep); }
+  .alum-grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fill, minmax(268px,1fr)); }
+  .alum { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:10px; }
+  .alum .top { display:flex; gap:12px; align-items:center; }
+  .alum .pic { width:52px; height:52px; border-radius:50%; overflow:hidden; flex:none; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--purple-deep); }
+  .alum .pic img { width:100%; height:100%; object-fit:cover; }
+  .alum h3 { margin:0; font-size:1rem; }
+  .alum .job { color:var(--purple-deep); font-weight:700; font-size:0.86rem; margin:2px 0 0; }
+  .alum .org { color:#5a4468; font-size:0.83rem; }
+  .alum .meta { display:flex; flex-wrap:wrap; gap:6px; }
+  .tagi { background:var(--lilac-light); color:var(--purple-rich); font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:999px; }
+  .tagi.mentor { background:#D9F0DE; color:#2E7D4F; }
+  .alum .bio { font-size:0.85rem; color:#5a4468; line-height:1.55; margin:0; }
+  .alum .reach { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; padding-top:6px; }
+  .alum .reach a { font-size:0.8rem; font-weight:700; color:var(--purple-deep); text-decoration:none; border:1px solid var(--line); padding:6px 13px; border-radius:999px; }
+  .alum .reach a:hover { border-color:var(--purple-deep); }
+  .locked { background:var(--lilac-light); border-left:3px solid var(--flame-gold); border-radius:0 10px 10px 0; padding:18px 20px; }
+  .locked p { margin:0; color:#5a4468; line-height:1.6; font-size:0.9rem; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:44px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Once ACONSU, Always ACONSU</p>
+    <h1>Alumni Connect</h1>
+    <p class="lede">Members who have finished their studies and are willing to be found — what they do now, and where. From every chapter of the union.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container">
+    <div id="filterWrap" hidden>
+      <div class="filters">
+        <input type="search" id="alumniSearch" placeholder="Search a name, profession, employer or city" aria-label="Search alumni">
+        <select id="industryFilter" aria-label="Filter by industry"><option value="">All professions</option></select>
+        <button type="button" class="chip-toggle" id="mentorToggle" aria-pressed="false">Open to mentoring</button>
+      </div>
+      <p class="tiny muted" id="alumniCount" style="margin:-10px 0 18px; color:#8a7595; font-size:0.84rem;"></p>
+    </div>
+    <div class="alum-grid" id="alumniGrid"></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/alumni.html');
+  var grid = document.getElementById('alumniGrid');
+  var state = { q: '', industry: '', mentoring: false };
+
+  function card(a) {
+    var initial = escapeHtml((a.name || '?').charAt(0));
+    var pic = a.profileImageFileId
+      ? '<img src="/api/files/' + escapeHtml(a.profileImageFileId) + '" alt="">'
+      : initial;
+    var where = [a.city, a.country].filter(Boolean).join(', ');
+    var reach = '';
+    if (a.email) reach += '<a href="mailto:' + escapeHtml(a.email) + '">Email</a>';
+    if (a.phone) reach += '<a href="tel:' + escapeHtml(a.phone) + '">Call</a>';
+    if (a.linkedin) reach += '<a href="' + escapeHtml(a.linkedin) + '" target="_blank" rel="noopener noreferrer">LinkedIn</a>';
+    if (!reach) reach = '<span class="tiny muted" style="font-size:0.78rem; color:#a993b3;">Contact details not shared</span>';
+    return '<article class="alum">'
+      + '<div class="top"><div class="pic">' + pic + '</div><div>'
+      + '<h3>' + escapeHtml(a.name) + '</h3>'
+      + '<p class="job">' + escapeHtml(a.profession || '') + '</p>'
+      + (a.organisation ? '<div class="org">' + escapeHtml(a.organisation) + '</div>' : '')
+      + '</div></div>'
+      + '<div class="meta">'
+      + (a.industry ? '<span class="tagi">' + escapeHtml(a.industry) + '</span>' : '')
+      + (a.graduationYear ? '<span class="tagi">Class of ' + escapeHtml(a.graduationYear) + '</span>' : '')
+      + (where ? '<span class="tagi">' + escapeHtml(where) + '</span>' : '')
+      + (a.chapterName ? '<span class="tagi">' + escapeHtml(a.chapterName) + '</span>' : '')
+      + (a.openToMentoring ? '<span class="tagi mentor">Open to mentoring</span>' : '')
+      + '</div>'
+      + (a.bio ? '<p class="bio">' + escapeHtml(a.bio) + '</p>' : '')
+      + '<div class="reach">' + reach + '</div>'
+      + '</article>';
+  }
+
+  // The scroll-reveal animation parks every card at opacity 0 until it scrolls
+  // into view. That is right on first load and wrong after a filter change,
+  // where re-running it would fade the whole list out and back in on every
+  // keystroke.
+  var revealed = false;
+  async function load() {
+    var qs = [];
+    if (state.q) qs.push('q=' + encodeURIComponent(state.q));
+    if (state.industry) qs.push('industry=' + encodeURIComponent(state.industry));
+    if (state.mentoring) qs.push('mentoring=1');
+    try {
+      var data = await fetchJSON('/api/alumni' + (qs.length ? '?' + qs.join('&') : ''));
+      document.getElementById('filterWrap').hidden = false;
+      var sel = document.getElementById('industryFilter');
+      if (sel.options.length === 1) {
+        (data.industries || []).forEach(function (i) {
+          var o = document.createElement('option'); o.value = i; o.textContent = i; sel.appendChild(o);
+        });
+      }
+      document.getElementById('alumniCount').textContent =
+        data.count + (data.count === 1 ? ' alumnus listed' : ' alumni listed');
+      grid.innerHTML = (data.items || []).map(card).join('')
+        || '<p class="empty-state">No alumni match that yet. Try a different profession, or clear the search.</p>';
+      if (!revealed) { initScrollReveal('.alum'); revealed = true; }
+    } catch (err) {
+      // The two refusals mean different things, and a member deserves to be
+      // told which one applies to them rather than a flat "no".
+      document.getElementById('filterWrap').hidden = true;
+      grid.innerHTML = '<div class="locked"><p>' + escapeHtml(err.message
+        || 'Could not load Alumni Connect right now.') + '</p></div>';
+    }
+  }
+
+  var t;
+  document.getElementById('alumniSearch').addEventListener('input', function (e) {
+    state.q = e.target.value.trim();
+    clearTimeout(t); t = setTimeout(load, 260);
+  });
+  document.getElementById('industryFilter').addEventListener('change', function (e) {
+    state.industry = e.target.value; load();
+  });
+  document.getElementById('mentorToggle').addEventListener('click', function (e) {
+    state.mentoring = !state.mentoring;
+    e.target.classList.toggle('on', state.mentoring);
+    e.target.setAttribute('aria-pressed', state.mentoring ? 'true' : 'false');
+    load();
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

@@ -2184,6 +2184,94 @@ const { fakeModels } = require('./harness.js');
       main.includes('opts.body instanceof FormData') && /Still uploading/.test(main));
   }
 
+  console.log('\n== Alumni Connect: opt-in, union-wide, and shut to newcomers ==');
+  {
+    // The member is 'active' by this point in the suite.
+    r = await call('member', 'GET', '/api/alumni');
+    check('an active member may browse the directory', r.status === 200, r.data);
+    check('and it starts empty, because nobody has opted in', r.data.count === 0, r.data);
+
+    // Listing yourself requires Shepherding to have marked you alumni. Claiming
+    // it is not enough — otherwise anyone could put themselves in the directory.
+    r = await call('member', 'PUT', '/api/member/alumni-profile',
+      { listed: true, profession: 'Software Engineer', industry: 'Technology' });
+    check('a member who is not alumni cannot list themselves', r.status === 403, r.data);
+
+    r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'alumni' });
+    check('shepherding marks them alumni', r.status === 200, r.data);
+
+    // Writing a profile is not the same as publishing it.
+    r = await call('member', 'PUT', '/api/member/alumni-profile',
+      { listed: false, profession: 'Software Engineer', organisation: 'Hubtel', industry: 'Technology', graduationYear: '2024', city: 'Accra' });
+    check('an alumnus can save a listing without publishing it', r.status === 200 && r.data.item.listed === false, r.data);
+    r = await call('member', 'GET', '/api/alumni');
+    check('an unlisted profile does not appear to anyone', r.data.count === 0, r.data);
+
+    r = await call('member', 'PUT', '/api/member/alumni-profile',
+      { listed: true, profession: 'Software Engineer', organisation: 'Hubtel', industry: 'Technology',
+        graduationYear: '2024', city: 'Accra', openToMentoring: true, showEmail: true });
+    check('publishing it puts them in the directory', r.status === 200 && r.data.item.listed === true, r.data);
+    r = await call('member', 'GET', '/api/alumni');
+    check('and now they are findable', r.data.count === 1 && r.data.items[0].profession === 'Software Engineer', r.data);
+
+    // Contact details are published only where the alumnus ticked the box.
+    check('the email they chose to show is shown', !!r.data.items[0].email, r.data.items[0]);
+    check('the phone they did NOT choose to show is withheld', r.data.items[0].phone === '', r.data.items[0]);
+
+    r = await call('member', 'GET', '/api/alumni?industry=Technology');
+    check('the industry filter finds them', r.data.count === 1, r.data);
+    r = await call('member', 'GET', '/api/alumni?industry=Law');
+    check('and excludes them from another industry', r.data.count === 0, r.data);
+    r = await call('member', 'GET', '/api/alumni?q=hubtel');
+    check('search matches where they work', r.data.count === 1, r.data);
+    r = await call('member', 'GET', '/api/alumni?mentoring=1');
+    check('and "open to mentoring" can be filtered on', r.data.count === 1, r.data);
+
+    // Listing yourself must not be a way to publish something you cannot name.
+    r = await call('member', 'PUT', '/api/member/alumni-profile', { listed: true, profession: '' });
+    check('you cannot publish a listing with no profession on it', r.status === 400, r.data);
+
+    // A brand-new visitor is exactly who this directory is closed to.
+    const newbieForm = new FormData();
+    newbieForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'n.png');
+    newbieForm.append('name', 'Kojo Newcomer');
+    newbieForm.append('email', 'kojo.newcomer@test.com');
+    newbieForm.append('password', 'secret123');
+    newbieForm.append('chapterId', chapterId);
+    await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: newbieForm })).json();
+    r = await call('newbie', 'POST', '/api/auth/login', { email: 'kojo.newcomer@test.com', password: 'secret123' });
+    check('a brand-new visitor can sign in', r.status === 200, r.data);
+    r = await call('newbie', 'GET', '/api/alumni');
+    check('but cannot browse alumni names, jobs and employers', r.status === 403, r.data);
+    r = await call('anon', 'GET', '/api/alumni');
+    check('and neither can someone signed out', r.status === 401, r.data);
+
+    // Union-wide by design — but a chapter can still take down its own.
+    r = await call('coord2', 'DELETE', `/api/admin/alumni/${(await call('member','GET','/api/member/alumni-profile')).data.profile.id}`);
+    check("another chapter's admin cannot unlist this chapter's alumnus", r.status === 404, r.data);
+  }
+
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const page = await fetch(BASE + '/alumni.html');
+    check('the Alumni Connect page is served', page.status === 200, page.status);
+    check('and is reachable from the app, not just by typing the URL',
+      pub('more.html').includes('/alumni.html') && pub('discover.html').includes('/alumni.html')
+      && pub('js/main.js').includes('/alumni.html'));
+    check('and opens offline like the other member pages', pub('sw.js').includes("'/alumni.html'"));
+    // The directory is the first thing here visible across chapters, so the
+    // policy has to say so rather than keep promising it never happens.
+    const policy = pub('privacy.html');
+    check('the privacy policy documents the cross-chapter directory',
+      /Alumni Connect/.test(policy) && /visible across chapters/i.test(policy));
+    check('and says plainly that it is off until switched on',
+      /off unless you turn it on/i.test(policy));
+    check('and that contact details are shown only on request',
+      /not published just because we hold them/i.test(policy));
+  }
+
   console.log('\n== the two admin portals are one portal ==');
   {
     const fs = require('fs');
