@@ -504,6 +504,7 @@ function renderFooter(settings) {
         <div>
           <h4>Get Involved</h4>
           <a href="/departments.html">Join a Department</a>
+          <a href="/alumni.html">Alumni Connect</a>
           <a href="/prayer.html">Submit a Prayer Request</a>
           <a href="/contact.html">Contact Us</a>
           <a href="/privacy.html">Privacy Policy</a>

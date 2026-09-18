@@ -141,6 +141,7 @@ const fakeModels = {
   FeatureFlags: makeModel({ modules: {} }),
   Department: makeModel({ chapterId: '', headerImageFileId: '' }),
   DepartmentRequest: makeModel({ chapterId: '', memberId: '', departmentId: '', status: 'pending', note: '', decidedByStaffId: '', decidedByName: '', decidedAt: null }),
+  AlumniProfile: makeModel({ memberId: '', chapterId: '', listed: false, profession: '', organisation: '', industry: '', programme: '', graduationYear: '', city: '', country: 'Ghana', bio: '', openToMentoring: false, showEmail: false, showPhone: false, linkedin: '' }),
   Event: makeModel({
     chapterId: '', isNational: false, registrationEnabled: false, capacity: 0, registrationDeadline: '',
     category: '', videoUrl: '', flyerFileId: '', registrationFormId: '',
@@ -203,7 +204,7 @@ const fakeModels = {
   Member: makeModel({
     chapterId: '', phone: '', level: '', programme: '', hostel: '', academicHistory: [], department: '', departments: [],
     profileImageFileId: '', membershipStage: 'visitor', membershipNumber: '', qrToken: '',
-    shepherdStaffId: '', shepherdName: '', graduationYear: '', chatRestricted: false,
+    shepherdStaffId: '', shepherdName: '', graduationYear: '', registeredAsAlumni: false, chatRestricted: false,
     currentStreak: 0, longestStreak: 0, bibleChaptersRead: 0, birthdayMonth: null, birthdayDay: null
   }),
   Notification: makeModel({ chapterId: '', source: 'admin' }),

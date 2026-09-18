@@ -65,10 +65,25 @@ const { fakeModels } = require('./harness.js');
   check('the public chapter list omits payment details', r.data[0].payment === undefined, r.data[0]);
 
   console.log('\n== leadership accounts ==');
+  // Every chapter leader is a member of the chapter first, so each office
+  // account is opened against a real member rather than a free-floating
+  // username. Their own profile then shows where they stand, like anyone else's.
+  async function registerMember(name, email) {
+    const fd = new FormData();
+    fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    fd.append('name', name); fd.append('email', email);
+    fd.append('password', 'secret123'); fd.append('chapterId', chapterId);
+    const res = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fd })).json();
+    return res.member.id;
+  }
+  const officeMemberIds = {};
   for (const [role, user] of Object.entries({ finance: 'fin.ama', shepherding: 'shep.kojo', publicity: 'pub.esi', coordinator: 'coord.yaw' })) {
-    r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123' });
+    officeMemberIds[user] = await registerMember(user, user.replace('.', '') + '@test.com');
+    r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123', memberId: officeMemberIds[user] });
     check(`create ${role} account`, r.status === 200, r.data);
   }
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.nomember', name: 'No Member', role: 'finance', password: 'password123' });
+  check('a chapter office account cannot be created without a member behind it', r.status === 400, r.data);
   // An executive is a promoted member, so the office can't be created out of
   // thin air — the promotion itself is exercised further down, once members
   // exist (see "executive portal + event workflow").
@@ -336,9 +351,14 @@ const { fakeModels } = require('./harness.js');
 
   console.log('\n== shepherding: attendance ==');
   r = await call('shep', 'GET', '/api/shepherd/members');
-  check('member appears in the shepherding list', r.data.length === 1, r.data);
-  check('new registration starts as a visitor', r.data[0].membershipStage === 'visitor', r.data);
-  const memberId = r.data[0].memberId;
+  // Found by identity, not position. This used to read r.data[0] because the
+  // suite had exactly one member; the moment office accounts got members of
+  // their own, "the first row" became somebody else and every later test
+  // quietly operated on the wrong person.
+  const memberId = regData.member.id;
+  const meRow = r.data.find(m => m.memberId === memberId);
+  check('member appears in the shepherding list', !!meRow, r.data.map(m => m.name));
+  check('new registration starts as a visitor', meRow && meRow.membershipStage === 'visitor', meRow);
 
   r = await call('shep', 'POST', '/api/shepherd/attendance', {
     date: '2026-08-09', serviceType: 'sunday', visitorCount: 4,
@@ -399,7 +419,8 @@ const { fakeModels } = require('./harness.js');
 
   console.log('\n== publicity ==');
   r = await call('pub', 'GET', '/api/publicity/audiences');
-  check('audiences list reachable numbers', r.status === 200 && r.data.audiences[0].reachable === 1, r.data);
+  check('audiences list reachable numbers',
+    r.status === 200 && r.data.audiences[0].reachable >= 1, r.data);
 
   r = await call('pub', 'POST', '/api/publicity/notifications', { title: 'Service at 9', body: 'Come early', channels: ['app', 'sms'] });
   check('announcement sends on both channels', r.status === 200 && /posted to the app/.test(r.data.result), r.data);
@@ -442,7 +463,8 @@ const { fakeModels } = require('./harness.js');
   check('and set again afterwards', r.status === 200 && r.data.hasApiKey === true, r.data);
 
   r = await call('pub', 'GET', '/api/publicity/sms-logs');
-  check('SMS attempt is logged even when skipped', r.data.length === 1 && r.data[0].status === 'skipped', r.data);
+  check('SMS attempt is logged even when skipped',
+    r.data.length >= 1 && r.data.every(l => l.status === 'skipped'), r.data);
 
   r = await call('pub', 'POST', '/api/publicity/scheduled', {
     title: 'Tomorrow', body: 'Programme at 6', channels: ['app'],
@@ -1502,7 +1524,8 @@ const { fakeModels } = require('./harness.js');
   check('an executive-appointment milestone was logged when the office was granted, not when a form was filled in', r.data.some(m => m.type === 'executive_appointment'), r.data);
 
   console.log('\n== Welfare (section 33) ==');
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'welf.efua', name: 'Efua Welfare', role: 'welfare', password: 'password123' });
+  const welfMemberId = await registerMember('Efua Welfare', 'efua.welfare@test.com');
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'welf.efua', name: 'Efua Welfare', role: 'welfare', password: 'password123', memberId: welfMemberId });
   check('welfare officer account created', r.status === 200, r.data);
   r = await call('welf', 'POST', '/api/portal/login', { username: 'welf.efua', password: 'password123' });
   check('welfare officer signs in', r.status === 200, r.data);
@@ -1603,7 +1626,8 @@ const { fakeModels } = require('./harness.js');
   r = await call('admin', 'POST', '/api/admin/departments', { name: 'No Chapter Given' });
   check('a national actor MUST specify a chapter once more than one exists', r.status === 400, r.data);
 
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin2', name: 'fin2', role: 'finance', password: 'password123', chapterId: 'test-chapter-2' });
+  const fin2MemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: (() => { const fd = new FormData(); fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png'); fd.append('name', 'Fin Two'); fd.append('email', 'fin2@test.com'); fd.append('password', 'secret123'); fd.append('chapterId', 'test-chapter-2'); return fd; })() })).json()).member.id;
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin2', name: 'fin2', role: 'finance', password: 'password123', chapterId: 'test-chapter-2', memberId: fin2MemberId });
   check('finance account created for chapter 2', r.status === 200 && r.data.item.chapterId === 'test-chapter-2', r.data);
   r = await call('fin2', 'POST', '/api/portal/login', { username: 'fin2', password: 'password123' });
   check('chapter 2 finance officer signs in', r.status === 200, r.data);
@@ -1645,12 +1669,14 @@ const { fakeModels } = require('./harness.js');
   r = await call('fin2', 'GET', '/api/finance/summary');
   check('chapter 2 sees its own 999 income, not chapter 1\'s books', r.data.totalIncome === 999, r.data);
 
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'shep2', name: 'shep2', role: 'shepherding', password: 'password123', chapterId: 'test-chapter-2' });
+  const shep2MemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: (() => { const fd = new FormData(); fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png'); fd.append('name', 'Shep Two'); fd.append('email', 'shep2@test.com'); fd.append('password', 'secret123'); fd.append('chapterId', 'test-chapter-2'); return fd; })() })).json()).member.id;
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'shep2', name: 'shep2', role: 'shepherding', password: 'password123', chapterId: 'test-chapter-2', memberId: shep2MemberId });
   check('shepherding account created for chapter 2', r.status === 200, r.data);
   r = await call('shep2', 'POST', '/api/portal/login', { username: 'shep2', password: 'password123' });
   check('chapter 2 shepherd signs in', r.status === 200, r.data);
   r = await call('shep2', 'GET', '/api/shepherd/members');
-  check("chapter 2's member list does not include chapter 1's registered member", r.data.length === 0, r.data);
+  check("chapter 2's member list does not include chapter 1's registered member",
+    !r.data.some(m => m.memberId === memberId), r.data.map(m => m.name));
   r = await call('shep2', 'POST', '/api/attendance/scan', { qrToken, date: '2026-08-16' });
   check("chapter 2 cannot check in chapter 1's member by QR code — chapter is verified, not just the code", r.status === 404, r.data);
 
@@ -1862,8 +1888,9 @@ const { fakeModels } = require('./harness.js');
     Array.isArray(r.data) && !r.data.some(e => e.id === nationalEventId), r.data);
 
   console.log('\n== delegation: a coordinator staffs their own chapter ==');
+  const delegatedMemberId = await registerMember('Delegated Admin', 'delegated.admin@test.com');
   r = await call('coord', 'POST', '/api/admin/staff',
-    { username: 'delegated-admin', name: 'Delegated Admin', role: 'chapterAdmin', password: 'password123' });
+    { username: 'delegated-admin', name: 'Delegated Admin', role: 'chapterAdmin', password: 'password123', memberId: delegatedMemberId });
   check('Chapter Coordinator appoints their own Chapter Admin', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
 
   r = await call('delegated', 'POST', '/api/portal/login', { username: 'delegated-admin', password: 'password123' });
@@ -1951,8 +1978,15 @@ const { fakeModels } = require('./harness.js');
 
   r = await call('readiness-coord', 'POST', '/api/portal/login', { username: 'readiness-coord', password: 'password123' });
   check('the new coordinator signs in', r.status === 200, r.data);
+  const readinessFinMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: (() => {
+    const fd = new FormData();
+    fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    fd.append('name', 'Readiness Finance'); fd.append('email', 'readiness.fin@test.com');
+    fd.append('password', 'secret123'); fd.append('chapterId', 'readiness-ch');
+    return fd;
+  })() })).json()).member.id;
   r = await call('readiness-coord', 'POST', '/api/admin/staff',
-    { username: 'readiness-fin', name: 'Readiness Finance', role: 'finance', password: 'password123' });
+    { username: 'readiness-fin', name: 'Readiness Finance', role: 'finance', password: 'password123', memberId: readinessFinMemberId });
   check('the coordinator staffs the finance office', r.status === 200, r.data);
 
   r = await call('admin', 'GET', '/api/national/dashboard');
@@ -2182,6 +2216,154 @@ const { fakeModels } = require('./harness.js');
     // would be wrong, to a brand-new member, at their first moment in the app.
     check('a slow upload is not mistaken for a sleeping server',
       main.includes('opts.body instanceof FormData') && /Still uploading/.test(main));
+  }
+
+  console.log('\n== signing up as an alumnus ==');
+  {
+    // Not everyone joining is a student. Someone who has finished says so at
+    // registration and is asked for a graduation year instead of a hostel.
+    const alForm = new FormData();
+    alForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'g.png');
+    alForm.append('name', 'Grace Returned');
+    alForm.append('email', 'grace.returned@test.com');
+    alForm.append('password', 'secret123');
+    alForm.append('chapterId', chapterId);
+    alForm.append('memberKind', 'alumni');
+    alForm.append('graduationYear', '2019');
+    const alRes = await fetch(BASE + '/api/auth/register', { method: 'POST', body: alForm });
+    const alData = await alRes.json();
+    check('someone can register as an alumnus', alRes.status === 200, alData);
+    const graceId = alData.member.id;
+
+    // The claim is recorded. The stage is NOT granted by saying it — otherwise
+    // Alumni Connect, which spans the union, is a directory anyone can write
+    // themselves into.
+    r = await call('shep', 'GET', '/api/shepherd/members');
+    const grace = r.data.find(m => m.memberId === graceId);
+    check('shepherding can see they said they had graduated', grace && grace.registeredAsAlumni === true, grace);
+    check('and the year they gave', grace && grace.graduationYear === '2019', grace);
+    check('but the stage is still theirs to confirm, not self-granted',
+      grace && grace.membershipStage === 'visitor', grace && grace.membershipStage);
+
+    r = await call('grace', 'POST', '/api/auth/login', { email: 'grace.returned@test.com', password: 'secret123' });
+    check('the alumnus can sign in', r.status === 200, r.data);
+    r = await call('grace', 'PUT', '/api/member/alumni-profile', { listed: true, profession: 'Architect' });
+    check('and cannot list themselves until shepherding confirms it', r.status === 403, r.data);
+
+    r = await call('shep', 'PATCH', `/api/shepherd/members/${graceId}/stage`, { stage: 'alumni' });
+    check('shepherding confirms them as alumni', r.status === 200, r.data);
+    r = await call('grace', 'PUT', '/api/member/alumni-profile', { listed: true, profession: 'Architect', industry: 'Architecture & Built Environment' });
+    check('and now the listing opens to them', r.status === 200, r.data);
+  }
+
+  console.log('\n== a chapter leader is a member of the chapter first ==');
+  {
+    // An office account with no member behind it has no profile, no membership
+    // number, and no way to show the holder where they stand.
+    r = await call('admin', 'POST', '/api/admin/staff',
+      { username: 'ghost.office', name: 'Ghost', role: 'shepherding', password: 'password123', chapterId });
+    check('an office account cannot be opened without naming the member', r.status === 400, r.data);
+    r = await call('admin', 'POST', '/api/admin/staff',
+      { username: 'real.office', name: 'Real Office', role: 'shepherding', password: 'password123', memberId, chapterId });
+    check('and is accepted once a member is named', r.status === 200 && r.data.item.memberId === memberId, r.data);
+    // National Coordinators and Patrons belong to the union, not to a chapter,
+    // so they remain the exception rather than being forced to hold a
+    // membership somewhere.
+    r = await call('admin', 'POST', '/api/admin/staff',
+      { username: 'nat.two', name: 'National Two', role: 'nationalCoordinator', password: 'password123' });
+    check('a National Coordinator is still allowed without one', r.status === 200, r.data);
+  }
+
+  console.log('\n== Alumni Connect: opt-in, union-wide, and shut to newcomers ==');
+  {
+    // The member is 'active' by this point in the suite.
+    r = await call('member', 'GET', '/api/alumni');
+    check('an active member may browse the directory', r.status === 200, r.data);
+    // Asserted about this member rather than the total, so an alumnus listed
+    // by an earlier test does not make this one lie.
+    const listedMe = (d) => (d.items || []).some(i => i.name === 'Ama Test');
+    check('and this member is not in it, having not opted in', !listedMe(r.data), r.data.items.map(i => i.name));
+
+    // Listing yourself requires Shepherding to have marked you alumni. Claiming
+    // it is not enough — otherwise anyone could put themselves in the directory.
+    r = await call('member', 'PUT', '/api/member/alumni-profile',
+      { listed: true, profession: 'Software Engineer', industry: 'Technology' });
+    check('a member who is not alumni cannot list themselves', r.status === 403, r.data);
+
+    r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'alumni' });
+    check('shepherding marks them alumni', r.status === 200, r.data);
+
+    // Writing a profile is not the same as publishing it.
+    r = await call('member', 'PUT', '/api/member/alumni-profile',
+      { listed: false, profession: 'Software Engineer', organisation: 'Hubtel', industry: 'Technology', graduationYear: '2024', city: 'Accra' });
+    check('an alumnus can save a listing without publishing it', r.status === 200 && r.data.item.listed === false, r.data);
+    r = await call('member', 'GET', '/api/alumni');
+    check('an unlisted profile does not appear to anyone', !listedMe(r.data), r.data.items.map(i => i.name));
+
+    r = await call('member', 'PUT', '/api/member/alumni-profile',
+      { listed: true, profession: 'Software Engineer', organisation: 'Hubtel', industry: 'Technology',
+        graduationYear: '2024', city: 'Accra', openToMentoring: true, showEmail: true });
+    check('publishing it puts them in the directory', r.status === 200 && r.data.item.listed === true, r.data);
+    r = await call('member', 'GET', '/api/alumni');
+    const mine = (r.data.items || []).find(i => i.name === 'Ama Test');
+    check('and now they are findable', !!mine && mine.profession === 'Software Engineer', r.data.items.map(i => i.name));
+
+    // Contact details are published only where the alumnus ticked the box.
+    check('the email they chose to show is shown', !!mine.email, mine);
+    check('the phone they did NOT choose to show is withheld', mine.phone === '', mine);
+
+    r = await call('member', 'GET', '/api/alumni?industry=Technology');
+    check('the industry filter finds them', listedMe(r.data), r.data.items.map(i => i.name));
+    r = await call('member', 'GET', '/api/alumni?industry=Law');
+    check('and excludes them from another industry', !listedMe(r.data), r.data.items.map(i => i.name));
+    r = await call('member', 'GET', '/api/alumni?q=hubtel');
+    check('search matches where they work', r.data.count === 1 && listedMe(r.data), r.data.items.map(i => i.name));
+    r = await call('member', 'GET', '/api/alumni?mentoring=1');
+    check('and "open to mentoring" can be filtered on', listedMe(r.data), r.data.items.map(i => i.name));
+
+    // Listing yourself must not be a way to publish something you cannot name.
+    r = await call('member', 'PUT', '/api/member/alumni-profile', { listed: true, profession: '' });
+    check('you cannot publish a listing with no profession on it', r.status === 400, r.data);
+
+    // A brand-new visitor is exactly who this directory is closed to.
+    const newbieForm = new FormData();
+    newbieForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'n.png');
+    newbieForm.append('name', 'Kojo Newcomer');
+    newbieForm.append('email', 'kojo.newcomer@test.com');
+    newbieForm.append('password', 'secret123');
+    newbieForm.append('chapterId', chapterId);
+    await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: newbieForm })).json();
+    r = await call('newbie', 'POST', '/api/auth/login', { email: 'kojo.newcomer@test.com', password: 'secret123' });
+    check('a brand-new visitor can sign in', r.status === 200, r.data);
+    r = await call('newbie', 'GET', '/api/alumni');
+    check('but cannot browse alumni names, jobs and employers', r.status === 403, r.data);
+    r = await call('anon', 'GET', '/api/alumni');
+    check('and neither can someone signed out', r.status === 401, r.data);
+
+    // Union-wide by design — but a chapter can still take down its own.
+    r = await call('coord2', 'DELETE', `/api/admin/alumni/${(await call('member','GET','/api/member/alumni-profile')).data.profile.id}`);
+    check("another chapter's admin cannot unlist this chapter's alumnus", r.status === 404, r.data);
+  }
+
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const page = await fetch(BASE + '/alumni.html');
+    check('the Alumni Connect page is served', page.status === 200, page.status);
+    check('and is reachable from the app, not just by typing the URL',
+      pub('more.html').includes('/alumni.html') && pub('discover.html').includes('/alumni.html')
+      && pub('js/main.js').includes('/alumni.html'));
+    check('and opens offline like the other member pages', pub('sw.js').includes("'/alumni.html'"));
+    // The directory is the first thing here visible across chapters, so the
+    // policy has to say so rather than keep promising it never happens.
+    const policy = pub('privacy.html');
+    check('the privacy policy documents the cross-chapter directory',
+      /Alumni Connect/.test(policy) && /visible across chapters/i.test(policy));
+    check('and says plainly that it is off until switched on',
+      /off unless you turn it on/i.test(policy));
+    check('and that contact details are shown only on request',
+      /not published just because we hold them/i.test(policy));
   }
 
   console.log('\n== the two admin portals are one portal ==');

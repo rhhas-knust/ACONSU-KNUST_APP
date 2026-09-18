@@ -728,7 +728,7 @@ async function scheduleOnboardingTasks(member) {
 // route below. Every new account starts life as a 'visitor': the Shepherding
 // workflow (section 7) is what moves someone from here to an active member.
 app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), async (req, res) => {
-  const { name, email, password, phone, level, programme, hostel, department, chapterId, birthdayMonth, birthdayDay } = req.body;
+  const { name, email, password, phone, level, programme, hostel, department, chapterId, birthdayMonth, birthdayDay, memberKind, graduationYear } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email and password are required' });
   }
@@ -767,6 +767,14 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
       name, email: email.toLowerCase().trim(), passwordHash,
       phone: phone || '', level: level || '', programme: programme || '', hostel: hostel || '',
       department: department || '',
+      // Someone who has finished their studies says so when they sign up, and
+      // the form asks them for a graduation year instead of a hostel. The
+      // CLAIM is recorded; the stage is not granted here. Stage is
+      // Shepherding's to set everywhere else in this system, and letting it be
+      // self-declared would make Alumni Connect — which is union-wide — a
+      // directory anyone could write themselves into.
+      registeredAsAlumni: String(memberKind || '') === 'alumni',
+      graduationYear: String(graduationYear || '').replace(/[^0-9]/g, '').slice(0, 4),
       profileImageFileId,
       membershipStage: 'visitor',
       qrToken: crypto.randomBytes(16).toString('hex'),
@@ -1267,6 +1275,145 @@ app.delete('/api/member/departments/:id', requireMember, async (req, res) => {
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not update your departments.' });
+  }
+});
+
+// ---------- Alumni Connect ----------
+// Fixed list so the directory can be filtered rather than searched by guesswork;
+// "Other" exists so nobody is forced into a box that isn't theirs.
+const ALUMNI_INDUSTRIES = [
+  'Health & Medicine', 'Engineering', 'Technology', 'Education', 'Law',
+  'Finance & Banking', 'Business & Entrepreneurship', 'Agriculture',
+  'Media & Communications', 'Public Service', 'Ministry', 'Science & Research',
+  'Architecture & Built Environment', 'Other'
+];
+
+// Browsing is for members who are actually part of the union — active and
+// above. A visitor who registered an hour ago cannot pull a list of alumni
+// names, professions and employers, which is the obvious way this directory
+// would be abused.
+function canBrowseAlumni(member) {
+  if (!member) return false;
+  const at = MEMBERSHIP_STAGES.indexOf(member.membershipStage || 'visitor');
+  return at >= MEMBERSHIP_STAGES.indexOf('active');
+}
+
+app.get('/api/alumni/industries', requireMember, (req, res) => res.json(ALUMNI_INDUSTRIES));
+
+// The one read in this system that is deliberately NOT chapter-scoped. It is
+// safe to be union-wide because every row here was written by the alumnus
+// themselves, carries only what they chose to publish, and exists at all only
+// because they opted in. No chapter-scoped record is reachable through it.
+app.get('/api/alumni', requireMember, async (req, res) => {
+  try {
+    const me = await repo.getById('members', req.session.memberId);
+    if (!canBrowseAlumni(me)) {
+      return res.status(403).json({ error: 'Alumni Connect opens once you are a full member of your chapter. Your Shepherd can tell you where you are.' });
+    }
+    const profiles = await repo.getAll('alumniProfiles', { listed: true });
+    const industry = String(req.query.industry || '').trim();
+    const q = String(req.query.q || '').trim().toLowerCase();
+    const mentoring = String(req.query.mentoring || '') === '1';
+
+    const rows = [];
+    for (const p of profiles) {
+      const m = await repo.getById('members', p.memberId);
+      if (!m) continue; // the account went; the listing goes with it
+      if (industry && p.industry !== industry) continue;
+      if (mentoring && !p.openToMentoring) continue;
+      const hay = [m.name, p.profession, p.organisation, p.industry, p.programme, p.city].join(' ').toLowerCase();
+      if (q && hay.indexOf(q) < 0) continue;
+      const chapter = await repo.getById('chapters', p.chapterId).catch(() => null);
+      rows.push({
+        id: p.id,
+        name: m.name || 'Alumnus',
+        profileImageFileId: m.profileImageFileId || '',
+        chapterName: (chapter && chapter.name) || '',
+        profession: p.profession, organisation: p.organisation, industry: p.industry,
+        programme: p.programme, graduationYear: p.graduationYear,
+        city: p.city, country: p.country, bio: p.bio,
+        openToMentoring: !!p.openToMentoring,
+        linkedin: p.linkedin || '',
+        // Only ever what this person ticked. Their member record's contact
+        // details are not published just because they have them.
+        email: p.showEmail ? (m.email || '') : '',
+        phone: p.showPhone ? (m.phone || '') : ''
+      });
+    }
+    rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    res.json({ industries: ALUMNI_INDUSTRIES, count: rows.length, items: rows });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load Alumni Connect right now.' });
+  }
+});
+
+// Your own listing: yours to write, yours to take down.
+app.get('/api/member/alumni-profile', requireMember, async (req, res) => {
+  try {
+    const me = await repo.getById('members', req.session.memberId);
+    if (!me) return res.status(404).json({ error: 'Member not found' });
+    const mine = (await repo.getAll('alumniProfiles', { memberId: me.id }))[0] || null;
+    res.json({
+      isAlumni: me.membershipStage === 'alumni',
+      canBrowse: canBrowseAlumni(me),
+      industries: ALUMNI_INDUSTRIES,
+      profile: mine
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your alumni listing.' });
+  }
+});
+
+app.put('/api/member/alumni-profile', requireMember, async (req, res) => {
+  try {
+    const me = await repo.getById('members', req.session.memberId);
+    if (!me) return res.status(404).json({ error: 'Member not found' });
+    // Stage is set by Shepherding, never self-declared, so a member cannot put
+    // themselves in the alumni directory by claiming to have graduated.
+    if (me.membershipStage !== 'alumni') {
+      return res.status(403).json({ error: 'Alumni listings are for members Shepherding has marked as alumni. Ask them to update your stage and this will open.' });
+    }
+    const industry = ALUMNI_INDUSTRIES.includes(req.body.industry) ? req.body.industry : '';
+    const fields = {
+      chapterId: me.chapterId || '',
+      listed: req.body.listed === true || req.body.listed === 'true',
+      profession: cleanText(String(req.body.profession || '')).slice(0, 120),
+      organisation: cleanText(String(req.body.organisation || '')).slice(0, 120),
+      industry,
+      programme: cleanText(String(req.body.programme || '')).slice(0, 120),
+      graduationYear: String(req.body.graduationYear || '').replace(/[^0-9]/g, '').slice(0, 4),
+      city: cleanText(String(req.body.city || '')).slice(0, 80),
+      country: cleanText(String(req.body.country || 'Ghana')).slice(0, 80),
+      bio: cleanText(String(req.body.bio || '')).slice(0, 600),
+      openToMentoring: req.body.openToMentoring === true || req.body.openToMentoring === 'true',
+      showEmail: req.body.showEmail === true || req.body.showEmail === 'true',
+      showPhone: req.body.showPhone === true || req.body.showPhone === 'true',
+      linkedin: cleanText(String(req.body.linkedin || '')).slice(0, 200)
+    };
+    if (fields.listed && !fields.profession) {
+      return res.status(400).json({ error: 'Add what you do before listing yourself — that is what other members will search for.' });
+    }
+    const existing = (await repo.getAll('alumniProfiles', { memberId: me.id }))[0];
+    const item = existing
+      ? await repo.updateById('alumniProfiles', existing.id, { ...existing, ...fields })
+      : await repo.create('alumniProfiles', { memberId: me.id, ...fields }, 'alum');
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save your alumni listing.' });
+  }
+});
+
+// Moderation, scoped the ordinary way: a chapter can take down a listing that
+// belongs to one of its own alumni, and nobody else's.
+app.delete('/api/admin/alumni/:id', requireChapterAdmin, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const profile = await repo.getById('alumniProfiles', req.params.id, filter);
+    if (!profile) return res.status(404).json({ error: 'That listing is not one of your chapter\'s.' });
+    await repo.patchById('alumniProfiles', profile.id, { listed: false }, filter);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not unlist that profile.' });
   }
 });
 
@@ -2778,6 +2925,11 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
         level: m.level,
         programme: m.programme || '',
         hostel: m.hostel || '',
+        // Someone who registered saying they had already graduated. The claim
+        // is theirs; confirming it is Shepherding's, and until they do the
+        // member is an ordinary visitor.
+        registeredAsAlumni: !!m.registeredAsAlumni,
+        graduationYear: m.graduationYear || '',
         department: m.department,
         birthdayMonth: m.birthdayMonth,
         birthdayDay: m.birthdayDay,
@@ -5261,6 +5413,13 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   if (role === 'executive' && !isChapterCoordinatorOrAbove(req)) {
     return res.status(403).json({ error: 'Only the Chapter Coordinator can promote a member to the executive body.' });
   }
+
+  // Whoever runs a chapter is a person in it, not a free-floating username.
+  // Tying the account to a member means their own profile shows where they
+  // stand, they carry a membership number, and an account cannot outlive the
+  // person behind it unnoticed. National Coordinators and Patrons belong to
+  // the union rather than to any one chapter, so they are the exception.
+  const MEMBER_BACKED_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'shepherding', 'publicity', 'welfare', 'executive'];
   // A National Patron belongs to the union rather than to any chapter, so they
   // are the one other account that legitimately has no chapterId. Saying so
   // takes the explicit NATIONAL_SCOPE token — the same deliberate statement a
@@ -5287,11 +5446,15 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   let position = null;
   let executiveDepartment = '';
   let promotedMember = null;
-  if (role === 'executive') {
+  if (MEMBER_BACKED_ROLES.includes(role)) {
     memberId = String(req.body.memberId || '').trim();
-    if (!memberId) return res.status(400).json({ error: 'Choose the member being promoted — an executive account belongs to a member.' });
+    if (!memberId) return res.status(400).json({ error: 'Choose which member this account belongs to — every chapter leader is a member of the chapter first.' });
+    // Scoped to the chapter, so an account here can never be pinned to
+    // somebody else's member.
     promotedMember = await repo.getById('members', memberId, chapterId ? { chapterId } : undefined);
     if (!promotedMember) return res.status(400).json({ error: 'That member is not in this chapter.' });
+  }
+  if (role === 'executive') {
 
     // An executive without a position is an executive nothing can reason
     // about — no capabilities, no place on the roster. Both ways of creating

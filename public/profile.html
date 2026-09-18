@@ -53,6 +53,7 @@
     </div>
 
     <div id="memberStanding"></div>
+    <div id="alumniListing"></div>
     <div id="myEvents"></div>
     <div id="quickPills"></div>
     <div id="streakCardWrap"></div>
@@ -222,25 +223,20 @@ async function renderMemberStanding() {
     return;
   }
 
-  const reached = d.journey.findIndex(j => j.key === d.stage.key);
-  const steps = d.journey
-    .filter(j => j.key !== 'alumni' || d.stage.key === 'alumni')
-    .map((j, i) => {
-      const done = i <= reached;
-      return `<span style="display:inline-flex; align-items:center; gap:6px; font-size:0.78rem;
-        color:${done ? 'var(--purple-deep)' : '#a993b3'}; font-weight:${j.key === d.stage.key ? '700' : '500'};">
-        <span style="width:9px; height:9px; border-radius:50%; background:${done ? 'var(--flame-gold)' : '#ddd3e4'};"></span>
-        ${escapeHtml(j.label)}
-      </span>`;
-    }).join('<span style="color:#ddd3e4; margin:0 2px;">›</span>');
-
+  // A member wants to know what they are right now, not to be shown the whole
+  // ladder with their rung highlighted. The journey is still what Shepherding
+  // works through; this just says where the person reading it stands today.
   el.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 4px;">Where You Stand</h3>
-      <p style="margin:0 0 12px; color:#5a4468; font-size:0.9rem;">${escapeHtml(d.stage.blurb)}</p>
-      <div style="display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-bottom:${d.membershipNumber || d.shepherdName ? '14px' : '0'};">
-        ${steps}
+      <h3 style="margin:0 0 10px;">Where You Stand</h3>
+      <div style="display:flex; align-items:center; gap:11px; margin-bottom:10px;">
+        <span style="width:11px; height:11px; border-radius:50%; background:var(--flame-gold); flex:none;
+          box-shadow:0 0 0 4px rgba(232,151,30,0.18);"></span>
+        <strong style="font-size:1.12rem; color:var(--purple-deep); font-family:var(--font-display);">
+          ${escapeHtml(d.stage.label)}
+        </strong>
       </div>
+      <p style="margin:0 0 ${d.membershipNumber || d.shepherdName ? '14px' : '0'}; color:#5a4468; font-size:0.9rem; line-height:1.55;">${escapeHtml(d.stage.blurb)}</p>
       ${(d.membershipNumber || d.shepherdName) ? `
         <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:#5a4468;">
           ${d.membershipNumber ? `<div><strong>Membership no.</strong><br>${escapeHtml(d.membershipNumber)}</div>` : ''}
@@ -462,6 +458,116 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   await clearCachedAccountData();
   window.location.href = '/index.html';
 });
+
+// An alumnus's own entry in Alumni Connect. It appears only for members
+// Shepherding has marked as alumni, and nothing here is published until they
+// tick "List me" — writing the entry and publishing it are separate acts.
+(async () => {
+  const wrap = document.getElementById('alumniListing');
+  if (!wrap) return;
+  let data;
+  try { data = await fetchJSON('/api/member/alumni-profile'); }
+  catch (e) { return; }
+  if (!data.isAlumni) return;
+
+  const p = data.profile || {};
+  const yes = (v) => v ? 'checked' : '';
+  wrap.innerHTML = `
+    <div class="form-card" style="margin-bottom:18px;">
+      <h3 style="margin:0 0 6px;">Your Alumni Connect listing</h3>
+      <p style="margin:0 0 16px; color:#5a4468; font-size:0.88rem; line-height:1.55;">
+        Members across every ACONSU chapter can look you up by what you do. Nothing
+        below is shown to anyone until you tick <strong>List me</strong>, and you can
+        take it down again at any time.
+      </p>
+      <form id="alumniForm">
+        <div class="field">
+          <label for="al_profession">What you do</label>
+          <input type="text" id="al_profession" placeholder="e.g. Paediatric Nurse" value="${escapeHtml(p.profession || '')}">
+        </div>
+        <div class="field">
+          <label for="al_org">Where you work</label>
+          <input type="text" id="al_org" placeholder="e.g. Komfo Anokye Teaching Hospital" value="${escapeHtml(p.organisation || '')}">
+        </div>
+        <div class="field">
+          <label for="al_industry">Field</label>
+          <select id="al_industry">
+            <option value="">Choose a field</option>
+            ${(data.industries || []).map(i => `<option value="${escapeHtml(i)}"${p.industry === i ? ' selected' : ''}>${escapeHtml(i)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-row" style="display:grid; gap:12px; grid-template-columns:1fr 1fr;">
+          <div class="field">
+            <label for="al_prog">What you studied</label>
+            <input type="text" id="al_prog" value="${escapeHtml(p.programme || '')}">
+          </div>
+          <div class="field">
+            <label for="al_year">Year you finished</label>
+            <input type="text" id="al_year" inputmode="numeric" placeholder="2024" value="${escapeHtml(p.graduationYear || '')}">
+          </div>
+        </div>
+        <div class="field-row" style="display:grid; gap:12px; grid-template-columns:1fr 1fr;">
+          <div class="field">
+            <label for="al_city">City</label>
+            <input type="text" id="al_city" value="${escapeHtml(p.city || '')}">
+          </div>
+          <div class="field">
+            <label for="al_country">Country</label>
+            <input type="text" id="al_country" value="${escapeHtml(p.country || 'Ghana')}">
+          </div>
+        </div>
+        <div class="field">
+          <label for="al_bio">A line about your work</label>
+          <textarea id="al_bio" rows="3" placeholder="What you do, and what you would be glad to talk to a student about.">${escapeHtml(p.bio || '')}</textarea>
+        </div>
+        <div class="field">
+          <label for="al_linkedin">LinkedIn (optional)</label>
+          <input type="url" id="al_linkedin" placeholder="https://..." value="${escapeHtml(p.linkedin || '')}">
+        </div>
+        <div style="display:grid; gap:9px; margin:16px 0; font-size:0.88rem; color:#4a3a56;">
+          <label><input type="checkbox" id="al_mentor" ${yes(p.openToMentoring)}> Happy to mentor a student</label>
+          <label><input type="checkbox" id="al_email" ${yes(p.showEmail)}> Show my email address</label>
+          <label><input type="checkbox" id="al_phone" ${yes(p.showPhone)}> Show my phone number</label>
+          <label style="font-weight:800; color:var(--purple-deep);"><input type="checkbox" id="al_listed" ${yes(p.listed)}> List me in Alumni Connect</label>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm" id="al_save">Save listing</button>
+        <div class="form-msg" id="al_msg"></div>
+      </form>
+    </div>
+  `;
+
+  document.getElementById('alumniForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('al_save');
+    const msg = document.getElementById('al_msg');
+    btn.disabled = true; btn.textContent = 'Saving...';
+    const val = (id) => document.getElementById(id).value.trim();
+    const on = (id) => document.getElementById(id).checked;
+    try {
+      await fetchJSON('/api/member/alumni-profile', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          profession: val('al_profession'), organisation: val('al_org'),
+          industry: val('al_industry'), programme: val('al_prog'),
+          graduationYear: val('al_year'), city: val('al_city'), country: val('al_country'),
+          bio: val('al_bio'), linkedin: val('al_linkedin'),
+          openToMentoring: on('al_mentor'), showEmail: on('al_email'),
+          showPhone: on('al_phone'), listed: on('al_listed')
+        })
+      });
+      msg.textContent = on('al_listed')
+        ? 'Saved. You are now listed in Alumni Connect.'
+        : 'Saved. You are not listed \u2014 tick "List me" when you are ready.';
+      msg.className = 'form-msg success';
+      showToast('Alumni listing saved.', 'success');
+    } catch (err) {
+      msg.textContent = err.message || 'Could not save that.';
+      msg.className = 'form-msg error';
+    }
+    btn.disabled = false; btn.textContent = 'Save listing';
+  });
+})();
 
 // Alerts live here, in the member's own settings, rather than as a banner on
 // the notifications page — one place to turn them on, and it stays out of the

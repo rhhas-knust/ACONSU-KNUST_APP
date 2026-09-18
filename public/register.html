@@ -13,6 +13,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<style>
+  /* An inline display:grid beats the browser's own [hidden] rule, so hiding
+     these blocks by setting .hidden silently did nothing. */
+  [hidden] { display: none !important; }
+  .who-are-you { display:grid; gap:10px; grid-template-columns:1fr 1fr; }
+  .who-opt { display:flex; align-items:flex-start; gap:9px; border:1px solid var(--line); border-radius:11px; padding:12px 13px; cursor:pointer; background:#fff; }
+  .who-opt:has(input:checked) { border-color:var(--purple-deep); background:var(--lilac-light); }
+  .who-opt input { margin-top:3px; flex:none; }
+  .who-opt span { display:flex; flex-direction:column; gap:2px; }
+  .who-opt strong { font-size:0.88rem; color:var(--purple-ink); }
+  .who-opt small { font-size:0.76rem; color:#8a7595; }
+  @media (max-width:420px){ .who-are-you { grid-template-columns:1fr; } }
+</style>
 </head>
 <body>
 
@@ -56,11 +69,21 @@
         <label for="phone">Phone Number (optional)</label>
         <input type="tel" id="phone">
       </div>
+      <!-- Not everyone signing up is a student. An alumnus asked for level and
+           hostel is being asked the wrong questions, so the form changes to
+           match who they are. -->
+      <div class="field">
+        <label>Are you studying now, or have you finished?</label>
+        <div class="who-are-you">
+          <label class="who-opt"><input type="radio" name="memberKind" value="student" checked> <span><strong>I'm a student</strong><small>currently on campus</small></span></label>
+          <label class="who-opt"><input type="radio" name="memberKind" value="alumni"> <span><strong>I'm an alumnus</strong><small>I've finished my studies</small></span></label>
+        </div>
+      </div>
       <div class="field">
         <label for="programme">Programme / Course (optional)</label>
         <input type="text" id="programme" placeholder="e.g. BSc. Computer Science">
       </div>
-      <div class="field-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+      <div class="field-row" id="studentFields" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
         <div class="field">
           <label for="level">Academic Year / Level (optional)</label>
           <input type="text" id="level" placeholder="e.g. 200 Level">
@@ -69,6 +92,11 @@
           <label for="hostel">Hostel / Residence (optional)</label>
           <input type="text" id="hostel" placeholder="e.g. Hostel A">
         </div>
+      </div>
+      <div class="field" id="alumniFields" hidden>
+        <label for="graduationYear">Year you finished (optional)</label>
+        <input type="text" id="graduationYear" inputmode="numeric" placeholder="e.g. 2021">
+        <small class="hint" style="color:#8a7595;">Shepherding will confirm your details and welcome you back. Once they do, you can add yourself to Alumni Connect if you would like other members to find you.</small>
       </div>
       <div class="field">
         <label>Birthday (optional — month &amp; day only, no year, ever)</label>
@@ -100,6 +128,16 @@
 
 <script src="/js/main.js"></script>
 <script>
+// Level and hostel are a student's questions; a graduation year is an
+// alumnus's. Only one set is ever on screen.
+document.querySelectorAll('input[name="memberKind"]').forEach(function (r) {
+  r.addEventListener('change', function () {
+    var alumni = document.querySelector('input[name="memberKind"]:checked').value === 'alumni';
+    document.getElementById('studentFields').hidden = alumni;
+    document.getElementById('alumniFields').hidden = !alumni;
+  });
+});
+
 (async function () {
   const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
   if (authRes.member) { window.location.href = '/profile.html'; return; }
@@ -158,6 +196,9 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     formData.append('programme', document.getElementById('programme').value);
     formData.append('level', document.getElementById('level').value);
     formData.append('hostel', document.getElementById('hostel').value);
+    const kind = document.querySelector('input[name="memberKind"]:checked');
+    formData.append('memberKind', kind ? kind.value : 'student');
+    formData.append('graduationYear', document.getElementById('graduationYear').value);
     formData.append('birthdayMonth', document.getElementById('birthdayMonth').value);
     formData.append('birthdayDay', document.getElementById('birthdayDay').value);
     // fetchJSON attaches an X-Chapter-Id header automatically; multipart
