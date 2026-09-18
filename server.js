@@ -728,7 +728,7 @@ async function scheduleOnboardingTasks(member) {
 // route below. Every new account starts life as a 'visitor': the Shepherding
 // workflow (section 7) is what moves someone from here to an active member.
 app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), async (req, res) => {
-  const { name, email, password, phone, level, programme, hostel, department, chapterId, birthdayMonth, birthdayDay } = req.body;
+  const { name, email, password, phone, level, programme, hostel, department, chapterId, birthdayMonth, birthdayDay, memberKind, graduationYear } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email and password are required' });
   }
@@ -767,6 +767,14 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
       name, email: email.toLowerCase().trim(), passwordHash,
       phone: phone || '', level: level || '', programme: programme || '', hostel: hostel || '',
       department: department || '',
+      // Someone who has finished their studies says so when they sign up, and
+      // the form asks them for a graduation year instead of a hostel. The
+      // CLAIM is recorded; the stage is not granted here. Stage is
+      // Shepherding's to set everywhere else in this system, and letting it be
+      // self-declared would make Alumni Connect — which is union-wide — a
+      // directory anyone could write themselves into.
+      registeredAsAlumni: String(memberKind || '') === 'alumni',
+      graduationYear: String(graduationYear || '').replace(/[^0-9]/g, '').slice(0, 4),
       profileImageFileId,
       membershipStage: 'visitor',
       qrToken: crypto.randomBytes(16).toString('hex'),
@@ -2917,6 +2925,11 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
         level: m.level,
         programme: m.programme || '',
         hostel: m.hostel || '',
+        // Someone who registered saying they had already graduated. The claim
+        // is theirs; confirming it is Shepherding's, and until they do the
+        // member is an ordinary visitor.
+        registeredAsAlumni: !!m.registeredAsAlumni,
+        graduationYear: m.graduationYear || '',
         department: m.department,
         birthdayMonth: m.birthdayMonth,
         birthdayDay: m.birthdayDay,
@@ -5400,6 +5413,13 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   if (role === 'executive' && !isChapterCoordinatorOrAbove(req)) {
     return res.status(403).json({ error: 'Only the Chapter Coordinator can promote a member to the executive body.' });
   }
+
+  // Whoever runs a chapter is a person in it, not a free-floating username.
+  // Tying the account to a member means their own profile shows where they
+  // stand, they carry a membership number, and an account cannot outlive the
+  // person behind it unnoticed. National Coordinators and Patrons belong to
+  // the union rather than to any one chapter, so they are the exception.
+  const MEMBER_BACKED_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'shepherding', 'publicity', 'welfare', 'executive'];
   // A National Patron belongs to the union rather than to any chapter, so they
   // are the one other account that legitimately has no chapterId. Saying so
   // takes the explicit NATIONAL_SCOPE token — the same deliberate statement a
@@ -5426,11 +5446,15 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   let position = null;
   let executiveDepartment = '';
   let promotedMember = null;
-  if (role === 'executive') {
+  if (MEMBER_BACKED_ROLES.includes(role)) {
     memberId = String(req.body.memberId || '').trim();
-    if (!memberId) return res.status(400).json({ error: 'Choose the member being promoted — an executive account belongs to a member.' });
+    if (!memberId) return res.status(400).json({ error: 'Choose which member this account belongs to — every chapter leader is a member of the chapter first.' });
+    // Scoped to the chapter, so an account here can never be pinned to
+    // somebody else's member.
     promotedMember = await repo.getById('members', memberId, chapterId ? { chapterId } : undefined);
     if (!promotedMember) return res.status(400).json({ error: 'That member is not in this chapter.' });
+  }
+  if (role === 'executive') {
 
     // An executive without a position is an executive nothing can reason
     // about — no capabilities, no place on the roster. Both ways of creating

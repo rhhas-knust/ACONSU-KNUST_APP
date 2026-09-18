@@ -204,7 +204,7 @@ const fakeModels = {
   Member: makeModel({
     chapterId: '', phone: '', level: '', programme: '', hostel: '', academicHistory: [], department: '', departments: [],
     profileImageFileId: '', membershipStage: 'visitor', membershipNumber: '', qrToken: '',
-    shepherdStaffId: '', shepherdName: '', graduationYear: '', chatRestricted: false,
+    shepherdStaffId: '', shepherdName: '', graduationYear: '', registeredAsAlumni: false, chatRestricted: false,
     currentStreak: 0, longestStreak: 0, bibleChaptersRead: 0, birthdayMonth: null, birthdayDay: null
   }),
   Notification: makeModel({ chapterId: '', source: 'admin' }),
