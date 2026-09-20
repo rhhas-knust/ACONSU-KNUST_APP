@@ -5,7 +5,7 @@
 //
 //   npm test              — the full suite
 //   SMOKE_SLOW=1 npm test — also waits out the 60s scheduled-send tick
-const { fakeModels } = require('./harness.js');
+const { fakeModels, fakeDb } = require('./harness.js');
 
 (async () => {
   process.env.MONGODB_URI = 'mongodb://stub/aconsu_test';
@@ -2216,6 +2216,68 @@ const { fakeModels } = require('./harness.js');
     // would be wrong, to a brand-new member, at their first moment in the app.
     check('a slow upload is not mistaken for a sleeping server',
       main.includes('opts.body instanceof FormData') && /Still uploading/.test(main));
+  }
+
+  console.log('\n== is the database actually there? ==');
+  {
+    // The home page answers 200 whether or not MongoDB is reachable, because
+    // it is a static file. So "the site loads" has never been evidence that
+    // the database is up, and this is the URL that is.
+    const health = await fetch(BASE + '/api/health');
+    const body = await health.json();
+    check('the health check answers without signing in', health.status === 200, health.status);
+    check('and says the database is connected', body.ok === true && body.database.connected === true, body);
+    check('and reports a real round trip, not just a flag', typeof body.database.pingMs === 'number', body.database);
+    check('and how long this instance has been up', typeof body.uptimeSeconds === 'number', body);
+    // Anyone can reach this URL, so it must give away nothing.
+    const asText = JSON.stringify(body).toLowerCase();
+    check('it leaks no connection string, host or credentials',
+      !asText.includes('mongodb') && !asText.includes('mongodb+srv') && !asText.includes('password')
+      && !asText.includes('@') && !asText.includes('uri'), body);
+
+    // The branch that matters. A monitor only helps if a dead database makes
+    // this URL go red — answering 200 while nothing works is worse than having
+    // no health check at all.
+    fakeDb.healthy = false;
+    const down = await fetch(BASE + '/api/health');
+    const downBody = await down.json();
+    check('a database that has gone away turns the health check red',
+      down.status === 503, down.status);
+    check('and it says so plainly rather than claiming to be fine',
+      downBody.ok === false && downBody.database.connected === false, downBody);
+    fakeDb.healthy = true;
+    const back = await fetch(BASE + '/api/health');
+    check('and it goes green again when the database returns', back.status === 200, back.status);
+
+    // Everything above runs against the harness's stand-in for lib/db.js, so
+    // it proves the ROUTE and nothing about the module the route depends on.
+    // Deleting the real dbStatus entirely left this whole section green, which
+    // is exactly the blind spot a stub creates. This reaches past the stub to
+    // the file that ships.
+    {
+      const path = require('path');
+      // require() inside this process still lands on the stub, which is the
+      // whole difficulty — so the real module is run in a process the harness
+      // was never loaded into.
+      const { execFileSync } = require('child_process');
+      const probe = execFileSync(process.execPath, ['-e',
+        "const d=require('./lib/db.js');" +
+        "if(typeof d.dbStatus!=='function'){console.log('{\"missing\":true}');process.exit(0);}" +
+        "d.dbStatus().then(s=>console.log(JSON.stringify(s))).catch(e=>console.log(JSON.stringify({threw:e.message})));"
+      ], { cwd: path.join(__dirname, '..'), encoding: 'utf8', timeout: 15000 }).trim();
+      const offline = JSON.parse(probe);
+      check('the real lib/db.js exports the status probe the route calls', !offline.missing, offline);
+      // Nothing is connected in that process, so it must say so rather than throw.
+      check('and reports a disconnected database instead of throwing',
+        !offline.threw && offline.connected === false && typeof offline.state === 'string', offline);
+      check('and never puts a connection string in what it returns',
+        !probe.toLowerCase().includes('mongodb'), probe.slice(0, 120));
+      const src = require('fs').readFileSync(path.join(__dirname, '..', 'lib', 'db.js'), 'utf8');
+      check('it asks the database a real question rather than trusting a flag',
+        src.includes('admin().ping()'), 'no ping in lib/db.js');
+      check('and a connection lost after startup is logged rather than silent',
+        /connection\.on\('disconnected'/.test(src), 'nothing watches for a drop');
+    }
   }
 
   console.log('\n== ACONSU Rooms: small meetings, honestly capped ==');

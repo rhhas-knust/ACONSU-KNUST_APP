@@ -256,6 +256,21 @@ function stub(relPath, exports) {
 
 stub('lib/models.js', fakeModels);
 stub('lib/gridfs.js', fakeGridfs);
-stub('lib/db.js', { connectDB: () => Promise.resolve({}), createSessionStore: () => undefined });
+// The double stands in for a healthy database by default, and can be told to
+// play a dead one — the 503 branch is the whole point of a health check, so it
+// has to be reachable from a test rather than taken on trust.
+const fakeDb = {
+  healthy: true,
+  status() {
+    return this.healthy
+      ? { state: 'connected', connected: true, name: 'aconsu_test', pingMs: 1 }
+      : { state: 'unreachable', connected: false, name: 'aconsu_test', pingMs: null, error: 'no reply' };
+  }
+};
+stub('lib/db.js', {
+  connectDB: () => Promise.resolve({}),
+  createSessionStore: () => undefined,
+  dbStatus: () => Promise.resolve(fakeDb.status())
+});
 
-module.exports = { fakeModels, fakeGridfs };
+module.exports = { fakeDb, fakeModels, fakeGridfs };

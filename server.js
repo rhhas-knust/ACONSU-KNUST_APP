@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
-const { connectDB, createSessionStore } = require('./lib/db');
+const { connectDB, createSessionStore, dbStatus } = require('./lib/db');
 const repo = require('./lib/repo');
 const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
@@ -1787,6 +1787,30 @@ app.get('/api/notifications', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: 'Could not load notifications' });
   }
+});
+
+// Is this thing actually working? Deliberately public and deliberately
+// answering 503 when the database is away: the home page returns 200 whether
+// or not MongoDB is reachable, so a monitor watching '/' would call a chapter
+// healthy while every query behind it failed. This is the URL to point an
+// uptime checker at — it also keeps a sleeping free-tier instance awake.
+//
+// It reveals nothing: no connection string, no host, no credentials.
+app.get('/api/health', async (req, res) => {
+  let database;
+  try {
+    database = await dbStatus();
+  } catch (e) {
+    database = { state: 'unknown', connected: false, error: 'status unavailable' };
+  }
+  const ok = !!database.connected;
+  res.status(ok ? 200 : 503).json({
+    ok,
+    service: 'aconsu',
+    uptimeSeconds: Math.round(process.uptime()),
+    database,
+    checkedAt: new Date().toISOString()
+  });
 });
 
 app.get('/api/push/vapid-public-key', (req, res) => {
