@@ -1,7 +1,7 @@
 // ACONSU service worker — enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v10';
+const CACHE_NAME = 'aconsu-v11';
 
 const APP_SHELL = [
   '/index.html',
@@ -9,6 +9,7 @@ const APP_SHELL = [
   '/about.html',
   '/departments.html',
   '/alumni.html',
+  '/meet.html',
   '/department.html',
   '/events.html',
   '/media.html',
@@ -58,6 +59,13 @@ const NEVER_CACHE_API = [
   '/api/portal/me'
 ];
 
+// A meeting's signalling stream never ends, so there is no response to cache —
+// trying would hold a clone of an infinite body open for as long as the call
+// lasts. These are passed straight to the network, untouched.
+const PASS_THROUGH = [
+  '/api/rooms/'
+];
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => {
@@ -82,6 +90,12 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return; // never intercept POST/PUT/DELETE (forms, admin actions)
 
   const url = new URL(request.url);
+
+  // Never come between the browser and a live connection.
+  if (PASS_THROUGH.some((p) => url.pathname.startsWith(p)) ||
+      (request.headers.get('accept') || '').includes('text/event-stream')) {
+    return; // no respondWith: the browser handles it as if no worker existed
+  }
 
   // API calls: network-first, so data is always fresh when online;
   // fall back to cache only if the network fails (offline browsing of last-seen data).

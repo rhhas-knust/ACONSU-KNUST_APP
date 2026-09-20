@@ -142,6 +142,7 @@ const fakeModels = {
   Department: makeModel({ chapterId: '', headerImageFileId: '' }),
   DepartmentRequest: makeModel({ chapterId: '', memberId: '', departmentId: '', status: 'pending', note: '', decidedByStaffId: '', decidedByName: '', decidedAt: null }),
   AlumniProfile: makeModel({ memberId: '', chapterId: '', listed: false, profession: '', organisation: '', industry: '', programme: '', graduationYear: '', city: '', country: 'Ghana', bio: '', openToMentoring: false, showEmail: false, showPhone: false, linkedin: '' }),
+  MeetingRoom: makeModel({ chapterId: '', departmentId: '', title: '', createdByName: '', createdByStaffId: '', maxParticipants: 4, open: true, closedAt: null }),
   Event: makeModel({
     chapterId: '', isNational: false, registrationEnabled: false, capacity: 0, registrationDeadline: '',
     category: '', videoUrl: '', flyerFileId: '', registrationFormId: '',

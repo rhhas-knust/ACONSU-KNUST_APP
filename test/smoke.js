@@ -2218,6 +2218,86 @@ const { fakeModels } = require('./harness.js');
       main.includes('opts.body instanceof FormData') && /Still uploading/.test(main));
   }
 
+  console.log('\n== ACONSU Rooms: small meetings, honestly capped ==');
+  {
+    // Opening a room is a leader's act.
+    r = await call('member', 'POST', '/api/rooms', { title: 'Sneaky Room', chapterId });
+    check('an ordinary member cannot open a room', r.status === 403 || r.status === 401, r.status);
+    r = await call('coord', 'POST', '/api/rooms', { title: 'Exec Huddle', chapterId });
+    check('a coordinator opens a room for the chapter', r.status === 200, r.data);
+    const roomId = r.data.item.id;
+    check('and it holds four people, not more', r.data.item.maxParticipants === 4, r.data.item);
+
+    r = await call('member', 'GET', '/api/rooms');
+    check('a member of the chapter sees it', r.status === 200 && r.data.items.some(x => x.id === roomId), r.data);
+    check('and is told the capacity up front', r.data.capacity === 4, r.data);
+
+    // A department room is that department's, not the chapter's.
+    r = await call('coord', 'POST', '/api/rooms', { title: 'Choir Practice', chapterId, departmentId: deptId });
+    check('a room can belong to one department', r.status === 200 && r.data.item.departmentId === deptId, r.data);
+    const choirRoomId = r.data.item.id;
+    r = await call('newbie', 'GET', '/api/rooms');
+    check("someone not in that department is not offered its room",
+      !(r.data.items || []).some(x => x.id === choirRoomId), r.data.items);
+
+    // Chapter isolation holds here as everywhere else.
+    r = await call('coord2', 'POST', '/api/rooms', { title: 'Other Chapter Room', chapterId: 'test-chapter-2' });
+    const otherRoomId = r.data.item && r.data.item.id;
+    r = await call('member', 'GET', '/api/rooms');
+    check("another chapter's room is never listed here",
+      !(r.data.items || []).some(x => x.id === otherRoomId), r.data.items);
+    // The listing is filtered by chapter at the query, so it proves nothing
+    // about the guard. Opening the stream for a room by id is the path that
+    // does: it looks the room up unscoped and then asks canEnterRoom.
+    {
+      const ctrl = new AbortController();
+      const streamRes = await fetch(BASE + `/api/rooms/${otherRoomId}/events`, {
+        headers: { cookie: jars['member'], accept: 'text/event-stream' },
+        signal: ctrl.signal
+      });
+      ctrl.abort();
+      check("a member cannot open another chapter's room at all", streamRes.status === 403, streamRes.status);
+    }
+
+    // The relay carries a message between two people in one room, and refuses
+    // anything else. Nobody is in the room here, so speaking as a peer that
+    // does not exist must fail rather than be forwarded anywhere.
+    r = await call('member', 'POST', `/api/rooms/${roomId}/signal`, { from: 'not-a-peer', to: 'nor-this', data: { sdp: 'x' } });
+    check('you cannot signal as a peer who is not in the room', r.status === 403, r.data);
+
+    r = await call('anon', 'GET', '/api/rooms');
+    check('rooms are not listed to someone signed out', r.status === 401, r.data);
+    r = await call('anon', 'GET', `/api/rooms/${roomId}/events`);
+    check('and the signalling stream is refused to them too', r.status === 401, r.status);
+
+    // A room that is closed is closed.
+    r = await call('coord', 'POST', `/api/rooms/${roomId}/close`, {});
+    check('a leader can close the room', r.status === 200, r.data);
+    r = await call('member', 'GET', '/api/rooms');
+    check('and it stops being offered', !(r.data.items || []).some(x => x.id === roomId), r.data.items);
+    r = await call('member', 'GET', `/api/rooms/${roomId}/events`);
+    check('nor can anyone still join it', r.status === 403, r.status);
+
+    // The page itself, and the worker that must not touch its stream.
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const meetPage = await fetch(BASE + '/meet.html');
+    check('the ACONSU Rooms page is served', meetPage.status === 200, meetPage.status);
+    check('and is reachable from the app', pub('more.html').includes('/meet.html'));
+    // An event stream never ends. Caching one would hold a clone of an
+    // infinite body open for the whole call, and the call would never connect.
+    const sw = pub('sw.js');
+    check('the service worker never intercepts a live stream',
+      sw.includes("'/api/rooms/'") && sw.includes('text/event-stream'));
+    // The cap is the one thing that must not be advisory.
+    const srv = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    check('capacity is enforced server-side, not just shown in the page',
+      /peers\.size >= \(room\.maxParticipants/.test(srv));
+    check('TURN is read from the environment so a chapter can add one',
+      srv.includes('TURN_URL') && srv.includes('hasTurn'));
+  }
+
   console.log('\n== signing up as an alumnus ==');
   {
     // Not everyone joining is a student. Someone who has finished says so at

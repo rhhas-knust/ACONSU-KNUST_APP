@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACONSU Rooms — ACONSU</title>
+<link rel="icon" href="/images/logo.jpg">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  [hidden] { display: none !important; }
+  .room-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:9px; }
+  .room-card h3 { margin:0; font-size:1rem; }
+  .room-meta { font-size:0.82rem; color:#5a4468; }
+  .seats { display:inline-flex; align-items:center; gap:6px; font-size:0.76rem; font-weight:800; padding:3px 11px; border-radius:999px; background:var(--lilac-light); color:var(--purple-rich); }
+  .seats.full { background:#FBDFDA; color:var(--flame-red); }
+
+  /* the call itself */
+  .call { position:fixed; inset:0; background:#150C1E; z-index:500; display:flex; flex-direction:column; }
+  .tiles { flex:1; display:grid; gap:8px; padding:8px; min-height:0; grid-template-columns:1fr; }
+  .tiles.two { grid-template-columns:1fr 1fr; }
+  .tiles.many { grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }
+  .tile { position:relative; background:#241530; border-radius:12px; overflow:hidden; min-height:0; display:flex; align-items:center; justify-content:center; }
+  .tile video { width:100%; height:100%; object-fit:cover; background:#241530; }
+  .tile .nm { position:absolute; left:9px; bottom:8px; background:rgba(0,0,0,0.5); color:#fff; font-size:0.76rem; font-weight:700; padding:3px 10px; border-radius:999px; }
+  .tile .state { position:absolute; right:9px; top:8px; background:rgba(0,0,0,0.5); color:#EFE6F6; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:999px; }
+  .tile .initial { width:74px; height:74px; border-radius:50%; background:var(--purple-deep); color:#fff; display:flex; align-items:center; justify-content:center; font-size:1.8rem; font-weight:800; font-family:var(--font-display); }
+  .bar { display:flex; align-items:center; justify-content:center; gap:10px; padding:14px; padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px)); background:rgba(0,0,0,0.35); flex-wrap:wrap; }
+  .bar button { border:1px solid rgba(239,230,246,0.28); background:rgba(239,230,246,0.10); color:#FBF8FD; border-radius:999px; padding:11px 20px; font-weight:700; font-size:0.86rem; font-family:inherit; cursor:pointer; }
+  .bar button.off { background:#A93226; border-color:#A93226; }
+  .bar button.leave { background:#A93226; border-color:#A93226; }
+  .call-head { padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top, 0px)); color:#EFE6F6; display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:0.85rem; }
+  .call-head strong { font-family:var(--font-display); font-size:1rem; }
+  .warn { background:rgba(232,151,30,0.14); border-left:3px solid var(--flame-gold); padding:14px 16px; border-radius:0 10px 10px 0; margin-bottom:20px; }
+  .warn p { margin:0; font-size:0.87rem; color:#5a4468; line-height:1.6; }
+</style>
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<section class="hero" style="padding-bottom:40px;">
+  <div class="hero-flame"></div>
+  <div class="hero-content">
+    <p class="eyebrow">Meet Inside ACONSU</p>
+    <h1>ACONSU Rooms</h1>
+    <p class="lede">Small meetings, in the app. Nothing to install, and no link to a service outside the union.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container" style="max-width:820px;">
+    <div class="warn">
+      <p><strong>Built for small groups.</strong> A room holds <strong>four people</strong>. Everyone's video goes straight to everyone else rather than through a server, which is what makes this free to run &mdash; and it is also why a fifth person would not fit. For a chapter-wide meeting, keep using Zoom or Meet.</p>
+    </div>
+    <div class="grid" id="roomGrid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr));"></div>
+  </div>
+</section>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<!-- the call, opened over everything else -->
+<div class="call" id="call" hidden>
+  <div class="call-head">
+    <strong id="callTitle">ACONSU Room</strong>
+    <span id="callStatus">Connecting&hellip;</span>
+  </div>
+  <div class="tiles" id="tiles"></div>
+  <div class="bar">
+    <button id="micBtn">Mute</button>
+    <button id="camBtn">Camera off</button>
+    <button id="leaveBtn" class="leave">Leave</button>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/meet.html');
+
+  var grid = document.getElementById('roomGrid');
+  var callEl = document.getElementById('call');
+  var tilesEl = document.getElementById('tiles');
+  var statusEl = document.getElementById('callStatus');
+
+  var ICE = [{ urls: ['stun:stun.l.google.com:19302'] }];
+  var hasTurn = false;
+  var CAPACITY = 4;
+
+  // call state
+  var stream = null, source = null, myPeerId = null, roomId = null;
+  var peers = {};   // peerId -> { pc, name, tile }
+
+  function tile(id, name, isMe) {
+    var d = document.createElement('div');
+    d.className = 'tile';
+    d.id = 'tile-' + id;
+    d.innerHTML = '<div class="initial">' + escapeHtml((name || '?').charAt(0)) + '</div>'
+      + '<video autoplay playsinline' + (isMe ? ' muted' : '') + ' hidden></video>'
+      + '<span class="nm">' + escapeHtml(isMe ? 'You' : name) + '</span>'
+      + '<span class="state" hidden></span>';
+    tilesEl.appendChild(d);
+    layout();
+    return d;
+  }
+  function layout() {
+    var n = tilesEl.children.length;
+    tilesEl.className = 'tiles' + (n === 2 ? ' two' : n > 2 ? ' many' : '');
+  }
+  function setTileStream(id, mediaStream) {
+    var t = document.getElementById('tile-' + id);
+    if (!t) return;
+    var v = t.querySelector('video');
+    v.srcObject = mediaStream;
+    v.hidden = false;
+    t.querySelector('.initial').hidden = true;
+  }
+  function setTileState(id, text) {
+    var t = document.getElementById('tile-' + id);
+    if (!t) return;
+    var s = t.querySelector('.state');
+    s.textContent = text || '';
+    s.hidden = !text;
+  }
+  function dropPeer(peerId) {
+    var p = peers[peerId];
+    if (!p) return;
+    try { p.pc.close(); } catch (e) { /* already closed */ }
+    var t = document.getElementById('tile-' + peerId);
+    if (t) t.remove();
+    delete peers[peerId];
+    layout();
+    say();
+  }
+  function say() {
+    var n = Object.keys(peers).length + 1;
+    statusEl.textContent = n === 1 ? 'Waiting for others…' : n + ' of ' + CAPACITY + ' here';
+  }
+
+  async function post(path, body) {
+    return fetchJSON(path, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
+    });
+  }
+
+  function makePeer(peerId, name) {
+    var pc = new RTCPeerConnection({ iceServers: ICE });
+    peers[peerId] = { pc: pc, name: name };
+    tile(peerId, name, false);
+    stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+
+    pc.ontrack = function (e) { setTileStream(peerId, e.streams[0]); };
+    pc.onicecandidate = function (e) {
+      if (e.candidate) post('/api/rooms/' + roomId + '/signal',
+        { from: myPeerId, to: peerId, data: { candidate: e.candidate } }).catch(function () {});
+    };
+    pc.onconnectionstatechange = function () {
+      var s = pc.connectionState;
+      if (s === 'connected') setTileState(peerId, '');
+      else if (s === 'connecting') setTileState(peerId, 'connecting');
+      else if (s === 'failed') {
+        // The honest message. Without a TURN server some networks simply
+        // cannot be joined, and saying so beats a frozen black tile.
+        setTileState(peerId, hasTurn ? 'lost' : 'no route');
+      }
+      say();
+    };
+    return pc;
+  }
+
+  async function offerTo(peerId, name) {
+    var pc = makePeer(peerId, name);
+    var offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await post('/api/rooms/' + roomId + '/signal', { from: myPeerId, to: peerId, data: { sdp: pc.localDescription } });
+  }
+
+  async function onSignal(from, data) {
+    var entry = peers[from];
+    if (data.sdp) {
+      if (!entry) { makePeer(from, 'Member'); entry = peers[from]; }
+      await entry.pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      if (data.sdp.type === 'offer') {
+        var answer = await entry.pc.createAnswer();
+        await entry.pc.setLocalDescription(answer);
+        await post('/api/rooms/' + roomId + '/signal', { from: myPeerId, to: from, data: { sdp: entry.pc.localDescription } });
+      }
+    } else if (data.candidate && entry) {
+      try { await entry.pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch (e) { /* late candidate */ }
+    }
+  }
+
+  async function join(room) {
+    roomId = room.id;
+    document.getElementById('callTitle').textContent = room.title || 'ACONSU Room';
+    callEl.hidden = false;
+    statusEl.textContent = 'Asking for your camera…';
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch (err) {
+      // A meeting you can hear is far better than no meeting, so a refused or
+      // missing camera falls back to audio rather than ending here.
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        showToast('Joining with audio only — no camera available.', 'error');
+      } catch (err2) {
+        statusEl.textContent = '';
+        callEl.hidden = true;
+        showToast('ACONSU Rooms needs permission to use your microphone.', 'error');
+        return;
+      }
+    }
+
+    tilesEl.innerHTML = '';
+    var meTile = tile('me', 'You', true);
+    setTileStream('me', stream);
+    if (!stream.getVideoTracks().length) {
+      meTile.querySelector('video').hidden = true;
+      meTile.querySelector('.initial').hidden = false;
+      setTileState('me', 'audio only');
+    }
+
+    try {
+      var ice = await fetchJSON('/api/rooms/ice-servers');
+      ICE = ice.iceServers; hasTurn = ice.hasTurn;
+    } catch (e) { /* the public STUN default stands */ }
+
+    source = new EventSource('/api/rooms/' + roomId + '/events');
+    source.onmessage = async function (e) {
+      var msg = JSON.parse(e.data);
+      if (msg.type === 'welcome') {
+        myPeerId = msg.peerId;
+        CAPACITY = msg.capacity || CAPACITY;
+        // Both sides must not offer at once, or the two offers collide. The
+        // lower id offers; the higher waits. No negotiation needed to agree.
+        for (var i = 0; i < msg.peers.length; i++) {
+          var other = msg.peers[i];
+          if (myPeerId < other.peerId) await offerTo(other.peerId, other.name);
+          else { makePeer(other.peerId, other.name); }
+        }
+        say();
+      } else if (msg.type === 'peer-joined') {
+        if (myPeerId < msg.peer.peerId) await offerTo(msg.peer.peerId, msg.peer.name);
+        else makePeer(msg.peer.peerId, msg.peer.name);
+        say();
+      } else if (msg.type === 'signal') {
+        await onSignal(msg.from, msg.data);
+      } else if (msg.type === 'peer-left') {
+        dropPeer(msg.peerId);
+      } else if (msg.type === 'replaced') {
+        showToast('You joined this room in another tab.', 'error');
+        leave();
+      } else if (msg.type === 'room-closed') {
+        showToast('The room was closed.', 'error');
+        leave();
+      }
+    };
+    source.onerror = function () { statusEl.textContent = 'Reconnecting…'; };
+    say();
+  }
+
+  function leave() {
+    if (source) { source.close(); source = null; }
+    Object.keys(peers).forEach(dropPeer);
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    callEl.hidden = true;
+    tilesEl.innerHTML = '';
+    myPeerId = null; roomId = null;
+    load();
+  }
+
+  document.getElementById('leaveBtn').addEventListener('click', leave);
+  document.getElementById('micBtn').addEventListener('click', function () {
+    if (!stream) return;
+    var on = stream.getAudioTracks().some(function (t) { return t.enabled; });
+    stream.getAudioTracks().forEach(function (t) { t.enabled = !on; });
+    this.textContent = on ? 'Unmute' : 'Mute';
+    this.classList.toggle('off', on);
+    setTileState('me', on ? 'muted' : '');
+  });
+  document.getElementById('camBtn').addEventListener('click', function () {
+    if (!stream || !stream.getVideoTracks().length) return;
+    var on = stream.getVideoTracks().some(function (t) { return t.enabled; });
+    stream.getVideoTracks().forEach(function (t) { t.enabled = !on; });
+    this.textContent = on ? 'Camera on' : 'Camera off';
+    this.classList.toggle('off', on);
+  });
+  // Closing the tab should free the seat immediately, not when the connection
+  // eventually times out — in a four-seat room a ghost is a real cost.
+  window.addEventListener('pagehide', function () { if (source) source.close(); });
+
+  function card(r) {
+    var full = r.here >= r.capacity;
+    return '<div class="room-card">'
+      + '<h3>' + escapeHtml(r.title || 'ACONSU Room') + '</h3>'
+      + '<div class="room-meta">' + escapeHtml(r.departmentName ? r.departmentName + ' department' : 'Open to the chapter')
+      + (r.createdByName ? ' &middot; opened by ' + escapeHtml(r.createdByName) : '') + '</div>'
+      + '<div><span class="seats' + (full ? ' full' : '') + '">' + r.here + ' of ' + r.capacity + ' here</span></div>'
+      + '<button class="btn btn-primary btn-sm join-btn" data-id="' + escapeHtml(r.id) + '"' + (full ? ' disabled' : '') + '>'
+      + (full ? 'Room is full' : 'Join') + '</button>'
+      + '</div>';
+  }
+
+  var ROOMS = [];
+  async function load() {
+    try {
+      var data = await fetchJSON('/api/rooms');
+      ROOMS = data.items || [];
+      CAPACITY = data.capacity || CAPACITY;
+      grid.innerHTML = ROOMS.map(card).join('')
+        || '<p class="empty-state">No rooms are open right now. A Chapter Admin or your department head opens one when a meeting is due.</p>';
+    } catch (err) {
+      grid.innerHTML = '<p class="empty-state">' + escapeHtml(err.message || 'Could not load rooms.') + '</p>';
+    }
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.join-btn');
+    if (!b || b.disabled) return;
+    var room = ROOMS.filter(function (r) { return r.id === b.dataset.id; })[0];
+    if (room) join(room);
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
