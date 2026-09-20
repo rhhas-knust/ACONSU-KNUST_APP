@@ -2508,6 +2508,74 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /not published just because we hold them/i.test(policy));
   }
 
+  console.log('\n== the Bible reader: more versions, and one the app may not serve ==');
+  {
+    r = await call('anon', 'GET', '/api/bible/books');
+    check('the reader offers more than the five versions it started with',
+      r.status === 200 && r.data.translations.length > 5, r.data && r.data.translations && r.data.translations.length);
+    check('every version says what language it is in',
+      r.data.translations.every(t => t.code && t.label && typeof t.language === 'string'), r.data.translations[0]);
+    check('the KJV leads the list, since it is the default',
+      r.data.translations[0].code === 'kjv', r.data.translations[0]);
+    const codes = r.data.translations.map(t => t.code);
+    check('the versions it already had are all still there',
+      ['kjv', 'web', 'webbe', 'oeb-us', 'clementine'].every(c => codes.includes(c)), codes);
+
+    // NASB 2020 is the version the church approved, and it is copyrighted.
+    // The app must offer it as a way to reach it, never as text it serves.
+    const external = r.data.externalVersions || [];
+    const nasb = external.find(v => v.code === 'nasb2020');
+    check('NASB 2020 is offered as a version', !!nasb, external);
+    check('and is not in the list the app serves text from',
+      !codes.includes('nasb2020'), codes);
+    check('and says openly why it opens elsewhere',
+      !!nasb && /copyright/i.test(nasb.note), nasb);
+    check('and names its publisher', !!nasb && /Lockman/i.test(nasb.publisher || ''), nasb);
+    check('and carries a link the reader fills in with the passage',
+      !!nasb && nasb.urlTemplate.includes('{reference}'), nasb);
+
+    r = await call('anon', 'GET', '/api/bible/passage?book=John&chapter=3&translation=nasb2020');
+    check('asking the server for it is answered with where to read it, not with text',
+      r.status === 409 && r.data.externalVersion && !r.data.verses, r.data);
+    check('and the link it gives points at the passage that was asked for',
+      r.status === 409 && /John%203/.test(r.data.externalVersion.url), r.data.externalVersion);
+  }
+
+  console.log('\n== sharing a verse as an image: the verse has to be on it ==');
+  {
+    // The bug this covers: the card used to be laid out with <foreignObject>,
+    // which the renderer ignores. Every share was the background and nothing
+    // else — so two different verses produced byte-identical files.
+    const png = async (query) => {
+      const res = await fetch(BASE + '/api/verse-image?' + query);
+      return { status: res.status, type: res.headers.get('content-type'), buf: Buffer.from(await res.arrayBuffer()) };
+    };
+    // Held against the *same* reference on purpose: if only the reference
+    // rendered, two different verses would still differ, and this check would
+    // pass while the card was blank where the scripture belongs.
+    const psalm = await png('verse=' + encodeURIComponent('The Lord is my shepherd') + '&reference=' + encodeURIComponent('Psalm 23:1'));
+    const otherVerse = await png('verse=' + encodeURIComponent('For God so loved the world') + '&reference=' + encodeURIComponent('Psalm 23:1'));
+    const otherRef = await png('verse=' + encodeURIComponent('The Lord is my shepherd') + '&reference=' + encodeURIComponent('John 3:16'));
+    check('the share image is a PNG', psalm.status === 200 && psalm.type === 'image/png', psalm.status);
+    check('the scripture itself is on the card, not just the background',
+      !psalm.buf.equals(otherVerse.buf), { psalm: psalm.buf.length, other: otherVerse.buf.length });
+    check('and so is the reference',
+      !psalm.buf.equals(otherRef.buf), { psalm: psalm.buf.length, other: otherRef.buf.length });
+
+    // Both conventions in this app put the reference at opposite ends: the
+    // Coordinator's daily verse trails it, the Verse of the Week leads with
+    // it. Whichever way it arrives, the same card has to come out.
+    const trailing = await png('verse=' + encodeURIComponent('"The Lord is my shepherd" — Psalm 23:1'));
+    const leading = await png('verse=' + encodeURIComponent('Psalm 23:1 — The Lord is my shepherd'));
+    check('a verse with the reference at the end is split the same way',
+      trailing.buf.equals(psalm.buf), { trailing: trailing.buf.length, expected: psalm.buf.length });
+    check('and so is one that leads with the reference',
+      leading.buf.equals(psalm.buf), { leading: leading.buf.length, expected: psalm.buf.length });
+
+    const noRef = await png('verse=' + encodeURIComponent('Be still, and know that I am God'));
+    check('a verse with no reference at all still renders', noRef.status === 200, noRef.status);
+  }
+
   console.log('\n== the two admin portals are one portal ==');
   {
     const fs = require('fs');

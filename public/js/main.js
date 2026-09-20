@@ -414,6 +414,10 @@ async function renderVerseOfDay(settings) {
     verseEl.textContent = daily.text
       ? `"${daily.text}" — ${daily.reference}`
       : daily.reference;
+    // Kept apart as well as joined: sharing this verse as an image needs the
+    // two halves, and guessing them back out of one string is guesswork.
+    verseEl.dataset.reference = daily.reference;
+    if (daily.text) verseEl.dataset.text = daily.text;
     // The reflection is the Coordinator's own thought on it, so it is shown
     // under the verse rather than folded into the quote itself.
     const card = document.getElementById('verseOfDayCard');

@@ -324,13 +324,15 @@
     // Download as image
     menu.querySelector('.share-menu-btn:nth-child(2)').addEventListener('click', async () => {
       try {
-        const encodedVerse = encodeURIComponent(verseText);
+        const strip = document.getElementById('verseStrip');
+        const params = new URLSearchParams({ verse: strip.dataset.text || verseText });
+        if (strip.dataset.reference) params.set('reference', strip.dataset.reference);
         const link = document.createElement('a');
-        link.href = `/api/verse-image?verse=${encodedVerse}`;
+        link.href = `/api/verse-image?${params.toString()}`;
         link.download = 'verse-of-the-day.png';
         link.click();
       } catch (e) {
-        alert('Could not download verse image');
+        showToast('Could not download the verse image.', 'error');
       }
       menu.remove();
     });

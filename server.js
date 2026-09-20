@@ -1862,24 +1862,130 @@ app.post('/api/admin/notifications', requireAdmin, async (req, res) => {
 });
 
 
+// The reader is served by bible-api.com, which carries public-domain
+// translations only. This list is the floor, not the ceiling: the live
+// catalogue is fetched from the service below and merged over it, so a
+// translation the service adds shows up without a deploy, and the picker is
+// still populated when the service (or the network) is down.
 const BIBLE_TRANSLATIONS = [
-  { code: 'kjv', label: 'King James Version (KJV)' },
-  { code: 'web', label: 'World English Bible (WEB)' },
-  { code: 'webbe', label: 'World English Bible, British Edition' },
-  { code: 'oeb-us', label: 'Open English Bible, US Edition' },
-  { code: 'clementine', label: 'Clementine Latin Vulgate' }
+  { code: 'kjv', label: 'King James Version (KJV)', language: 'English' },
+  { code: 'web', label: 'World English Bible (WEB)', language: 'English' },
+  { code: 'webbe', label: 'World English Bible, British Edition', language: 'English' },
+  { code: 'bbe', label: 'Bible in Basic English', language: 'English' },
+  { code: 'oeb-us', label: 'Open English Bible, US Edition', language: 'English' },
+  { code: 'oeb-cw', label: 'Open English Bible, Commonwealth Edition', language: 'English' },
+  { code: 'cherokee', label: 'Cherokee New Testament', language: 'Cherokee' },
+  { code: 'clementine', label: 'Clementine Latin Vulgate', language: 'Latin' },
+  { code: 'almeida', label: 'João Ferreira de Almeida', language: 'Portuguese' },
+  { code: 'rccv', label: 'Romanian Corrected Cornilescu Version', language: 'Romanian' }
 ];
+
+// Versions the union reads that the app is not free to serve as text.
+//
+// The church has approved NASB 2020, but the NASB is © The Lockman
+// Foundation: reproducing it — including proxying it through this server —
+// needs a licence, and bible-api.com does not carry it. So it is offered as a
+// version that opens in a licensed reader, honestly labelled, instead of
+// quietly missing from the list. If the union obtains a licence (from The
+// Lockman Foundation directly, or through a provider that already holds the
+// rights), this entry moves into BIBLE_TRANSLATIONS as an ordinary code and
+// the rest of the reader needs no change.
+const BIBLE_EXTERNAL_VERSIONS = [
+  {
+    code: 'nasb2020',
+    label: 'New American Standard Bible 2020 (NASB)',
+    language: 'English',
+    external: true,
+    publisher: 'The Lockman Foundation',
+    note: 'Approved by the church. The NASB is copyrighted, so this version opens in the publisher\u2019s licensed reader rather than inside the app.',
+    urlTemplate: 'https://www.biblegateway.com/passage/?search={reference}&version=NASB'
+  }
+];
+const EXTERNAL_VERSION_CODES = new Set(BIBLE_EXTERNAL_VERSIONS.map((v) => v.code));
+
 const bibleCache = new Map(); // key -> { data, expiresAt }
 const BIBLE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — scripture text doesn't change
+const BIBLE_TRANSLATION_TTL_MS = 12 * 60 * 60 * 1000; // the catalogue changes far more rarely than it is asked for
+const BIBLE_TRANSLATION_RETRY_MS = 5 * 60 * 1000;     // how long a failed catalogue fetch is left alone
+let bibleTranslationCache = { list: null, expiresAt: 0 };
 
-app.get('/api/bible/books', (req, res) => {
-  res.json({ books: BIBLE_BOOKS, translations: BIBLE_TRANSLATIONS });
+// Our own label wins for a translation we already name well; everything else
+// keeps the service's own name. English first — that is what the chapter
+// reads — then alphabetically, with the KJV pinned at the top as the default.
+function mergeTranslations(live) {
+  const known = new Map(BIBLE_TRANSLATIONS.map((t) => [t.code, t]));
+  const merged = new Map();
+  for (const t of BIBLE_TRANSLATIONS) merged.set(t.code, t);
+  for (const t of live) {
+    const ours = known.get(t.code);
+    merged.set(t.code, ours ? { ...t, label: ours.label } : t);
+  }
+  return [...merged.values()].sort((a, b) => {
+    if (a.code === 'kjv') return -1;
+    if (b.code === 'kjv') return 1;
+    const aEn = a.language === 'English' ? 0 : 1;
+    const bEn = b.language === 'English' ? 0 : 1;
+    if (aEn !== bEn) return aEn - bEn;
+    return a.label.localeCompare(b.label);
+  });
+}
+
+async function loadBibleTranslations() {
+  if (bibleTranslationCache.list && bibleTranslationCache.expiresAt > Date.now()) {
+    return bibleTranslationCache.list;
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+    const apiRes = await fetch('https://bible-api.com/data', { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!apiRes.ok) throw new Error('Translation catalogue unavailable');
+    const data = await apiRes.json();
+    const live = (Array.isArray(data.translations) ? data.translations : [])
+      .filter((t) => t && t.identifier)
+      .map((t) => ({
+        code: String(t.identifier),
+        label: String(t.name || t.identifier).trim(),
+        language: String(t.language || '').trim()
+      }));
+    if (!live.length) throw new Error('Translation catalogue was empty');
+    const list = mergeTranslations(live);
+    bibleTranslationCache = { list, expiresAt: Date.now() + BIBLE_TRANSLATION_TTL_MS };
+    return list;
+  } catch (e) {
+    // Offline, or the service is down. The reader still offers the versions we
+    // know it carries rather than an empty picker — and the failure is held
+    // briefly, so a service that is down costs one slow request rather than a
+    // six-second wait on every page load until it comes back.
+    bibleTranslationCache = { list: BIBLE_TRANSLATIONS, expiresAt: Date.now() + BIBLE_TRANSLATION_RETRY_MS };
+    return BIBLE_TRANSLATIONS;
+  }
+}
+
+app.get('/api/bible/books', async (req, res) => {
+  const translations = await loadBibleTranslations();
+  res.json({ books: BIBLE_BOOKS, translations, externalVersions: BIBLE_EXTERNAL_VERSIONS });
 });
 
 app.get('/api/bible/passage', async (req, res) => {
   const { book, chapter, translation } = req.query;
   if (!book || !chapter) return res.status(400).json({ error: 'Book and chapter are required' });
   const trans = translation || 'kjv';
+
+  // A version we are not licensed to reproduce is answered with where to read
+  // it, not with an error the reader cannot act on.
+  if (EXTERNAL_VERSION_CODES.has(trans)) {
+    const version = BIBLE_EXTERNAL_VERSIONS.find((v) => v.code === trans);
+    return res.status(409).json({
+      error: version.note,
+      externalVersion: {
+        code: version.code,
+        label: version.label,
+        publisher: version.publisher,
+        url: version.urlTemplate.replace('{reference}', encodeURIComponent(`${book} ${chapter}`))
+      }
+    });
+  }
   const cacheKey = `${book}|${chapter}|${trans}`.toLowerCase();
 
   const cached = bibleCache.get(cacheKey);
@@ -1894,6 +2000,16 @@ app.get('/api/bible/passage', async (req, res) => {
     const timeout = setTimeout(() => controller.abort(), 8000);
     const apiRes = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
+    if (apiRes.status === 404) {
+      // bible-api.com answers 404 both for a passage that does not exist and
+      // for a translation code it does not carry. Saying which it was is the
+      // difference between "try another chapter" and "try another version".
+      const known = await loadBibleTranslations();
+      if (!known.some((t) => t.code === trans)) {
+        return res.status(404).json({ error: 'That version is not available in the reader. Please pick another one.' });
+      }
+      return res.status(404).json({ error: 'Passage not found' });
+    }
     if (!apiRes.ok) throw new Error('Bible service unavailable');
     const data = await apiRes.json();
     if (data.error) return res.status(404).json({ error: 'Passage not found' });
@@ -2503,59 +2619,122 @@ app.get('/api/settings', async (req, res) => {
 });
 
 // Generate verse-of-the-day as a shareable image (PNG)
+// Wraps a line of scripture into SVG <tspan> rows.
+//
+// This exists because the image used to be laid out with <foreignObject>, and
+// librsvg — which sharp renders through — does not implement it. The plain
+// <text> elements around it appeared, the verse inside it did not, so every
+// shared image was a purple gradient with a heading and no scripture on it.
+// Real <text> and <tspan> render, so the wrapping has to be done here rather
+// than left to a browser that is never involved.
+function wrapSvgText(text, maxChars) {
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const candidate = line ? line + ' ' + word : word;
+    if (candidate.length > maxChars && line) { lines.push(line); line = word; }
+    else line = candidate;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function escapeSvg(str) {
+  return String(str).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]
+  ));
+}
+
+// "Book 3:16", "1 John 4:8", "Psalm 23" — a book name followed by numbers.
+const SCRIPTURE_REF = /^\s*(?:[1-3]\s*)?[A-Za-z][A-Za-z.\s]{1,24}\s*\d{1,3}(?::\d{1,3}(?:\s*[-–]\s*\d{1,3})?)?\s*$/;
+
+// A verse arrives as one string, and the two conventions in this app put the
+// reference at opposite ends: the Coordinator's daily verse renders as
+// `"text" — Reference`, while the Verse of the Week an admin types into Site
+// Settings is prompted as `Acts 2:42 — And they continued...`. Splitting on
+// the dash alone got the settings one backwards, printing the scripture where
+// the reference belongs. So look at both sides and let the one that is shaped
+// like a reference win.
+function splitVerseAndReference(raw) {
+  const text = String(raw || '').trim();
+  const parts = text.split(/\s+[—–]\s+|\s+--?\s+/);
+  if (parts.length >= 2) {
+    const head = parts[0].trim();
+    const tail = parts.slice(1).join(' — ').trim();
+    if (SCRIPTURE_REF.test(head)) return { verse: tail, reference: head };
+    const last = parts[parts.length - 1].trim();
+    if (SCRIPTURE_REF.test(last)) {
+      return { verse: parts.slice(0, -1).join(' — ').trim(), reference: last };
+    }
+  }
+  return { verse: text, reference: '' };
+}
+
 app.get('/api/verse-image', async (req, res) => {
   try {
     let verseText = req.query.verse || '';
+    let reference = cleanText(String(req.query.reference || ''));
     if (!verseText) {
       const settings = await repo.getSettings();
       if (!settings.verseOfTheWeek) return res.status(400).json({ error: 'No verse configured' });
       verseText = settings.verseOfTheWeek;
     }
+    // The client passes the reference when it knows it; otherwise split the
+    // strip so the reference is set apart rather than run on from the quote.
+    if (!reference) {
+      const split = splitVerseAndReference(verseText);
+      verseText = split.verse;
+      reference = split.reference;
+    }
+    verseText = String(verseText).replace(/^[\s"“]+|[\s"”]+$/g, '');
 
-    // Limit verse length for image generation
-    const shortVerse = verseText.length > 200 ? verseText.substring(0, 197) + '...' : verseText;
-    
-    // Create SVG with the verse text
-    const width = 1080;
-    const height = 1350;
+    const width = 1080, height = 1350;
+    // Sized so a long verse still fits the panel rather than running off it.
+    const full = verseText.length > 420 ? verseText.slice(0, 417).trimEnd() + '…' : verseText;
+    const fontSize = full.length > 260 ? 38 : full.length > 150 ? 44 : 52;
+    const perLine = Math.floor(1560 / fontSize);
+    const lines = wrapSvgText(full, perLine);
+    const lineHeight = Math.round(fontSize * 1.52);
+    const blockHeight = lines.length * lineHeight;
+    const startY = Math.round((height - blockHeight) / 2) + fontSize / 2;
+
+    const tspans = lines.map((ln, i) =>
+      `<tspan x="${width / 2}" y="${startY + i * lineHeight}">${escapeSvg(ln)}</tspan>`
+    ).join('');
+
     const svg = `
       <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <!-- Background gradient -->
         <defs>
           <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#5B2C82;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#3A1B54;stop-opacity:1" />
+            <stop offset="0%" stop-color="#5B2C82"/>
+            <stop offset="55%" stop-color="#3A1B54"/>
+            <stop offset="100%" stop-color="#241530"/>
           </linearGradient>
         </defs>
         <rect width="${width}" height="${height}" fill="url(#grad)"/>
-        
-        <!-- Logo/brand -->
-        <text x="${width / 2}" y="100" font-size="36" font-weight="700" fill="#E8971E" text-anchor="middle" font-family="serif">ACONSU</text>
-        
-        <!-- Verse text -->
-        <foreignObject x="60" y="200" width="${width - 120}" height="900">
-          <div xmlns="http://www.w3.org/1999/xhtml" style="
-            font-family: Georgia, serif;
-            font-size: 32px;
-            color: #FFFFFF;
-            line-height: 1.6;
-            text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            padding: 40px;
-          ">
-            <p style="margin: 0;">"${shortVerse.replace(/"/g, '&quot;')}"</p>
-          </div>
-        </foreignObject>
-        
-        <!-- Footer -->
-        <text x="${width / 2}" y="${height - 40}" font-size="20" fill="rgba(255,255,255,0.7)" text-anchor="middle" font-family="sans-serif">Verse of the Day</text>
+        <circle cx="${width - 60}" cy="180" r="300" fill="#E8971E" opacity="0.07"/>
+        <circle cx="40" cy="${height - 140}" r="240" fill="#E8971E" opacity="0.05"/>
+
+        <text x="${width / 2}" y="112" font-size="34" font-weight="700" fill="#E8971E"
+              text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+              letter-spacing="7">ACONSU</text>
+        <line x1="${width / 2 - 60}" y1="140" x2="${width / 2 + 60}" y2="140" stroke="#E8971E" stroke-width="2" opacity="0.6"/>
+
+        <text x="${width / 2 - 20}" y="${startY - lineHeight}" font-size="150" fill="#E8971E"
+              opacity="0.22" text-anchor="middle" font-family="Georgia, serif">&#8220;</text>
+
+        <text font-size="${fontSize}" fill="#FBF8FD" text-anchor="middle"
+              font-family="Georgia, 'Times New Roman', serif">${tspans}</text>
+
+        ${reference ? `<text x="${width / 2}" y="${startY + blockHeight + 34}" font-size="32" font-weight="700"
+              fill="#E8971E" text-anchor="middle" font-family="Georgia, serif">${escapeSvg(reference)}</text>` : ''}
+
+        <text x="${width / 2}" y="${height - 58}" font-size="22" fill="#EFE6F6" opacity="0.55"
+              text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
+              letter-spacing="2">THE APOSTLES&#8217; CONTINUATION STUDENTS UNION</text>
       </svg>
     `;
 
-    // Convert SVG to PNG using sharp
     const buffer = await require('sharp')(Buffer.from(svg)).png().toBuffer();
     res.type('image/png').send(buffer);
   } catch (e) {
