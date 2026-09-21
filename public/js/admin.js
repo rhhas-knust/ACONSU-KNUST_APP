@@ -636,6 +636,10 @@ const PORTAL_ROLES = [
 ];
 // Only a National Coordinator may hand out these two — see /api/admin/staff.
 const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];
+// Every chapter office is held by a member of that chapter, so the server asks
+// which one. A National Coordinator belongs to the union rather than to any
+// chapter, and is the one account here that doesn't.
+const MEMBER_BACKED_STAFF_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'shepherding', 'publicity', 'welfare'];
 
 async function renderStaffAccounts() {
   const el = document.getElementById('panel-staff');
@@ -724,6 +728,12 @@ async function openStaffForm(user) {
           ${roleOptions.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label} — ${r.blurb}</option>`).join('')}
         </select>
       </div>
+      ${isEdit ? '' : `
+        <div class="field" id="stMemberWrap">
+          <label>Member holding this office</label>
+          <select id="stMemberId"><option value="">Loading members…</option></select>
+          <small class="hint">Every chapter leader is a member of the chapter first, so the account is attached to their member record.</small>
+        </div>`}
       ${ADMIN_SCOPE.isNational ? `
         <div class="field"><label>Chapter</label>
           <select id="stChapter">
@@ -750,6 +760,38 @@ async function openStaffForm(user) {
   `);
   document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
 
+  // The roster follows whichever chapter the account is being created in —
+  // otherwise a national actor would be offered one chapter's members while
+  // creating an account in another, and the server would rightly refuse it.
+  const roleSelect = document.getElementById('stRole');
+  const memberWrap = document.getElementById('stMemberWrap');
+  const memberSelect = document.getElementById('stMemberId');
+  const chapterSelect = document.getElementById('stChapter');
+
+  async function loadMembersForChapter() {
+    if (!memberSelect) return;
+    const chapterId = chapterSelect ? chapterSelect.value : '';
+    memberSelect.innerHTML = '<option value="">Loading members…</option>';
+    try {
+      const members = await fetchJSON('/api/admin/members' + (chapterId ? `?chapterId=${encodeURIComponent(chapterId)}` : ''));
+      memberSelect.innerHTML = '<option value="">Choose the member</option>'
+        + members.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.email || m.id)}</option>`).join('');
+    } catch (err) {
+      memberSelect.innerHTML = '<option value="">Could not load members</option>';
+    }
+  }
+
+  function syncMemberField() {
+    if (!memberWrap) return;
+    memberWrap.hidden = !MEMBER_BACKED_STAFF_ROLES.includes(roleSelect.value);
+  }
+  if (memberWrap) {
+    roleSelect.addEventListener('change', syncMemberField);
+    if (chapterSelect) chapterSelect.addEventListener('change', loadMembersForChapter);
+    syncMemberField();
+    loadMembersForChapter();
+  }
+
   document.getElementById('staffForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {
@@ -762,7 +804,12 @@ async function openStaffForm(user) {
     const password = document.getElementById('stPassword').value;
     if (password) payload.password = password;
     if (isEdit) payload.active = document.getElementById('stActive').checked;
-    else payload.username = document.getElementById('stUsername').value;
+    else {
+      payload.username = document.getElementById('stUsername').value;
+      if (memberSelect && MEMBER_BACKED_STAFF_ROLES.includes(payload.role)) {
+        payload.memberId = memberSelect.value;
+      }
+    }
 
     try {
       await fetchJSON(isEdit ? `/api/admin/staff/${user.id}` : '/api/admin/staff', {

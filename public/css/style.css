@@ -21,6 +21,10 @@
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 
+/* A class that sets `display` beats the browser's own rule for [hidden], so a
+   hidden element would otherwise still be on screen. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: var(--font-body);
@@ -191,6 +195,13 @@ img { max-width: 100%; display: block; }
   0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
   50% { opacity: 1; transform: translateX(-50%) scale(1.06); }
 }
+/* A page whose job is reading should start reading. The full hero is most of
+   a phone screen of nothing on the way to the first verse. */
+.hero.hero-compact { min-height: 0; padding: 46px 24px 30px; }
+.hero.hero-compact h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); }
+.hero.hero-compact .lede { font-size: 1rem; margin-bottom: 0; }
+.hero.hero-compact .hero-flame { width: 320px; height: 320px; bottom: -170px; }
+
 .hero-content { position: relative; max-width: 760px; margin: 0 auto; }
 .hero h1 { margin-bottom: 0.35em; }
 .hero .lede { font-size: 1.15rem; color: #5a4468; max-width: 560px; margin: 0 auto 2em; }
@@ -510,14 +521,104 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .bday-pill .avatar { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.3); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:0.8rem; }
 .bday-pill .avatar img { width:100%; height:100%; object-fit:cover; }
 
-/* ---------- bible reader ---------- */
+/* ---------- bible reader ----------
+   The reading pane carries its own colours so day / sepia / night can change
+   the page someone is reading without repainting the whole site around it. */
 .bible-controls { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:24px; }
 .bible-controls select { padding:10px 12px; border-radius:10px; border:1.5px solid var(--line); font-family:'Manrope',sans-serif; background:var(--paper); }
-.bible-nav-btns { display:flex; gap:10px; justify-content:center; margin-top:20px; flex-wrap:wrap; }
-.verse-block { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:28px 30px; }
-.verse-line { margin-bottom:0.9em; line-height:1.8; font-size:1.05rem; }
-.verse-num { font-weight:800; color: var(--flame-gold); font-size:0.78rem; vertical-align:super; margin-right:4px; }
+
+.reader-bar {
+  position: sticky; top: 0; z-index: 320;
+  background: rgba(255,255,255,0.93);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 12px; margin-bottom: 20px;
+  box-shadow: 0 6px 20px rgba(58,27,84,0.07);
+  display: grid; gap: 10px;
+}
+.reader-pickers { display:grid; gap:8px; grid-template-columns: 1.5fr 1fr; }
+.reader-pickers select.version { grid-column: 1 / -1; }
+.reader-pickers select {
+  width:100%; padding:11px 12px; border-radius:11px; border:1.5px solid var(--line);
+  font-family: var(--font-body); font-weight:600; font-size:0.92rem;
+  background:var(--paper); color:var(--purple-ink); appearance:none;
+  background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235B2C82' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat; background-position:right 12px center; padding-right:32px;
+}
+.reader-pickers select:focus { outline:none; border-color:var(--purple-deep); box-shadow:0 0 0 3px rgba(91,44,130,0.14); }
+.reader-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.reader-tools .spacer { flex:1 1 auto; }
+.tool-group { display:flex; border:1.5px solid var(--line); border-radius:999px; overflow:hidden; background:var(--paper); }
+.tool-btn {
+  border:none; background:none; cursor:pointer; padding:7px 12px;
+  font-family: var(--font-body); font-weight:700; font-size:0.8rem; color:var(--purple-rich);
+  display:flex; align-items:center; gap:6px; line-height:1;
+}
+.tool-btn + .tool-btn { border-left:1.5px solid var(--line); }
+.tool-btn:hover { background: var(--lilac-light); }
+.tool-btn[aria-pressed="true"] { background: var(--purple-deep); color:#fff; }
+.tool-btn svg { width:15px; height:15px; }
+.tool-btn .t-label { margin-left:5px; }
+
+.reader {
+  --reader-bg:#fff; --reader-ink:#241530; --reader-soft:rgba(36,21,48,0.58);
+  --reader-rule:rgba(58,27,84,0.12); --reader-accent:var(--flame-gold);
+  --reader-size:1.08rem;
+  background:var(--reader-bg); color:var(--reader-ink);
+  border:1px solid var(--reader-rule); border-radius:var(--radius);
+  padding:30px 30px 34px; transition:background .25s ease, color .25s ease;
+}
+.reader[data-theme="sepia"] { --reader-bg:#FBF3E4; --reader-ink:#3B2A18; --reader-soft:rgba(59,42,24,0.6); --reader-rule:rgba(59,42,24,0.14); --reader-accent:#B5730F; }
+.reader[data-theme="night"] { --reader-bg:#1B1224; --reader-ink:#EDE4F4; --reader-soft:rgba(237,228,244,0.62); --reader-rule:rgba(237,228,244,0.16); --reader-accent:#F0AE43; }
+.reader-head { display:flex; align-items:baseline; justify-content:space-between; gap:14px; flex-wrap:wrap; padding-bottom:14px; margin-bottom:20px; border-bottom:1px solid var(--reader-rule); }
+.reader-head h2 { font-family:var(--font-display); font-size:clamp(1.5rem,4vw,2rem); color:var(--reader-ink); margin:0; }
+.reader-head .reader-version { font-size:0.74rem; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--reader-soft); }
+
+.verse-line {
+  margin:0 0 0.55em; line-height:1.85; font-size:var(--reader-size);
+  font-family:var(--font-display); font-weight:400;
+  padding:5px 10px; margin-left:-10px; margin-right:-10px;
+  border-radius:9px; cursor:pointer; transition:background .15s ease;
+}
+.verse-line:hover { background:rgba(232,151,30,0.09); }
+.verse-line.is-active { background:rgba(232,151,30,0.16); box-shadow:inset 3px 0 0 var(--reader-accent); }
+.verse-num { font-family:var(--font-body); font-weight:800; color:var(--reader-accent); font-size:0.7rem; vertical-align:super; margin-right:5px; }
+.reader[data-flow="paragraph"] .verse-block { font-size:var(--reader-size); line-height:1.9; font-family:var(--font-display); }
+.reader[data-flow="paragraph"] .verse-line { display:inline; margin:0; padding:0; border-radius:0; box-shadow:none; }
+.reader[data-flow="paragraph"] .verse-line::after { content:' '; }
+
+.verse-actions {
+  position:fixed; left:50%; transform:translateX(-50%);
+  bottom:calc(76px + env(safe-area-inset-bottom, 0px)); z-index:340;
+  background:var(--purple-rich); color:#fff; border-radius:999px;
+  padding:6px; display:flex; gap:4px; box-shadow:0 12px 30px rgba(36,21,48,0.35);
+}
+.verse-actions button {
+  border:none; background:none; color:#fff; cursor:pointer; border-radius:999px;
+  padding:9px 15px; font-family:var(--font-body); font-weight:700; font-size:0.82rem;
+  display:flex; align-items:center; gap:6px;
+}
+.verse-actions button:hover { background:rgba(255,255,255,0.16); }
+.verse-actions svg { width:15px; height:15px; }
+
+.bible-nav-btns { display:flex; gap:10px; justify-content:space-between; margin-top:20px; flex-wrap:wrap; }
+.bible-nav-btns .btn { flex:1 1 160px; }
 .bible-download-hint { background: var(--lilac-light); border-radius: var(--radius); padding:18px 20px; margin-top:24px; text-align:center; }
+.external-version {
+  border:1px dashed var(--lilac-mid); background:var(--lilac-light);
+  border-radius:var(--radius); padding:24px; text-align:center;
+}
+.external-version h3 { margin-bottom:8px; }
+.external-version p { color:#5a4468; font-size:0.92rem; max-width:44ch; margin:0 auto 16px; }
+
+@media (max-width: 560px) {
+  .reader { padding:22px 20px 26px; }
+  .reader-tools { gap:6px; }
+  .tool-btn { padding:7px 10px; font-size:0.76rem; }
+  /* The glyphs carry these two on a narrow screen, so the whole row of
+     reading controls stays on one line instead of spilling onto a second. */
+  .tool-btn .t-label { display:none; }
+}
 
 /* ---------- bottom tab bar (mobile app nav) ---------- */
 .bottom-nav {

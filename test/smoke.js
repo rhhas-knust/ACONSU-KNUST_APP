@@ -2508,6 +2508,173 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /not published just because we hold them/i.test(policy));
   }
 
+  console.log('\n== the handover: Shepherding marks an executive, the Coordinator opens the account ==');
+  {
+    // Shepherding can label someone an Executive; only the Coordinator can
+    // give them a portal. Nothing used to carry that between the two offices,
+    // so a member sat marked as an executive with no account and no page.
+    const waitingId = await registerMember('Nana Awaiting', 'nana.awaiting@test.com');
+
+    let r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
+    check('nobody is waiting for an account before anyone is marked',
+      r2.status === 200 && !r2.data.some(w => w.id === waitingId), r2.data);
+
+    r2 = await call('shep', 'PATCH', `/api/shepherd/members/${waitingId}/stage`, { stage: 'executive', shepherdName: 'Sister Grace' });
+    check('Shepherding marks the member an Executive', r2.status === 200 && r2.data.item.membershipStage === 'executive', r2.data);
+
+    r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
+    const waiting = r2.data.find(w => w.id === waitingId);
+    check('and the Coordinator is shown that they are waiting for an account', !!waiting, r2.data);
+    check('with the shepherd who marked them, so the Coordinator knows who to ask',
+      !!waiting && waiting.shepherdName === 'Sister Grace', waiting);
+
+    // The notifications feed is chapter-wide: a row there would announce to
+    // every member which of them had just been made an executive.
+    r2 = await call('anon', 'GET', '/api/notifications');
+    check('and the whole chapter is not told about it',
+      !r2.data.some(n => /Nana Awaiting/.test(`${n.title} ${n.body}`)), r2.data.slice(0, 3));
+
+    r2 = await call('coord', 'GET', '/api/coordinator/overview');
+    check('the dashboard counts them too', r2.data.awaitingAppointment >= 1, r2.data.awaitingAppointment);
+
+    // Appointing them is what clears it — nothing has to remember to.
+    r2 = await call('coord', 'POST', '/api/admin/staff', {
+      username: 'exec.awaiting', name: 'Nana Awaiting', role: 'executive',
+      password: 'password123', memberId: waitingId, positionKey: 'general_secretary'
+    });
+    check('the Coordinator appoints them', r2.status === 200, r2.data);
+
+    r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
+    check('and they stop waiting, because the account is the thing that was missing',
+      !r2.data.some(w => w.id === waitingId), r2.data);
+
+    // A member marked an executive in another chapter is that chapter's
+    // business, not this one's.
+    const otherId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: (() => {
+      const fd = new FormData();
+      fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+      fd.append('name', 'Other Chapter Exec'); fd.append('email', 'other.exec@test.com');
+      fd.append('password', 'secret123'); fd.append('chapterId', 'test-chapter-2');
+      return fd;
+    })() })).json()).member.id;
+    await call('admin', 'PATCH', `/api/shepherd/members/${otherId}/stage`, { stage: 'executive' }, false, { 'X-Chapter-Id': 'test-chapter-2' });
+    r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
+    check('another chapter\'s waiting executive is not in this chapter\'s list',
+      !r2.data.some(w => w.id === otherId), r2.data);
+
+    r2 = await call('pub', 'GET', '/api/coordinator/pending-executives');
+    check('and it is not open to every office', r2.status === 401, r2.status);
+  }
+
+  console.log('\n== appointing a leader asks for the member the server requires ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const js = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', 'js', f), 'utf8');
+
+    // The server has always required a member for every chapter office. The
+    // Coordinator's form only asked when appointing an executive, so every
+    // other appointment was refused with nothing on screen to explain it.
+    const coord = js('coordinator.js');
+    check('the Coordinator form sends the member for any office, not only an executive',
+      /payload\.memberId = memberSelect \? memberSelect\.value : '';/.test(coord)
+      && !/if \(roleSelect\.value === 'executive'\) \{\s*payload\.memberId/.test(coord), null);
+    check('and it no longer hides the member picker behind the executive branch',
+      !/memberWrap\.hidden = !isExecutive/.test(coord), null);
+    check('while the position picker stays an executive-only question',
+      /positionWrap\.hidden = !isExecutive/.test(coord), null);
+
+    // The admin portal had no member picker at all, so it could not create a
+    // Finance, Shepherding, Publicity or Welfare account either.
+    const adm = js('admin.js');
+    check('the admin form knows which roles are held by a member',
+      /const MEMBER_BACKED_STAFF_ROLES = \[/.test(adm)
+      && /'finance', 'shepherding', 'publicity', 'welfare'/.test(adm), null);
+    check('and sends the member it asked for',
+      /payload\.memberId = memberSelect\.value;/.test(adm), null);
+    check('and reloads the roster when the chapter changes, so the two agree',
+      /chapterSelect\.addEventListener\('change', loadMembersForChapter\)/.test(adm), null);
+
+    // The real proof: the exact payload each form now sends is accepted.
+    const finMemberId = await registerMember('Kwesi Books', 'kwesi.books@test.com');
+    let r2 = await call('coord', 'POST', '/api/admin/staff',
+      { username: 'fin.kwesi', name: 'Kwesi Books', role: 'finance', password: 'password123', memberId: finMemberId });
+    check('a Finance Officer can be appointed the way the form appoints one', r2.status === 200, r2.data);
+
+    r2 = await call('coord', 'POST', '/api/admin/staff',
+      { username: 'fin.nobody', name: 'Nobody', role: 'finance', password: 'password123' });
+    check('and one with no member behind it is still refused',
+      r2.status === 400 && /member/i.test(r2.data.error), r2.data);
+  }
+
+  console.log('\n== the Bible reader: more versions, and one the app may not serve ==');
+  {
+    r = await call('anon', 'GET', '/api/bible/books');
+    check('the reader offers more than the five versions it started with',
+      r.status === 200 && r.data.translations.length > 5, r.data && r.data.translations && r.data.translations.length);
+    check('every version says what language it is in',
+      r.data.translations.every(t => t.code && t.label && typeof t.language === 'string'), r.data.translations[0]);
+    check('the KJV leads the list, since it is the default',
+      r.data.translations[0].code === 'kjv', r.data.translations[0]);
+    const codes = r.data.translations.map(t => t.code);
+    check('the versions it already had are all still there',
+      ['kjv', 'web', 'webbe', 'oeb-us', 'clementine'].every(c => codes.includes(c)), codes);
+
+    // NASB 2020 is the version the church approved, and it is copyrighted.
+    // The app must offer it as a way to reach it, never as text it serves.
+    const external = r.data.externalVersions || [];
+    const nasb = external.find(v => v.code === 'nasb2020');
+    check('NASB 2020 is offered as a version', !!nasb, external);
+    check('and is not in the list the app serves text from',
+      !codes.includes('nasb2020'), codes);
+    check('and says openly why it opens elsewhere',
+      !!nasb && /copyright/i.test(nasb.note), nasb);
+    check('and names its publisher', !!nasb && /Lockman/i.test(nasb.publisher || ''), nasb);
+    check('and carries a link the reader fills in with the passage',
+      !!nasb && nasb.urlTemplate.includes('{reference}'), nasb);
+
+    r = await call('anon', 'GET', '/api/bible/passage?book=John&chapter=3&translation=nasb2020');
+    check('asking the server for it is answered with where to read it, not with text',
+      r.status === 409 && r.data.externalVersion && !r.data.verses, r.data);
+    check('and the link it gives points at the passage that was asked for',
+      r.status === 409 && /John%203/.test(r.data.externalVersion.url), r.data.externalVersion);
+  }
+
+  console.log('\n== sharing a verse as an image: the verse has to be on it ==');
+  {
+    // The bug this covers: the card used to be laid out with <foreignObject>,
+    // which the renderer ignores. Every share was the background and nothing
+    // else — so two different verses produced byte-identical files.
+    const png = async (query) => {
+      const res = await fetch(BASE + '/api/verse-image?' + query);
+      return { status: res.status, type: res.headers.get('content-type'), buf: Buffer.from(await res.arrayBuffer()) };
+    };
+    // Held against the *same* reference on purpose: if only the reference
+    // rendered, two different verses would still differ, and this check would
+    // pass while the card was blank where the scripture belongs.
+    const psalm = await png('verse=' + encodeURIComponent('The Lord is my shepherd') + '&reference=' + encodeURIComponent('Psalm 23:1'));
+    const otherVerse = await png('verse=' + encodeURIComponent('For God so loved the world') + '&reference=' + encodeURIComponent('Psalm 23:1'));
+    const otherRef = await png('verse=' + encodeURIComponent('The Lord is my shepherd') + '&reference=' + encodeURIComponent('John 3:16'));
+    check('the share image is a PNG', psalm.status === 200 && psalm.type === 'image/png', psalm.status);
+    check('the scripture itself is on the card, not just the background',
+      !psalm.buf.equals(otherVerse.buf), { psalm: psalm.buf.length, other: otherVerse.buf.length });
+    check('and so is the reference',
+      !psalm.buf.equals(otherRef.buf), { psalm: psalm.buf.length, other: otherRef.buf.length });
+
+    // Both conventions in this app put the reference at opposite ends: the
+    // Coordinator's daily verse trails it, the Verse of the Week leads with
+    // it. Whichever way it arrives, the same card has to come out.
+    const trailing = await png('verse=' + encodeURIComponent('"The Lord is my shepherd" — Psalm 23:1'));
+    const leading = await png('verse=' + encodeURIComponent('Psalm 23:1 — The Lord is my shepherd'));
+    check('a verse with the reference at the end is split the same way',
+      trailing.buf.equals(psalm.buf), { trailing: trailing.buf.length, expected: psalm.buf.length });
+    check('and so is one that leads with the reference',
+      leading.buf.equals(psalm.buf), { leading: leading.buf.length, expected: psalm.buf.length });
+
+    const noRef = await png('verse=' + encodeURIComponent('Be still, and know that I am God'));
+    check('a verse with no reference at all still renders', noRef.status === 200, noRef.status);
+  }
+
   console.log('\n== the two admin portals are one portal ==');
   {
     const fs = require('fs');
