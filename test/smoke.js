@@ -2607,6 +2607,54 @@ const { fakeModels, fakeDb } = require('./harness.js');
       r2.status === 400 && /member/i.test(r2.data.error), r2.data);
   }
 
+  console.log('\n== opening the app, and one class name that belonged to two things ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const css = pub('css/style.css');
+    const home = pub('index.html');
+    const bible = pub('bible.html');
+
+    // The regression this guards: the Bible page's floating action bar was
+    // added as `.verse-actions`, a class the home page had been using since
+    // long before for the row inside its Verse of the Day card. The shared
+    // stylesheet then pinned that row to the bottom of the screen, where it
+    // floated over the quick-access tiles on every scroll.
+    check('the shared stylesheet leaves .verse-actions to the page that owns it',
+      !/^\.verse-actions[\s{,]/m.test(css), (css.match(/^\.verse-actions.*/m) || [])[0]);
+    check('and the home page still styles its own row',
+      /\.verse-actions\s*\{[^}]*display:\s*flex/.test(home), null);
+    check('while the Bible page\'s floating bar has a name of its own',
+      /class="verse-action-bar"/.test(bible) && !/class="verse-actions"/.test(bible), null);
+    check('which the stylesheet is what pins to the screen',
+      /\.verse-action-bar\s*\{[^}]*position:\s*fixed/.test(css), null);
+    check('and the Bible page dismisses it by that same name',
+      /closest\('\.verse-action-bar'\)/.test(bible), null);
+
+    // The splash colour is not a taste: it is the icon's own background, which
+    // is what makes the mark sit on the screen rather than on a tile.
+    const manifest = JSON.parse(pub('manifest.json'));
+    const sharp = require('sharp');
+    const icon = await sharp(path.join(__dirname, '..', 'public', 'icons', 'icon-maskable-512.png'))
+      .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const corner = [icon.data[0], icon.data[1], icon.data[2]];
+    const cornerHex = '#' + corner.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+    check('the splash background is the icon artwork\'s own ground colour',
+      manifest.background_color.toUpperCase() === cornerHex, { manifest: manifest.background_color, icon: cornerHex });
+
+    // A splash that only script can dismiss is a splash that a failed script
+    // leaves you staring at.
+    check('the opening screen removes itself in CSS, not in script',
+      /animation:\s*splashOut[^;]*forwards/.test(home) && /@keyframes splashOut/.test(home), null);
+    check('and is painted before the stylesheet is even asked for',
+      home.indexOf('#appSplash') < home.indexOf('css/style.css'), null);
+    check('the mark it shows has had its white backing removed',
+      /logo-splash\.png/.test(home) && fs.existsSync(path.join(__dirname, '..', 'public', 'icons', 'logo-splash.png')), null);
+    check('and is cached, being the first thing anyone sees',
+      /logo-splash\.png/.test(pub('sw.js')), null);
+  }
+
   console.log('\n== hero art: every page wears something, and a chapter can dress it ==');
   {
     const fs = require('fs');

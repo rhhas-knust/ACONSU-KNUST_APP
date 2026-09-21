@@ -1,7 +1,7 @@
 // ACONSU service worker — enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v13';
+const CACHE_NAME = 'aconsu-v14';
 
 const APP_SHELL = [
   '/index.html',
@@ -48,7 +48,8 @@ const APP_SHELL = [
   '/icons/icon-192.png',
   '/icons/icon-384.png',
   '/icons/icon-512.png',
-  '/icons/icon-maskable-512.png'
+  '/icons/icon-maskable-512.png',
+  '/icons/logo-splash.png'
 ];
 
 // Responses that describe *who you are* are never written to the cache. Serving

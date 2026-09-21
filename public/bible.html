@@ -79,7 +79,7 @@
   </div>
 </section>
 
-<div class="verse-actions" id="verseActions" hidden>
+<div class="verse-action-bar" id="verseActions" hidden>
   <button id="copyVerseBtn">Copy</button>
   <button id="shareVerseBtn">Share</button>
   <button id="imageVerseBtn">Image</button>
@@ -182,7 +182,7 @@ const MIN_SIZE = 0.92, MAX_SIZE = 1.6;
   document.addEventListener('click', (e) => {
     const line = e.target.closest('.verse-line');
     if (line) return selectVerse(line);
-    if (!e.target.closest('.verse-actions')) clearSelection();
+    if (!e.target.closest('.verse-action-bar')) clearSelection();
   });
 
   // Page through chapters with the arrow keys, the way a reader expects.
