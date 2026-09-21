@@ -15,6 +15,7 @@ const rolesLib = require('./lib/roles');
 const positions = require('./lib/positions');
 const CAP = positions.CAPABILITIES;
 const BIBLE_BOOKS = require('./lib/bibleBooks');
+const heroArt = require('./lib/heroArt');
 const push = require('./lib/push');
 const sms = require('./lib/sms');
 const mailer = require('./lib/mailer');
@@ -2589,8 +2590,23 @@ function chapterSettingsResponse(chapter) {
   return chapter ? { ...chapter, chapterId: chapter.id } : null;
 }
 
+// Only pages this build actually has, and only the two fields the page needs.
+// A key left over from a renamed page, or anything else that found its way
+// into the record, is dropped rather than handed to the browser.
+function sanitiseHeroArt(stored) {
+  const out = {};
+  if (!stored || typeof stored !== 'object') return out;
+  for (const [key, value] of Object.entries(stored)) {
+    if (!heroArt.isHeroPage(key) || !value || !value.fileId) continue;
+    out[key] = { fileId: String(value.fileId), tone: value.tone === 'dark' ? 'dark' : 'light' };
+  }
+  return out;
+}
+
 function buildPublicSettings(globalSettings, chapter) {
-  if (!chapter) return globalSettings;
+  // heroArt is always an object, chapter or not, so a page never has to guard
+  // against the shape of the answer before looking for its own artwork.
+  if (!chapter) return { ...globalSettings, heroArt: {} };
   const contact = chapter.contact || {};
   const payment = chapter.payment || {};
   const globalAbout = globalSettings.about || {};
@@ -2605,6 +2621,9 @@ function buildPublicSettings(globalSettings, chapter) {
     verseOfTheWeek: chapter.verseOfTheWeek || globalSettings.verseOfTheWeek,
     address: chapter.address || chapter.location || globalSettings.address,
     homeHeaderImageFileId: chapter.homeHeaderImageFileId || globalSettings.homeHeaderImageFileId,
+    // Every page already loads settings to draw its header and footer, so the
+    // artwork map rides along with it rather than costing a request of its own.
+    heroArt: sanitiseHeroArt(chapter.heroArt),
     serviceTimes: chapter.serviceTimes?.length ? chapter.serviceTimes : (globalSettings.serviceTimes || []),
     email: contact.email || globalSettings.email,
     phone: contact.phone || globalSettings.phone,
@@ -2718,6 +2737,96 @@ function splitVerseAndReference(raw) {
   return { verse: text, reference: '' };
 }
 
+// The backgrounds a verse card can wear. One purple gradient was the only
+// option, which made every verse anybody shared look like every other one.
+// Each style carries its own backdrop and the ink that stays readable on it,
+// so a light card is a real option rather than dark text on a dark panel.
+const VERSE_CARD_STYLES = {
+  purple: {
+    label: 'Royal purple',
+    swatch: 'linear-gradient(135deg,#5B2C82,#3A1B54 55%,#241530)',
+    ink: '#FBF8FD', accent: '#E8971E', sub: '#EFE6F6', quote: '#E8971E', quoteOpacity: 0.22,
+    backdrop: (w, h) => `
+      <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#5B2C82"/><stop offset="55%" stop-color="#3A1B54"/>
+        <stop offset="100%" stop-color="#241530"/></linearGradient></defs>
+      <rect width="${w}" height="${h}" fill="url(#g)"/>
+      <circle cx="${w - 60}" cy="180" r="300" fill="#E8971E" opacity="0.07"/>
+      <circle cx="40" cy="${h - 140}" r="240" fill="#E8971E" opacity="0.05"/>`
+  },
+  dawn: {
+    label: 'Sunrise gold',
+    swatch: 'linear-gradient(180deg,#F6C56A,#EEA23F 48%,#D97B22)',
+    ink: '#2A1708', accent: '#8A3F12', sub: '#4A2A12', quote: '#B4661C', quoteOpacity: 0.3,
+    backdrop: (w, h) => `
+      <defs><linearGradient id="g" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#F6C56A"/><stop offset="48%" stop-color="#EEA23F"/>
+        <stop offset="100%" stop-color="#D97B22"/></linearGradient></defs>
+      <rect width="${w}" height="${h}" fill="url(#g)"/>
+      <circle cx="${w / 2}" cy="${h + 120}" r="620" fill="#FFF2D4" opacity="0.30"/>
+      <circle cx="${w / 2}" cy="${h + 120}" r="420" fill="#FFF8E8" opacity="0.28"/>`
+  },
+  night: {
+    label: 'Midnight',
+    swatch: 'radial-gradient(120% 100% at 50% 18%,#2B2144,#161029 62%,#0B0715)',
+    ink: '#EDE7F5', accent: '#F0AE43', sub: '#C7BCD8', quote: '#F0AE43', quoteOpacity: 0.26,
+    backdrop: (w, h) => `
+      <defs><radialGradient id="g" cx="50%" cy="18%" r="92%">
+        <stop offset="0%" stop-color="#2B2144"/><stop offset="62%" stop-color="#161029"/>
+        <stop offset="100%" stop-color="#0B0715"/></radialGradient></defs>
+      <rect width="${w}" height="${h}" fill="url(#g)"/>
+      ${[[140, 210, 3], [320, 130, 2], [880, 250, 3], [980, 520, 2], [180, 980, 2],
+         [760, 1180, 3], [420, 1260, 2], [620, 96, 2], [1010, 880, 2]]
+        .map(([cx, cy, r]) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#FFF6E2" opacity="0.7"/>`).join('')}`
+  },
+  olive: {
+    label: 'Still waters',
+    swatch: 'linear-gradient(150deg,#2F5044,#1E3A31 60%,#132622)',
+    ink: '#F2F6F1', accent: '#E8C87A', sub: '#D3DECF', quote: '#E8C87A', quoteOpacity: 0.24,
+    backdrop: (w, h) => `
+      <defs><linearGradient id="g" x1="0%" y1="0%" x2="60%" y2="100%">
+        <stop offset="0%" stop-color="#2F5044"/><stop offset="60%" stop-color="#1E3A31"/>
+        <stop offset="100%" stop-color="#132622"/></linearGradient></defs>
+      <rect width="${w}" height="${h}" fill="url(#g)"/>
+      <circle cx="120" cy="200" r="300" fill="#8FBFA4" opacity="0.08"/>
+      <circle cx="${w - 80}" cy="${h - 180}" r="260" fill="#E8C87A" opacity="0.06"/>`
+  },
+  ember: {
+    label: 'Ember',
+    swatch: 'radial-gradient(120% 110% at 50% 108%,#C4451F,#7E2318 46%,#3A1010)',
+    ink: '#FDF3EF', accent: '#F3B14A', sub: '#EED6CC', quote: '#F3B14A', quoteOpacity: 0.24,
+    backdrop: (w, h) => `
+      <defs><radialGradient id="g" cx="50%" cy="108%" r="108%">
+        <stop offset="0%" stop-color="#C4451F"/><stop offset="46%" stop-color="#7E2318"/>
+        <stop offset="100%" stop-color="#3A1010"/></radialGradient></defs>
+      <rect width="${w}" height="${h}" fill="url(#g)"/>
+      <circle cx="${w / 2}" cy="${h + 60}" r="430" fill="#F3B14A" opacity="0.16"/>`
+  },
+  parchment: {
+    label: 'Parchment',
+    swatch: 'linear-gradient(180deg,#FBF3E2,#EFE0C4)',
+    ink: '#3B2A18', accent: '#8A5A16', sub: '#6B563C', quote: '#B08A3E', quoteOpacity: 0.34,
+    backdrop: (w, h) => `
+      <defs><linearGradient id="g" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#FBF3E2"/><stop offset="100%" stop-color="#EFE0C4"/></linearGradient></defs>
+      <rect width="${w}" height="${h}" fill="url(#g)"/>
+      <rect x="44" y="44" width="${w - 88}" height="${h - 88}" fill="none" stroke="#C7A96B" stroke-width="3" opacity="0.55"/>
+      <rect x="60" y="60" width="${w - 120}" height="${h - 120}" fill="none" stroke="#C7A96B" stroke-width="1" opacity="0.4"/>`
+  }
+};
+const DEFAULT_VERSE_STYLE = 'purple';
+
+// Public: the share sheet asks for this so the pickers and the renderer cannot
+// drift apart on which cards exist.
+app.get('/api/verse-styles', (req, res) => {
+  res.json({
+    // The swatch is a CSS gradient, not a rendered card: a picker that showed
+    // six real cards would download six full-size PNGs to let someone choose one.
+    styles: Object.entries(VERSE_CARD_STYLES).map(([value, s]) => ({ value, label: s.label, swatch: s.swatch })),
+    defaultStyle: DEFAULT_VERSE_STYLE
+  });
+});
+
 app.get('/api/verse-image', async (req, res) => {
   try {
     let verseText = req.query.verse || '';
@@ -2736,6 +2845,10 @@ app.get('/api/verse-image', async (req, res) => {
     }
     verseText = String(verseText).replace(/^[\s"“]+|[\s"”]+$/g, '');
 
+    // An unknown style is answered with the default rather than an error: a
+    // shared link with a stale style in it should still produce a card.
+    const style = VERSE_CARD_STYLES[String(req.query.style || '')] || VERSE_CARD_STYLES[DEFAULT_VERSE_STYLE];
+
     const width = 1080, height = 1350;
     // Sized so a long verse still fits the panel rather than running off it.
     const full = verseText.length > 420 ? verseText.slice(0, 417).trimEnd() + '…' : verseText;
@@ -2752,32 +2865,23 @@ app.get('/api/verse-image', async (req, res) => {
 
     const svg = `
       <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#5B2C82"/>
-            <stop offset="55%" stop-color="#3A1B54"/>
-            <stop offset="100%" stop-color="#241530"/>
-          </linearGradient>
-        </defs>
-        <rect width="${width}" height="${height}" fill="url(#grad)"/>
-        <circle cx="${width - 60}" cy="180" r="300" fill="#E8971E" opacity="0.07"/>
-        <circle cx="40" cy="${height - 140}" r="240" fill="#E8971E" opacity="0.05"/>
+        ${style.backdrop(width, height)}
 
-        <text x="${width / 2}" y="112" font-size="34" font-weight="700" fill="#E8971E"
+        <text x="${width / 2}" y="112" font-size="34" font-weight="700" fill="${style.accent}"
               text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
               letter-spacing="7">ACONSU</text>
-        <line x1="${width / 2 - 60}" y1="140" x2="${width / 2 + 60}" y2="140" stroke="#E8971E" stroke-width="2" opacity="0.6"/>
+        <line x1="${width / 2 - 60}" y1="140" x2="${width / 2 + 60}" y2="140" stroke="${style.accent}" stroke-width="2" opacity="0.6"/>
 
-        <text x="${width / 2 - 20}" y="${startY - lineHeight}" font-size="150" fill="#E8971E"
-              opacity="0.22" text-anchor="middle" font-family="Georgia, serif">&#8220;</text>
+        <text x="${width / 2 - 20}" y="${startY - lineHeight}" font-size="150" fill="${style.quote}"
+              opacity="${style.quoteOpacity}" text-anchor="middle" font-family="Georgia, serif">&#8220;</text>
 
-        <text font-size="${fontSize}" fill="#FBF8FD" text-anchor="middle"
+        <text font-size="${fontSize}" fill="${style.ink}" text-anchor="middle"
               font-family="Georgia, 'Times New Roman', serif">${tspans}</text>
 
         ${reference ? `<text x="${width / 2}" y="${startY + blockHeight + 34}" font-size="32" font-weight="700"
-              fill="#E8971E" text-anchor="middle" font-family="Georgia, serif">${escapeSvg(reference)}</text>` : ''}
+              fill="${style.accent}" text-anchor="middle" font-family="Georgia, serif">${escapeSvg(reference)}</text>` : ''}
 
-        <text x="${width / 2}" y="${height - 58}" font-size="22" fill="#EFE6F6" opacity="0.55"
+        <text x="${width / 2}" y="${height - 58}" font-size="22" fill="${style.sub}" opacity="0.62"
               text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
               letter-spacing="2">THE APOSTLES&#8217; CONTINUATION STUDENTS UNION</text>
       </svg>
@@ -6604,6 +6708,11 @@ const IMAGE_PLACEMENTS = {
     needsTarget: 'page',
     describe: (name) => `Added to the ${name || 'selected'} page's gallery or resource shelf.`
   },
+  'page-hero': {
+    label: 'Artwork for the top of a page',
+    needsTarget: 'page-hero',
+    describe: (name) => `Becomes the artwork behind the heading at the top of the ${name || 'selected'} page, replacing its built-in background.`
+  },
   'home-header': {
     label: 'Home page header banner',
     needsTarget: '',
@@ -6631,6 +6740,47 @@ const IMAGE_PLACEMENTS = {
   }
 };
 
+// The chapter whose artwork a content manager is editing. A Chapter Admin is
+// pinned to their own; a national actor works on whichever they have selected.
+async function heroArtChapter(req, explicitId) {
+  const chapterId = await resolveChapterIdForWrite(req, explicitId);
+  if (!chapterId) return null;
+  return repo.getById('chapters', chapterId);
+}
+
+async function heroPageTargets(req) {
+  const chapter = await heroArtChapter(req).catch(() => null);
+  const current = sanitiseHeroArt(chapter && chapter.heroArt);
+  return heroArt.HERO_PAGES.map((page) => ({
+    id: page.key,
+    name: page.label,
+    scene: page.scene,
+    sceneDescription: heroArt.SCENES[page.scene] || '',
+    fileId: current[page.key] ? current[page.key].fileId : '',
+    tone: current[page.key] ? current[page.key].tone : 'light'
+  }));
+}
+
+// Take a chapter's artwork back off a page. The page returns to its built-in
+// scene rather than to nothing, which is why this is a removal and not a
+// requirement to upload something else.
+app.delete('/api/admin/hero-art/:pageKey', requireContentManager, async (req, res) => {
+  try {
+    if (!heroArt.isHeroPage(req.params.pageKey)) return res.status(400).json({ error: 'Unknown page' });
+    const chapter = await heroArtChapter(req, req.query.chapterId);
+    if (!chapter) return res.status(400).json({ error: 'A chapter is required.' });
+    const next = sanitiseHeroArt(chapter.heroArt);
+    const removed = next[req.params.pageKey];
+    if (!removed) return res.json({ success: true, heroArt: next });
+    delete next[req.params.pageKey];
+    gridfs.deleteFile(removed.fileId).catch(() => {});
+    await repo.patchById('chapters', chapter.id, { heroArt: next });
+    res.json({ success: true, heroArt: next });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove this artwork' });
+  }
+});
+
 // The front-end asks for this so the placement picker and its explanations are
 // defined in exactly one place.
 app.get('/api/admin/image-placements', requireContentManager, async (req, res) => {
@@ -6643,7 +6793,10 @@ app.get('/api/admin/image-placements', requireContentManager, async (req, res) =
       })),
       departments: departments.map(d => ({ id: d.id, name: d.name, hasHeader: !!d.headerImageFileId })),
       pages: pages.filter(p => p.type === 'gallery' || p.type === 'bookshelf').map(p => ({ id: p.slug, name: p.title })),
-      events: events.map(e => ({ id: e.id, name: e.title, hasFlyer: !!e.flyerFileId }))
+      events: events.map(e => ({ id: e.id, name: e.title, hasFlyer: !!e.flyerFileId })),
+      // Every page that carries a heading, and whether this chapter has
+      // already dressed it, so the picker can say which are still built-in.
+      heroPages: await heroPageTargets(req)
     });
   } catch (e) {
     res.status(500).json({ error: 'Could not load placement options' });
@@ -6695,6 +6848,17 @@ app.post('/api/admin/uploads', requireContentManager, upload.single('file'), asy
         await repo.patchById('events', targetId, { flyerFileId: String(fileId) }, filter);
         placedOn = event.title;
       }
+    } else if (placement === 'page-hero') {
+      if (!heroArt.isHeroPage(targetId)) return res.status(400).json({ error: 'Choose which page this artwork belongs to.' });
+      const chapter = await heroArtChapter(req, req.body.chapterId || req.query.chapterId);
+      if (!chapter) return res.status(400).json({ error: 'A chapter is required.' });
+      const next = sanitiseHeroArt(chapter.heroArt);
+      // Replacing a page's artwork drops the old file: nothing else points at
+      // it, and a chapter should not pay storage for what it has replaced.
+      if (next[targetId]) gridfs.deleteFile(next[targetId].fileId).catch(() => {});
+      next[targetId] = { fileId: String(fileId), tone: req.body.tone === 'dark' ? 'dark' : 'light' };
+      await repo.patchById('chapters', chapter.id, { heroArt: next });
+      placedOn = (heroArt.pageByKey(targetId) || {}).label || targetId;
     } else if (placement === 'home-header') {
       const scopedChapterId = await resolveChapterIdForWrite(req, req.body.chapterId || req.query.chapterId);
       if (scopedChapterId) {

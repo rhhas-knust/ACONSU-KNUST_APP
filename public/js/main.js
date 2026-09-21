@@ -554,12 +554,42 @@ async function initLayout(activePath) {
   try {
     const settings = await fetchJSON('/api/settings');
     renderFooter(settings);
+    applyHeroArtwork(settings);
     await renderVerseOfDay(settings);
     return settings;
   } catch (e) {
     renderFooter({});
     return {};
   }
+}
+
+// ---------- hero artwork ----------
+// Each page's built-in scene is drawn by CSS from the data-art on its own
+// hero, so it is already on screen before this runs and before any request
+// returns. This only adds the picture a chapter has uploaded for that page,
+// when it has uploaded one.
+function applyHeroArtwork(settings) {
+  const hero = document.querySelector('.hero[data-hero-page]');
+  if (!hero || hero.querySelector('.hero-art')) return;
+  const own = ((settings && settings.heroArt) || {})[hero.dataset.heroPage];
+  if (!own || !own.fileId) return;
+
+  const url = `/api/files/${encodeURIComponent(own.fileId)}`;
+  const layer = document.createElement('div');
+  layer.className = 'hero-art';
+
+  // Nothing is shown until the picture has actually decoded. A slow file leaves
+  // the scene where it is, and a missing one leaves it there for good — better
+  // than a blank rectangle, and much better than dark text on a dark image
+  // because the tone was flipped before the veil under it existed.
+  const probe = new Image();
+  probe.onload = () => {
+    layer.style.backgroundImage = `url('${url}')`;
+    hero.dataset.artTone = own.tone === 'dark' ? 'dark' : 'light';
+    hero.prepend(layer);
+    requestAnimationFrame(() => layer.classList.add('is-loaded'));
+  };
+  probe.src = url;
 }
 
 function formatFileSize(bytes) {
@@ -823,6 +853,103 @@ async function shareContent({ title, text, url }) {
   } catch (err) { /* clipboard failure */ }
   showToast('Sharing is not supported on this browser', 'error');
   return false;
+}
+
+// ---------- sharing a verse as a card ----------
+// One path for both places a verse can be shared from, so the picker, the
+// share sheet and the download fallback exist once.
+const VERSE_STYLE_PREF = 'aconsu.verseCardStyle';
+
+function rememberedVerseStyle() {
+  try { return localStorage.getItem(VERSE_STYLE_PREF) || ''; } catch (e) { return ''; }
+}
+
+async function pickVerseCardStyle() {
+  let styles = [];
+  let fallback = 'purple';
+  try {
+    const data = await fetchJSON('/api/verse-styles');
+    styles = data.styles || [];
+    fallback = data.defaultStyle || fallback;
+  } catch (e) {
+    return rememberedVerseStyle() || fallback; // offline: use whatever they chose last
+  }
+  if (!styles.length) return fallback;
+
+  const chosen = rememberedVerseStyle();
+  return new Promise((resolve) => {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.58); z-index:9999; display:flex; align-items:flex-end; justify-content:center; padding:0;';
+    backdrop.innerHTML = `
+      <div role="dialog" aria-label="Choose a background" style="background:#fff; width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px)); font-family:'Manrope',sans-serif;">
+        <h3 style="margin:0 0 4px; font-family:'Fraunces',serif; font-size:1.15rem; color:#3A1B54;">Choose a background</h3>
+        <p style="margin:0 0 16px; font-size:0.85rem; color:#6b5878;">Your choice is remembered for next time.</p>
+        <div id="verseStyleGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;"></div>
+        <button type="button" id="verseStyleCancel" class="btn btn-outline btn-sm" style="width:100%; margin-top:16px;">Cancel</button>
+      </div>
+    `;
+    document.body.appendChild(backdrop);
+
+    const grid = backdrop.querySelector('#verseStyleGrid');
+    styles.forEach((style) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const isChosen = style.value === chosen;
+      btn.style.cssText = `border:2px solid ${isChosen ? '#5B2C82' : 'transparent'}; background:none; padding:0; cursor:pointer; border-radius:12px; overflow:hidden; display:block;`;
+      const chip = document.createElement('span');
+      chip.style.cssText = `display:block; height:74px; border-radius:9px; background:${style.swatch || '#5B2C82'};`;
+      const name = document.createElement('span');
+      name.style.cssText = 'display:block; font-size:0.72rem; font-weight:700; color:#3A1B54; padding:6px 2px 4px; text-align:center;';
+      name.textContent = style.label;
+      btn.append(chip, name);
+      btn.addEventListener('click', () => {
+        try { localStorage.setItem(VERSE_STYLE_PREF, style.value); } catch (e) { /* private mode */ }
+        backdrop.remove();
+        resolve(style.value);
+      });
+      grid.appendChild(btn);
+    });
+
+    const close = () => { backdrop.remove(); resolve(''); };
+    backdrop.querySelector('#verseStyleCancel').addEventListener('click', close);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  });
+}
+
+// Share sheets take a file where they can, which is how a verse card ends up
+// in a WhatsApp status rather than a downloads folder. Everything else falls
+// back to a plain download.
+async function shareVerseCard({ text, reference, filename }) {
+  const style = await pickVerseCardStyle();
+  if (!style) return false; // they backed out of the picker
+
+  const params = new URLSearchParams({ verse: text || '', style });
+  if (reference) params.set('reference', reference);
+  const url = `/api/verse-image?${params.toString()}`;
+  const name = `${(filename || reference || 'verse').replace(/[\s:]+/g, '_')}.png`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('image failed');
+    const blob = await res.blob();
+    const file = new File([blob], name, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: reference || 'Verse of the Day' });
+      return true;
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(objectUrl);
+    showToast('Verse image saved.', 'success');
+    return true;
+  } catch (e) {
+    if (e && e.name === 'AbortError') return false;
+    showToast('Could not make the verse image.', 'error');
+    return false;
+  }
 }
 
 // ---------- offline / online network connectivity banner ----------

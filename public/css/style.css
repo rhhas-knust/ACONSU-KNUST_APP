@@ -171,9 +171,9 @@ img { max-width: 100%; display: block; }
   position: relative;
   overflow: hidden;
   background: radial-gradient(120% 140% at 50% -10%, var(--lilac-light) 0%, var(--paper) 55%);
-  padding: 96px 24px 72px;
+  padding: 72px 24px 64px;
   text-align: center;
-  min-height: 640px;
+  min-height: 420px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -195,6 +195,153 @@ img { max-width: 100%; display: block; }
   0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
   50% { opacity: 1; transform: translateX(-50%) scale(1.06); }
 }
+/* ---------- hero art ----------
+   Every page's header used to be the same flat lilac wash, which read as a
+   blank wall rather than as a page. Each page now wears a scene suited to what
+   it is for, and each scene is drawn in CSS — layered gradients and a motif —
+   so a page on mobile data costs nothing extra to look like something.
+
+   A chapter can upload its own artwork for any page on top of this (see
+   .hero-art below). The scene is what shows until they do, and what shows if
+   the image is slow, so the page is never bare. */
+
+.hero[data-art] { background: linear-gradient(180deg, #F4EBFB 0%, var(--paper) 64%); }
+.hero[data-art]::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+}
+
+/* Sunrise — home. Gold breaking along the bottom, purple weight at the top. */
+.hero[data-art="dawn"] {
+  background:
+    radial-gradient(78% 52% at 50% 108%, rgba(232,151,30,0.58) 0%, rgba(232,151,30,0) 60%),
+    radial-gradient(60% 44% at 8% -8%, rgba(91,44,130,0.42) 0%, rgba(91,44,130,0) 68%),
+    radial-gradient(54% 40% at 94% 0%, rgba(169,50,38,0.26) 0%, rgba(169,50,38,0) 66%),
+    linear-gradient(180deg, #E4D0F2 0%, #F7F0FC 54%, var(--paper) 100%);
+}
+.hero[data-art="dawn"]::before {
+  background: conic-gradient(from 200deg at 50% 118%,
+    rgba(255,255,255,0.30) 0deg, transparent 15deg, rgba(255,255,255,0.20) 30deg,
+    transparent 46deg, rgba(255,255,255,0.26) 62deg, transparent 80deg);
+}
+
+/* Roots — about. Bands of deepening purple, like strata. */
+.hero[data-art="roots"] {
+  background:
+    linear-gradient(180deg, rgba(91,44,130,0.34) 0%, rgba(91,44,130,0.10) 38%, transparent 66%),
+    radial-gradient(64% 46% at 86% 98%, rgba(232,151,30,0.34) 0%, transparent 62%),
+    linear-gradient(180deg, #E3D2F1 0%, #F6EFFC 52%, var(--paper) 100%);
+}
+.hero[data-art="roots"]::before {
+  background: repeating-linear-gradient(94deg,
+    rgba(255,255,255,0.34) 0 2px, transparent 2px 58px);
+}
+
+/* Scripture — the Bible pages. Ruled light, like a page under the words. */
+.hero[data-art="word"] {
+  background:
+    radial-gradient(72% 52% at 50% -14%, rgba(91,44,130,0.46) 0%, rgba(91,44,130,0) 62%),
+    radial-gradient(52% 38% at 90% 104%, rgba(232,151,30,0.36) 0%, transparent 60%),
+    linear-gradient(180deg, #DFCBEF 0%, #F5EDFB 50%, var(--paper) 100%);
+}
+.hero[data-art="word"]::before {
+  background: repeating-linear-gradient(180deg,
+    rgba(91,44,130,0.13) 0 1px, transparent 1px 30px);
+  mask-image: radial-gradient(70% 70% at 50% 50%, #000 30%, transparent 78%);
+  -webkit-mask-image: radial-gradient(70% 70% at 50% 50%, #000 30%, transparent 78%);
+}
+
+/* Gathering — people: events, departments, groups, alumni, chat. */
+.hero[data-art="gather"] {
+  background:
+    radial-gradient(52% 40% at 14% 4%, rgba(232,151,30,0.40) 0%, transparent 62%),
+    radial-gradient(56% 42% at 88% 92%, rgba(91,44,130,0.40) 0%, transparent 62%),
+    linear-gradient(180deg, #E7D7F4 0%, #F6EFFC 54%, var(--paper) 100%);
+}
+.hero[data-art="gather"]::before {
+  background-image: radial-gradient(rgba(91,44,130,0.22) 1.8px, transparent 1.9px);
+  background-size: 28px 28px;
+  mask-image: radial-gradient(76% 70% at 50% 46%, #000 20%, transparent 76%);
+  -webkit-mask-image: radial-gradient(76% 70% at 50% 46%, #000 20%, transparent 76%);
+}
+
+/* Flame — prayer and welfare. An ember low and centred. */
+.hero[data-art="flame"] {
+  background:
+    radial-gradient(56% 42% at 50% 106%, rgba(169,50,38,0.44) 0%, rgba(169,50,38,0) 58%),
+    radial-gradient(38% 30% at 50% 100%, rgba(232,151,30,0.60) 0%, rgba(232,151,30,0) 62%),
+    radial-gradient(56% 42% at 4% 0%, rgba(91,44,130,0.34) 0%, transparent 66%),
+    linear-gradient(180deg, #E8D6F0 0%, #F7EFFB 52%, var(--paper) 100%);
+}
+.hero[data-art="flame"]::before {
+  background: conic-gradient(from 210deg at 50% 112%,
+    rgba(255,255,255,0.26) 0deg, transparent 22deg, rgba(255,255,255,0.34) 42deg,
+    transparent 64deg, rgba(255,255,255,0.22) 84deg);
+}
+
+/* Harvest — giving. Gold-led, with sheaf strokes. */
+.hero[data-art="harvest"] {
+  background:
+    radial-gradient(70% 52% at 50% 102%, rgba(232,151,30,0.56) 0%, rgba(232,151,30,0) 60%),
+    radial-gradient(48% 36% at 10% 2%, rgba(91,44,130,0.34) 0%, transparent 66%),
+    linear-gradient(180deg, #F2E0C6 0%, #FBF4E9 52%, var(--paper) 100%);
+}
+.hero[data-art="harvest"]::before {
+  background: repeating-linear-gradient(68deg,
+    rgba(255,255,255,0.40) 0 2px, transparent 2px 20px);
+  mask-image: linear-gradient(180deg, transparent 38%, #000 100%);
+  -webkit-mask-image: linear-gradient(180deg, transparent 38%, #000 100%);
+}
+
+/* Voice — sermons, media, rooms. Bands spreading like sound. */
+.hero[data-art="voice"] {
+  background:
+    radial-gradient(58% 44% at 50% 102%, rgba(91,44,130,0.44) 0%, transparent 62%),
+    radial-gradient(44% 34% at 90% 0%, rgba(232,151,30,0.34) 0%, transparent 66%),
+    linear-gradient(180deg, #E2D2F3 0%, #F5EEFC 52%, var(--paper) 100%);
+}
+.hero[data-art="voice"]::before {
+  background: repeating-radial-gradient(60% 46% at 50% 104%,
+    rgba(255,255,255,0.40) 0 1.5px, transparent 1.5px 26px);
+}
+
+/* Calm — reading and utility pages. Present, but quiet. */
+.hero[data-art="calm"] {
+  background:
+    radial-gradient(54% 40% at 86% 2%, rgba(91,44,130,0.30) 0%, transparent 66%),
+    radial-gradient(48% 36% at 10% 98%, rgba(232,151,30,0.26) 0%, transparent 66%),
+    linear-gradient(180deg, #E9DCF6 0%, #F6EFFC 54%, var(--paper) 100%);
+}
+
+/* The chapter's own artwork, laid over the scene. It fades in only once the
+   image has actually loaded, so a slow or missing file leaves the scene in
+   place rather than flashing a blank rectangle. */
+.hero-art {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-size: cover; background-position: center;
+  opacity: 0; transition: opacity 0.45s ease;
+}
+.hero-art.is-loaded { opacity: 1; }
+/* Artwork is artwork; the words on top still have to be readable over it.
+   Which way the veil goes is the chapter's call when they upload — a light
+   picture keeps the dark heading, a dark one gets light text instead. */
+.hero-art::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(253,251,255,0.70) 0%, rgba(253,251,255,0.86) 100%);
+}
+.hero[data-art-tone="dark"] .hero-art::after {
+  background: linear-gradient(180deg, rgba(36,21,48,0.58) 0%, rgba(36,21,48,0.76) 100%);
+}
+.hero[data-art-tone="dark"] .hero-content h1,
+.hero[data-art-tone="dark"] .hero-content h2 { color: #FFFFFF; }
+.hero[data-art-tone="dark"] .hero-content .lede,
+.hero[data-art-tone="dark"] .hero-content p { color: rgba(255,255,255,0.88); }
+.hero[data-art-tone="dark"] .hero-content .eyebrow { color: var(--flame-gold); }
+.hero-content { z-index: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-art { transition: none; }
+}
+
 /* A page whose job is reading should start reading. The full hero is most of
    a phone screen of nothing on the way to the first verse. */
 .hero.hero-compact { min-height: 0; padding: 46px 24px 30px; }
