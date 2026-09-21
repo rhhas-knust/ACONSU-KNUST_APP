@@ -2607,6 +2607,112 @@ const { fakeModels, fakeDb } = require('./harness.js');
       r2.status === 400 && /member/i.test(r2.data.error), r2.data);
   }
 
+  console.log('\n== hero art: every page wears something, and a chapter can dress it ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const catalogue = require('../lib/heroArt.js');
+
+    // The scene is drawn by CSS from an attribute in the page's own HTML, so
+    // it is on screen before any request returns. That only holds while the
+    // catalogue and the pages agree — which is what these check.
+    let dressed = 0;
+    let mismatched = [];
+    for (const page of catalogue.HERO_PAGES) {
+      const file = path.join(__dirname, '..', 'public', page.path);
+      if (!fs.existsSync(file)) { mismatched.push(`${page.key}: no such page`); continue; }
+      const html = fs.readFileSync(file, 'utf8');
+      const hero = html.match(/<section class="hero[^"]*"[^>]*>/);
+      if (!hero) { mismatched.push(`${page.key}: no hero`); continue; }
+      if (!hero[0].includes(`data-hero-page="${page.key}"`)) { mismatched.push(`${page.key}: wrong key`); continue; }
+      if (!hero[0].includes(`data-art="${page.scene}"`)) { mismatched.push(`${page.key}: wrong scene`); continue; }
+      dressed++;
+    }
+    check('every page in the catalogue carries its own scene and key',
+      dressed === catalogue.HERO_PAGES.length && !mismatched.length, mismatched.slice(0, 4));
+    check('and that is more than a couple of pages', dressed >= 20, dressed);
+
+    const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'style.css'), 'utf8');
+    const missingScene = [...new Set(catalogue.HERO_PAGES.map(p => p.scene))]
+      .filter(scene => !css.includes(`.hero[data-art="${scene}"]`));
+    check('and every scene a page asks for is actually drawn', !missingScene.length, missingScene);
+
+    // Nothing is uploaded yet, so the pages are wearing their built-in scenes.
+    r = await call('anon', 'GET', '/api/settings', null, false, { 'X-Chapter-Id': chapterId });
+    check('a chapter that has uploaded nothing reports no artwork',
+      r.status === 200 && r.data.heroArt && Object.keys(r.data.heroArt).length === 0, r.data.heroArt);
+
+    const artwork = (page, tone) => {
+      const fd = new FormData();
+      fd.append('file', new Blob([Buffer.from('\x89PNG art')], { type: 'image/png' }), 'art.png');
+      fd.append('placement', 'page-hero');
+      fd.append('targetId', page);
+      fd.append('chapterId', chapterId); // as the admin form does, since FormData carries no scope header
+      if (tone) fd.append('tone', tone);
+      return fd;
+    };
+
+    r = await call('admin', 'POST', '/api/admin/uploads', artwork('give', 'dark'), true);
+    check('a chapter uploads artwork for one page', r.status === 200 && /Give/.test(r.data.placedOn || ''), r.data);
+
+    r = await call('anon', 'GET', '/api/settings', null, false, { 'X-Chapter-Id': chapterId });
+    check('and the page that was dressed now carries it',
+      !!(r.data.heroArt.give && r.data.heroArt.give.fileId), r.data.heroArt);
+    check('with the tone it was uploaded as, which is what keeps the heading readable',
+      r.data.heroArt.give.tone === 'dark', r.data.heroArt.give);
+    check('while every other page is left on its built-in scene',
+      Object.keys(r.data.heroArt).length === 1, r.data.heroArt);
+
+    // Anything that is not a page of this app never reaches the record.
+    r = await call('admin', 'POST', '/api/admin/uploads', artwork('not-a-page', 'dark'), true);
+    check('artwork for a page that does not exist is refused', r.status === 400, r.data);
+
+    r = await call('admin', 'POST', '/api/admin/uploads', artwork('prayer', 'chartreuse'), true);
+    check('an unrecognised tone is read as light rather than stored as given', r.status === 200, r.data);
+    r = await call('anon', 'GET', '/api/settings', null, false, { 'X-Chapter-Id': chapterId });
+    check('and comes back as light', r.data.heroArt.prayer.tone === 'light', r.data.heroArt.prayer);
+
+    // Taking artwork off returns the page to its scene, not to nothing.
+    r = await call('admin', 'DELETE', `/api/admin/hero-art/prayer?chapterId=${chapterId}`);
+    check('artwork can be taken back off a page', r.status === 200, r.data);
+    r = await call('anon', 'GET', '/api/settings', null, false, { 'X-Chapter-Id': chapterId });
+    check('and the page falls back to its built-in scene',
+      !r.data.heroArt.prayer && !!r.data.heroArt.give, r.data.heroArt);
+
+    r = await call('pub', 'GET', '/api/admin/image-placements');
+    check('the picker offers every page as somewhere artwork can go',
+      r.status === 200 && (r.data.heroPages || []).length === catalogue.HERO_PAGES.length,
+      (r.data.heroPages || []).length);
+    check('and says which scene each page is wearing now',
+      (r.data.heroPages || []).every(p => p.scene && typeof p.sceneDescription === 'string'), (r.data.heroPages || [])[0]);
+  }
+
+  console.log('\n== a verse card is no longer one purple rectangle ==');
+  {
+    r = await call('anon', 'GET', '/api/verse-styles');
+    check('the card backgrounds are listed', r.status === 200 && r.data.styles.length >= 5, r.data);
+    check('each one can be shown without downloading a card',
+      r.data.styles.every(st => st.value && st.label && /gradient\(/.test(st.swatch || '')), r.data.styles[0]);
+    check('and one of them is the default', r.data.styles.some(st => st.value === r.data.defaultStyle), r.data.defaultStyle);
+
+    const png = async (query) => {
+      const res = await fetch(BASE + '/api/verse-image?' + query);
+      return { status: res.status, buf: Buffer.from(await res.arrayBuffer()) };
+    };
+    const verse = 'verse=' + encodeURIComponent('The Lord is my shepherd') + '&reference=' + encodeURIComponent('Psalm 23:1');
+    const plain = await png(verse);
+    const night = await png(verse + '&style=night');
+    const parchment = await png(verse + '&style=parchment');
+    check('asking for a different background gives a different card',
+      !plain.buf.equals(night.buf), { plain: plain.buf.length, night: night.buf.length });
+    check('and so does a third', !night.buf.equals(parchment.buf) && !plain.buf.equals(parchment.buf), parchment.buf.length);
+
+    // A link someone shared last term should still produce a card.
+    const nonsense = await png(verse + '&style=not-a-style');
+    check('an unknown background falls back to the default rather than failing',
+      nonsense.status === 200 && nonsense.buf.equals(plain.buf), nonsense.status);
+  }
+
   console.log('\n== the Bible reader: more versions, and one the app may not serve ==');
   {
     r = await call('anon', 'GET', '/api/bible/books');

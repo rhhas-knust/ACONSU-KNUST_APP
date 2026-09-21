@@ -1952,6 +1952,15 @@ async function renderMediaLibrary() {
           <select id="uploadTarget"></select>
         </div>
 
+        <div class="field" id="toneFieldWrap" style="display:none;">
+          <label>Is the artwork light or dark?</label>
+          <select id="uploadTone">
+            <option value="light">Light artwork — keep the dark heading</option>
+            <option value="dark">Dark artwork — use white text over it</option>
+          </select>
+          <small class="hint">The heading sits on top of the picture, so this is what keeps it readable.</small>
+        </div>
+
         <div id="placementExplain" style="background:var(--lilac-light); border-left:3px solid var(--flame-gold); border-radius:8px; padding:12px 14px; font-size:0.85rem; color:var(--purple-rich); margin-bottom:18px;"></div>
 
         <div class="field-row">
@@ -2002,13 +2011,25 @@ async function renderMediaLibrary() {
     const targetSelect = document.getElementById('uploadTarget');
     const explain = document.getElementById('placementExplain');
 
+    const TARGET_LISTS = {
+      department: placementData.departments,
+      page: placementData.pages,
+      'page-hero': placementData.heroPages || [],
+      event: placementData.events
+    };
+    const TARGET_LABELS = {
+      department: 'Which department?',
+      page: 'Which page?',
+      'page-hero': 'Which page gets this artwork?',
+      event: 'Which event?'
+    };
+
     if (spec.needsTarget) {
-      const list = spec.needsTarget === 'department' ? placementData.departments : placementData.pages;
-      document.getElementById('targetLabel').textContent =
-        spec.needsTarget === 'department' ? 'Which department?' : 'Which page?';
+      const list = TARGET_LISTS[spec.needsTarget] || [];
+      document.getElementById('targetLabel').textContent = TARGET_LABELS[spec.needsTarget] || 'Which one?';
       targetSelect.innerHTML = list.length
-        ? list.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.hasHeader ? ' (replaces current header)' : ''}</option>`).join('')
-        : `<option value="">— no ${spec.needsTarget}s exist yet —</option>`;
+        ? list.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.hasHeader || t.fileId ? ' (replaces what is there now)' : ''}</option>`).join('')
+        : `<option value="">— nothing to choose yet —</option>`;
       wrap.style.display = 'block';
     } else {
       wrap.style.display = 'none';
@@ -2026,9 +2047,24 @@ async function renderMediaLibrary() {
       'executive-photo': 'This image is kept in the library ready to use as an executive portrait. Attach it to a person from the <strong>Executives</strong> panel.',
       'library': 'Nothing on the public site changes. The image simply sits in the library until you place it somewhere.'
     };
+    if (value === 'page-hero') {
+      const chosen = (placementData.heroPages || []).find(pg => pg.id === targetSelect.value);
+      const cleanName = escapeHtml((targetName || 'selected').replace(' (replaces what is there now)', ''));
+      messages['page-hero'] = `This becomes the artwork behind the heading at the top of the <strong>${cleanName}</strong> page,`
+        + ` replacing its built-in background${chosen && chosen.sceneDescription ? ` (${escapeHtml(chosen.sceneDescription)})` : ''}.`
+        + ' Wide landscape images work best — the heading sits on top of it.';
+    }
     explain.innerHTML = `<strong>Where this goes:</strong> ${messages[value] || spec.description}`;
+
+    // Only artwork that sits behind text needs to say which way it reads.
+    document.getElementById('toneFieldWrap').style.display = value === 'page-hero' ? 'block' : 'none';
+    if (value === 'page-hero') {
+      const chosen = (placementData.heroPages || []).find(pg => pg.id === targetSelect.value);
+      document.getElementById('uploadTone').value = (chosen && chosen.tone) || 'light';
+    }
+
     // A department header is always a photo, never a document.
-    if (value === 'department-header' || value === 'home-header' || value === 'home-floating' || value === 'executive-photo') {
+    if (['department-header', 'home-header', 'home-floating', 'executive-photo', 'page-hero'].includes(value)) {
       document.getElementById('uploadCategory').value = 'photo';
     }
   }
@@ -2052,6 +2088,12 @@ async function renderMediaLibrary() {
     formData.append('targetId', document.getElementById('uploadTarget').value || '');
     formData.append('title', document.getElementById('uploadTitle').value);
     formData.append('description', document.getElementById('uploadDescription').value);
+    if (placement === 'page-hero') formData.append('tone', document.getElementById('uploadTone').value);
+    // This form posts raw FormData rather than going through fetchJSON, so the
+    // selected chapter is not added to it for us. A placement that writes to a
+    // chapter record has to name the chapter, or a national actor's upload has
+    // nowhere to land.
+    if (ADMIN_SCOPE.isNational && ADMIN_SCOPE.chapterId) formData.append('chapterId', ADMIN_SCOPE.chapterId);
     try {
       const res = await fetch('/api/admin/uploads', { method: 'POST', body: formData });
       const data = await res.json();

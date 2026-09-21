@@ -18,7 +18,7 @@
 
 <header id="site-header"></header>
 
-<section class="hero hero-compact">
+<section class="hero hero-compact" data-art="word" data-hero-page="bible">
   <div class="hero-flame"></div>
   <div class="hero-content">
     <p class="eyebrow">The Word</p>
@@ -419,34 +419,13 @@ function shareSelectedVerse() {
   clearSelection();
 }
 
-// Share sheets take a file where they can, which is how a verse card ends up
-// in a WhatsApp status rather than a downloads folder. Everything else falls
-// back to a plain download.
 async function shareSelectedVerseImage() {
   const parts = selectedVerseParts();
   if (!parts) return;
-  const url = `/api/verse-image?verse=${encodeURIComponent(parts.text)}&reference=${encodeURIComponent(parts.reference)}`;
   clearSelection();
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('image failed');
-    const blob = await res.blob();
-    const file = new File([blob], `${parts.reference.replace(/[\s:]+/g, '_')}.png`, { type: 'image/png' });
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: parts.reference });
-      return;
-    }
-    const objectUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = objectUrl;
-    a.download = file.name;
-    a.click();
-    URL.revokeObjectURL(objectUrl);
-    showToast('Verse image saved.', 'success');
-  } catch (e) {
-    if (e && e.name === 'AbortError') return;
-    showToast('Could not make the verse image.', 'error');
-  }
+  // The picker, the share sheet and the download fallback all live in
+  // main.js, so the home screen and this page offer exactly the same thing.
+  await shareVerseCard({ text: parts.text, reference: parts.reference });
 }
 
 function downloadChapter() {
