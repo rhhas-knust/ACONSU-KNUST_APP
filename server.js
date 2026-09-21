@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
-const { connectDB, createSessionStore } = require('./lib/db');
+const { connectDB, createSessionStore, dbStatus } = require('./lib/db');
 const repo = require('./lib/repo');
 const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
@@ -1417,6 +1417,235 @@ app.delete('/api/admin/alumni/:id', requireChapterAdmin, async (req, res) => {
   }
 });
 
+// ---------- ACONSU Rooms: small-group meetings ----------
+//
+// Peer-to-peer. The server introduces two browsers to each other and then gets
+// out of the way — no audio or video passes through it, which is the only
+// reason this can run on the hosting we have.
+//
+// That choice sets the ceiling. Each participant sends their own video to
+// every other participant, so a phone's UPLOAD is what runs out: four people
+// means sending three streams at once, which mobile data manages; six does
+// not. ROOM_CAPACITY is enforced, not advisory, because a room that lets a
+// fifth person in and then falls over is worse than one that says it is full.
+const ROOM_CAPACITY = 4;
+
+// Signalling only. Offers, answers and ICE candidates are worthless a second
+// after they are read, so they are passed straight between open connections
+// and never stored. LIVE is lost on restart, which costs a meeting its
+// signalling channel and nothing else.
+const LIVE_ROOMS = new Map(); // roomId -> Map(peerId -> { memberId, name, res })
+
+function roomPeers(roomId) {
+  if (!LIVE_ROOMS.has(roomId)) LIVE_ROOMS.set(roomId, new Map());
+  return LIVE_ROOMS.get(roomId);
+}
+function sendEvent(res, payload) {
+  try { res.write(`data: ${JSON.stringify(payload)}\n\n`); } catch (e) { /* the connection went */ }
+}
+function broadcastToRoom(roomId, payload, exceptPeerId) {
+  for (const [peerId, peer] of roomPeers(roomId)) {
+    if (peerId !== exceptPeerId) sendEvent(peer.res, payload);
+  }
+}
+function peerSummary(peerId, peer) {
+  return { peerId, memberId: peer.memberId, name: peer.name };
+}
+
+// Who may be in this room. A department room is that department's; a chapter
+// room is that chapter's. Nothing here widens chapterFilter — the room itself
+// carries the chapter it belongs to, and it is checked against the member's.
+async function canEnterRoom(member, room) {
+  if (!member || !room || !room.open) return false;
+  if ((room.chapterId || '') !== (member.chapterId || '')) return false;
+  if (!room.departmentId) return true;
+  return memberDepartmentIds(member).includes(room.departmentId);
+}
+
+// Rooms this member could walk into right now.
+app.get('/api/rooms', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    const rooms = await repo.getAll('meetingRooms', { chapterId: member.chapterId || '', open: true });
+    const mine = [];
+    for (const room of rooms) {
+      if (!(await canEnterRoom(member, room))) continue;
+      let departmentName = '';
+      if (room.departmentId) {
+        const d = await repo.getById('departments', room.departmentId, { chapterId: member.chapterId || '' });
+        departmentName = d ? d.name : '';
+      }
+      mine.push({
+        id: room.id, title: room.title, departmentId: room.departmentId, departmentName,
+        createdByName: room.createdByName, createdAt: room.createdAt,
+        capacity: room.maxParticipants || ROOM_CAPACITY,
+        here: roomPeers(room.id).size
+      });
+    }
+    mine.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json({ capacity: ROOM_CAPACITY, items: mine });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load meeting rooms.' });
+  }
+});
+
+// Opening a room is a leader's act. A Chapter Admin or Coordinator can open one
+// for the chapter or for a named department; a department head can open one for
+// their own department and nobody else's.
+// A Chapter Admin or Coordinator, or an executive who heads a department.
+// Anything narrower than this cannot open a room at all.
+function requireRoomHost(req, res, next) {
+  if (isChapterAdminOrAbove(req)) return next();
+  const staff = currentStaff(req);
+  if (staff && staff.role === 'executive' && staff.department) return next();
+  return res.status(403).json({ error: 'Only a Chapter Admin, or the head of a department, can open a room.' });
+}
+
+app.post('/api/rooms', requireRoomHost, async (req, res) => {
+  try {
+    const staff = currentStaff(req);
+    const isAdmin = isChapterAdminOrAbove(req);
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'A chapter is required.' });
+
+    let departmentId = String(req.body.departmentId || '').trim();
+    if (!isAdmin) {
+      // Not an admin: the only room they may open is their own department's.
+      const own = staff && staff.department ? String(staff.department) : '';
+      if (!own) return res.status(403).json({ error: 'Only a Chapter Admin, or the head of a department, can open a room.' });
+      departmentId = own;
+    }
+    if (departmentId) {
+      const dept = await repo.getById('departments', departmentId, { chapterId });
+      if (!dept) return res.status(400).json({ error: 'That department is not one of this chapter\'s.' });
+    }
+    const item = await repo.create('meetingRooms', {
+      chapterId,
+      departmentId,
+      title: cleanText(String(req.body.title || 'ACONSU Room')).slice(0, 120),
+      createdByName: (staff && staff.name) || 'Leadership',
+      createdByStaffId: (staff && staff.id) || '',
+      maxParticipants: ROOM_CAPACITY,
+      open: true
+    }, 'room');
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not open the room.' });
+  }
+});
+
+app.post('/api/rooms/:id/close', requireRoomHost, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req, { required: false });
+    const room = await repo.getById('meetingRooms', req.params.id, filter);
+    if (!room) return res.status(404).json({ error: 'That room is not one of your chapter\'s.' });
+    await repo.patchById('meetingRooms', room.id, { open: false, closedAt: new Date() }, filter);
+    broadcastToRoom(room.id, { type: 'room-closed' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not close the room.' });
+  }
+});
+
+// The signalling channel. Held open for as long as the member is in the room:
+// the server pushes who else is here, and relays their offers and answers.
+app.get('/api/rooms/:id/events', requireMember, async (req, res) => {
+  const member = await repo.getById('members', req.session.memberId);
+  const room = await repo.getById('meetingRooms', req.params.id);
+  if (!(await canEnterRoom(member, room))) {
+    return res.status(403).json({ error: 'This room is not open to you.' });
+  }
+  const peers = roomPeers(room.id);
+  if (peers.size >= (room.maxParticipants || ROOM_CAPACITY)) {
+    return res.status(409).json({ error: `This room is full — ${room.maxParticipants || ROOM_CAPACITY} people is the most it holds.` });
+  }
+  // One person, one seat: rejoining from a second tab replaces the first
+  // rather than quietly eating a place in a four-seat room.
+  for (const [existingId, peer] of peers) {
+    if (peer.memberId === member.id) {
+      sendEvent(peer.res, { type: 'replaced' });
+      try { peer.res.end(); } catch (e) { /* already gone */ }
+      peers.delete(existingId);
+      broadcastToRoom(room.id, { type: 'peer-left', peerId: existingId }, existingId);
+    }
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    // Proxies that buffer would hold each message until the buffer filled,
+    // which for signalling means the call never connects.
+    'X-Accel-Buffering': 'no'
+  });
+  if (res.flushHeaders) res.flushHeaders();
+
+  const peerId = crypto.randomBytes(8).toString('hex');
+  const me = { memberId: member.id, name: member.name || 'Member', res };
+  const others = [...peers].map(([id, p]) => peerSummary(id, p));
+  peers.set(peerId, me);
+
+  sendEvent(res, { type: 'welcome', peerId, peers: others, capacity: room.maxParticipants || ROOM_CAPACITY });
+  broadcastToRoom(room.id, { type: 'peer-joined', peer: peerSummary(peerId, me) }, peerId);
+
+  // Idle signalling connections look dead to some proxies, so they are kept
+  // visibly alive. A comment line is a no-op to the client.
+  const beat = setInterval(() => { try { res.write(': ping\n\n'); } catch (e) { /* gone */ } }, 20000);
+
+  req.on('close', () => {
+    clearInterval(beat);
+    const current = roomPeers(room.id);
+    if (current.get(peerId) === me) {
+      current.delete(peerId);
+      broadcastToRoom(room.id, { type: 'peer-left', peerId }, peerId);
+      if (current.size === 0) LIVE_ROOMS.delete(room.id);
+    }
+  });
+});
+
+// One peer's offer, answer or ICE candidate, handed to exactly one other peer
+// in the same room. The server does not read it.
+app.post('/api/rooms/:id/signal', requireMember, async (req, res) => {
+  try {
+    const member = await repo.getById('members', req.session.memberId);
+    const room = await repo.getById('meetingRooms', req.params.id);
+    if (!(await canEnterRoom(member, room))) return res.status(403).json({ error: 'This room is not open to you.' });
+
+    const peers = roomPeers(room.id);
+    const from = String(req.body.from || '');
+    const to = String(req.body.to || '');
+    // Only somebody actually in the room may speak, and only as themselves.
+    const sender = peers.get(from);
+    if (!sender || sender.memberId !== member.id) {
+      return res.status(403).json({ error: 'You are not in this room.' });
+    }
+    const target = peers.get(to);
+    if (!target) return res.status(404).json({ error: 'That person has left the room.' });
+    sendEvent(target.res, { type: 'signal', from, data: req.body.data });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not reach them.' });
+  }
+});
+
+// What the browser should use to find a route between two peers. STUN is free
+// and public. TURN relays the media when a direct route cannot be found, which
+// on hostel wifi and mobile networks is a real share of the time — it is read
+// from the environment so a chapter can add one without a code change, and its
+// absence is reported honestly rather than left to look like a bug.
+app.get('/api/rooms/ice-servers', requireMember, (req, res) => {
+  const iceServers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (process.env.TURN_URL && process.env.TURN_USERNAME && process.env.TURN_PASSWORD) {
+    iceServers.push({
+      urls: process.env.TURN_URL.split(',').map(u => u.trim()).filter(Boolean),
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_PASSWORD
+    });
+  }
+  res.json({ iceServers, hasTurn: !!process.env.TURN_URL });
+});
+
 app.get('/api/member/badges', requireMember, async (req, res) => {
   try {
     const member = await models.Member.findOne({ id: req.session.memberId }).lean();
@@ -1558,6 +1787,30 @@ app.get('/api/notifications', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: 'Could not load notifications' });
   }
+});
+
+// Is this thing actually working? Deliberately public and deliberately
+// answering 503 when the database is away: the home page returns 200 whether
+// or not MongoDB is reachable, so a monitor watching '/' would call a chapter
+// healthy while every query behind it failed. This is the URL to point an
+// uptime checker at — it also keeps a sleeping free-tier instance awake.
+//
+// It reveals nothing: no connection string, no host, no credentials.
+app.get('/api/health', async (req, res) => {
+  let database;
+  try {
+    database = await dbStatus();
+  } catch (e) {
+    database = { state: 'unknown', connected: false, error: 'status unavailable' };
+  }
+  const ok = !!database.connected;
+  res.status(ok ? 200 : 503).json({
+    ok,
+    service: 'aconsu',
+    uptimeSeconds: Math.round(process.uptime()),
+    database,
+    checkedAt: new Date().toISOString()
+  });
 });
 
 app.get('/api/push/vapid-public-key', (req, res) => {

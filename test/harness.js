@@ -142,6 +142,7 @@ const fakeModels = {
   Department: makeModel({ chapterId: '', headerImageFileId: '' }),
   DepartmentRequest: makeModel({ chapterId: '', memberId: '', departmentId: '', status: 'pending', note: '', decidedByStaffId: '', decidedByName: '', decidedAt: null }),
   AlumniProfile: makeModel({ memberId: '', chapterId: '', listed: false, profession: '', organisation: '', industry: '', programme: '', graduationYear: '', city: '', country: 'Ghana', bio: '', openToMentoring: false, showEmail: false, showPhone: false, linkedin: '' }),
+  MeetingRoom: makeModel({ chapterId: '', departmentId: '', title: '', createdByName: '', createdByStaffId: '', maxParticipants: 4, open: true, closedAt: null }),
   Event: makeModel({
     chapterId: '', isNational: false, registrationEnabled: false, capacity: 0, registrationDeadline: '',
     category: '', videoUrl: '', flyerFileId: '', registrationFormId: '',
@@ -255,6 +256,21 @@ function stub(relPath, exports) {
 
 stub('lib/models.js', fakeModels);
 stub('lib/gridfs.js', fakeGridfs);
-stub('lib/db.js', { connectDB: () => Promise.resolve({}), createSessionStore: () => undefined });
+// The double stands in for a healthy database by default, and can be told to
+// play a dead one — the 503 branch is the whole point of a health check, so it
+// has to be reachable from a test rather than taken on trust.
+const fakeDb = {
+  healthy: true,
+  status() {
+    return this.healthy
+      ? { state: 'connected', connected: true, name: 'aconsu_test', pingMs: 1 }
+      : { state: 'unreachable', connected: false, name: 'aconsu_test', pingMs: null, error: 'no reply' };
+  }
+};
+stub('lib/db.js', {
+  connectDB: () => Promise.resolve({}),
+  createSessionStore: () => undefined,
+  dbStatus: () => Promise.resolve(fakeDb.status())
+});
 
-module.exports = { fakeModels, fakeGridfs };
+module.exports = { fakeDb, fakeModels, fakeGridfs };
