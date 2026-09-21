@@ -682,6 +682,54 @@ async function createNotification(title, body, url, source, chapterId, audience)
   return notif;
 }
 
+// ---------- the handover from Shepherding to the Coordinator ----------
+// Shepherding marks someone an Executive; only the Chapter Coordinator can
+// open the account that actually gives them a portal. Those are two people and
+// two portals, and nothing used to carry the news between them — so a member
+// could sit labelled 'executive' for weeks with no account, no position and no
+// page, which is exactly what it looked like from outside.
+//
+// Derived rather than stored: "marked an executive, no account yet" is a
+// question the records already answer, so there is no second copy of it to go
+// stale, and appointing them clears it without anything having to remember to.
+async function membersAwaitingAppointment(chapterId) {
+  const [members, staff] = await Promise.all([
+    repo.getAll('members', { chapterId, membershipStage: 'executive' }),
+    repo.getAll('staffUsers', { chapterId })
+  ]);
+  const accounted = new Set(staff.map((u) => u.memberId).filter(Boolean));
+  return members
+    .filter((m) => !accounted.has(m.id))
+    .map((m) => ({
+      id: m.id, name: m.name || '', email: m.email || '',
+      markedAt: m.updatedAt || m.createdAt || null,
+      shepherdName: m.shepherdName || ''
+    }));
+}
+
+// A chapter's Coordinators, as members — a coordinator account is
+// member-backed, which is what makes it possible to reach the person rather
+// than the office.
+async function coordinatorMemberIds(chapterId) {
+  const staff = await repo.getAll('staffUsers', { chapterId, role: 'coordinator' });
+  return staff.filter((u) => u.active !== false && u.memberId).map((u) => u.memberId);
+}
+
+// Sent straight to the Coordinator's own devices, and deliberately NOT written
+// to the notifications feed: that feed is chapter-wide, so a row there would
+// announce to every member which of them had just been made an executive.
+async function tellCoordinatorSomeoneNeedsAnAccount(member) {
+  try {
+    const memberIds = await coordinatorMemberIds(member.chapterId);
+    if (!memberIds.length) return;
+    await push.sendPushToAll({
+      title: 'An executive is waiting for an account',
+      body: `${member.name || 'A member'} has been marked an Executive. Give them a position and a portal account.`,
+      url: '/coordinator.html'
+    }, member.chapterId, memberIds);
+  } catch (e) { /* non-critical — the Leadership Accounts screen still shows them */ }
+}
+
 // ---------- admin email helper ----------
 function escapeHtmlForEmail(str) {
   if (!str) return '';
@@ -3861,6 +3909,15 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
     }
 
     const updated = await repo.updateById('members', req.params.id, { ...existing, ...updates }, filter);
+
+    // Newly marked an Executive, and no account behind it: the Coordinator is
+    // the only one who can finish this, so they are told rather than left to
+    // notice. Only on the change itself — re-saving the same stage is not news.
+    if (stage === 'executive' && existing.membershipStage !== 'executive') {
+      const account = await models.StaffUser.findOne({ memberId: updated.id }).lean();
+      if (!account) tellCoordinatorSomeoneNeedsAnAccount(updated);
+    }
+
     const { passwordHash, ...safe } = updated;
     res.json({ success: true, item: safe });
   } catch (e) {
@@ -5496,10 +5553,30 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
         unreadMessages: contactMessages.filter(m => m.status !== 'replied').length
       },
       team: staff.map(({ passwordHash, ...s }) => s),
+      // Marked an Executive by Shepherding, still with no account of their
+      // own. Counted from rows already read rather than asked for again.
+      awaitingAppointment: members.filter(
+        (m) => m.membershipStage === 'executive'
+          && !staff.some((u) => u.memberId && u.memberId === m.id)
+      ).length,
       generatedAt: new Date().toISOString()
     });
   } catch (e) {
     res.status(500).json({ error: 'Could not load the coordinator dashboard' });
+  }
+});
+
+// Who Shepherding has marked an Executive and who is still waiting on the
+// Coordinator to give them a position and a login.
+app.get('/api/coordinator/pending-executives', requireViewRole('coordinator'), async (req, res) => {
+  try {
+    const scope = rolesLib.getActingScope(req);
+    if (scope.isNational && !scope.chapterId) {
+      return res.status(400).json({ error: 'Pick a chapter to view (?chapterId=...).' });
+    }
+    res.json(await membersAwaitingAppointment(scope.chapterId));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load who is waiting for an account' });
   }
 });
 

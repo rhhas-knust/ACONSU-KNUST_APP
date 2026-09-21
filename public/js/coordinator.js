@@ -208,7 +208,7 @@ async function renderOffices(el) {
 // belongs here rather than in the national inbox. The server already allowed
 // this; until now nothing in the interface offered it, so every appointment
 // in every chapter had to be requested from National.
-function staffForm(existing) {
+function staffForm(existing, preselect) {
   const isEdit = !!existing;
   showModal(`
     <h3>${isEdit ? `Edit ${escapeHtml(existing.name || existing.username)}` : 'Appoint Chapter Leader'}</h3>
@@ -222,18 +222,18 @@ function staffForm(existing) {
           <small class="hint">They sign in with this. Lowercase, no spaces.</small>
         </div>`}
       <div class="field"><label>Full Name</label>
-        <input type="text" id="sfName" value="${escapeHtml(existing?.name || '')}" required></div>
+        <input type="text" id="sfName" value="${escapeHtml(existing?.name || preselect?.name || '')}" required></div>
       <div class="field"><label>Role</label>
         <select id="sfRole">
-          ${APPOINTABLE_ROLES.map(r => `<option value="${r.value}" ${existing?.role === r.value ? 'selected' : ''}>${escapeHtml(r.label)}</option>`).join('')}
+          ${APPOINTABLE_ROLES.map(r => `<option value="${r.value}" ${(existing?.role || preselect?.role) === r.value ? 'selected' : ''}>${escapeHtml(r.label)}</option>`).join('')}
         </select>
         <small class="hint" id="sfRoleBlurb"></small>
       </div>
       ${isEdit ? '' : `
-        <div class="field" id="sfMemberWrap" hidden>
-          <label>Member being promoted</label>
+        <div class="field" id="sfMemberWrap">
+          <label>Member being appointed</label>
           <select id="sfMemberId"><option value="">Loading members…</option></select>
-          <small class="hint">An executive is an elected member of this chapter, so the office is attached to their member record. You can appoint someone at any point in the year — their term runs to <strong>${escapeHtml(academicYearEndLabel())}</strong>, when the whole executive body hands over together.</small>
+          <small class="hint" id="sfMemberHint"></small>
         </div>
         <div class="field" id="sfPositionWrap" hidden>
           <label>Position</label>
@@ -260,6 +260,7 @@ function staffForm(existing) {
   const blurb = document.getElementById('sfRoleBlurb');
   const memberWrap = document.getElementById('sfMemberWrap');
   const memberSelect = document.getElementById('sfMemberId');
+  const memberHint = document.getElementById('sfMemberHint');
   const positionWrap = document.getElementById('sfPositionWrap');
   const positionSelect = document.getElementById('sfPosition');
   const deptWrap = document.getElementById('sfDeptWrap');
@@ -278,8 +279,17 @@ function staffForm(existing) {
     const found = APPOINTABLE_ROLES.find(r => r.value === roleSelect.value);
     blurb.textContent = found ? found.blurb : '';
     const isExecutive = roleSelect.value === 'executive';
-    if (memberWrap) memberWrap.hidden = !isExecutive;
+    // Every chapter office is held by a member of the chapter, not by a
+    // free-floating username — the server has always required that, but this
+    // form only asked for it when appointing an executive, so appointing a
+    // Finance or Shepherding officer was refused with nothing on screen to
+    // explain what was missing.
     if (positionWrap) positionWrap.hidden = !isExecutive;
+    if (memberHint) {
+      memberHint.innerHTML = isExecutive
+        ? `An executive is an elected member of this chapter, so the office is attached to their member record. You can appoint someone at any point in the year — their term runs to <strong>${escapeHtml(academicYearEndLabel())}</strong>, when the whole executive body hands over together.`
+        : 'Every chapter leader is a member of the chapter first, so the account is attached to their member record.';
+    }
     syncDepartment();
   };
   roleSelect.addEventListener('change', showBlurb);
@@ -304,13 +314,16 @@ function staffForm(existing) {
       .catch(() => { deptSelect.innerHTML = '<option value="">Could not load departments</option>'; });
   }
 
-  // Only the executive office needs a member to promote, so the roster is
-  // fetched once, lazily, rather than on every appointment.
+  // The roster is fetched once for the form, whichever office is being filled.
   if (memberSelect) {
     fetchJSON('/api/admin/members')
       .then(members => {
-        memberSelect.innerHTML = '<option value="">Choose the member being promoted</option>'
+        memberSelect.innerHTML = '<option value="">Choose the member being appointed</option>'
           + members.map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.email || m.id)}</option>`).join('');
+        // Opened from "waiting for an account", so the person is already known.
+        if (preselect && members.some(m => m.id === preselect.memberId)) {
+          memberSelect.value = preselect.memberId;
+        }
       })
       .catch(() => { memberSelect.innerHTML = '<option value="">Could not load members</option>'; });
   }
@@ -325,8 +338,8 @@ function staffForm(existing) {
     if (password) payload.password = password;
     if (!isEdit) {
       payload.username = document.getElementById('sfUsername').value;
+      payload.memberId = memberSelect ? memberSelect.value : '';
       if (roleSelect.value === 'executive') {
-        payload.memberId = memberSelect ? memberSelect.value : '';
         payload.positionKey = positionSelect ? positionSelect.value : '';
         payload.department = deptSelect ? deptSelect.value : '';
       }
@@ -365,7 +378,13 @@ function termCell(staff) {
 }
 
 async function renderLeadershipAccounts(el) {
-  const staff = await fetchJSON('/api/admin/staff');
+  // Shepherding marks someone an Executive; only this portal can give them the
+  // account that makes it mean anything. Asking for that list here is what
+  // carries the handover between the two offices.
+  const [staff, waiting] = await Promise.all([
+    fetchJSON('/api/admin/staff'),
+    fetchJSON('/api/coordinator/pending-executives').catch(() => [])
+  ]);
   const appointable = staff.filter(s => s.role !== 'nationalCoordinator');
   const filled = new Set(appointable.filter(s => s.active).map(s => s.role));
   const unfilled = APPOINTABLE_ROLES.filter(r => !filled.has(r.value) && r.value !== 'executive');
@@ -378,6 +397,32 @@ async function renderLeadershipAccounts(el) {
       </div>
       <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newStaffBtn">+ Appoint Leader</button></div>
     </div>
+
+    ${waiting.length ? `
+      <div class="portal-card" style="border-left:4px solid var(--flame-red, #A93226);">
+        <h3>Waiting for an account (${waiting.length})</h3>
+        <p class="hint">
+          Shepherding has marked ${waiting.length === 1 ? 'this member' : 'these members'} an Executive.
+          That is a label on their record — it gives them no portal on its own.
+          Give them a position and an account here and their office opens.
+        </p>
+        <div class="table-wrap" style="margin-top:12px;">
+          <table class="portal-table">
+            <thead><tr><th>Name</th><th>Marked</th><th>Shepherd</th><th></th></tr></thead>
+            <tbody>
+              ${waiting.map(w => `
+                <tr>
+                  <td><strong>${escapeHtml(w.name || 'Unnamed member')}</strong>${w.email ? `<br><small class="muted">${escapeHtml(w.email)}</small>` : ''}</td>
+                  <td class="tiny muted">${w.markedAt ? shortDate(String(w.markedAt).slice(0, 10)) : '—'}</td>
+                  <td class="tiny muted">${escapeHtml(w.shepherdName || '—')}</td>
+                  <td><div class="row-actions"><button data-appoint-member="${escapeHtml(w.id)}">Appoint</button></div></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ` : ''}
 
     ${unfilled.length ? `
       <div class="portal-card" style="border-left:4px solid var(--flame-gold, #E8971E);">
@@ -420,6 +465,13 @@ async function renderLeadershipAccounts(el) {
   `;
 
   document.getElementById('newStaffBtn').addEventListener('click', () => staffForm(null));
+  el.querySelectorAll('[data-appoint-member]').forEach(btn => btn.addEventListener('click', () => {
+    const person = waiting.find(w => w.id === btn.dataset.appointMember);
+    if (!person) return;
+    staffForm(null, { memberId: person.id, name: person.name, role: 'executive' });
+    const select = document.getElementById('sfRole');
+    if (select) select.dispatchEvent(new Event('change'));
+  }));
   el.querySelectorAll('[data-quick-role]').forEach(btn => btn.addEventListener('click', () => {
     staffForm(null);
     const select = document.getElementById('sfRole');

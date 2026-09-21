@@ -2508,6 +2508,105 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /not published just because we hold them/i.test(policy));
   }
 
+  console.log('\n== the handover: Shepherding marks an executive, the Coordinator opens the account ==');
+  {
+    // Shepherding can label someone an Executive; only the Coordinator can
+    // give them a portal. Nothing used to carry that between the two offices,
+    // so a member sat marked as an executive with no account and no page.
+    const waitingId = await registerMember('Nana Awaiting', 'nana.awaiting@test.com');
+
+    let r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
+    check('nobody is waiting for an account before anyone is marked',
+      r2.status === 200 && !r2.data.some(w => w.id === waitingId), r2.data);
+
+    r2 = await call('shep', 'PATCH', `/api/shepherd/members/${waitingId}/stage`, { stage: 'executive', shepherdName: 'Sister Grace' });
+    check('Shepherding marks the member an Executive', r2.status === 200 && r2.data.item.membershipStage === 'executive', r2.data);
+
+    r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
+    const waiting = r2.data.find(w => w.id === waitingId);
+    check('and the Coordinator is shown that they are waiting for an account', !!waiting, r2.data);
+    check('with the shepherd who marked them, so the Coordinator knows who to ask',
+      !!waiting && waiting.shepherdName === 'Sister Grace', waiting);
+
+    // The notifications feed is chapter-wide: a row there would announce to
+    // every member which of them had just been made an executive.
+    r2 = await call('anon', 'GET', '/api/notifications');
+    check('and the whole chapter is not told about it',
+      !r2.data.some(n => /Nana Awaiting/.test(`${n.title} ${n.body}`)), r2.data.slice(0, 3));
+
+    r2 = await call('coord', 'GET', '/api/coordinator/overview');
+    check('the dashboard counts them too', r2.data.awaitingAppointment >= 1, r2.data.awaitingAppointment);
+
+    // Appointing them is what clears it — nothing has to remember to.
+    r2 = await call('coord', 'POST', '/api/admin/staff', {
+      username: 'exec.awaiting', name: 'Nana Awaiting', role: 'executive',
+      password: 'password123', memberId: waitingId, positionKey: 'general_secretary'
+    });
+    check('the Coordinator appoints them', r2.status === 200, r2.data);
+
+    r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
+    check('and they stop waiting, because the account is the thing that was missing',
+      !r2.data.some(w => w.id === waitingId), r2.data);
+
+    // A member marked an executive in another chapter is that chapter's
+    // business, not this one's.
+    const otherId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: (() => {
+      const fd = new FormData();
+      fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+      fd.append('name', 'Other Chapter Exec'); fd.append('email', 'other.exec@test.com');
+      fd.append('password', 'secret123'); fd.append('chapterId', 'test-chapter-2');
+      return fd;
+    })() })).json()).member.id;
+    await call('admin', 'PATCH', `/api/shepherd/members/${otherId}/stage`, { stage: 'executive' }, false, { 'X-Chapter-Id': 'test-chapter-2' });
+    r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
+    check('another chapter\'s waiting executive is not in this chapter\'s list',
+      !r2.data.some(w => w.id === otherId), r2.data);
+
+    r2 = await call('pub', 'GET', '/api/coordinator/pending-executives');
+    check('and it is not open to every office', r2.status === 401, r2.status);
+  }
+
+  console.log('\n== appointing a leader asks for the member the server requires ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const js = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', 'js', f), 'utf8');
+
+    // The server has always required a member for every chapter office. The
+    // Coordinator's form only asked when appointing an executive, so every
+    // other appointment was refused with nothing on screen to explain it.
+    const coord = js('coordinator.js');
+    check('the Coordinator form sends the member for any office, not only an executive',
+      /payload\.memberId = memberSelect \? memberSelect\.value : '';/.test(coord)
+      && !/if \(roleSelect\.value === 'executive'\) \{\s*payload\.memberId/.test(coord), null);
+    check('and it no longer hides the member picker behind the executive branch',
+      !/memberWrap\.hidden = !isExecutive/.test(coord), null);
+    check('while the position picker stays an executive-only question',
+      /positionWrap\.hidden = !isExecutive/.test(coord), null);
+
+    // The admin portal had no member picker at all, so it could not create a
+    // Finance, Shepherding, Publicity or Welfare account either.
+    const adm = js('admin.js');
+    check('the admin form knows which roles are held by a member',
+      /const MEMBER_BACKED_STAFF_ROLES = \[/.test(adm)
+      && /'finance', 'shepherding', 'publicity', 'welfare'/.test(adm), null);
+    check('and sends the member it asked for',
+      /payload\.memberId = memberSelect\.value;/.test(adm), null);
+    check('and reloads the roster when the chapter changes, so the two agree',
+      /chapterSelect\.addEventListener\('change', loadMembersForChapter\)/.test(adm), null);
+
+    // The real proof: the exact payload each form now sends is accepted.
+    const finMemberId = await registerMember('Kwesi Books', 'kwesi.books@test.com');
+    let r2 = await call('coord', 'POST', '/api/admin/staff',
+      { username: 'fin.kwesi', name: 'Kwesi Books', role: 'finance', password: 'password123', memberId: finMemberId });
+    check('a Finance Officer can be appointed the way the form appoints one', r2.status === 200, r2.data);
+
+    r2 = await call('coord', 'POST', '/api/admin/staff',
+      { username: 'fin.nobody', name: 'Nobody', role: 'finance', password: 'password123' });
+    check('and one with no member behind it is still refused',
+      r2.status === 400 && /member/i.test(r2.data.error), r2.data);
+  }
+
   console.log('\n== the Bible reader: more versions, and one the app may not serve ==');
   {
     r = await call('anon', 'GET', '/api/bible/books');
