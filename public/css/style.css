@@ -734,19 +734,23 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .reader[data-flow="paragraph"] .verse-line { display:inline; margin:0; padding:0; border-radius:0; box-shadow:none; }
 .reader[data-flow="paragraph"] .verse-line::after { content:' '; }
 
-.verse-actions {
+/* Named for the bar, not for the verse: the home page has had its own
+   .verse-actions (the row inside the Verse of the Day card) since long before
+   this existed, and sharing the name tore that row out of its card and pinned
+   it to the bottom of the screen on every scroll. */
+.verse-action-bar {
   position:fixed; left:50%; transform:translateX(-50%);
   bottom:calc(76px + env(safe-area-inset-bottom, 0px)); z-index:340;
   background:var(--purple-rich); color:#fff; border-radius:999px;
   padding:6px; display:flex; gap:4px; box-shadow:0 12px 30px rgba(36,21,48,0.35);
 }
-.verse-actions button {
+.verse-action-bar button {
   border:none; background:none; color:#fff; cursor:pointer; border-radius:999px;
   padding:9px 15px; font-family:var(--font-body); font-weight:700; font-size:0.82rem;
   display:flex; align-items:center; gap:6px;
 }
-.verse-actions button:hover { background:rgba(255,255,255,0.16); }
-.verse-actions svg { width:15px; height:15px; }
+.verse-action-bar button:hover { background:rgba(255,255,255,0.16); }
+.verse-action-bar svg { width:15px; height:15px; }
 
 .bible-nav-btns { display:flex; gap:10px; justify-content:space-between; margin-top:20px; flex-wrap:wrap; }
 .bible-nav-btns .btn { flex:1 1 160px; }

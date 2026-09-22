@@ -13,7 +13,58 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
-<link rel="stylesheet" href="/css/style.css?v=7">
+<style>
+  /* ---------- opening the app ----------
+     The system draws its own splash first: a purple screen (manifest
+     background_color) with the app icon. This picks that exact screen up and
+     carries it, so the handoff is invisible and the logo appears to sit still
+     and then spring — one motion rather than two screens.
+
+     It lives here, above the stylesheet link, so the purple is painted on the
+     first frame. It also removes itself in CSS rather than in script, so a
+     failed or slow main.js can never leave someone staring at a purple wall. */
+  #appSplash {
+    position: fixed; inset: 0; z-index: 9999;
+    background: #5B2C82;
+    display: flex; align-items: center; justify-content: center;
+    animation: splashOut 340ms ease 720ms forwards;
+  }
+  /* The emblem's ring text is purple, so on a purple ground it would all but
+     disappear. A soft glow behind it lifts the dark strokes without giving the
+     mark an edge to sit on — light behind the flame rather than a tile under
+     it. Drawn here rather than baked into the file so it scales with the art. */
+  #appSplash .splash-mark {
+    width: 280px; height: 280px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: radial-gradient(closest-side,
+      rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.55) 58%, rgba(255,255,255,0) 100%);
+    animation: splashPop 640ms cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+  }
+  #appSplash img { width: 200px; height: 200px; }
+  @keyframes splashPop {
+    0%   { opacity: 0; transform: scale(0.74); }
+    55%  { opacity: 1; transform: scale(1.06); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  @keyframes splashOut {
+    to { opacity: 0; visibility: hidden; }
+  }
+  /* Tapping Home from the bottom nav should not replay the opening titles. */
+  html[data-splash="skip"] #appSplash { display: none; }
+  @media (prefers-reduced-motion: reduce) {
+    #appSplash { animation: splashOut 200ms ease 160ms forwards; }
+    #appSplash .splash-mark { animation: none; }
+  }
+</style>
+<script>
+  // Runs while the head is still parsing, so the decision is made before the
+  // overlay is ever painted — no flash of a splash we meant to skip.
+  try {
+    if (sessionStorage.getItem('aconsu.splashShown')) document.documentElement.dataset.splash = 'skip';
+    else sessionStorage.setItem('aconsu.splashShown', '1');
+  } catch (e) { /* private mode: showing it again is the harmless outcome */ }
+</script>
+<link rel="stylesheet" href="/css/style.css?v=8">
 <style>
   .live-stream-banner {
     background: linear-gradient(135deg, #A93226, #C0392B);
@@ -45,6 +96,13 @@
 </style>
 </head>
 <body>
+
+<!-- logo-splash.png is the emblem with its white backing removed, so the mark
+     sits on the screen rather than on a white tile stuck to it. The white
+     inside the artwork — the book's pages, the dove — is untouched. -->
+<div id="appSplash" aria-hidden="true">
+  <span class="splash-mark"><img src="/icons/logo-splash.png" alt=""></span>
+</div>
 
 <header id="site-header"></header>
 
