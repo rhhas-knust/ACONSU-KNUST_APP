@@ -755,28 +755,65 @@ const NEXT_ACTION_LABEL = {
   executive: 'Mark as Alumni'
 };
 
-async function moveStage(memberId, stage, extra) {
+async function moveStage(memberId, stage, extra, successMessage) {
   try {
     await fetchJSON(`/api/shepherd/members/${memberId}/stage`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stage, ...(extra || {}) })
     });
-    showToast(`Marked as ${STAGE_LABELS[stage]}.`, 'success');
+    showToast(successMessage || `Marked as ${STAGE_LABELS[stage]}.`, 'success');
     openPanel('visitors');
   } catch (err) {
     showToast(err.message || 'Could not update this person.', 'error');
   }
 }
 
-function assignShepherdForm(person) {
-  showModal(`
-    <h3>Assign Shepherd &amp; Activate</h3>
-    <p class="hint">${escapeHtml(person.name)} becomes an active member once a shepherd is assigned — their digital membership card is issued at the same time.</p>
-    <form id="assignShepherdForm">
-      <div class="field"><label>Shepherd's Name</label>
-        <input type="text" id="shepherdNameInput" placeholder="Who is shepherding this person?" required></div>
+// Picking a shepherd is a choice from the check-up team, never a typed name.
+// A typed name is not a link to anybody: it cannot be counted, it cannot be
+// followed, and it goes stale the moment the person's name is corrected.
+// `stage` is the stage to leave the person on. Activating from the pipeline
+// moves them to 'active'; changing an existing member's shepherd must leave
+// their stage exactly where it was, which is why it is passed in rather than
+// assumed.
+async function assignShepherdForm(person, stage) {
+  const toStage = stage || 'active';
+  // Leaving someone on the stage they are already on means this is only about
+  // who looks after them; moving them onto a new stage means it is activation.
+  const reassigning = person.membershipStage === toStage;
+  let team = [];
+  try {
+    ({ team } = await fetchJSON('/api/shepherd/team'));
+  } catch (err) {
+    showToast(err.message || 'Could not load the check-up team.', 'error');
+    return;
+  }
+  // Nobody shepherds themselves — so they are not even offered. The server
+  // refuses it too; this is only so the choice never appears in the first place.
+  const choices = team.filter(t => t.memberId !== person.memberId);
+  if (!choices.length) {
+    showModal(`
+      <h3>No one on the check-up team yet</h3>
+      <p class="hint">A shepherd is drawn from the check-up team. Put someone on the team first — the Check-up Team tab — and they can then be assigned here.</p>
       <div style="display:flex; gap:10px;">
-        <button type="submit" class="btn btn-primary">Activate Membership</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Close</button>
+      </div>
+    `);
+    return;
+  }
+  showModal(`
+    <h3>${reassigning ? 'Change Shepherd' : 'Assign Shepherd &amp; Activate'}</h3>
+    <p class="hint">${reassigning
+      ? `${escapeHtml(person.name)} is currently looked after by ${escapeHtml(person.shepherdName || 'nobody')}.`
+      : `${escapeHtml(person.name)} becomes an active member once a shepherd is assigned — their digital membership card is issued at the same time.`}</p>
+    <form id="assignShepherdForm">
+      <div class="field"><label>Shepherd</label>
+        <select id="shepherdPick" required>
+          <option value="">Choose from the check-up team…</option>
+          ${choices.map(t => `<option value="${escapeHtml(t.memberId)}"${t.memberId === person.shepherdMemberId ? ' selected' : ''}>${escapeHtml(t.name)}${t.isAlumni ? ' (alumni)' : ''} — looking after ${t.flockSize}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">${reassigning ? 'Save Shepherd' : 'Activate Membership'}</button>
         <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
       </div>
       <div class="form-msg" id="assignShepherdMsg"></div>
@@ -784,10 +821,99 @@ function assignShepherdForm(person) {
   `);
   document.getElementById('assignShepherdForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const shepherdName = document.getElementById('shepherdNameInput').value.trim();
-    if (!shepherdName) return;
-    await moveStage(person.memberId, 'active', { shepherdName });
+    const shepherdMemberId = document.getElementById('shepherdPick').value;
+    if (!shepherdMemberId) return;
+    await moveStage(person.memberId, toStage, { shepherdMemberId },
+      reassigning ? 'Shepherd updated.' : undefined);
     closeModal();
+  });
+}
+
+// ---------- the check-up team ----------
+async function renderShepTeam(el) {
+  const { team, candidates, unassignedCount } = await fetchJSON('/api/shepherd/team');
+  const alumniCount = team.filter(t => t.isAlumni).length;
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>The Check-up Team</h2>
+        <p class="sub">The members Shepherding sends out to visit and follow up. Every shepherd is drawn from this team — nobody outside it can be assigned to anyone.</p>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      ${statCard('On the Team', team.length, { foot: 'the pool every shepherd comes from' })}
+      ${statCard('Alumni Among Them', alumniCount, { foot: 'still shepherding, no longer on campus' })}
+      ${statCard('Nobody Assigned', unassignedCount, { tone: unassignedCount ? 'bad' : 'good', foot: 'members with no shepherd yet' })}
+    </div>
+
+    ${PORTAL.canEdit ? `
+    <div class="portal-card">
+      <h3>Add to the team</h3>
+      <p class="hint">A shepherd is always a member of this chapter. Alumni included — being off campus does not end it.</p>
+      <form id="addToTeamForm" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+        <div class="field" style="flex:1; min-width:220px; margin:0;">
+          <label>Add a member to the team</label>
+          <select id="teamCandidate" required>
+            <option value="">Choose a member…</option>
+            ${candidates.map(c => `<option value="${escapeHtml(c.memberId)}">${escapeHtml(c.name)}${c.isAlumni ? ' (alumni)' : ''}</option>`).join('')}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Add to team</button>
+      </form>
+    </div>` : ''}
+
+    <div class="portal-card">
+      <h3>Who they look after</h3>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th></th><th>Name</th><th>Stage</th><th>Looking after</th><th>On the team since</th><th></th></tr></thead>
+          <tbody>
+            ${team.map(t => `
+              <tr>
+                <td>${avatar(t)}</td>
+                <td>${escapeHtml(t.name)}${t.isAlumni ? ' <span class="tiny muted">(alumni)</span>' : ''}</td>
+                <td>${pill(STAGE_LABELS[t.membershipStage] || t.membershipStage)}</td>
+                <td class="tiny">${t.flockSize}</td>
+                <td class="tiny muted">${t.since ? new Date(t.since).toLocaleDateString() : '—'}</td>
+                <td>${PORTAL.canEdit ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-standdown="${escapeHtml(t.memberId)}">Stand down</button>` : ''}</td>
+              </tr>
+            `).join('') || emptyRow(6, 'Nobody on the check-up team yet.')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  const addForm = el.querySelector('#addToTeamForm');
+  if (addForm) addForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const memberId = el.querySelector('#teamCandidate').value;
+    if (!memberId) return;
+    try {
+      await fetchJSON('/api/shepherd/team', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId })
+      });
+      showToast('Added to the check-up team.', 'success');
+      renderShepTeam(el);
+    } catch (err) {
+      showToast(err.message || 'Could not add this member.', 'error');
+    }
+  });
+
+  el.querySelectorAll('[data-standdown]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await fetchJSON(`/api/shepherd/team/${btn.dataset.standdown}`, { method: 'DELETE' });
+        showToast('Stood down from the check-up team.', 'success');
+        renderShepTeam(el);
+      } catch (err) {
+        // The server refuses while people still look to them, and says how many.
+        showToast(err.message || 'Could not remove this member.', 'error');
+      }
+    });
   });
 }
 
@@ -854,7 +980,10 @@ async function renderVisitors(el) {
                 <td>${pill(STAGE_LABELS[p.membershipStage] || p.membershipStage)}</td>
                 <td class="tiny muted">${escapeHtml(p.membershipNumber || '—')}</td>
                 <td class="tiny muted">${escapeHtml(p.shepherdName || '—')}</td>
-                <td>${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}</td>
+                <td>
+                  ${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}
+                  ${PORTAL.canEdit ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-reshepherd="${escapeHtml(p.memberId)}">Change shepherd</button>` : ''}
+                </td>
               </tr>
             `).join('') || emptyRow(6, 'No active members yet.')}
           </tbody>
@@ -884,6 +1013,13 @@ async function renderVisitors(el) {
   });
   el.querySelectorAll('[data-assign]').forEach(btn => {
     btn.addEventListener('click', () => assignShepherdForm(pipeline.find(p => p.memberId === btn.dataset.assign)));
+  });
+  // Reassigning leaves the member's stage alone — only who looks after them
+  // changes. Without this there would be no way to move a flock, and standing
+  // someone down would be blocked forever.
+  el.querySelectorAll('[data-reshepherd]').forEach(btn => {
+    const person = active.find(p => p.memberId === btn.dataset.reshepherd);
+    btn.addEventListener('click', () => assignShepherdForm(person, person.membershipStage));
   });
 }
 
@@ -1031,6 +1167,7 @@ initPortal({
   panels: [
     { key: 'overview', label: 'Overview', render: renderShepOverview },
     { key: 'visitors', label: 'Membership Workflow', render: renderVisitors },
+    { key: 'team', label: 'Check-up Team', render: renderShepTeam },
     { key: 'attendance', label: 'Attendance', render: renderAttendance },
     { key: 'members', label: 'Members', render: renderShepMembers },
     { key: 'care', label: 'Pastoral Care', render: renderCare },

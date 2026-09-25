@@ -3500,6 +3500,105 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
 // shepherding record (pastoral notes, address, attendance, etc.) if one exists.
 // This is what makes "auto-import" work — nothing about a member is duplicated
 // or re-entered, it's joined at read time from data the church already has.
+// ---------- the check-up team (the pool every shepherd is drawn from) ----------
+// Shepherding sends a team out to check up on people, and it is that team the
+// individual shepherds come from. So "who may be assigned as a shepherd" is not
+// a free-text name and not a portal account — it is a member of THIS chapter
+// who has been put on the team.
+//
+// Nothing here filters on membershipStage: a few of the team are alumni, and an
+// alumnus shepherding a current student is the normal case, not an exception.
+
+// Turns a member record into the roster row the portal shows. flockSize is
+// counted rather than stored, so it can never fall out of step with the
+// assignments themselves.
+function shepherdTeamRow(member, flockByShepherdId) {
+  return {
+    memberId: member.id,
+    name: member.name,
+    phone: member.phone || '',
+    email: member.email || '',
+    level: member.level || '',
+    programme: member.programme || '',
+    membershipStage: member.membershipStage || 'visitor',
+    isAlumni: (member.membershipStage || '') === 'alumni',
+    imageFileId: member.profileImageFileId || '',
+    since: member.shepherdTeamSince || null,
+    flockSize: flockByShepherdId.get(member.id) || 0
+  };
+}
+
+app.get('/api/shepherd/team', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const members = await repo.getAll('members', filter);
+    const flockByShepherdId = new Map();
+    for (const m of members) {
+      if (!m.shepherdMemberId) continue;
+      flockByShepherdId.set(m.shepherdMemberId, (flockByShepherdId.get(m.shepherdMemberId) || 0) + 1);
+    }
+    const team = members
+      .filter(m => m.onShepherdTeam)
+      .map(m => shepherdTeamRow(m, flockByShepherdId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    // Everyone who could be put on the team, so the portal can offer a picker
+    // without pulling the whole member list down a second time.
+    const candidates = members
+      .filter(m => !m.onShepherdTeam)
+      .map(m => ({
+        memberId: m.id,
+        name: m.name,
+        membershipStage: m.membershipStage || 'visitor',
+        isAlumni: (m.membershipStage || '') === 'alumni'
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ team, candidates, unassignedCount: members.filter(m => !m.shepherdMemberId).length });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the check-up team' });
+  }
+});
+
+app.post('/api/shepherd/team', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const memberId = String(req.body.memberId || '').trim();
+    if (!memberId) return res.status(400).json({ error: 'Choose a member to put on the team' });
+    // Looked up through chapterFilter, so one chapter can never staff its
+    // check-up team with another chapter's members.
+    const member = await repo.getById('members', memberId, filter);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    if (member.onShepherdTeam) return res.status(400).json({ error: 'Already on the check-up team' });
+    const updated = await repo.updateById('members', memberId, {
+      ...member, onShepherdTeam: true, shepherdTeamSince: member.shepherdTeamSince || new Date()
+    }, filter);
+    res.json({ ok: true, member: shepherdTeamRow(updated, new Map()) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not add this member to the team' });
+  }
+});
+
+app.delete('/api/shepherd/team/:memberId', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const member = await repo.getById('members', req.params.memberId, filter);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    // Standing someone down while people still look to them would leave those
+    // people shepherded by nobody, silently. Reassign them first.
+    const all = await repo.getAll('members', filter);
+    const flock = all.filter(m => m.shepherdMemberId === member.id);
+    if (flock.length) {
+      return res.status(400).json({
+        error: `${member.name} still shepherds ${flock.length} ${flock.length === 1 ? 'person' : 'people'}. Reassign them first.`,
+        flock: flock.map(m => ({ memberId: m.id, name: m.name }))
+      });
+    }
+    await repo.updateById('members', member.id, { ...member, onShepherdTeam: false, shepherdTeamSince: null }, filter);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove this member from the team' });
+  }
+});
+
 app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
@@ -3539,8 +3638,10 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
         // Membership workflow (section 7).
         membershipStage: m.membershipStage || 'visitor',
         membershipNumber: m.membershipNumber || '',
+        shepherdMemberId: m.shepherdMemberId || '',
         shepherdStaffId: m.shepherdStaffId || '',
-        shepherdName: m.shepherdName || ''
+        shepherdName: m.shepherdName || '',
+        onShepherdTeam: !!m.onShepherdTeam
       };
     });
 
@@ -4002,20 +4103,35 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
     if (!existing.qrToken) updates.qrToken = crypto.randomBytes(16).toString('hex');
 
     // Assigning a shepherd is allowed alongside any stage change, or on its own.
-    if (req.body.shepherdStaffId !== undefined || req.body.shepherdName !== undefined) {
-      const shepherdStaffId = req.body.shepherdStaffId || '';
-      let shepherdName = req.body.shepherdName || '';
-      if (shepherdStaffId) {
-        // A portal account holder — pull their name from the account rather
-        // than trust free text, so it can never drift out of sync.
-        const shepherdStaff = await repo.getById('staffUsers', shepherdStaffId, filter);
-        if (!shepherdStaff) return res.status(400).json({ error: 'Unknown shepherd' });
-        shepherdName = shepherdStaff.name;
+    // A shepherd is a member of this chapter who sits on the check-up team, so
+    // the name is never typed — it is read off the record the id points at and
+    // can never drift out of sync with it.
+    if (req.body.shepherdMemberId !== undefined) {
+      const shepherdMemberId = String(req.body.shepherdMemberId || '').trim();
+      if (shepherdMemberId) {
+        // Nobody shepherds themselves. The team shepherds the members —
+        // themselves excepted — and each of them is looked after by someone
+        // else on the team.
+        if (shepherdMemberId === existing.id) {
+          return res.status(400).json({ error: 'Nobody can be their own shepherd' });
+        }
+        // Through chapterFilter, so a shepherd can never be borrowed from
+        // another chapter.
+        const shepherd = await repo.getById('members', shepherdMemberId, filter);
+        if (!shepherd) return res.status(400).json({ error: 'Unknown shepherd' });
+        // Being on the check-up team is what makes someone assignable. Without
+        // this the field would accept any member at all and the team would mean
+        // nothing.
+        if (!shepherd.onShepherdTeam) {
+          return res.status(400).json({ error: `${shepherd.name} is not on the check-up team` });
+        }
+        updates.shepherdMemberId = shepherd.id;
+        updates.shepherdName = shepherd.name;
+      } else {
+        // Explicitly clearing the assignment.
+        updates.shepherdMemberId = '';
+        updates.shepherdName = '';
       }
-      // Otherwise a lay shepherd with no portal login of their own — the
-      // name typed in is all that's recorded, same as `recordedBy` elsewhere.
-      updates.shepherdStaffId = shepherdStaffId;
-      updates.shepherdName = shepherdName;
     }
 
     // First time reaching 'active' — issue the membership number the digital
