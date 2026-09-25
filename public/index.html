@@ -133,25 +133,38 @@
   </div>
 </section>
 
-<section style="padding-bottom:8px;">
+<!-- The three things worth seeing first, on one row. Kept in this DOM order —
+     verse, quick access, events — so a phone still reads the way it always has;
+     the rail-width layout reorders them with `order` so what is happening next
+     leads, which is what the space is for. -->
+<section class="home-dash">
   <div class="container">
-    <div class="verse-of-day-card" id="verseOfDayCard">
-      <div class="verse-actions">
-        <p class="eyebrow" style="color:rgba(255,255,255,0.75); margin:0;">Verse of the Day</p>
-        <button type="button" class="btn btn-sm" id="shareVerseBtn" style="background:rgba(255,255,255,0.2); color:#fff; border:none; padding:5px 12px; font-size:0.78rem; border-radius:999px; cursor:pointer;">📤 Share Verse</button>
-      </div>
-      <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship, in the breaking of bread, and in prayers." — Acts 2:42</p>
-    </div>
-  </div>
-</section>
+    <div class="dash-grid">
 
-<section style="padding-bottom:24px;">
-  <div class="container">
-    <div class="section-head" style="margin-bottom:8px;">
-      <p class="eyebrow">Quick Access</p>
-      <h2>Everything in one place</h2>
+      <div class="dash-card dash-verse" id="verseOfDayCard">
+        <div class="verse-actions">
+          <p class="eyebrow" style="color:rgba(255,255,255,0.75); margin:0;">Verse of the Day</p>
+          <button type="button" class="btn btn-sm" id="shareVerseBtn" style="background:rgba(255,255,255,0.2); color:#fff; border:none; padding:5px 12px; font-size:0.78rem; border-radius:999px; cursor:pointer;">📤 Share Verse</button>
+        </div>
+        <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship, in the breaking of bread, and in prayers." — Acts 2:42</p>
+      </div>
+
+      <div class="dash-card dash-quick">
+        <div class="dash-head">
+          <h3>Quick Access</h3>
+        </div>
+        <div class="tile-grid" id="dashboardTiles"></div>
+      </div>
+
+      <div class="dash-card dash-events">
+        <div class="dash-head">
+          <h3>Upcoming Events</h3>
+          <a href="/events.html">View all</a>
+        </div>
+        <div class="dash-list" id="eventPreview"></div>
+      </div>
+
     </div>
-    <div class="tile-grid" id="dashboardTiles"></div>
   </div>
 </section>
 
@@ -173,19 +186,6 @@
       <h2>Event Flyers</h2>
     </div>
     <div id="flyerStrip" style="display:flex; gap:16px; overflow-x:auto; padding-bottom:12px; -webkit-overflow-scrolling:touch;"></div>
-  </div>
-</section>
-
-<section class="alt-bg">
-  <div class="container">
-    <div class="section-head">
-      <p class="eyebrow">What's Next</p>
-      <h2>Upcoming Gatherings</h2>
-    </div>
-    <div class="grid" id="eventPreview"></div>
-    <div style="text-align:center; margin-top:32px;">
-      <a href="/events.html" class="btn btn-outline">View Full Calendar</a>
-    </div>
   </div>
 </section>
 

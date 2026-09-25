@@ -2695,6 +2695,76 @@ const { fakeModels, fakeDb } = require('./harness.js');
       r.data.payment.welfareMomoNumber === '0244000111' && r.data.payment.welfareMomoName === 'ACONSU Welfare', r.data.payment);
   }
 
+  console.log('\n== the app shell: a rail on wide screens, tabs on a phone ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const main = pub('js/main.js');
+    const css = pub('css/style.css');
+
+    check('every page gets the rail, because every page goes through initLayout',
+      /renderSideNav\(activePath, customPages, member\);/.test(main), null);
+
+    // A rail is a promise that everything in it is reachable. A link to a page
+    // that does not exist is a 404 the person only finds by trusting the menu.
+    const hrefs = [...main.matchAll(/href: '(\/[^']+)'/g)].map((m) => m[1]);
+    const railLinks = hrefs.filter((h) => h.endsWith('.html') || h.includes('.html?'));
+    const missing = [...new Set(railLinks)]
+      .map((h) => h.split('?')[0])
+      .filter((h) => !fs.existsSync(path.join(__dirname, '..', 'public', h)));
+    check('and every link in it points at a page that exists', !missing.length, missing);
+    check('with enough of them to be worth a rail', railLinks.length >= 12, railLinks.length);
+
+    // Three tiers. The phone must not inherit the desktop shell.
+    check('the rail is hidden until there is room for it',
+      /\.side-nav \{ display: none; \}/.test(css) && /@media \(min-width: 1024px\)/.test(css), null);
+    check('and where it shows, the top bar stops repeating the same links',
+      /@media \(min-width: 1024px\)[\s\S]{0,3000}?\.nav-links \{ display: none !important; \}/.test(css), null);
+    check('the bottom tabs stay the phone\'s navigation',
+      /@media \(min-width: 861px\) \{ \.bottom-nav \{ display: none; \} \}/.test(css), null);
+
+    // The same shape of bug as the floating verse bar: a rule written for a
+    // full-width section, reused inside a narrow column.
+    check('the quick-access tiles do not keep six columns inside a dashboard card',
+      /\.dash-quick \.tile-grid \{[^}]*repeat\(3, 1fr\)/.test(css), null);
+
+    check('the home dashboard leads with what is happening next',
+      /\.dash-events \{ order: 1; \}/.test(css) && /\.dash-verse  \{ order: 3; \}/.test(css), null);
+  }
+
+  console.log('\n== notifications, in the app rather than on another page ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const main = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'main.js'), 'utf8');
+
+    check('the bell is still a real link to the full history',
+      /href="\/notifications\.html" class="bell-link"/.test(main), null);
+    check('and a modified click is left alone, so it can still open in a tab',
+      /if \(e\.metaKey \|\| e\.ctrlKey \|\| e\.shiftKey \|\| e\.button !== 0\) return;/.test(main), null);
+    check('opening the panel is what marks them seen',
+      /markNotificationsSeen\(\);[\s\S]{0,120}notif-count/.test(main), null);
+    check('the unread count is shown as a number, not only a dot',
+      /badge\.textContent = count > 9 \? '9\+' : String\(count\);/.test(main), null);
+
+    // timeAgo is a pure function, so it can be run rather than read.
+    const fn = main.match(/function timeAgo\(iso\)[\s\S]*?\n\}/)[0];
+    const timeAgo = new Function(`${fn}; return timeAgo;`)();
+    const ago = (secs) => timeAgo(new Date(Date.now() - secs * 1000).toISOString());
+    check('a notice from seconds ago reads as just now', ago(5) === 'just now', ago(5));
+    check('minutes and hours read as themselves', ago(600) === '10m ago' && ago(7200) === '2h ago', [ago(600), ago(7200)]);
+    check('and a day old reads in days', ago(86400 * 2) === '2d ago', ago(86400 * 2));
+    // A behaviour check, not a guard: a timestamp ahead of this device's clock
+    // falls through to 'just now' because of the branch order, with or without
+    // the clamp in front of it. Worth asserting that it stays true; not worth
+    // claiming it proves the clamp does something.
+    check('a timestamp ahead of the device clock still reads sensibly',
+      timeAgo(new Date(Date.now() + 40000).toISOString()) === 'just now',
+      timeAgo(new Date(Date.now() + 40000).toISOString()));
+    check('and nonsense in gives nothing out, not "NaN ago"', timeAgo('not-a-date') === '', timeAgo('not-a-date'));
+  }
+
   console.log('\n== opening the app, and one class name that belonged to two things ==');
   {
     const fs = require('fs');
