@@ -3,14 +3,15 @@
 function registerMemberServiceRoutes(app, deps) {
   const { repo, rolesLib, requireMember, requireContentManager, requireShepherd, requireViewRole,
     requireFinance, isChapterAdminOrAbove, hasRole, actorName, createNotification, notifyAdminByEmail,
-    resolveViewerChapterId, chapterConfidential } = deps;
+    resolveViewerChapterId, chapterConfidential, requireWelfareOfficer } = deps;
   const VOLUNTEER_ROLES = ['usher', 'prayer_team', 'media', 'musician', 'protocol', 'publicity', 'transport', 'other'];
   const MILESTONE_TYPES = ['graduation', 'executive_appointment', 'membership_anniversary', 'other'];
   const MILESTONE_LABELS = { graduation: 'graduated! 🎓', executive_appointment: 'was appointed to a new executive position! 🎉', membership_anniversary: 'is celebrating a membership milestone! 🎉', other: 'has something to celebrate! 🎉' };
   const WELFARE_CATEGORIES = ['financial', 'medical', 'bereavement', 'academic', 'other'];
   const WELFARE_STATUSES = ['submitted', 'under_review', 'approved', 'declined', 'fulfilled'];
-  const requireWelfareAccess = (req, res, next) => (isChapterAdminOrAbove(req) || hasRole(req, 'welfare'))
-    ? next() : res.status(401).json({ error: 'Not authenticated' });
+  // Who the welfare desk is, is decided in server.js and passed in, so the
+  // purse and the case notes can never drift apart on who may read them.
+  const requireWelfareAccess = requireWelfareOfficer;
   const eventDateTime = (e) => {
     const d = new Date(`${e.date || ''}T${e.time || '00:00'}:00`);
     return Number.isNaN(d.getTime()) ? null : d;

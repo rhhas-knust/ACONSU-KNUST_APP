@@ -33,7 +33,7 @@ const ROLE_LABEL = APPOINTABLE_ROLES.reduce((acc, r) => { acc[r.value] = r.label
 // ---------- dashboard ----------
 async function renderCoordinatorDashboard(el) {
   const data = await fetchJSON('/api/coordinator/overview');
-  const { finance, shepherding, publicity, engagement } = data;
+  const { finance, shepherding, publicity, engagement, welfare } = data;
   const budget = finance.activeBudget;
 
   el.innerHTML = `
@@ -618,6 +618,70 @@ async function renderChapterAnnouncements(el) {
   });
 }
 
+// ---------- the welfare purse, as reported to this office ----------
+// Welfare collects the tithe and the semester dues into an account of its own
+// and answers for it here. Read-only: the Coordinator is owed the figures, not
+// a second set of hands in the book.
+const WELFARE_REPORT_LABELS = {
+  tithe: 'Tithe', semester_dues: 'Semester welfare dues', donation: 'Donation',
+  member_support: 'Support paid to a member', medical: 'Medical',
+  bereavement: 'Bereavement', transport: 'Transport', supplies: 'Supplies', other: 'Other'
+};
+
+async function renderWelfarePurseReport(el) {
+  const { totals, entries } = await fetchJSON('/api/welfare/report');
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>The Welfare Purse</h2>
+        <p class="sub">Welfare collects the tithe and the semester dues into its own account and answers for it to you
+          and to the executive body. This is that account \u2014 read-only.</p>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      ${statCard('Collected', money(totals.income), { tone: 'good' })}
+      ${statCard('Paid out', money(totals.expense))}
+      ${statCard('Balance', money(totals.balance), { tone: totals.balance < 0 ? 'bad' : 'good' })}
+      ${statCard('Movements', totals.entryCount)}
+    </div>
+
+    <div class="portal-card" style="margin-top:16px;">
+      <h3>Where the money came from</h3>
+      <div class="row-actions" style="flex-wrap:wrap; gap:14px; margin-top:8px;">
+        ${Object.entries(totals.byCategory).map(([key, amount]) =>
+          `<span class="tiny muted">${escapeHtml(WELFARE_REPORT_LABELS[key] || key)}:
+            <strong>${money(amount)}</strong></span>`).join('')}
+      </div>
+    </div>
+
+    <div class="table-wrap" style="margin-top:16px;">
+      <table class="portal-table">
+        <thead><tr><th>Date</th><th>What</th><th>Paid to</th><th>Amount</th><th>Evidence</th><th>Recorded by</th></tr></thead>
+        <tbody>
+          ${entries.map(e => `
+            <tr>
+              <td class="tiny muted">${escapeHtml(e.date || '')}</td>
+              <td>
+                <strong>${escapeHtml(WELFARE_REPORT_LABELS[e.category] || e.category)}</strong>
+                ${e.description ? `<br><small class="muted">${escapeHtml(e.description)}</small>` : ''}
+              </td>
+              <td class="tiny muted">${escapeHtml(e.payee || '\u2014')}</td>
+              <td><strong>${e.entryType === 'income' ? '+' : '\u2212'}${money(e.amount)}</strong></td>
+              <td>${e.hasEvidence ? pill('attached', 'green') : '<span class="tiny muted">\u2014</span>'}</td>
+              <td class="tiny muted">${escapeHtml(e.recordedBy || '\u2014')}</td>
+            </tr>
+          `).join('') || emptyRow(6, 'Welfare has not recorded anything yet.')}
+        </tbody>
+      </table>
+      <p class="tiny muted" style="margin-top:10px;">
+        Who paid dues and who was helped stays with the welfare desk. You are shown the money and the evidence behind it.
+      </p>
+    </div>
+  `;
+}
+
 initPortal({
   role: 'coordinator',
   label: 'Chapter Coordinator',
@@ -625,6 +689,7 @@ initPortal({
     { key: 'dashboard', label: 'Dashboard', render: renderCoordinatorDashboard },
     { key: 'offices', label: 'Offices & Leaders', render: renderOffices },
     { key: 'accounts', label: 'Leadership Accounts', render: renderLeadershipAccounts },
+    { key: 'welfare', label: 'Welfare Purse', render: renderWelfarePurseReport },
     { key: 'approvals', label: 'Approvals', render: renderApprovals },
     { key: 'announcements', label: 'Chapter Announcement', render: renderChapterAnnouncements }
   ]
