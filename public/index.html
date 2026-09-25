@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ACONSU — The Apostles' Continuation Students Union</title>
 <meta name="description" content="ACONSU: a campus fellowship carrying the fire of the Holy Spirit and continuing the pattern of the apostles.">
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -78,14 +86,14 @@
     50% { box-shadow: 0 8px 32px rgba(192, 57, 43, 0.6); }
   }
   .live-pill {
-    background: #fff; color: #C0392B; font-weight: 900; font-size: 0.72rem;
+    background: var(--surface); color: #C0392B; font-weight: 900; font-size: 0.72rem;
     padding: 3px 9px; border-radius: 999px; letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 6px;
   }
   .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #C0392B; animation: blink 1.2s infinite; }
   @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
   .verse-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; flex-wrap: wrap; gap: 10px; }
   .highlight-card {
-    background: #fff; border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
     flex: none; width: 260px; box-shadow: 0 6px 18px rgba(58,27,84,0.06); text-decoration: none; color: inherit;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
@@ -173,7 +181,7 @@
     <div class="section-head">
       <p class="eyebrow">Moments &amp; Memories</p>
       <h2>This Week at ACONSU</h2>
-      <p style="color:#5a4468;">Catch up on life across our fellowship, outreaches, and campus gatherings.</p>
+      <p style="color:var(--ink-soft);">Catch up on life across our fellowship, outreaches, and campus gatherings.</p>
     </div>
     <div id="highlightsStrip" style="display:flex; gap:16px; overflow-x:auto; padding-bottom:14px; -webkit-overflow-scrolling:touch;"></div>
   </div>
@@ -194,7 +202,7 @@
     <div class="section-head">
       <p class="eyebrow">Get Involved</p>
       <h2>Find your place in the union</h2>
-      <p style="color:#5a4468;">Every department is a door into deeper fellowship and service. Explore where you fit.</p>
+      <p style="color:var(--ink-soft);">Every department is a door into deeper fellowship and service. Explore where you fit.</p>
     </div>
     <div class="grid" id="deptPreview"></div>
     <div style="text-align:center; margin-top:32px;">
@@ -208,7 +216,7 @@
     <div class="section-head">
       <p class="eyebrow">Small Groups &amp; Fellowships</p>
       <h2>Grow in a Small Circle</h2>
-      <p style="color:#5a4468;">Connect with Bible study cells, prayer groups, and campus fellowships.</p>
+      <p style="color:var(--ink-soft);">Connect with Bible study cells, prayer groups, and campus fellowships.</p>
     </div>
     <div class="grid" id="groupsPreview"></div>
     <div style="text-align:center; margin-top:32px;">
@@ -221,7 +229,7 @@
   <div class="container" style="text-align:center;">
     <p class="eyebrow">We're Here for You</p>
     <h2>Need Prayer?</h2>
-    <p style="max-width:520px; margin:0 auto 28px; color:#5a4468;">Whatever you're carrying — an exam, a decision, a burden — bring it to the family. We would love to stand with you in prayer.</p>
+    <p style="max-width:520px; margin:0 auto 28px; color:var(--ink-soft);">Whatever you're carrying — an exam, a decision, a burden — bring it to the family. We would love to stand with you in prayer.</p>
     <a href="/prayer.html" class="btn btn-flame">Submit a Prayer Request</a>
   </div>
 </section>
@@ -309,7 +317,7 @@
       <h2 style="margin-bottom:0;">${greeting}${firstName ? ', ' + escapeHtml(firstName) : ''}</h2>
       <div class="greeting-icons">
         ${streakHtml}
-        <a href="/notifications.html" class="bell-link" style="position:relative; color:var(--purple-deep);" aria-label="Notifications">
+        <a href="/notifications.html" class="bell-link" style="position:relative; color:var(--brand);" aria-label="Notifications">
           ${svgIcon(ICON_BELL)}
           ${unread > 0 ? `<span style="position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);"></span>` : ''}
         </a>
@@ -454,7 +462,7 @@
               : '<span class="dept-thumb-fallback"></span>'}
           </div>
           <div class="highlight-body">
-            <h4 style="margin:0 0 4px; font-size:0.95rem; color:var(--purple-deep);">${escapeHtml(h.title)}</h4>
+            <h4 style="margin:0 0 4px; font-size:0.95rem; color:var(--brand);">${escapeHtml(h.title)}</h4>
             <p style="margin:0; font-size:0.84rem; color:#6b527b; line-height:1.4;">${escapeHtml(h.summary || '')}</p>
           </div>
         </a>
@@ -480,7 +488,7 @@
             : '<span class="dept-thumb-fallback"></span>'}
         </div>
         <h3>${escapeHtml(d.name)}</h3>
-        <p style="color:#5a4468; font-size:0.92rem;">${escapeHtml(d.tagline)}</p>
+        <p style="color:var(--ink-soft); font-size:0.92rem;">${escapeHtml(d.tagline)}</p>
         <div class="dept-meta">${escapeHtml(d.meetingDay)} · ${escapeHtml(d.meetingTime)}</div>
       </a>
     `).join('') || '<p class="empty-state">Departments coming soon.</p>';
@@ -502,7 +510,7 @@
         </div>
         <div>
           <h3 style="margin-bottom:4px;">${escapeHtml(e.title)}</h3>
-          <p style="font-size:0.88rem; color:#5a4468; margin-bottom:4px;">${escapeHtml(e.location)}</p>
+          <p style="font-size:0.88rem; color:var(--ink-soft); margin-bottom:4px;">${escapeHtml(e.location)}</p>
           <span class="badge">${e.time}</span>
         </div>
       </div>`;
@@ -515,7 +523,7 @@
       document.getElementById('flyerStrip').innerHTML = flyerEvents.map(e => `
         <a href="/events.html" style="flex:none; width:220px; display:block; text-decoration:none;">
           <img src="/api/files/${e.flyerFileId}" alt="${escapeHtml(e.title)}" loading="lazy" style="width:100%; height:280px; object-fit:cover; border-radius:14px; box-shadow:0 12px 28px rgba(58,27,84,0.18);">
-          <p style="margin-top:8px; font-weight:700; font-size:0.88rem; color:var(--purple-deep);">${escapeHtml(e.title)}</p>
+          <p style="margin-top:8px; font-weight:700; font-size:0.88rem; color:var(--brand);">${escapeHtml(e.title)}</p>
         </a>
       `).join('');
     }
@@ -526,11 +534,11 @@
       document.getElementById('groupsPreview').innerHTML = groups.slice(0, 3).map(g => `
         <a href="/group.html?id=${g.id}" class="card" style="text-decoration:none; color:inherit;">
           <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-            <h3 style="margin:0; font-size:1.1rem; color:var(--purple-deep);">${escapeHtml(g.name)}</h3>
-            <span class="badge" style="background:var(--lilac-light); color:var(--purple-deep);">${escapeHtml(g.type || 'Fellowship')}</span>
+            <h3 style="margin:0; font-size:1.1rem; color:var(--brand);">${escapeHtml(g.name)}</h3>
+            <span class="badge" style="background:var(--lilac-light); color:var(--brand);">${escapeHtml(g.type || 'Fellowship')}</span>
           </div>
-          <p style="color:#5a4468; font-size:0.9rem; margin-bottom:12px;">${escapeHtml(g.description || 'Join this group for fellowship and spiritual growth.')}</p>
-          <div style="font-size:0.82rem; color:#8a7595; display:flex; gap:12px; flex-wrap:wrap;">
+          <p style="color:var(--ink-soft); font-size:0.9rem; margin-bottom:12px;">${escapeHtml(g.description || 'Join this group for fellowship and spiritual growth.')}</p>
+          <div style="font-size:0.82rem; color:var(--ink-faint); display:flex; gap:12px; flex-wrap:wrap;">
             ${g.meetingDay ? `<span>🗓️ ${escapeHtml(g.meetingDay)}</span>` : ''}
             ${g.meetingTime ? `<span>⏰ ${escapeHtml(g.meetingTime)}</span>` : ''}
             <span>👥 ${g.memberCount || 0} members</span>

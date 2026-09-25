@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Give — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -14,10 +22,10 @@
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .pay-details { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:24px; }
+  .pay-details { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:24px; }
   .pay-details dt { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; color:#8a7595; margin-top:12px; }
   .pay-details dt:first-child { margin-top:0; }
-  .pay-details dd { margin:2px 0 0; font-weight:700; font-size:1.05rem; color:var(--purple-deep); }
+  .pay-details dd { margin:2px 0 0; font-weight:700; font-size:1.05rem; color:var(--brand); }
   .give-history-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:0.88rem; }
 </style>
 </head>
@@ -40,7 +48,7 @@
 
     <form class="form-card" id="giveForm" style="display:none;">
       <h3 style="margin-bottom:6px;">Log Your Gift</h3>
-      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">After sending via MoMo/bank using the details above, tell us here — Finance confirms it against the books.</p>
+      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">After sending via MoMo/bank using the details above, tell us here — Finance confirms it against the books.</p>
       <div class="field"><label for="amount">Amount (GH₵)</label><input type="number" id="amount" min="0.01" step="0.01" required></div>
       <div class="field"><label for="purpose">Purpose</label>
         <select id="purpose">
@@ -106,7 +114,7 @@ async function loadHistory() {
           ${p.bankAccountNumber ? `<dt>Account</dt><dd>${escapeHtml(p.bankAccountName || '')} ${escapeHtml(p.bankAccountNumber)}</dd>` : ''}
           ${p.donationDestination ? `<dt>General Giving</dt><dd>${escapeHtml(p.donationDestination)}</dd>` : ''}
           ${p.welfareDestination ? `<dt>Welfare Giving</dt><dd>${escapeHtml(p.welfareDestination)}</dd>` : ''}
-          <p style="font-size:0.8rem; color:#8a7595; margin-top:14px;">Sent via your own MoMo/bank app — this page doesn't process payments directly.</p>
+          <p style="font-size:0.8rem; color:var(--ink-faint); margin-top:14px;">Sent via your own MoMo/bank app — this page doesn't process payments directly.</p>
         </div>
       `;
       document.getElementById('giveForm').style.display = 'block';

@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bible Study — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -14,14 +22,14 @@
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .study-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px; cursor:pointer; transition:box-shadow 0.15s ease; }
+  .study-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px; cursor:pointer; transition:box-shadow 0.15s ease; }
   .study-card:hover { box-shadow:0 10px 24px rgba(58,27,84,0.12); }
   .study-card h3 { margin:0 0 4px; }
   .study-card .meta { font-size:0.82rem; color:#8a7595; margin-bottom:8px; }
-  .study-detail { background:#fff; border:1px solid var(--line); border-radius:16px; padding:26px; }
-  .study-detail h4 { margin:18px 0 8px; color:var(--purple-deep); }
+  .study-detail { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:26px; }
+  .study-detail h4 { margin:18px 0 8px; color:var(--brand); }
   .study-detail ul { padding-left:20px; }
-  .scripture-link { display:inline-flex; align-items:center; gap:6px; background:var(--lilac-light); color:var(--purple-deep); padding:6px 14px; border-radius:999px; font-weight:700; font-size:0.85rem; text-decoration:none; margin-bottom:10px; }
+  .scripture-link { display:inline-flex; align-items:center; gap:6px; background:var(--lilac-light); color:var(--brand); padding:6px 14px; border-radius:999px; font-weight:700; font-size:0.85rem; text-decoration:none; margin-bottom:10px; }
 </style>
 </head>
 <body>
@@ -72,7 +80,7 @@ function renderList() {
     <div class="study-card" data-id="${s.id}">
       <h3>${escapeHtml(s.topic)}</h3>
       <div class="meta">${[s.date, s.scriptureReference].filter(Boolean).map(escapeHtml).join(' · ') || 'ACONSU Bible Study'}</div>
-      <p style="color:#5a4468; font-size:0.9rem;">${escapeHtml((s.studyMaterial || '').slice(0, 140))}${(s.studyMaterial || '').length > 140 ? '…' : ''}</p>
+      <p style="color:var(--ink-soft); font-size:0.9rem;">${escapeHtml((s.studyMaterial || '').slice(0, 140))}${(s.studyMaterial || '').length > 140 ? '…' : ''}</p>
     </div>
   `).join('');
   el.querySelectorAll('[data-id]').forEach(card => card.addEventListener('click', () => showDetail(card.dataset.id)));

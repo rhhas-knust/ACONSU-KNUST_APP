@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Discover — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -14,11 +22,11 @@
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .discover-search { width:100%; padding:14px 18px; border-radius:999px; border:1.5px solid var(--line); font-family:'Manrope',sans-serif; font-size:0.95rem; background:#fff; margin-bottom:22px; }
-  .discover-search:focus { outline:none; border-color:var(--purple-deep); }
+  .discover-search { width:100%; padding:14px 18px; border-radius:999px; border:1.5px solid var(--line); font-family:'Manrope',sans-serif; font-size:0.95rem; background:var(--surface); margin-bottom:22px; }
+  .discover-search:focus { outline:none; border-color:var(--brand); }
   .discover-status { margin:-10px 0 18px; color:#5a4468; font-size:0.9rem; }
   .discover-tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:28px; }
-  .discover-tile { background:#fff; border:1px solid var(--line); border-radius:16px; padding:20px 16px; text-decoration:none; color:var(--purple-ink); display:flex; align-items:center; gap:12px; font-weight:700; }
+  .discover-tile { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:20px 16px; text-decoration:none; color:var(--purple-ink); display:flex; align-items:center; gap:12px; font-weight:700; }
   .discover-tile .dt-icon { width:40px; height:40px; border-radius:12px; background:linear-gradient(135deg,var(--purple-deep),var(--purple-rich)); display:flex; align-items:center; justify-content:center; color:#fff; flex:none; }
   .discover-tile .dt-icon svg { width:20px; height:20px; }
   .discover-summary { margin-bottom:18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
@@ -96,7 +104,7 @@ const INITIAL_QUERY = new URLSearchParams(location.search).get('q') || '';
     <a href="/media.html" class="discover-result">
       <div class="dr-type">${s.type === 'video' ? 'Video' : 'Audio'}</div>
       <strong>${escapeHtml(s.title)}</strong>
-      <div style="font-size:0.85rem; color:#5a4468;">${escapeHtml(s.speaker || '')}</div>
+      <div style="font-size:0.85rem; color:var(--ink-soft);">${escapeHtml(s.speaker || '')}</div>
     </a>
   `).join('') || '<p class="empty-state">No sermons uploaded yet.</p>';
 
@@ -183,7 +191,7 @@ function renderSearchResults(query, results) {
           <a href="${r.href}" class="discover-result">
             <div class="dr-type">${escapeHtml(r.typeLabel || r.type || 'Result')}</div>
             <strong>${escapeHtml(r.title)}</strong>
-            ${r.subtitle ? `<div style="font-size:0.85rem; color:#5a4468;">${escapeHtml(r.subtitle)}</div>` : ''}
+            ${r.subtitle ? `<div style="font-size:0.85rem; color:var(--ink-soft);">${escapeHtml(r.subtitle)}</div>` : ''}
             ${r.description ? `<div style="font-size:0.84rem; color:#7a6a87; margin-top:3px;">${escapeHtml(r.description).slice(0, 140)}</div>` : ''}
           </a>
         `).join('')}

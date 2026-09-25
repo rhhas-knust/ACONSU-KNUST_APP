@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ACONSU Content</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -13,14 +21,14 @@
   .video-container iframe { position:absolute; top:0; left:0; width:100%; height:100%; border:0; }
   .cat-pills { display:flex; gap:8px; overflow-x:auto; padding-bottom:12px; margin-bottom:20px; scrollbar-width:none; }
   .cat-pills::-webkit-scrollbar { display:none; }
-  .cat-pill { padding:6px 16px; border-radius:999px; border:1px solid var(--line); background:#fff; font-size:0.85rem; font-weight:600; color:var(--purple-ink); cursor:pointer; white-space:nowrap; transition:all 0.15s ease; }
-  .cat-pill.active, .cat-pill:hover { background:var(--purple-deep); color:#fff; border-color:var(--purple-deep); }
+  .cat-pill { padding:6px 16px; border-radius:999px; border:1px solid var(--line); background:var(--surface); font-size:0.85rem; font-weight:600; color:var(--purple-ink); cursor:pointer; white-space:nowrap; transition:all 0.15s ease; }
+  .cat-pill.active, .cat-pill:hover { background:var(--purple-deep); color:#fff; border-color:var(--brand); }
   .search-bar { width:100%; padding:12px 18px; border-radius:999px; border:1.5px solid var(--line); font-size:0.95rem; margin-bottom:20px; outline:none; font-family:'Manrope',sans-serif; }
-  .search-bar:focus { border-color:var(--purple-deep); }
+  .search-bar:focus { border-color:var(--brand); }
   .search-context { margin:0 0 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
   .search-focus-card { border:2px solid var(--purple-deep); box-shadow:0 10px 24px rgba(91,44,130,0.12); }
   .live-badge { display:inline-flex; align-items:center; gap:6px; background:#dc2626; color:#fff; font-weight:800; font-size:0.75rem; text-transform:uppercase; padding:4px 10px; border-radius:999px; letter-spacing:0.05em; }
-  .live-dot { width:8px; height:8px; border-radius:50%; background:#fff; animation:pulse 1.5s infinite; }
+  .live-dot { width:8px; height:8px; border-radius:50%; background:var(--surface); animation:pulse 1.5s infinite; }
   @keyframes pulse { 0% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.8); } 100% { opacity:1; transform:scale(1); } }
 </style>
 </head>
@@ -185,8 +193,8 @@ function renderContent() {
           </div>
           ${videoEmbed || (item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="" style="width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:12px; margin-bottom:16px;">` : '')}
           <h2 style="margin:8px 0 10px;">${escapeHtml(item.title)}</h2>
-          ${item.summary ? `<p style="font-weight:600; color:var(--purple-rich); margin-bottom:10px;">${escapeHtml(item.summary)}</p>` : ''}
-          ${item.body ? `<p style="white-space:pre-line; color:#5a4468; margin-bottom:16px;">${escapeHtml(item.body)}</p>` : ''}
+          ${item.summary ? `<p style="font-weight:600; color:var(--brand-strong); margin-bottom:10px;">${escapeHtml(item.summary)}</p>` : ''}
+          ${item.body ? `<p style="white-space:pre-line; color:var(--ink-soft); margin-bottom:16px;">${escapeHtml(item.body)}</p>` : ''}
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
             ${item.previewUrl ? `<a class="btn btn-primary" href="${escapeHtml(item.previewUrl)}" target="_blank" rel="noopener">Open Stream in App &nearr;</a>` : ''}
             ${item.resourceUrl ? `<a class="btn btn-outline" href="${escapeHtml(item.resourceUrl)}" target="_blank" rel="noopener">Watch on YouTube / Facebook</a>` : ''}
@@ -202,8 +210,8 @@ function renderContent() {
           <span class="badge">${escapeHtml(item.category || 'Seminar')}</span>
           <h3 style="margin:10px 0 6px;">${escapeHtml(item.title)}</h3>
           ${item.eventDate ? `<p class="muted" style="font-size:0.85rem; margin-bottom:8px;">${formatDate(item.eventDate)}</p>` : ''}
-          ${item.summary ? `<p style="color:#5a4468; margin-bottom:10px;">${escapeHtml(item.summary)}</p>` : ''}
-          ${item.body ? `<p style="white-space:pre-line; color:#5a4468; font-size:0.92rem; margin-bottom:14px;">${escapeHtml(item.body)}</p>` : ''}
+          ${item.summary ? `<p style="color:var(--ink-soft); margin-bottom:10px;">${escapeHtml(item.summary)}</p>` : ''}
+          ${item.body ? `<p style="white-space:pre-line; color:var(--ink-soft); font-size:0.92rem; margin-bottom:14px;">${escapeHtml(item.body)}</p>` : ''}
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:auto;">
             ${item.resourceUrl ? `<a class="btn btn-primary btn-sm" href="${escapeHtml(item.resourceUrl)}" target="_blank" rel="noopener">Watch Full Session &nearr;</a>` : ''}
             ${item.resourceFileId ? `<a class="btn btn-outline btn-sm" href="/api/files/${item.resourceFileId}" target="_blank">Download Notes</a>` : ''}
@@ -218,8 +226,8 @@ function renderContent() {
           ${item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="Book Cover" style="width:100%; aspect-ratio:3/4; object-fit:cover; border-radius:10px; margin-bottom:14px; box-shadow:0 4px 12px rgba(0,0,0,0.08);">` : ''}
           <span class="badge">${escapeHtml(item.category || 'Publication')}</span>
           <h3 style="margin:10px 0 6px;">${escapeHtml(item.title)}</h3>
-          ${item.summary ? `<p style="color:#5a4468; margin-bottom:10px;">${escapeHtml(item.summary)}</p>` : ''}
-          ${item.body ? `<p style="white-space:pre-line; color:#5a4468; font-size:0.9rem; margin-bottom:14px;">${escapeHtml(item.body)}</p>` : ''}
+          ${item.summary ? `<p style="color:var(--ink-soft); margin-bottom:10px;">${escapeHtml(item.summary)}</p>` : ''}
+          ${item.body ? `<p style="white-space:pre-line; color:var(--ink-soft); font-size:0.9rem; margin-bottom:14px;">${escapeHtml(item.body)}</p>` : ''}
           <div style="margin-top:auto; padding-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
             ${item.resourceFileId ? `<a class="btn btn-primary btn-sm" href="/api/files/${item.resourceFileId}" target="_blank" download>Read / Download PDF</a>` : ''}
             ${item.resourceUrl ? `<a class="btn btn-outline btn-sm" href="${escapeHtml(item.resourceUrl)}" target="_blank" rel="noopener">Read Online</a>` : ''}
@@ -235,8 +243,8 @@ function renderContent() {
         <span class="badge">${escapeHtml(item.category || pageConfig[2])}</span>
         <h3 style="margin:10px 0 6px;">${escapeHtml(item.title)}</h3>
         ${item.eventDate ? `<p class="muted" style="font-size:0.85rem; margin-bottom:8px;">${formatDate(item.eventDate)}</p>` : ''}
-        ${item.summary ? `<p style="font-weight:600; color:var(--purple-rich); margin-bottom:8px;">${escapeHtml(item.summary)}</p>` : ''}
-        ${item.body ? `<p style="white-space:pre-line; color:#5a4468; margin-bottom:14px;">${escapeHtml(item.body)}</p>` : ''}
+        ${item.summary ? `<p style="font-weight:600; color:var(--brand-strong); margin-bottom:8px;">${escapeHtml(item.summary)}</p>` : ''}
+        ${item.body ? `<p style="white-space:pre-line; color:var(--ink-soft); margin-bottom:14px;">${escapeHtml(item.body)}</p>` : ''}
         ${videoEmbed}
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:auto;">
           ${item.previewUrl && !videoEmbed ? `<a class="btn btn-outline btn-sm" href="${escapeHtml(item.previewUrl)}" target="_blank" rel="noopener">Preview</a>` : ''}

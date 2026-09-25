@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Welfare — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -14,8 +22,8 @@
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .welfare-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-bottom:12px; }
-  .welfare-card .status-pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.72rem; font-weight:800; background:var(--lilac-mid); color:var(--purple-rich); text-transform:capitalize; }
+  .welfare-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-bottom:12px; }
+  .welfare-card .status-pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.72rem; font-weight:800; background:var(--lilac-mid); color:var(--brand-strong); text-transform:capitalize; }
   .welfare-card .status-pill.fulfilled, .welfare-card .status-pill.approved { background:#D9F0DE; color:#2E7D4F; }
   .welfare-card .status-pill.declined { background:#FBDFDA; color:#A93226; }
 </style>
@@ -78,7 +86,7 @@ async function loadMyRequests() {
       <div class="welfare-card">
         <span class="status-pill ${w.status}">${w.status.replace('_', ' ')}</span>
         <p style="margin:8px 0 4px; font-weight:700;">${escapeHtml(w.category)}</p>
-        <p style="color:#5a4468; font-size:0.9rem;">${escapeHtml(w.description)}</p>
+        <p style="color:var(--ink-soft); font-size:0.9rem;">${escapeHtml(w.description)}</p>
       </div>
     `).join('') || '<p class="empty-state">No requests submitted yet.</p>';
   } catch (e) {

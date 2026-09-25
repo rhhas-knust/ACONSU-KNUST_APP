@@ -12,10 +12,71 @@
   --paper: #FDFBFF;
   --line: rgba(58, 27, 84, 0.12);
   --shadow: 0 12px 32px rgba(58, 27, 84, 0.12);
+
+  /* Semantic tokens: what a colour is FOR, not what it is. A theme swaps
+     these; everything else reads them. The palette above stays fixed - the
+     brand purples are the brand in both themes, and --white has to stay
+     white because it is also the text colour on top of them. */
+  --bg: #FDFBFF;            /* the page itself */
+  --surface: #FFFFFF;       /* cards, panels, anything raised off the page */
+  --surface-2: #F6EEFB;     /* inset fills, table headers, quiet blocks */
+  --surface-3: #EFE6F6;     /* one step further in */
+  --ink: #241530;           /* body text */
+  --ink-soft: #5a4468;      /* secondary text */
+  --ink-faint: #8a7595;     /* hints, meta, timestamps */
+  --heading: #3A1B54;       /* headings */
+  --brand: #5B2C82;         /* links and accents on a light surface */
+  --brand-strong: #3A1B54;  /* the same job, one step heavier */
+  --border: rgba(58, 27, 84, 0.12);
+  --shadow-color: rgba(58, 27, 84, 0.12);
+  --header-bg: rgba(253, 251, 255, 0.85);   /* translucent, so the page shows through the blur */
+  --art-veil-top: rgba(253,251,255,0.70);   /* over a chapter's own hero artwork */
+  --art-veil-bottom: rgba(253,251,255,0.86);
+  /* Status tints - pills, badges, attendance marks. Pale chip with dark ink in
+     the light; deep chip with bright ink in the dark. */
+  --ok-bg: #D9F0DE;   --ok-ink: #2E7D4F;
+  --warn-bg: #FCE9C9; --warn-ink: #A9670E;
+  --bad-bg: #FBDFDA;  --bad-ink: #A93226;
+  --mute-bg: #EDE3F2; --mute-ink: #5a4468;
+  --row-hover: #FBF7FD;
   --radius: 14px;
   --font-display: 'Fraunces', serif;
   --font-body: 'Manrope', sans-serif;
   --max-w: 1180px;
+}
+
+/* Dark theme. Only the semantic tokens move: the purple header and footer are
+   the brand and stay as they are, which is also why they need no dark variant.
+   Surfaces lift as they get closer to the reader, the way they do in light -
+   the page is darkest, a card sits above it, an inset sits above that. */
+:root[data-theme="dark"] {
+  --bg: #17101F;
+  --surface: #221831;
+  --surface-2: #2C2040;
+  --surface-3: #372850;
+  --ink: #F1E9F7;
+  --ink-soft: #C6B4D6;
+  --ink-faint: #9B87AE;
+  --heading: #EBDDF6;
+  --brand: #C9A3E8;         /* the deep purple is unreadable on a dark page */
+  --brand-strong: #E0C8F5;
+  --border: rgba(233, 217, 245, 0.14);
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  --line: rgba(233, 217, 245, 0.14);
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --header-bg: rgba(23, 16, 31, 0.85);
+  --art-veil-top: rgba(23,16,31,0.62);
+  --art-veil-bottom: rgba(23,16,31,0.80);
+  --ok-bg: #16301F;   --ok-ink: #6FD394;
+  --warn-bg: #362508; --warn-ink: #E9AE52;
+  --bad-bg: #3A1614;  --bad-ink: #F0897C;
+  --mute-bg: #2C2040; --mute-ink: #C6B4D6;
+  --row-hover: #2A1E3C;
+  /* Tints that were pale washes on white have to become deep washes on dark,
+     or every "subtle" panel turns into a glare. */
+  --lilac-light: #2C2040;
+  --lilac-mid: #3F2E58;
+  --paper: #17101F;
 }
 
 * { box-sizing: border-box; }
@@ -28,15 +89,15 @@ html { scroll-behavior: smooth; }
 body {
   margin: 0;
   font-family: var(--font-body);
-  color: var(--purple-ink);
-  background: var(--paper);
+  color: var(--ink);
+  background: var(--bg);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3, h4 {
   font-family: var(--font-display);
-  color: var(--purple-rich);
+  color: var(--heading);
   margin: 0 0 0.5em;
   line-height: 1.15;
   font-weight: 600;
@@ -86,8 +147,8 @@ img { max-width: 100%; display: block; }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(91,44,130,0.35); }
 .btn-outline {
   background: transparent;
-  border-color: var(--purple-deep);
-  color: var(--purple-deep);
+  border-color: var(--brand);
+  color: var(--brand);
 }
 .btn-outline:hover { background: var(--purple-deep); color: var(--white); }
 .btn-flame {
@@ -103,7 +164,7 @@ img { max-width: 100%; display: block; }
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(253, 251, 255, 0.85);
+  background: var(--header-bg);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
@@ -123,7 +184,7 @@ img { max-width: 100%; display: block; }
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.15rem;
-  color: var(--purple-rich);
+  color: var(--brand-strong);
   text-decoration: none;
   flex-shrink: 0;
 }
@@ -137,8 +198,8 @@ img { max-width: 100%; display: block; }
   font-weight: 600;
   font-size: 0.92rem;
 }
-.nav-links a { padding: 6px 0; border-bottom: 2px solid transparent; transition: border-color 0.2s ease, color 0.2s ease; text-decoration: none; color: var(--purple-ink); }
-.nav-links a:hover, .nav-links a.active { border-color: var(--flame-gold); color: var(--purple-deep); font-weight: 700; }
+.nav-links a { padding: 6px 0; border-bottom: 2px solid transparent; transition: border-color 0.2s ease, color 0.2s ease; text-decoration: none; color: var(--ink); }
+.nav-links a:hover, .nav-links a.active { border-color: var(--flame-gold); color: var(--brand); font-weight: 700; }
 .nav-cta { display: flex; align-items: center; gap: 12px; }
 
 @media (max-width: 860px) {
@@ -170,7 +231,7 @@ img { max-width: 100%; display: block; }
 .hero {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(120% 140% at 50% -10%, var(--lilac-light) 0%, var(--paper) 55%);
+  background: radial-gradient(120% 140% at 50% -10%, var(--lilac-light) 0%, var(--bg) 55%);
   padding: 72px 24px 64px;
   text-align: center;
   min-height: 420px;
@@ -205,18 +266,19 @@ img { max-width: 100%; display: block; }
    .hero-art below). The scene is what shows until they do, and what shows if
    the image is slow, so the page is never bare. */
 
-.hero[data-art] { background: linear-gradient(180deg, #F4EBFB 0%, var(--paper) 64%); }
+.hero[data-art] { background: linear-gradient(180deg, var(--hero-wash-a, #F4EBFB) 0%, var(--bg) 64%); }
 .hero[data-art]::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
 }
 
 /* Sunrise — home. Gold breaking along the bottom, purple weight at the top. */
 .hero[data-art="dawn"] {
+  --hero-wash-a: #E4D0F2; --hero-wash-b: #F7F0FC;
   background:
     radial-gradient(78% 52% at 50% 108%, rgba(232,151,30,0.58) 0%, rgba(232,151,30,0) 60%),
     radial-gradient(60% 44% at 8% -8%, rgba(91,44,130,0.42) 0%, rgba(91,44,130,0) 68%),
     radial-gradient(54% 40% at 94% 0%, rgba(169,50,38,0.26) 0%, rgba(169,50,38,0) 66%),
-    linear-gradient(180deg, #E4D0F2 0%, #F7F0FC 54%, var(--paper) 100%);
+    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 54%, var(--bg) 100%);
 }
 .hero[data-art="dawn"]::before {
   background: conic-gradient(from 200deg at 50% 118%,
@@ -226,10 +288,11 @@ img { max-width: 100%; display: block; }
 
 /* Roots — about. Bands of deepening purple, like strata. */
 .hero[data-art="roots"] {
+  --hero-wash-a: #E3D2F1; --hero-wash-b: #F6EFFC;
   background:
     linear-gradient(180deg, rgba(91,44,130,0.34) 0%, rgba(91,44,130,0.10) 38%, transparent 66%),
     radial-gradient(64% 46% at 86% 98%, rgba(232,151,30,0.34) 0%, transparent 62%),
-    linear-gradient(180deg, #E3D2F1 0%, #F6EFFC 52%, var(--paper) 100%);
+    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 52%, var(--bg) 100%);
 }
 .hero[data-art="roots"]::before {
   background: repeating-linear-gradient(94deg,
@@ -238,10 +301,11 @@ img { max-width: 100%; display: block; }
 
 /* Scripture — the Bible pages. Ruled light, like a page under the words. */
 .hero[data-art="word"] {
+  --hero-wash-a: #DFCBEF; --hero-wash-b: #F5EDFB;
   background:
     radial-gradient(72% 52% at 50% -14%, rgba(91,44,130,0.46) 0%, rgba(91,44,130,0) 62%),
     radial-gradient(52% 38% at 90% 104%, rgba(232,151,30,0.36) 0%, transparent 60%),
-    linear-gradient(180deg, #DFCBEF 0%, #F5EDFB 50%, var(--paper) 100%);
+    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 50%, var(--bg) 100%);
 }
 .hero[data-art="word"]::before {
   background: repeating-linear-gradient(180deg,
@@ -252,10 +316,11 @@ img { max-width: 100%; display: block; }
 
 /* Gathering — people: events, departments, groups, alumni, chat. */
 .hero[data-art="gather"] {
+  --hero-wash-a: #E7D7F4; --hero-wash-b: #F6EFFC;
   background:
     radial-gradient(52% 40% at 14% 4%, rgba(232,151,30,0.40) 0%, transparent 62%),
     radial-gradient(56% 42% at 88% 92%, rgba(91,44,130,0.40) 0%, transparent 62%),
-    linear-gradient(180deg, #E7D7F4 0%, #F6EFFC 54%, var(--paper) 100%);
+    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 54%, var(--bg) 100%);
 }
 .hero[data-art="gather"]::before {
   background-image: radial-gradient(rgba(91,44,130,0.22) 1.8px, transparent 1.9px);
@@ -266,11 +331,12 @@ img { max-width: 100%; display: block; }
 
 /* Flame — prayer and welfare. An ember low and centred. */
 .hero[data-art="flame"] {
+  --hero-wash-a: #E8D6F0; --hero-wash-b: #F7EFFB;
   background:
     radial-gradient(56% 42% at 50% 106%, rgba(169,50,38,0.44) 0%, rgba(169,50,38,0) 58%),
     radial-gradient(38% 30% at 50% 100%, rgba(232,151,30,0.60) 0%, rgba(232,151,30,0) 62%),
     radial-gradient(56% 42% at 4% 0%, rgba(91,44,130,0.34) 0%, transparent 66%),
-    linear-gradient(180deg, #E8D6F0 0%, #F7EFFB 52%, var(--paper) 100%);
+    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 52%, var(--bg) 100%);
 }
 .hero[data-art="flame"]::before {
   background: conic-gradient(from 210deg at 50% 112%,
@@ -280,10 +346,11 @@ img { max-width: 100%; display: block; }
 
 /* Harvest — giving. Gold-led, with sheaf strokes. */
 .hero[data-art="harvest"] {
+  --hero-wash-a: #F2E0C6; --hero-wash-b: #FBF4E9;
   background:
     radial-gradient(70% 52% at 50% 102%, rgba(232,151,30,0.56) 0%, rgba(232,151,30,0) 60%),
     radial-gradient(48% 36% at 10% 2%, rgba(91,44,130,0.34) 0%, transparent 66%),
-    linear-gradient(180deg, #F2E0C6 0%, #FBF4E9 52%, var(--paper) 100%);
+    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 52%, var(--bg) 100%);
 }
 .hero[data-art="harvest"]::before {
   background: repeating-linear-gradient(68deg,
@@ -294,10 +361,11 @@ img { max-width: 100%; display: block; }
 
 /* Voice — sermons, media, rooms. Bands spreading like sound. */
 .hero[data-art="voice"] {
+  --hero-wash-a: #E2D2F3; --hero-wash-b: #F5EEFC;
   background:
     radial-gradient(58% 44% at 50% 102%, rgba(91,44,130,0.44) 0%, transparent 62%),
     radial-gradient(44% 34% at 90% 0%, rgba(232,151,30,0.34) 0%, transparent 66%),
-    linear-gradient(180deg, #E2D2F3 0%, #F5EEFC 52%, var(--paper) 100%);
+    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 52%, var(--bg) 100%);
 }
 .hero[data-art="voice"]::before {
   background: repeating-radial-gradient(60% 46% at 50% 104%,
@@ -306,15 +374,30 @@ img { max-width: 100%; display: block; }
 
 /* Calm — reading and utility pages. Present, but quiet. */
 .hero[data-art="calm"] {
+  --hero-wash-a: #E9DCF6; --hero-wash-b: #F6EFFC;
   background:
     radial-gradient(54% 40% at 86% 2%, rgba(91,44,130,0.30) 0%, transparent 66%),
     radial-gradient(48% 36% at 10% 98%, rgba(232,151,30,0.26) 0%, transparent 66%),
-    linear-gradient(180deg, #E9DCF6 0%, #F6EFFC 54%, var(--paper) 100%);
+    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 54%, var(--bg) 100%);
 }
 
 /* The chapter's own artwork, laid over the scene. It fades in only once the
    image has actually loaded, so a slow or missing file leaves the scene in
    place rather than flashing a blank rectangle. */
+/* Dark: each scene keeps its own coloured washes - the gold breaking along the
+   bottom of "dawn", the strata of "roots" - and only the pale base underneath
+   them goes deep. One pair of values per scene, because the hue is what makes
+   each one that scene. */
+:root[data-theme="dark"] .hero[data-art] { --hero-wash-a: #2A1C3D; --hero-wash-b: #1D1429; }
+:root[data-theme="dark"] .hero[data-art="dawn"] { --hero-wash-a: #301344; --hero-wash-b: #1C082B; }
+:root[data-theme="dark"] .hero[data-art="roots"] { --hero-wash-a: #2E1542; --hero-wash-b: #1B082B; }
+:root[data-theme="dark"] .hero[data-art="word"] { --hero-wash-a: #2E1442; --hero-wash-b: #1C092A; }
+:root[data-theme="dark"] .hero[data-art="gather"] { --hero-wash-a: #2E1344; --hero-wash-b: #1B082B; }
+:root[data-theme="dark"] .hero[data-art="flame"] { --hero-wash-a: #33173F; --hero-wash-b: #1F0A29; }
+:root[data-theme="dark"] .hero[data-art="harvest"] { --hero-wash-a: #473010; --hero-wash-b: #2B1D08; }
+:root[data-theme="dark"] .hero[data-art="voice"] { --hero-wash-a: #2B1244; --hero-wash-b: #19082B; }
+:root[data-theme="dark"] .hero[data-art="calm"] { --hero-wash-a: #2B1245; --hero-wash-b: #1B082B; }
+
 .hero-art {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background-size: cover; background-position: center;
@@ -326,7 +409,7 @@ img { max-width: 100%; display: block; }
    picture keeps the dark heading, a dark one gets light text instead. */
 .hero-art::after {
   content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(253,251,255,0.70) 0%, rgba(253,251,255,0.86) 100%);
+  background: linear-gradient(180deg, var(--art-veil-top) 0%, var(--art-veil-bottom) 100%);
 }
 .hero[data-art-tone="dark"] .hero-art::after {
   background: linear-gradient(180deg, rgba(36,21,48,0.58) 0%, rgba(36,21,48,0.76) 100%);
@@ -351,23 +434,23 @@ img { max-width: 100%; display: block; }
 
 .hero-content { position: relative; max-width: 760px; margin: 0 auto; }
 .hero h1 { margin-bottom: 0.35em; }
-.hero .lede { font-size: 1.15rem; color: #5a4468; max-width: 560px; margin: 0 auto 2em; }
+.hero .lede { font-size: 1.15rem; color: var(--ink-soft); max-width: 560px; margin: 0 auto 2em; }
 .hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 2.5em; }
 
 /* countdown */
 .countdown {
   display: inline-flex;
   gap: 14px;
-  background: var(--white);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 18px 26px;
   box-shadow: var(--shadow);
 }
 .countdown-unit { text-align: center; min-width: 56px; }
-.countdown-num { font-family: var(--font-display); font-size: 1.8rem; font-weight: 700; color: var(--purple-deep); }
-.countdown-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8a7595; }
-.countdown-caption { margin-top: 10px; font-size: 0.85rem; color: #8a7595; font-weight: 600; }
+.countdown-num { font-family: var(--font-display); font-size: 1.8rem; font-weight: 700; color: var(--brand); }
+.countdown-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-faint); }
+.countdown-caption { margin-top: 10px; font-size: 0.85rem; color: var(--ink-faint); font-weight: 600; }
 
 /* ---------- sections ---------- */
 section { padding: 72px 24px; }
@@ -381,7 +464,7 @@ section { padding: 72px 24px; }
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
 .card {
-  background: var(--white);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 28px;
@@ -394,7 +477,7 @@ section { padding: 72px 24px; }
   margin-bottom: 16px;
 }
 .dept-card { display: flex; flex-direction: column; gap: 10px; }
-.dept-meta { display: flex; gap: 10px; font-size: 0.82rem; color: var(--purple-deep); font-weight: 700; }
+.dept-meta { display: flex; gap: 10px; font-size: 0.82rem; color: var(--brand); font-weight: 700; }
 
 /* Department header photos — the thumbnail on a card, and the full banner on
    the department's own page. Both fall back to the flame gradient when no
@@ -464,19 +547,44 @@ section { padding: 72px 24px; }
 .social-icon-link.social-telegram:hover { background: #229ED9 !important; }
 .social-icon-link.social-spotify:hover { background: #1DB954 !important; }
 
+/* The light/dark switch. Sits in the nav beside the bell, same size and
+   same quiet treatment, because it is a preference and not an action. */
+.theme-toggle {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent; color: var(--brand);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.theme-toggle:hover { background: var(--surface-2); }
+.theme-toggle:focus-visible { outline: 2px solid var(--flame-gold); outline-offset: 2px; }
+:root[data-theme="dark"] .theme-toggle { color: var(--flame-gold); }
+/* On the purple staff top bar the switch sits on brand, not on paper, so it
+   takes the same treatment as the Log Out button beside it. */
+.theme-toggle-onbrand { color: #fff; border-color: rgba(255,255,255,0.4); }
+.theme-toggle-onbrand:hover { background: rgba(255,255,255,0.14); }
+:root[data-theme="dark"] .theme-toggle-onbrand { color: var(--flame-gold); }
+
 /* Light-background contexts (e.g. contact page, about page) */
 .social-icon-link.on-light {
-  background: var(--lilac-light); color: var(--purple-deep); border: 1px solid var(--lilac-mid);
+  /* --brand, not --purple-deep: the deep purple is the brand on a pale
+     surface, but on a dark one it is nearly the background. */
+  background: var(--lilac-light); color: var(--brand); border: 1px solid var(--lilac-mid);
 }
 .social-icon-link.on-light:hover { color: #fff; }
 
-/* Dark/hero contexts with image background */
-.social-row .social-icon-link {
+/* Dark/hero contexts with image background.
+   `:not(.on-light)` matters: this rule and `.social-icon-link.on-light` above
+   have the SAME specificity, so the later one wins - and this one is later.
+   Without the exclusion, a link that has declared itself on-light still got
+   white icons on a near-white background, which is to say invisible. */
+.social-row .social-icon-link:not(.on-light) {
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.25);
 }
-.social-row .social-icon-link:hover {
+.social-row .social-icon-link:not(.on-light):hover {
   background: rgba(255, 255, 255, 0.28);
   box-shadow: 0 8px 20px rgba(0,0,0,0.3);
   transform: translateY(-4px) scale(1.1);
@@ -495,7 +603,7 @@ section { padding: 72px 24px; }
 
 /* ---------- forms ---------- */
 .form-card {
-  background: var(--white);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 32px;
@@ -504,20 +612,20 @@ section { padding: 72px 24px; }
   margin: 0 auto;
 }
 .field { margin-bottom: 18px; }
-.field label { display: block; font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; color: var(--purple-rich); }
+.field label { display: block; font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; color: var(--brand-strong); }
 .field input, .field select, .field textarea {
   width: 100%; padding: 12px 14px; border-radius: 10px;
   border: 1.5px solid var(--line); font-family: var(--font-body); font-size: 0.95rem;
-  background: var(--paper); color: var(--purple-ink);
+  background: var(--bg); color: var(--ink);
 }
 .field input:focus, .field select:focus, .field textarea:focus {
-  outline: none; border-color: var(--purple-deep);
+  outline: none; border-color: var(--brand);
 }
 .field textarea { min-height: 120px; resize: vertical; }
 .checkbox-field { display: flex; align-items: center; gap: 8px; }
 .checkbox-field input { width: auto; }
 .form-msg { font-size: 0.9rem; font-weight: 700; margin-top: 12px; display: none; }
-.form-msg.success { color: #2E7D4F; display: block; }
+.form-msg.success { color: var(--ok-ink); display: block; }
 .form-msg.error { color: var(--flame-red); display: block; }
 
 /* ---------- misc ---------- */
@@ -532,11 +640,11 @@ section { padding: 72px 24px; }
 }
 .badge {
   display: inline-block; padding: 4px 12px; border-radius: 999px;
-  background: var(--lilac-mid); color: var(--purple-rich); font-size: 0.75rem; font-weight: 700;
+  background: var(--lilac-mid); color: var(--brand-strong); font-size: 0.75rem; font-weight: 700;
 }
 .divider-dove { text-align: center; margin: 8px 0 32px; opacity: 0.5; font-size: 1.4rem; }
-.empty-state { text-align: center; color: #8a7595; padding: 40px 20px; font-weight: 600; }
-.back-link { display: inline-block; margin-bottom: 24px; font-weight: 700; color: var(--purple-deep); }
+.empty-state { text-align: center; color: var(--ink-faint); padding: 40px 20px; font-weight: 600; }
+.back-link { display: inline-block; margin-bottom: 24px; font-weight: 700; color: var(--brand); }
 
 @media (max-width: 600px) {
   .footer-bottom { flex-direction: column; align-items: flex-start; }
@@ -575,7 +683,7 @@ section { padding: 72px 24px; }
   display: flex; align-items: center; justify-content: center;
   color: var(--lilac-light); font-family: var(--font-display); font-size: 2rem;
 }
-.book-meta { font-size: 0.78rem; color: #8a7595; }
+.book-meta { font-size: 0.78rem; color: var(--ink-faint); }
 
 /* ---------- public modal (event registration) ---------- */
 .pub-modal-backdrop {
@@ -583,14 +691,14 @@ section { padding: 72px 24px; }
   align-items: center; justify-content: center; padding: 20px; z-index: 250;
 }
 .pub-modal-backdrop.open { display: flex; }
-.pub-modal { background: #fff; border-radius: 14px; padding: 28px; max-width: 460px; width: 100%; }
+.pub-modal { background: var(--surface); border-radius: 14px; padding: 28px; max-width: 460px; width: 100%; }
 
 /* ---------- event registration badges ---------- */
 .spots-badge { font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
-.spots-badge.plenty { background: #D9F0DE; color: #2E7D4F; }
-.spots-badge.low { background: #FCE9C9; color: #A9670E; }
-.spots-badge.full { background: #FBDFDA; color: var(--flame-red); }
-.spots-badge.closed { background: #EDE3F2; color: #8a7595; }
+.spots-badge.plenty { background: var(--ok-bg); color: var(--ok-ink); }
+.spots-badge.low { background: var(--warn-bg); color: var(--warn-ink); }
+.spots-badge.full { background: var(--bad-bg); color: var(--bad-ink); }
+.spots-badge.closed { background: var(--mute-bg); color: var(--ink-faint); }
 
 /* ---------- executives ---------- */
 .exec-card { text-align: center; }
@@ -600,9 +708,9 @@ section { padding: 72px 24px; }
   display: flex; align-items: center; justify-content: center;
 }
 .exec-photo img { width: 100%; height: 100%; object-fit: cover; }
-.exec-photo .initial { font-family: var(--font-display); font-size: 2.2rem; color: var(--purple-deep); }
+.exec-photo .initial { font-family: var(--font-display); font-size: 2.2rem; color: var(--brand); }
 .exec-role { color: var(--flame-gold); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-.exec-bio { font-size: 0.88rem; color: #5a4468; }
+.exec-bio { font-size: 0.88rem; color: var(--ink-soft); }
 
 /* ---------- floating decorative images ---------- */
 .float-deco {
@@ -671,8 +779,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 /* ---------- bible reader ----------
    The reading pane carries its own colours so day / sepia / night can change
    the page someone is reading without repainting the whole site around it. */
-.bible-controls { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:24px; }
-.bible-controls select { padding:10px 12px; border-radius:10px; border:1.5px solid var(--line); font-family:'Manrope',sans-serif; background:var(--paper); }
+.bible-controls { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; margin-bottom:24px; }
+.bible-controls select { padding:10px 12px; border-radius:10px; border:1.5px solid var(--line); font-family:'Manrope',sans-serif; background:var(--bg); }
 
 .reader-bar {
   position: sticky; top: 0; z-index: 320;
@@ -688,17 +796,17 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .reader-pickers select {
   width:100%; padding:11px 12px; border-radius:11px; border:1.5px solid var(--line);
   font-family: var(--font-body); font-weight:600; font-size:0.92rem;
-  background:var(--paper); color:var(--purple-ink); appearance:none;
+  background:var(--bg); color:var(--ink); appearance:none;
   background-image:url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%235B2C82' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat:no-repeat; background-position:right 12px center; padding-right:32px;
 }
-.reader-pickers select:focus { outline:none; border-color:var(--purple-deep); box-shadow:0 0 0 3px rgba(91,44,130,0.14); }
+.reader-pickers select:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(91,44,130,0.14); }
 .reader-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .reader-tools .spacer { flex:1 1 auto; }
-.tool-group { display:flex; border:1.5px solid var(--line); border-radius:999px; overflow:hidden; background:var(--paper); }
+.tool-group { display:flex; border:1.5px solid var(--line); border-radius:999px; overflow:hidden; background:var(--bg); }
 .tool-btn {
   border:none; background:none; cursor:pointer; padding:7px 12px;
-  font-family: var(--font-body); font-weight:700; font-size:0.8rem; color:var(--purple-rich);
+  font-family: var(--font-body); font-weight:700; font-size:0.8rem; color:var(--brand-strong);
   display:flex; align-items:center; gap:6px; line-height:1;
 }
 .tool-btn + .tool-btn { border-left:1.5px solid var(--line); }
@@ -760,7 +868,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   border-radius:var(--radius); padding:24px; text-align:center;
 }
 .external-version h3 { margin-bottom:8px; }
-.external-version p { color:#5a4468; font-size:0.92rem; max-width:44ch; margin:0 auto 16px; }
+.external-version p { color:var(--ink-soft); font-size:0.92rem; max-width:44ch; margin:0 auto 16px; }
 
 @media (max-width: 560px) {
   .reader { padding:22px 20px 26px; }
@@ -790,7 +898,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   transition: color 0.15s ease, transform 0.1s ease;
 }
 .bottom-nav-item svg { width: 22px; height: 22px; transition: transform 0.15s ease; }
-.bottom-nav-item.active { color: var(--purple-deep); font-weight: 800; }
+.bottom-nav-item.active { color: var(--brand); font-weight: 800; }
 .bottom-nav-item.active svg { transform: translateY(-1px); }
 .bottom-nav-item.active::after {
   content: ''; position: absolute; bottom: -3px; width: 14px; height: 3px;
@@ -812,7 +920,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   position: fixed; z-index: 420;
   top: calc(env(safe-area-inset-top, 0px) + 60px); right: 12px; left: 12px;
   max-width: 380px; margin-left: auto;
-  background: #fff; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
   box-shadow: 0 20px 48px rgba(36,21,48,0.24);
   overflow: hidden; animation: notifIn 160ms ease-out;
 }
@@ -822,9 +930,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   padding: 13px 16px; border-bottom: 1px solid var(--line);
   font-family: var(--font-display);
 }
-.notif-panel-head a { font-family: var(--font-body); font-size: 0.8rem; font-weight: 700; color: var(--purple-deep); }
+.notif-panel-head a { font-family: var(--font-body); font-size: 0.8rem; font-weight: 700; color: var(--brand); }
 .notif-panel-body { max-height: min(60vh, 420px); overflow-y: auto; }
-.notif-empty { padding: 22px 16px; margin: 0; text-align: center; color: #8a7595; font-size: 0.88rem; }
+.notif-empty { padding: 22px 16px; margin: 0; text-align: center; color: var(--ink-faint); font-size: 0.88rem; }
 .notif-row {
   display: grid; gap: 2px; padding: 12px 16px;
   border-bottom: 1px solid var(--line); text-decoration: none; color: inherit;
@@ -835,8 +943,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
    read and an unread notice are still the same thing to read. */
 .notif-row.unread { box-shadow: inset 3px 0 0 var(--flame-gold); background: rgba(232,151,30,0.05); }
 .notif-row-title { font-weight: 700; font-size: 0.9rem; }
-.notif-row-body { font-size: 0.85rem; color: #5a4468; }
-.notif-row-when { font-size: 0.72rem; color: #9b88ab; }
+.notif-row-body { font-size: 0.85rem; color: var(--ink-soft); }
+.notif-row-when { font-size: 0.72rem; color: var(--ink-faint); }
 @media (prefers-reduced-motion: reduce) { .notif-panel { animation: none; } }
 
 /* ---------- the home dashboard row ----------
@@ -845,13 +953,13 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .home-dash { padding: 18px 0 8px; }
 .dash-grid { display: grid; gap: 16px; }
 .dash-card {
-  background: #fff; border: 1px solid var(--line); border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
   padding: 20px; box-shadow: 0 8px 24px rgba(58,27,84,0.06);
   display: flex; flex-direction: column; min-width: 0;
 }
 .dash-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .dash-head h3 { margin: 0; font-size: 1.05rem; }
-.dash-head a { font-size: 0.8rem; font-weight: 700; color: var(--purple-deep); }
+.dash-head a { font-size: 0.8rem; font-weight: 700; color: var(--brand); }
 .dash-head a:hover { text-decoration: underline; }
 
 /* The verse keeps its own colour — it is the one card that is a thing to read
@@ -883,7 +991,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
 .dash-list:empty::after {
   content: 'Nothing on the calendar yet.';
-  color: #8a7595; font-size: 0.88rem;
+  color: var(--ink-faint); font-size: 0.88rem;
 }
 
 @media (min-width: 1024px) {
@@ -906,7 +1014,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .side-nav {
     position: fixed; top: 0; left: 0; bottom: 0; width: 248px; z-index: 200;
     display: flex; flex-direction: column;
-    background: #fff; border-right: 1px solid var(--line);
+    background: var(--surface); border-right: 1px solid var(--line);
     padding: 16px 12px 14px;
   }
   /* Only the rail scrolls. The brand and the profile block stay put, so the
@@ -916,18 +1024,18 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .side-nav-brand {
     display: flex; align-items: center; gap: 10px; padding: 6px 10px 12px;
     font-family: var(--font-display); font-weight: 700; font-size: 1.1rem;
-    color: var(--purple-rich); text-decoration: none;
+    color: var(--brand-strong); text-decoration: none;
   }
   .side-nav-brand img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
 
   .side-nav-title {
     margin: 14px 10px 6px; font-size: 0.68rem; font-weight: 800;
-    letter-spacing: 0.12em; text-transform: uppercase; color: #9b88ab;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint);
   }
   .side-nav-item {
     display: flex; align-items: center; gap: 11px;
     padding: 9px 10px; margin-bottom: 2px; border-radius: 10px;
-    font-size: 0.9rem; font-weight: 600; color: var(--purple-ink);
+    font-size: 0.9rem; font-weight: 600; color: var(--ink);
     text-decoration: none; transition: background 0.15s ease, color 0.15s ease;
   }
   .side-nav-item svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.75; }
@@ -938,7 +1046,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .side-nav-foot { border-top: 1px solid var(--line); padding-top: 12px; }
   .side-nav-me {
     display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-    border-radius: 12px; text-decoration: none; color: var(--purple-ink);
+    border-radius: 12px; text-decoration: none; color: var(--ink);
   }
   .side-nav-me:hover { background: var(--lilac-light); }
   .side-nav-avatar {
@@ -948,7 +1056,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   }
   .side-nav-me-text { display: flex; flex-direction: column; min-width: 0; }
   .side-nav-me-text strong { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .side-nav-me-text small { font-size: 0.74rem; color: #8a7595; }
+  .side-nav-me-text small { font-size: 0.74rem; color: var(--ink-faint); }
 
   /* The page moves over to make room, and the top bar comes with it. */
   body { padding-left: 248px; }
@@ -957,7 +1065,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .hero { min-height: 340px; padding: 52px 24px 44px; }
   #site-header {
     position: sticky; top: 0; z-index: 100;
-    background: rgba(253, 251, 255, 0.88);
+    background: var(--header-bg);
     backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--line);
   }
@@ -1004,21 +1112,21 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .more-tile-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .more-tile {
   display: flex; align-items: center; gap: 14px;
-  background: var(--white); border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
   padding: 16px 18px; width: 100%; cursor: pointer;
-  text-decoration: none; color: var(--purple-ink);
+  text-decoration: none; color: var(--ink);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 .more-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--lilac-mid); }
 .more-tile-icon {
   width: 44px; height: 44px; border-radius: 12px; flex: none;
-  background: var(--lilac-light); color: var(--purple-deep);
+  background: var(--lilac-light); color: var(--brand);
   display: flex; align-items: center; justify-content: center;
 }
 .more-tile-icon svg { width: 22px; height: 22px; }
 .more-tile-text { flex: 1; min-width: 0; }
 .more-tile-text strong { display: flex; align-items: center; gap: 8px; font-size: 0.98rem; }
-.more-tile-text small { display: block; color: #7d6789; font-size: 0.82rem; margin-top: 2px; }
+.more-tile-text small { display: block; color: var(--ink-soft); font-size: 0.82rem; margin-top: 2px; }
 .more-tile .more-chevron { color: var(--lilac-mid); }
 .more-tile-badge {
   background: var(--flame-red); color: #fff; border-radius: 999px;
@@ -1029,18 +1137,18 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .bell-link svg { width: 22px; height: 22px; }
 .notif-item { display:flex; gap:14px; padding:16px 4px; border-bottom:1px solid var(--line); }
 .notif-item:last-child { border-bottom:none; }
-.notif-icon { width:40px; height:40px; border-radius:50%; background: var(--lilac-light); display:flex; align-items:center; justify-content:center; flex:none; color:var(--purple-deep); }
+.notif-icon { width:40px; height:40px; border-radius:50%; background: var(--lilac-light); display:flex; align-items:center; justify-content:center; flex:none; color:var(--brand); }
 .notif-icon svg { width:20px; height:20px; }
-.notif-time { font-size:0.75rem; color:#a08eb0; margin-top:4px; }
+.notif-time { font-size:0.75rem; color:var(--ink-faint); margin-top:4px; }
 
 /* ---------- dashboard tiles ---------- */
 .tile-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 24px 0 8px; }
 @media (min-width: 600px) { .tile-grid { grid-template-columns: repeat(4, 1fr); } }
 @media (min-width: 900px) { .tile-grid { grid-template-columns: repeat(6, 1fr); } }
 .tile {
-  background: #fff; border: 1px solid var(--line); border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
   padding: 18px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px;
-  text-decoration: none; color: var(--purple-ink); text-align: center; position: relative;
+  text-decoration: none; color: var(--ink); text-align: center; position: relative;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 .tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
@@ -1060,7 +1168,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .greeting-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
 .greeting-bar h2 { font-size: 1.4rem; }
 .greeting-icons { display: flex; align-items: center; gap: 14px; }
-.streak-pill { background: var(--lilac-light); border: 1px solid var(--lilac-mid); border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 0.85rem; color: var(--purple-deep); }
+.streak-pill { background: var(--lilac-light); border: 1px solid var(--lilac-mid); border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 0.85rem; color: var(--brand); }
 
 /* ---------- verse of the day card ---------- */
 .verse-of-day-card {

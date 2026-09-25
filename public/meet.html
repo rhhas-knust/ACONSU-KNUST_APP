@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ACONSU Rooms — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -14,10 +22,10 @@
 <link rel="stylesheet" href="/css/style.css">
 <style>
   [hidden] { display: none !important; }
-  .room-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:9px; }
+  .room-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:9px; }
   .room-card h3 { margin:0; font-size:1rem; }
   .room-meta { font-size:0.82rem; color:#5a4468; }
-  .seats { display:inline-flex; align-items:center; gap:6px; font-size:0.76rem; font-weight:800; padding:3px 11px; border-radius:999px; background:var(--lilac-light); color:var(--purple-rich); }
+  .seats { display:inline-flex; align-items:center; gap:6px; font-size:0.76rem; font-weight:800; padding:3px 11px; border-radius:999px; background:var(--lilac-light); color:var(--brand-strong); }
   .seats.full { background:#FBDFDA; color:var(--flame-red); }
 
   /* the call itself */

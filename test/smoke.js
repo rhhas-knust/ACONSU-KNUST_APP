@@ -3009,6 +3009,103 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check("council.html's scripts declare no clashing globals", error === '', error);
   }
 
+  console.log('\n== light and dark, and one rule that made icons invisible ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const css = pub('css/style.css');
+    const portalCss = pub('css/portal.css');
+    const adminCss = pub('css/admin.css');
+    const main = pub('js/main.js');
+
+    // The reported bug. `.social-icon-link.on-light` and
+    // `.social-row .social-icon-link` have the SAME specificity, so the later
+    // one won - and the later one painted white icons on a near-white chip.
+    check('the dark-context social rule steps aside for an on-light link',
+      /\.social-row \.social-icon-link:not\(\.on-light\) \{/.test(css), null);
+    check('and does so on hover too, or they vanish again on the way past',
+      /\.social-row \.social-icon-link:not\(\.on-light\):hover \{/.test(css), null);
+    // The chip's ink has to follow the theme: the deep brand purple is almost
+    // the background once the page goes dark.
+    check('an on-light chip takes its ink from the theme, not the fixed palette',
+      /\.social-icon-link\.on-light \{[\s\S]*?color: var\(--brand\)/.test(css), null);
+
+    // A page that paints light and then flips is worse than one that never
+    // offered dark. The only way to avoid it is to set the attribute before
+    // the first paint, which means inline and synchronous, on every page.
+    const pages = fs.readdirSync(path.join(__dirname, '..', 'public')).filter(f => f.endsWith('.html'));
+    const missing = pages.filter(f => !/aconsu\.theme/.test(pub(f)));
+    check(`every one of the ${pages.length} pages sets its theme before the first paint`,
+      missing.length === 0, missing);
+    const late = pages.filter((f) => {
+      const html = pub(f);
+      const themeAt = html.indexOf('aconsu.theme');
+      const cssAt = html.indexOf('css/style.css');
+      return cssAt !== -1 && themeAt > cssAt;
+    });
+    check('and does it before the stylesheet, not after', late.length === 0, late);
+
+    // Every token the dark theme has to answer for. Forgetting one is not a
+    // crash - it is a white card on a black page, which nobody notices until a
+    // reader does.
+    const darkBlock = (css.match(/:root\[data-theme="dark"\] \{([\s\S]*?)\n\}/) || [])[1] || '';
+    const rootBlock = (css.match(/^:root \{([\s\S]*?)\n\}/m) || [])[1] || '';
+    const MUST_THEME = [
+      '--bg', '--surface', '--surface-2', '--surface-3',
+      '--ink', '--ink-soft', '--ink-faint', '--heading',
+      '--brand', '--brand-strong', '--border', '--header-bg',
+      '--art-veil-top', '--art-veil-bottom',
+      '--ok-bg', '--ok-ink', '--warn-bg', '--warn-ink',
+      '--bad-bg', '--bad-ink', '--mute-bg', '--mute-ink', '--row-hover'
+    ];
+    const unlit = MUST_THEME.filter(t => !new RegExp('\\' + t + '\\s*:').test(rootBlock));
+    check('every theme token has a light value', unlit.length === 0, unlit);
+    const undark = MUST_THEME.filter(t => !new RegExp('\\' + t + '\\s*:').test(darkBlock));
+    check('and a dark one', undark.length === 0, undark);
+
+    // A literal pale background is a surface the theme cannot reach. This is
+    // the whole class of bug, not one instance of it.
+    const paleBg = [];
+    for (const [name, sheet] of [['style.css', css], ['portal.css', portalCss], ['admin.css', adminCss]]) {
+      sheet.split('\n').forEach((line, i) => {
+        if (/--[a-z-]+:/.test(line)) return;           // the token declarations themselves
+        const m = line.match(/background(?:-color)?:\s*(#[A-Fa-f0-9]{6}|#fff\b|white\b)/);
+        if (!m) return;
+        const hex = m[1].replace('#fff', '#ffffff').replace('white', '#ffffff').slice(1);
+        const avg = (parseInt(hex.slice(0, 2), 16) + parseInt(hex.slice(2, 4), 16) + parseInt(hex.slice(4, 6), 16)) / 3;
+        if (avg > 205) paleBg.push(`${name}:${i + 1} ${m[1]}`);
+      });
+    }
+    check('no stylesheet paints a surface a pale literal the theme cannot reach',
+      paleBg.length === 0, paleBg);
+
+    // The switch itself.
+    check('the header carries a theme toggle', /id="themeToggle"/.test(main), null);
+    check('which is a button, so it is reachable by keyboard',
+      /<button type="button" class="theme-toggle" id="themeToggle"/.test(main), null);
+    check('and says what it does, for a reader who cannot see the icon',
+      /aria-label="Switch to light mode" : 'Switch to dark mode'|Switch between light and dark/.test(main), null);
+    // The staff portals and the admin pages build their own top bar rather than
+    // going through renderHeader, so they carry the button themselves. A member
+    // could switch theme and a Coordinator could not, which is not a theme.
+    const portalPages = pages.filter(f => /portalLogoutBtn|id="logoutBtn"/.test(pub(f)));
+    const noToggle = portalPages.filter(f => !/id="themeToggle"/.test(pub(f)));
+    check(`all ${portalPages.length} staff pages carry the switch too`, noToggle.length === 0, noToggle);
+    check('and something picks it up on a page that never calls renderHeader',
+      /addEventListener\('DOMContentLoaded', wireThemeToggle\)/.test(main), null);
+    check('wiring it twice does not bind the click twice',
+      /if \(btn\.dataset\.wired\) return;/.test(main), null);
+
+    check('the choice is remembered', /localStorage\.setItem\(THEME_KEY, theme\)/.test(main), null);
+    check('and storage failing in a private window never takes the page down',
+      /function storedTheme\(\)[\s\S]*?catch \(e\) \{ return ''; \}/.test(main), null);
+    check('with no choice made, the device decides',
+      /prefers-color-scheme: dark/.test(main), null);
+    check('but once someone has chosen, the device stops overruling them',
+      /if \(storedTheme\(\)\) return;/.test(main), null);
+  }
+
   // The send loop only ticks once a minute, so this one is opt-in: run it with
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
   if (process.env.SMOKE_SLOW === '1') {

@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Welfare Portal — ACONSU</title>
 <meta name="robots" content="noindex">
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <meta name="theme-color" content="#5B2C82">
 <link rel="stylesheet" href="/css/style.css">
@@ -43,6 +51,7 @@
     </div>
     <div class="who">
       <span class="name" id="portalWho"></span>
+      <button type="button" class="theme-toggle theme-toggle-onbrand" id="themeToggle" aria-label="Switch between light and dark"></button>
       <button class="btn btn-outline btn-sm" id="portalLogoutBtn" style="color:#fff; border-color:rgba(255,255,255,0.4);">Log Out</button>
     </div>
   </div>

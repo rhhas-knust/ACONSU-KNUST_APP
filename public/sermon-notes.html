@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sermon Notes — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -14,12 +22,12 @@
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .note-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:14px; }
+  .note-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:14px; }
   .note-card h4 { margin:0 0 4px; }
   .note-card .meta { font-size:0.8rem; color:#8a7595; margin-bottom:10px; }
   .note-card .body-text { white-space:pre-wrap; font-size:0.92rem; line-height:1.55; color:var(--purple-ink); }
   .note-card .row-actions { margin-top:12px; display:flex; gap:8px; }
-  .note-card .row-actions button { border:none; background:var(--lilac-mid); color:var(--purple-rich); padding:6px 12px; border-radius:7px; font-size:0.78rem; font-weight:700; cursor:pointer; }
+  .note-card .row-actions button { border:none; background:var(--lilac-mid); color:var(--brand-strong); padding:6px 12px; border-radius:7px; font-size:0.78rem; font-weight:700; cursor:pointer; }
   .note-card .row-actions button.danger { background:#FBDFDA; color:#A93226; }
 </style>
 </head>
@@ -42,7 +50,7 @@
 <footer class="site-footer" id="site-footer"></footer>
 
 <div class="modal-backdrop" id="modalBackdrop" style="display:none; position:fixed; inset:0; background:rgba(36,21,48,0.55); align-items:center; justify-content:center; padding:20px; z-index:200;">
-  <div class="modal" id="modalContent" style="background:#fff; border-radius:16px; padding:26px; max-width:520px; width:100%; max-height:88vh; overflow-y:auto;"></div>
+  <div class="modal" id="modalContent" style="background:var(--surface); border-radius:16px; padding:26px; max-width:520px; width:100%; max-height:88vh; overflow-y:auto;"></div>
 </div>
 
 <script src="/js/main.js"></script>

@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>About — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -30,19 +38,19 @@
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
     <h2>Our Story</h2>
-    <p style="color:#5a4468;" id="aboutHistory">ACONSU exists to see students encounter God and continue steadfastly in the pattern the apostles left the early church: the Word, fellowship, prayer, and one another. We believe campus life is fertile ground for a generation to be raised — not just academically, but spiritually.</p>
+    <p style="color:var(--ink-soft);" id="aboutHistory">ACONSU exists to see students encounter God and continue steadfastly in the pattern the apostles left the early church: the Word, fellowship, prayer, and one another. We believe campus life is fertile ground for a generation to be raised — not just academically, but spiritually.</p>
     <h2 style="margin-top:2em;">What We Believe</h2>
-    <p style="color:#5a4468;" id="aboutMission">We hold to the Scriptures as the final authority for faith and living, and we exist to help every student grow in Christ, discover their gifts, and carry that fire into every hostel, lecture hall and city they go on to.</p>
+    <p style="color:var(--ink-soft);" id="aboutMission">We hold to the Scriptures as the final authority for faith and living, and we exist to help every student grow in Christ, discover their gifts, and carry that fire into every hostel, lecture hall and city they go on to.</p>
     <div class="grid" style="margin-top:32px;">
       <div class="card">
         <p class="eyebrow">Vision</p>
         <h3 style="margin-bottom:8px;">Our Vision</h3>
-        <p style="color:#5a4468; margin:0;" id="aboutVision">Raising students who continue steadfastly in Christ and carry His life into every campus and city.</p>
+        <p style="color:var(--ink-soft); margin:0;" id="aboutVision">Raising students who continue steadfastly in Christ and carry His life into every campus and city.</p>
       </div>
       <div class="card">
         <p class="eyebrow">Values</p>
         <h3 style="margin-bottom:8px;">What Shapes Us</h3>
-        <p style="color:#5a4468; margin:0;" id="aboutValues">Scripture, prayer, fellowship, service, and holy living remain central to our chapter life.</p>
+        <p style="color:var(--ink-soft); margin:0;" id="aboutValues">Scripture, prayer, fellowship, service, and holy living remain central to our chapter life.</p>
       </div>
     </div>
   </div>
@@ -53,7 +61,7 @@
     <div class="section-head">
       <p class="eyebrow">Leadership</p>
       <h2 id="leadershipHeading">Meet the Executives</h2>
-      <p style="color:#5a4468;" id="leadershipBlurb">The team serving and leading ACONSU this session.</p>
+      <p style="color:var(--ink-soft);" id="leadershipBlurb">The team serving and leading ACONSU this session.</p>
     </div>
     <div class="grid" id="execGrid">
       <div class="skeleton-grid">
@@ -69,7 +77,7 @@
   <div class="container" style="text-align:center; max-width:640px;">
     <p class="eyebrow">Stay Connected</p>
     <h2>Follow ACONSU</h2>
-    <p style="color:#5a4468; margin-bottom:20px;">Join our online community, watch sermons, and follow updates across all our platforms.</p>
+    <p style="color:var(--ink-soft); margin-bottom:20px;">Join our online community, watch sermons, and follow updates across all our platforms.</p>
     <div id="aboutSocialRow" class="social-row" style="justify-content:center; gap:12px;"></div>
   </div>
 </section>
@@ -124,9 +132,9 @@
           </div>
           <h3 style="margin-bottom:2px;">${escapeHtml(person.name)}</h3>
           <div class="exec-role">${escapeHtml(person.role || '')}</div>
-          ${person.chapterName ? `<p style="margin:8px 0 0; color:#5a4468; font-size:0.82rem; font-weight:700;">${escapeHtml(person.chapterName)}</p>` : ''}
-          ${person.phone ? `<p style="margin:8px 0 0; color:#5a4468; font-size:0.82rem;"><a href="tel:${escapeHtml(person.phone)}">${escapeHtml(person.phone)}</a></p>` : ''}
-          ${person.email ? `<p style="margin:6px 0 0; color:#5a4468; font-size:0.82rem;"><a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email)}</a></p>` : ''}
+          ${person.chapterName ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem; font-weight:700;">${escapeHtml(person.chapterName)}</p>` : ''}
+          ${person.phone ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem;"><a href="tel:${escapeHtml(person.phone)}">${escapeHtml(person.phone)}</a></p>` : ''}
+          ${person.email ? `<p style="margin:6px 0 0; color:var(--ink-soft); font-size:0.82rem;"><a href="mailto:${escapeHtml(person.email)}">${escapeHtml(person.email)}</a></p>` : ''}
         </div>
       `).join('');
     }

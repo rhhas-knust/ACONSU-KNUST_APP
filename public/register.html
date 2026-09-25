@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Create Account — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -18,8 +26,8 @@
      these blocks by setting .hidden silently did nothing. */
   [hidden] { display: none !important; }
   .who-are-you { display:grid; gap:10px; grid-template-columns:1fr 1fr; }
-  .who-opt { display:flex; align-items:flex-start; gap:9px; border:1px solid var(--line); border-radius:11px; padding:12px 13px; cursor:pointer; background:#fff; }
-  .who-opt:has(input:checked) { border-color:var(--purple-deep); background:var(--lilac-light); }
+  .who-opt { display:flex; align-items:flex-start; gap:9px; border:1px solid var(--line); border-radius:11px; padding:12px 13px; cursor:pointer; background:var(--surface); }
+  .who-opt:has(input:checked) { border-color:var(--brand); background:var(--lilac-light); }
   .who-opt input { margin-top:3px; flex:none; }
   .who-opt span { display:flex; flex-direction:column; gap:2px; }
   .who-opt strong { font-size:0.88rem; color:var(--purple-ink); }
@@ -36,7 +44,7 @@
     <form class="form-card" id="registerForm">
       <img src="/images/logo.jpg" alt="ACONSU" style="width:56px; height:56px; border-radius:50%; margin:0 auto 14px; display:block;">
       <h2 style="text-align:center;">Join ACONSU</h2>
-      <p style="text-align:center; color:#5a4468; margin-bottom:24px;">Create your account to register for events faster and keep your profile up to date.</p>
+      <p style="text-align:center; color:var(--ink-soft); margin-bottom:24px;">Create your account to register for events faster and keep your profile up to date.</p>
 
       <div class="field">
         <label for="chapterId">ACONSU Chapter</label>
@@ -48,7 +56,7 @@
       <div class="field">
         <label for="profileImage">Profile Photo</label>
         <input type="file" id="profileImage" accept="image/*" required>
-        <small class="hint" style="color:#8a7595;">Required — used on your digital membership card once you're accepted as a member.</small>
+        <small class="hint" style="color:var(--ink-faint);">Required — used on your digital membership card once you're accepted as a member.</small>
         <img id="photoPreview" alt="" style="display:none; width:88px; height:88px; border-radius:50%; object-fit:cover; margin-top:10px;">
       </div>
 
@@ -63,7 +71,7 @@
       <div class="field">
         <label for="password">Password</label>
         <input type="password" id="password" minlength="6" required>
-        <small class="hint" style="color:#8a7595;">At least 6 characters.</small>
+        <small class="hint" style="color:var(--ink-faint);">At least 6 characters.</small>
       </div>
       <div class="field">
         <label for="phone">Phone Number (optional)</label>
@@ -96,7 +104,7 @@
       <div class="field" id="alumniFields" hidden>
         <label for="graduationYear">Year you finished (optional)</label>
         <input type="text" id="graduationYear" inputmode="numeric" placeholder="e.g. 2021">
-        <small class="hint" style="color:#8a7595;">Shepherding will confirm your details and welcome you back. Once they do, you can add yourself to Alumni Connect if you would like other members to find you.</small>
+        <small class="hint" style="color:var(--ink-faint);">Shepherding will confirm your details and welcome you back. Once they do, you can add yourself to Alumni Connect if you would like other members to find you.</small>
       </div>
       <div class="field">
         <label>Birthday (optional — month &amp; day only, no year, ever)</label>
@@ -112,13 +120,13 @@
             <option value="">Day</option>
           </select>
         </div>
-        <small class="hint" style="color:#8a7595;">We'll celebrate you on the day — your birth year is never collected or stored.</small>
+        <small class="hint" style="color:var(--ink-faint);">We'll celebrate you on the day — your birth year is never collected or stored.</small>
       </div>
-      <p style="font-size:0.82rem; color:#8a7595; margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong> — the Shepherding team will follow up and accept you as an official member.</p>
+      <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong> — the Shepherding team will follow up and accept you as an official member.</p>
       <button type="submit" class="btn btn-primary btn-block" id="registerBtn">Create Account</button>
       <div class="form-msg" id="registerMsg"></div>
-      <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:#5a4468;">
-        Already have an account? <a href="/login.html" style="color:var(--purple-deep); font-weight:700;">Log in</a>
+      <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:var(--ink-soft);">
+        Already have an account? <a href="/login.html" style="color:var(--brand); font-weight:700;">Log in</a>
       </p>
     </form>
   </div>
