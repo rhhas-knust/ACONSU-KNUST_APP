@@ -386,10 +386,19 @@ const { fakeModels, fakeDb } = require('./harness.js');
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'accepted' });
   check('shepherding accepts the visitor as a member', r.status === 200 && r.data.item.membershipStage === 'accepted', r.data);
   check('no membership number yet — not active', !r.data.item.membershipNumber, r.data);
-  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active', shepherdName: 'Sister Grace' });
+  // A shepherd is a member of this chapter who sits on the check-up team, so
+  // one has to exist before anyone can be assigned to them.
+  const graceId = await registerMember('Sister Grace', 'sister.grace@test.com');
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active', shepherdMemberId: graceId });
+  check('someone not on the check-up team cannot be made a shepherd',
+    r.status === 400 && /check-up team/i.test(r.data.error), r.data);
+  r = await call('shep', 'POST', '/api/shepherd/team', { memberId: graceId });
+  check('shepherding puts a member on the check-up team', r.status === 200, r.data);
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active', shepherdMemberId: graceId });
   check('shepherding assigns a shepherd and activates membership', r.status === 200 && r.data.item.membershipStage === 'active', r.data);
   check('a membership number is issued on activation', /^TEST-CHAPTER-\d{4}$/.test(r.data.item.membershipNumber), r.data.item);
   check('the assigned shepherd is recorded', r.data.item.shepherdName === 'Sister Grace', r.data.item);
+  check('and recorded as a link to the member, not just their name', r.data.item.shepherdMemberId === graceId, r.data.item);
   check('a QR token was generated for the digital membership card', !!r.data.item.qrToken, r.data.item);
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'worker' });
   check('lifecycle can advance from active to worker', r.status === 200 && r.data.item.membershipStage === 'worker', r.data);
@@ -2519,7 +2528,9 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('nobody is waiting for an account before anyone is marked',
       r2.status === 200 && !r2.data.some(w => w.id === waitingId), r2.data);
 
-    r2 = await call('shep', 'PATCH', `/api/shepherd/members/${waitingId}/stage`, { stage: 'executive', shepherdName: 'Sister Grace' });
+    const graceTeamId = (await call('shep', 'GET', '/api/shepherd/team')).data.team
+      .find(t => t.name === 'Sister Grace').memberId;
+    r2 = await call('shep', 'PATCH', `/api/shepherd/members/${waitingId}/stage`, { stage: 'executive', shepherdMemberId: graceTeamId });
     check('Shepherding marks the member an Executive', r2.status === 200 && r2.data.item.membershipStage === 'executive', r2.data);
 
     r2 = await call('coord', 'GET', '/api/coordinator/pending-executives');
@@ -3007,6 +3018,125 @@ const { fakeModels, fakeDb } = require('./harness.js');
     let error = '';
     try { new vm.Script(combined); } catch (e) { error = e.message; }
     check("council.html's scripts declare no clashing globals", error === '', error);
+  }
+
+  console.log('\n== the check-up team: who may be a shepherd, and who may not ==');
+  {
+    // Shepherding sends a team out to check up on people, and it is that team
+    // the individual shepherds are drawn from. Being on it is what makes
+    // someone assignable — before this a shepherd was a typed name that
+    // pointed at nobody.
+    const registerIn = async (name, email, chapter) => {
+      const fd = new FormData();
+      fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+      fd.append('name', name); fd.append('email', email);
+      fd.append('password', 'secret123'); fd.append('chapterId', chapter);
+      const res = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fd })).json();
+      return res.member.id;
+    };
+
+    const kwameId = await registerMember('Bro Kwame', 'bro.kwame@test.com');
+    const abenaId = await registerMember('Sis Abena', 'sis.abena@test.com');
+
+    let r3 = await call('shep', 'POST', '/api/shepherd/team', { memberId: kwameId });
+    check('a member can be put on the check-up team', r3.status === 200, r3.data);
+    r3 = await call('shep', 'POST', '/api/shepherd/team', { memberId: kwameId });
+    check('and cannot be added to it twice', r3.status === 400, r3.data);
+
+    // Alumni keep shepherding — a few of the team have already graduated, so
+    // nothing here may filter on membership stage.
+    const elderId = await registerMember('Elder Kofi', 'elder.kofi@test.com');
+    r3 = await call('shep', 'PATCH', `/api/shepherd/members/${elderId}/stage`, { stage: 'alumni' });
+    check('a member becomes alumni', r3.status === 200 && r3.data.item.membershipStage === 'alumni', r3.data);
+    r3 = await call('shep', 'POST', '/api/shepherd/team', { memberId: elderId });
+    check('an alumnus can still be on the check-up team', r3.status === 200, r3.data);
+    r3 = await call('shep', 'GET', '/api/shepherd/team');
+    check('and is shown as alumni on the roster',
+      (r3.data.team.find(t => t.memberId === elderId) || {}).isAlumni === true, r3.data.team);
+
+    // Nobody shepherds themselves.
+    r3 = await call('shep', 'PATCH', `/api/shepherd/members/${kwameId}/stage`, { stage: 'active', shepherdMemberId: kwameId });
+    check('nobody can be made their own shepherd',
+      r3.status === 400 && /own shepherd/i.test(r3.data.error), r3.data);
+
+    // Someone off the team is not a shepherd, however senior they are.
+    r3 = await call('shep', 'PATCH', `/api/shepherd/members/${kwameId}/stage`, { stage: 'active', shepherdMemberId: abenaId });
+    check('someone not on the check-up team cannot be assigned as a shepherd',
+      r3.status === 400 && /check-up team/i.test(r3.data.error), r3.data);
+
+    // A chapter's shepherds come from its own members. Standing rule: one
+    // chapter's leaders never reach into another's.
+    const outsiderId = await registerIn('Outside Shepherd', 'outside.shepherd@test.com', 'test-chapter-2');
+    // Put them on chapter 2's OWN team, directly, so the only thing standing
+    // between them and chapter 1 is chapterFilter. Without this they would be
+    // refused for not being on any team, and the test would pass without ever
+    // exercising the chapter boundary it claims to.
+    const outsiderDoc = fakeModels.Member._docs.find(m => m.id === outsiderId);
+    outsiderDoc.onShepherdTeam = true;
+    r3 = await call('shep', 'PATCH', `/api/shepherd/members/${kwameId}/stage`, { stage: 'active', shepherdMemberId: outsiderId });
+    check("a shepherd cannot be borrowed from another chapter, even one on their own team",
+      r3.status === 400 && /unknown shepherd/i.test(r3.data.error), r3.data);
+    r3 = await call('shep', 'POST', '/api/shepherd/team', { memberId: outsiderId });
+    check("nor can another chapter's member be put on this team", r3.status === 404, r3.data);
+
+    // The assignment that should work.
+    r3 = await call('shep', 'PATCH', `/api/shepherd/members/${abenaId}/stage`, { stage: 'active', shepherdMemberId: kwameId });
+    check('a team member can be assigned to someone else',
+      r3.status === 200 && r3.data.item.shepherdMemberId === kwameId, r3.data.item);
+    check('and the name is read off their record, never typed',
+      r3.data.item.shepherdName === 'Bro Kwame', r3.data.item);
+
+    r3 = await call('shep', 'GET', '/api/shepherd/team');
+    check('the roster counts who each of them looks after',
+      (r3.data.team.find(t => t.memberId === kwameId) || {}).flockSize === 1, r3.data.team);
+
+    // Standing someone down while people still look to them would leave those
+    // people shepherded by nobody, silently.
+    r3 = await call('shep', 'DELETE', `/api/shepherd/team/${kwameId}`);
+    check('someone with a flock cannot simply be stood down',
+      r3.status === 400 && /reassign/i.test(r3.data.error), r3.data);
+    check('and the people who would have been orphaned are named',
+      Array.isArray(r3.data.flock) && r3.data.flock.some(f => f.memberId === abenaId), r3.data);
+
+    // Move the flock, then it is allowed.
+    r3 = await call('shep', 'POST', '/api/shepherd/team', { memberId: abenaId });
+    check('the person they looked after joins the team themselves', r3.status === 200, r3.data);
+    r3 = await call('shep', 'PATCH', `/api/shepherd/members/${abenaId}/stage`, { stage: 'active', shepherdMemberId: elderId });
+    check('their flock is reassigned without changing their stage',
+      r3.status === 200 && r3.data.item.membershipStage === 'active' && r3.data.item.shepherdMemberId === elderId, r3.data.item);
+    r3 = await call('shep', 'DELETE', `/api/shepherd/team/${kwameId}`);
+    check('and now they can be stood down', r3.status === 200, r3.data);
+    r3 = await call('shep', 'GET', '/api/shepherd/team');
+    check('leaving them off the roster',
+      !r3.data.team.some(t => t.memberId === kwameId), r3.data.team);
+
+    // The team is Shepherding's to keep, not an ordinary member's.
+    r3 = await call('member', 'POST', '/api/shepherd/team', { memberId: abenaId });
+    check('an ordinary member cannot put anyone on the check-up team', r3.status === 401, r3.data);
+    r3 = await call('member', 'GET', '/api/shepherd/team');
+    check('nor read who is on it', r3.status === 401, r3.data);
+  }
+
+  console.log('\n== the shepherd portal picks a shepherd, it does not ask for a name ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const shep = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'shepherd.js'), 'utf8');
+
+    // A typed name is not a link to anybody: it cannot be counted, it cannot be
+    // followed, and it goes stale the moment a name is corrected.
+    check('the free-text shepherd box is gone',
+      !/id="shepherdNameInput"/.test(shep), null);
+    check('and the form sends the member id it picked',
+      /shepherdMemberId: document\.getElementById\('shepherdPick'\)\.value|const shepherdMemberId = document\.getElementById\('shepherdPick'\)\.value/.test(shep), null);
+    check('the picker is filled from the check-up team',
+      /fetchJSON\('\/api\/shepherd\/team'\)/.test(shep), null);
+    check('and never offers the person themselves',
+      /team\.filter\(t => t\.memberId !== person\.memberId\)/.test(shep), null);
+    check('the portal has a tab for the team',
+      /key: 'team', label: 'Check-up Team'/.test(shep), null);
+    check('and a way to move a flock, or standing someone down could never be undone',
+      /data-reshepherd/.test(shep), null);
   }
 
   // The send loop only ticks once a minute, so this one is opt-in: run it with
