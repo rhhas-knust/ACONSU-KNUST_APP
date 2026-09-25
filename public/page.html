@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -68,7 +76,7 @@
     } else if (page.type === 'bookshelf') {
       await renderBookshelf(slug, bodyEl);
     } else {
-      bodyEl.innerHTML = `<div style="max-width:760px; margin:0 auto; color:#5a4468;">${
+      bodyEl.innerHTML = `<div style="max-width:760px; margin:0 auto; color:var(--ink-soft);">${
         (page.content || '').split('\n\n').map(p => `<p>${escapeHtml(p)}</p>`).join('')
       }</div>`;
     }
@@ -118,7 +126,7 @@ async function renderBookshelf(slug, bodyEl) {
       <div class="card book-card">
         <div class="book-icon">${(f.contentType || '').includes('pdf') ? 'PDF' : 'FILE'}</div>
         <h3 style="margin-bottom:2px;">${escapeHtml(f.title)}</h3>
-        <p style="color:#5a4468; font-size:0.9rem;">${escapeHtml(f.description || '')}</p>
+        <p style="color:var(--ink-soft); font-size:0.9rem;">${escapeHtml(f.description || '')}</p>
         <div class="book-meta">${formatFileSize(f.length)}</div>
         <a href="/api/files/${f.id}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Open / Download</a>
       </div>

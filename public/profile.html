@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My Profile — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -16,10 +24,10 @@
 <style>
   .profile-photo { width: 96px; height: 96px; border-radius: 50%; overflow: hidden; border: 3px solid var(--lilac-mid); background: var(--lilac-light); display:flex; align-items:center; justify-content:center; margin: 0 auto 12px; }
   .profile-photo img { width:100%; height:100%; object-fit:cover; }
-  .profile-photo .initial { font-family: var(--font-display); font-size: 1.8rem; color: var(--purple-deep); }
+  .profile-photo .initial { font-family: var(--font-display); font-size: 1.8rem; color: var(--brand); }
   .profile-tabs { display:flex; gap:10px; justify-content:center; margin-bottom:24px; flex-wrap:wrap; }
   .profile-tabs button { background:none; border:2px solid var(--line); border-radius:999px; padding:8px 18px; font-weight:700; font-size:0.85rem; cursor:pointer; color:var(--purple-ink); }
-  .profile-tabs button.active { border-color: var(--purple-deep); background: var(--purple-deep); color: #fff; }
+  .profile-tabs button.active { border-color: var(--brand); background: var(--purple-deep); color: #fff; }
 
   /* ---------- redesigned profile header ---------- */
   .profile-top-row { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:20px; }
@@ -27,10 +35,10 @@
   .profile-avatar-wrap { position:relative; flex:none; }
   .profile-avatar { width:76px; height:76px; border-radius:50%; overflow:hidden; border:3px solid var(--lilac-mid); background:var(--lilac-light); display:flex; align-items:center; justify-content:center; }
   .profile-avatar img { width:100%; height:100%; object-fit:cover; }
-  .profile-avatar .initial { font-family:var(--font-display); font-size:1.6rem; color:var(--purple-deep); }
+  .profile-avatar .initial { font-family:var(--font-display); font-size:1.6rem; color:var(--brand); }
   .avatar-camera-btn { position:absolute; bottom:-2px; right:-2px; width:28px; height:28px; border-radius:50%; background:var(--purple-deep); color:#fff; border:2px solid #fff; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.85rem; }
   .quick-pills { display:flex; gap:10px; margin-bottom:22px; }
-  .quick-pill { flex:1; background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 8px; text-align:center; text-decoration:none; color:var(--purple-ink); font-size:0.78rem; font-weight:700; }
+  .quick-pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 8px; text-align:center; text-decoration:none; color:var(--purple-ink); font-size:0.78rem; font-weight:700; }
   .quick-pill .qp-icon { font-size:1.3rem; display:block; margin-bottom:4px; }
   .streak-card { background:linear-gradient(120deg, var(--flame-gold), var(--flame-red)); border-radius:16px; padding:20px; color:#fff; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
   .streak-card .streak-num { font-family:var(--font-display); font-size:2rem; font-weight:700; }
@@ -127,11 +135,12 @@
 
     <div class="form-card" style="margin-top:24px;">
       <h3 style="margin-bottom:6px;">Alerts</h3>
-      <p style="font-size:0.87rem; color:#5a4468; margin-bottom:16px;" id="alertsStatus">Checking…</p>
+      <p style="font-size:0.87rem; color:var(--ink-soft); margin-bottom:16px;" id="alertsStatus">Checking…</p>
       <button type="button" class="btn btn-outline btn-sm" id="alertsToggleBtn">Enable Alerts</button>
     </div>
 
     <div style="text-align:center; margin-top:24px;">
+      <button type="button" class="theme-toggle theme-toggle-onbrand" id="themeToggle" aria-label="Switch between light and dark"></button>
       <button class="btn btn-outline btn-sm" id="logoutBtn">Log Out</button>
     </div>
   </div>
@@ -196,7 +205,7 @@ function renderProfileTopRow() {
     <div class="profile-top-row">
       <div class="profile-name">
         <h1>${escapeHtml(m.name)}</h1>
-        <p style="color:#5a4468; margin:0;">${escapeHtml(m.email)}</p>
+        <p style="color:var(--ink-soft); margin:0;">${escapeHtml(m.email)}</p>
       </div>
       <div class="profile-avatar-wrap">
         <div class="profile-avatar">
@@ -232,13 +241,13 @@ async function renderMemberStanding() {
       <div style="display:flex; align-items:center; gap:11px; margin-bottom:10px;">
         <span style="width:11px; height:11px; border-radius:50%; background:var(--flame-gold); flex:none;
           box-shadow:0 0 0 4px rgba(232,151,30,0.18);"></span>
-        <strong style="font-size:1.12rem; color:var(--purple-deep); font-family:var(--font-display);">
+        <strong style="font-size:1.12rem; color:var(--brand); font-family:var(--font-display);">
           ${escapeHtml(d.stage.label)}
         </strong>
       </div>
-      <p style="margin:0 0 ${d.membershipNumber || d.shepherdName ? '14px' : '0'}; color:#5a4468; font-size:0.9rem; line-height:1.55;">${escapeHtml(d.stage.blurb)}</p>
+      <p style="margin:0 0 ${d.membershipNumber || d.shepherdName ? '14px' : '0'}; color:var(--ink-soft); font-size:0.9rem; line-height:1.55;">${escapeHtml(d.stage.blurb)}</p>
       ${(d.membershipNumber || d.shepherdName) ? `
-        <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:#5a4468;">
+        <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:var(--ink-soft);">
           ${d.membershipNumber ? `<div><strong>Membership no.</strong><br>${escapeHtml(d.membershipNumber)}</div>` : ''}
           ${d.shepherdName ? `<div><strong>Your shepherd</strong><br>${escapeHtml(d.shepherdName)}</div>` : ''}
         </div>` : ''}
@@ -249,15 +258,15 @@ async function renderMemberStanding() {
       ${(d.departments || []).length ? `
         ${d.departments.map(dep => `
           <div style="padding:14px 0; border-bottom:1px solid var(--line);">
-            <p style="margin:0 0 6px; font-size:1.05rem; font-weight:700; color:var(--purple-deep);">
+            <p style="margin:0 0 6px; font-size:1.05rem; font-weight:700; color:var(--brand);">
               ${escapeHtml(dep.name)}
             </p>
-            ${dep.tagline ? `<p style="margin:0 0 10px; color:#5a4468; font-size:0.88rem;">${escapeHtml(dep.tagline)}</p>` : ''}
-            <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:#5a4468;">
+            ${dep.tagline ? `<p style="margin:0 0 10px; color:var(--ink-soft); font-size:0.88rem;">${escapeHtml(dep.tagline)}</p>` : ''}
+            <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:var(--ink-soft);">
               ${(dep.meetingDay || dep.meetingTime) ? `
                 <div><strong>Meets</strong><br>${escapeHtml([dep.meetingDay, dep.meetingTime].filter(Boolean).join(', '))}</div>` : ''}
               ${dep.meetingLocation ? `<div><strong>Where</strong><br>${escapeHtml(dep.meetingLocation)}</div>` : ''}
-              ${dep.headName ? `<div><strong>Led by</strong><br>${escapeHtml(dep.headName)}${dep.headRole ? `<br><span style="font-size:0.78rem; color:#a993b3;">${escapeHtml(dep.headRole)}</span>` : ''}</div>` : ''}
+              ${dep.headName ? `<div><strong>Led by</strong><br>${escapeHtml(dep.headName)}${dep.headRole ? `<br><span style="font-size:0.78rem; color:var(--ink-faint);">${escapeHtml(dep.headRole)}</span>` : ''}</div>` : ''}
             </div>
             <a href="/department.html?id=${encodeURIComponent(dep.id)}" class="btn btn-outline btn-sm" style="margin-top:14px;">Open ${escapeHtml(dep.name)}</a>
           </div>
@@ -275,13 +284,13 @@ async function renderMemberStanding() {
             <h4 style="margin:0 0 12px; font-size:0.95rem;">From your ${(d.departments || []).length > 1 ? 'departments' : 'department'}</h4>
             ${d.departmentNotices.map(n => `
               <div style="margin-bottom:14px;">
-                <div style="font-weight:700; color:var(--purple-deep); font-size:0.9rem;">${escapeHtml(n.title)}</div>
-                <p style="margin:4px 0 2px; color:#5a4468; font-size:0.87rem; white-space:pre-wrap;">${escapeHtml(n.body)}</p>
-                <span style="font-size:0.75rem; color:#a993b3;">${escapeHtml(formatDate(String(n.createdAt).slice(0, 10)))}</span>
+                <div style="font-weight:700; color:var(--brand); font-size:0.9rem;">${escapeHtml(n.title)}</div>
+                <p style="margin:4px 0 2px; color:var(--ink-soft); font-size:0.87rem; white-space:pre-wrap;">${escapeHtml(n.body)}</p>
+                <span style="font-size:0.75rem; color:var(--ink-faint);">${escapeHtml(formatDate(String(n.createdAt).slice(0, 10)))}</span>
               </div>`).join('')}
           </div>` : ''}
       ` : `
-        <p style="margin:0 0 12px; color:#5a4468; font-size:0.9rem;">
+        <p style="margin:0 0 12px; color:var(--ink-soft); font-size:0.9rem;">
           You are not in a department yet. It is where most of the friendships and the serving happen ${(d.pendingRequests || []).length ? '\u2014 and you have already asked to join one, so its head just needs to say yes.' : '\u2014 have a look and ask to join the one you want.'}
         </p>
         <a href="/departments.html" class="btn btn-primary btn-sm">${(d.pendingRequests || []).length ? 'See your request' : 'Find Your Department'}</a>
@@ -310,8 +319,8 @@ async function renderMyEvents() {
   const row = (e) => `
     <div style="display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid var(--line);">
       <div>
-        <div style="font-weight:700; color:var(--purple-deep); font-size:0.92rem;">${escapeHtml(e.title)}</div>
-        <div style="font-size:0.8rem; color:#5a4468;">
+        <div style="font-weight:700; color:var(--brand); font-size:0.92rem;">${escapeHtml(e.title)}</div>
+        <div style="font-size:0.8rem; color:var(--ink-soft);">
           ${escapeHtml(formatDate(String(e.date).slice(0, 10)))}${e.time ? ` · ${escapeHtml(e.time)}` : ''}${e.location ? ` · ${escapeHtml(e.location)}` : ''}
         </div>
       </div>
@@ -321,10 +330,10 @@ async function renderMyEvents() {
   el.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
       <h3 style="margin:0 0 10px;">You Are Signed Up For</h3>
-      ${upcoming.length ? upcoming.map(row).join('') : '<p style="margin:0; color:#5a4468; font-size:0.9rem;">Nothing coming up that you have registered for.</p>'}
+      ${upcoming.length ? upcoming.map(row).join('') : '<p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">Nothing coming up that you have registered for.</p>'}
       ${past.length ? `
         <details style="margin-top:12px;">
-          <summary style="cursor:pointer; font-size:0.85rem; color:#5a4468;">${past.length} you have already attended</summary>
+          <summary style="cursor:pointer; font-size:0.85rem; color:var(--ink-soft);">${past.length} you have already attended</summary>
           <div style="margin-top:8px; opacity:0.75;">${past.map(row).join('')}</div>
         </details>` : ''}
     </div>
@@ -475,7 +484,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   wrap.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
       <h3 style="margin:0 0 6px;">Your Alumni Connect listing</h3>
-      <p style="margin:0 0 16px; color:#5a4468; font-size:0.88rem; line-height:1.55;">
+      <p style="margin:0 0 16px; color:var(--ink-soft); font-size:0.88rem; line-height:1.55;">
         Members across every ACONSU chapter can look you up by what you do. Nothing
         below is shown to anyone until you tick <strong>List me</strong>, and you can
         take it down again at any time.
@@ -524,11 +533,11 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
           <label for="al_linkedin">LinkedIn (optional)</label>
           <input type="url" id="al_linkedin" placeholder="https://..." value="${escapeHtml(p.linkedin || '')}">
         </div>
-        <div style="display:grid; gap:9px; margin:16px 0; font-size:0.88rem; color:#4a3a56;">
+        <div style="display:grid; gap:9px; margin:16px 0; font-size:0.88rem; color:var(--ink-soft);">
           <label><input type="checkbox" id="al_mentor" ${yes(p.openToMentoring)}> Happy to mentor a student</label>
           <label><input type="checkbox" id="al_email" ${yes(p.showEmail)}> Show my email address</label>
           <label><input type="checkbox" id="al_phone" ${yes(p.showPhone)}> Show my phone number</label>
-          <label style="font-weight:800; color:var(--purple-deep);"><input type="checkbox" id="al_listed" ${yes(p.listed)}> List me in Alumni Connect</label>
+          <label style="font-weight:800; color:var(--brand);"><input type="checkbox" id="al_listed" ${yes(p.listed)}> List me in Alumni Connect</label>
         </div>
         <button type="submit" class="btn btn-primary btn-sm" id="al_save">Save listing</button>
         <div class="form-msg" id="al_msg"></div>

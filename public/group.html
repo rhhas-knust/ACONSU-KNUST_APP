@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Group — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -16,14 +24,14 @@
 <style>
   .group-tabs { display:flex; gap:8px; border-bottom:1px solid var(--line); margin:20px 0; overflow-x:auto; }
   .group-tabs button { border:none; background:none; padding:10px 6px; font-weight:700; font-size:0.88rem; color:#8a7595; cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; }
-  .group-tabs button.active { color:var(--purple-deep); border-color:var(--purple-deep); }
-  .post-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+  .group-tabs button.active { color:var(--brand); border-color:var(--brand); }
+  .post-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
   .post-card.announcement { border-color:var(--flame-gold); background:#FFF8EC; }
-  .post-card .who { font-weight:700; font-size:0.85rem; color:var(--purple-deep); }
+  .post-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
   .post-card .when { font-size:0.75rem; color:#8a7595; }
   .member-chip { display:inline-flex; align-items:center; gap:8px; background:var(--lilac-light); border-radius:999px; padding:4px 12px 4px 4px; font-size:0.82rem; margin:0 6px 6px 0; }
-  .member-chip img, .member-chip .fallback { width:26px; height:26px; border-radius:50%; object-fit:cover; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--purple-deep); font-size:0.75rem; }
-  .meeting-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+  .member-chip img, .member-chip .fallback { width:26px; height:26px; border-radius:50%; object-fit:cover; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--brand); font-size:0.75rem; }
+  .meeting-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
 </style>
 </head>
 <body>
@@ -78,7 +86,7 @@ function renderAbout(body) {
     : `<button class="btn btn-primary" id="joinBtn">Join Group</button>`;
 
   body.innerHTML = `
-    <div class="portal-card" style="background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px;">
+    <div class="portal-card" style="background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px;">
       <p><strong>Leader:</strong> ${escapeHtml(GROUP.leaderName || 'Not yet assigned')}</p>
       ${GROUP.meetingDay ? `<p><strong>Meets:</strong> ${escapeHtml(GROUP.meetingDay)} ${escapeHtml(GROUP.meetingTime || '')} ${GROUP.meetingLocation ? '— ' + escapeHtml(GROUP.meetingLocation) : ''}</p>` : ''}
       <div style="margin-top:14px;">${joinBtn}</div>

@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sermons & Media — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -68,9 +76,9 @@ const searchQuery = mediaParams.get('q') || '';
       <div class="card ${s.id === selectedSermonId ? 'search-focus-card' : ''}" data-sermon-id="${escapeHtml(s.id)}">
         <span class="badge">${s.type === 'video' ? 'Video' : 'Audio'}</span>
         <h3 style="margin:12px 0 4px;">${escapeHtml(s.title)}</h3>
-        <p style="font-size:0.88rem; color:#5a4468; margin-bottom:8px;">${escapeHtml(s.speaker || '')} ${s.date ? '· ' + formatDate(s.date) : ''}</p>
-        <p style="color:#5a4468; margin-bottom:12px;">${escapeHtml(s.description || '')}</p>
-        ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:#a08eb0;">Link coming soon</span>'}
+        <p style="font-size:0.88rem; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(s.speaker || '')} ${s.date ? '· ' + formatDate(s.date) : ''}</p>
+        <p style="color:var(--ink-soft); margin-bottom:12px;">${escapeHtml(s.description || '')}</p>
+        ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:var(--ink-faint);">Link coming soon</span>'}
       </div>
     `).join('') || '<p class="empty-state">No sermons uploaded yet — check back soon.</p>';
     if (selectedSermonId) {

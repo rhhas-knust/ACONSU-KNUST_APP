@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Community — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -14,10 +22,10 @@
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .topic-card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .topic-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; }
   .topic-card:hover { box-shadow:0 8px 20px rgba(58,27,84,0.1); }
-  .chat-message { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
-  .chat-message .who { font-weight:700; font-size:0.85rem; color:var(--purple-deep); }
+  .chat-message { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
+  .chat-message .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
   .chat-message .when { font-size:0.74rem; color:#8a7595; }
   .chat-message .actions { margin-top:6px; }
   .chat-message .actions button { background:none; border:none; color:#8a7595; font-size:0.75rem; cursor:pointer; text-decoration:underline; padding:0; }

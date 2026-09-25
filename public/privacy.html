@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -15,8 +23,8 @@
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .policy { max-width: 760px; margin: 0 auto; }
-  .policy h2 { margin: 34px 0 12px; font-size: 1.25rem; color: var(--purple-deep); }
-  .policy h3 { margin: 22px 0 8px; font-size: 1rem; color: var(--purple-rich); }
+  .policy h2 { margin: 34px 0 12px; font-size: 1.25rem; color: var(--brand); }
+  .policy h3 { margin: 22px 0 8px; font-size: 1rem; color: var(--brand-strong); }
   .policy p, .policy li { color: #4a3a56; line-height: 1.7; }
   .policy ul { margin: 10px 0 10px 20px; }
   .policy li { margin-bottom: 7px; }
@@ -27,7 +35,7 @@
   }
   .policy table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
   .policy th, .policy td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  .policy th { color: var(--purple-deep); font-weight: 700; }
+  .policy th { color: var(--brand); font-weight: 700; }
 </style>
 </head>
 <body>

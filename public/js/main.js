@@ -468,7 +468,10 @@ function renderHeader(activePath, customPages, member) {
       </a>
       <ul class="nav-links" id="navLinks">${links}</ul>
       <div class="nav-cta">
-        <a href="/notifications.html" class="bell-link" id="navBellLink" aria-label="Notifications" style="position:relative; color:var(--purple-deep); display:flex; align-items:center;">
+        <button type="button" class="theme-toggle" id="themeToggle" aria-label="Switch between light and dark">
+          ${themeToggleIcon()}
+        </button>
+        <a href="/notifications.html" class="bell-link" id="navBellLink" aria-label="Notifications" style="position:relative; color:var(--brand); display:flex; align-items:center;">
           ${svgIcon(ICON_BELL)}
         </a>
         ${accountLink}
@@ -477,6 +480,75 @@ function renderHeader(activePath, customPages, member) {
     </nav>
   `;
   wireNotificationBell();
+  wireThemeToggle();
+}
+
+// ---------- light and dark ----------
+// The theme is set on <html> by an inline script in each page's <head>, before
+// any of this runs, so the page never paints light and then flips. Everything
+// below only has to keep that in step with what the reader clicks.
+const THEME_KEY = 'aconsu.theme';
+
+// What the reader chose, or '' for "whatever this device prefers". Storage can
+// throw in a private window, so it is never allowed to take the page down.
+function storedTheme() {
+  try { return localStorage.getItem(THEME_KEY) || ''; } catch (e) { return ''; }
+}
+
+function systemPrefersDark() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme')
+    || storedTheme()
+    || (systemPrefersDark() ? 'dark' : 'light');
+}
+
+// The icon shows what you would GET, not what you are on: a moon while you are
+// in the light, because that is the thing the button does.
+function themeToggleIcon() {
+  const dark = currentTheme() === 'dark';
+  return dark
+    ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+    : '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private window */ }
+  const btn = document.getElementById('themeToggle');
+  if (btn) {
+    btn.innerHTML = themeToggleIcon();
+    btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+}
+
+function wireThemeToggle() {
+  const btn = document.getElementById('themeToggle');
+  if (!btn) return;
+  if (btn.dataset.wired) return;
+  btn.dataset.wired = '1';
+  // The staff portals carry the button in static markup, so it arrives empty.
+  if (!btn.querySelector('svg')) btn.innerHTML = themeToggleIcon();
+  btn.setAttribute('aria-label', currentTheme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+  btn.addEventListener('click', () => {
+    applyTheme(currentTheme() === 'dark' ? 'light' : 'dark');
+  });
+
+  // Until someone chooses for themselves, follow the device. Once they have
+  // chosen, their choice stands - changing the phone's theme at dusk should not
+  // overrule someone who deliberately picked the other one.
+  if (!storedTheme() && window.matchMedia) {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const follow = (e) => {
+      if (storedTheme()) return;
+      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+      btn.innerHTML = themeToggleIcon();
+    };
+    if (mq.addEventListener) mq.addEventListener('change', follow);
+    else if (mq.addListener) mq.addListener(follow);
+  }
 }
 
 // ---------- in-app notifications ----------
@@ -1160,3 +1232,8 @@ window.addEventListener('offline', () => {
 window.addEventListener('online', () => {
   showToast('⚡ Back online! Connection restored.', 'success');
 });
+
+
+// The staff portals and the admin pages build their own top bar rather than
+// going through renderHeader, so the switch has to be picked up here too.
+document.addEventListener('DOMContentLoaded', wireThemeToggle);

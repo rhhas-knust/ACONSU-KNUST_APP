@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Chapter — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -68,7 +76,7 @@
         ${chapter.headerImageFileId ? '' : `
           <p class="eyebrow">Chapter</p>
           <h1>${escapeHtml(chapter.name)}</h1>
-          <p style="color:#5a4468; font-size:1.05rem;">${escapeHtml(chapter.fullName || chapter.institution || '')}</p>`}
+          <p style="color:var(--ink-soft); font-size:1.05rem;">${escapeHtml(chapter.fullName || chapter.institution || '')}</p>`}
         <div class="card" style="margin:28px 0;">
           <h3 style="margin-bottom:16px;">Chapter Overview</h3>
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
@@ -88,7 +96,7 @@
                 </div>
                 <div style="padding:16px;">
                   <h4 style="margin:0 0 8px;">${escapeHtml(d.name)}</h4>
-                  <p style="margin:0; color:#5a4468; font-size:0.9rem;">${escapeHtml(d.tagline || '')}</p>
+                  <p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">${escapeHtml(d.tagline || '')}</p>
                 </div>
               </a>
             `).join('')}</div>` : '<p class="empty-state">No departments added for this chapter yet.</p>'}
@@ -104,9 +112,9 @@
                 </div>
                 <h4 style="margin:0;">${escapeHtml(e.name)}</h4>
                 <div class="exec-role">${escapeHtml(e.role || '')}</div>
-                ${e.department ? `<p style="margin:8px 0 0; color:#5a4468; font-size:0.82rem; font-weight:700;">${escapeHtml(e.department)}</p>` : ''}
-                ${e.contact && e.contact.phone ? `<p style="margin:8px 0 0; color:#5a4468; font-size:0.82rem;"><a href="tel:${escapeHtml(e.contact.phone)}">${escapeHtml(e.contact.phone)}</a></p>` : ''}
-                ${e.contact && e.contact.email ? `<p style="margin:6px 0 0; color:#5a4468; font-size:0.82rem;"><a href="mailto:${escapeHtml(e.contact.email)}">${escapeHtml(e.contact.email)}</a></p>` : ''}
+                ${e.department ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem; font-weight:700;">${escapeHtml(e.department)}</p>` : ''}
+                ${e.contact && e.contact.phone ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem;"><a href="tel:${escapeHtml(e.contact.phone)}">${escapeHtml(e.contact.phone)}</a></p>` : ''}
+                ${e.contact && e.contact.email ? `<p style="margin:6px 0 0; color:var(--ink-soft); font-size:0.82rem;"><a href="mailto:${escapeHtml(e.contact.email)}">${escapeHtml(e.contact.email)}</a></p>` : ''}
               </div>
             `).join('')}</div>` : '<p class="empty-state">No executive profiles for this chapter yet.</p>'}
         </div>
@@ -130,7 +138,7 @@
         ${dept.headerImageFileId ? '' : `
           <p class="eyebrow">Department</p>
           <h1>${escapeHtml(dept.name)}</h1>
-          <p style="color:#5a4468; font-size:1.05rem;">${escapeHtml(dept.tagline || '')}</p>`}
+          <p style="color:var(--ink-soft); font-size:1.05rem;">${escapeHtml(dept.tagline || '')}</p>`}
         <div class="card" style="margin:28px 0;">
           <h3 style="margin-bottom:16px;">Meeting Information</h3>
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
@@ -140,7 +148,7 @@
             ${dept.leaderName ? `<div><div class="eyebrow">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leaderName)}</p>${dept.leaderRole ? `<p class="tiny muted" style="margin:2px 0 0;">${escapeHtml(dept.leaderRole)}</p>` : ''}</div>` : ''}
           </div>
         </div>
-        <p style="color:#5a4468;">${escapeHtml(dept.description)}</p>
+        <p style="color:var(--ink-soft);">${escapeHtml(dept.description)}</p>
       `;
     } else {
       detailEl.innerHTML = '<p class="empty-state">No chapter or department selected.</p>';

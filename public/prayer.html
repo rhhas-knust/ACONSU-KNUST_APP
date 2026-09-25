@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Prayer Wall — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -14,11 +22,11 @@
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .prayer-card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
+  .prayer-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
   .prayer-card p.request-text { margin:8px 0 12px; color:var(--purple-ink); line-height:1.5; }
   .prayer-card .row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
-  .prayer-card .who { font-weight:700; font-size:0.85rem; color:var(--purple-deep); }
-  .pray-btn { border:2px solid var(--purple-deep); background:#fff; color:var(--purple-deep); border-radius:999px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
+  .prayer-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
+  .pray-btn { border:2px solid var(--purple-deep); background:var(--surface); color:var(--brand); border-radius:999px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
   .pray-btn.done { background:var(--purple-deep); color:#fff; }
   .pray-count { font-size:0.78rem; color:#8a7595; }
   .answered-badge { display:inline-block; background:#D9F0DE; color:#2E7D4F; font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:999px; margin-bottom:8px; }

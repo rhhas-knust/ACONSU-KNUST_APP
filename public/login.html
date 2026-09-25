@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Log In — ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
 <link rel="icon" href="/images/logo.jpg">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
@@ -23,7 +31,7 @@
     <form class="form-card" id="loginForm">
       <img src="/images/logo.jpg" alt="ACONSU" style="width:56px; height:56px; border-radius:50%; margin:0 auto 14px; display:block;">
       <h2 style="text-align:center;">Welcome Back</h2>
-      <p style="text-align:center; color:#5a4468; margin-bottom:24px;">Log in to your ACONSU account.</p>
+      <p style="text-align:center; color:var(--ink-soft); margin-bottom:24px;">Log in to your ACONSU account.</p>
       <div class="field">
         <label for="email">Email Address</label>
         <input type="email" id="email" required>
@@ -32,11 +40,11 @@
         <label for="password">Password</label>
         <input type="password" id="password" required>
       </div>
-      <p style="text-align:right; margin-bottom:16px;"><a href="/forgot-password.html" style="font-size:0.85rem; color:var(--purple-deep); font-weight:700;">Forgot password?</a></p>
+      <p style="text-align:right; margin-bottom:16px;"><a href="/forgot-password.html" style="font-size:0.85rem; color:var(--brand); font-weight:700;">Forgot password?</a></p>
       <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log In</button>
       <div class="form-msg" id="loginMsg"></div>
-      <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:#5a4468;">
-        Don't have an account? <a href="/register.html" style="color:var(--purple-deep); font-weight:700;">Sign up</a>
+      <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:var(--ink-soft);">
+        Don't have an account? <a href="/register.html" style="color:var(--brand); font-weight:700;">Sign up</a>
       </p>
     </form>
   </div>
