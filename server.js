@@ -2320,11 +2320,20 @@ async function resolveViewerChapterId(req) {
 // Community routes live in focused modules. Dependencies are injected rather
 // than imported there so authentication and chapter scoping remain the single
 // source of truth in this application entry point.
+// The welfare desk: the Welfare Officer, or a Chapter Admin standing in for
+// them. Defined once and handed to the routes module as well, because the
+// welfare request routes there need exactly the same answer — two copies of a
+// rule about who may see case notes is one copy too many.
+function requireWelfareOfficer(req, res, next) {
+  if (isChapterAdminOrAbove(req) || hasRole(req, 'welfare')) return next();
+  return res.status(401).json({ error: 'Not authenticated' });
+}
+
 const communityRouteDeps = {
   repo, models, rolesLib, requireMember, requireContentManager, requireShepherd,
   requireViewRole, requireFinance, requireChapterAdmin, isChapterAdminOrAbove,
   hasRole, resolveViewerChapterId, resolveChapterIdForWrite, actorName,
-  createNotification, notifyAdminByEmail, chapterConfidential
+  createNotification, notifyAdminByEmail, chapterConfidential, requireWelfareOfficer
 };
 registerGroupRoutes(app, communityRouteDeps);
 registerChatRoutes(app, communityRouteDeps);
@@ -2655,7 +2664,11 @@ function buildPublicSettings(globalSettings, chapter) {
       bankAccountName: payment.bankAccountName || globalSettings.bankAccountName || '',
       bankAccountNumber: payment.bankAccountNumber || globalSettings.bankAccountNumber || '',
       donationDestination: payment.donationDestination || globalSettings.donationDestination || '',
-      welfareDestination: payment.welfareDestination || globalSettings.welfareDestination || ''
+      welfareDestination: payment.welfareDestination || globalSettings.welfareDestination || '',
+      // Welfare collects into its own account, so its details are published
+      // alongside the chapter's rather than members being told the wrong number.
+      welfareMomoNumber: payment.welfareMomoNumber || '',
+      welfareMomoName: payment.welfareMomoName || ''
     },
     about: {
       history: about.history || globalAbout.history || '',
@@ -3487,6 +3500,105 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
 // shepherding record (pastoral notes, address, attendance, etc.) if one exists.
 // This is what makes "auto-import" work — nothing about a member is duplicated
 // or re-entered, it's joined at read time from data the church already has.
+// ---------- the check-up team (the pool every shepherd is drawn from) ----------
+// Shepherding sends a team out to check up on people, and it is that team the
+// individual shepherds come from. So "who may be assigned as a shepherd" is not
+// a free-text name and not a portal account — it is a member of THIS chapter
+// who has been put on the team.
+//
+// Nothing here filters on membershipStage: a few of the team are alumni, and an
+// alumnus shepherding a current student is the normal case, not an exception.
+
+// Turns a member record into the roster row the portal shows. flockSize is
+// counted rather than stored, so it can never fall out of step with the
+// assignments themselves.
+function shepherdTeamRow(member, flockByShepherdId) {
+  return {
+    memberId: member.id,
+    name: member.name,
+    phone: member.phone || '',
+    email: member.email || '',
+    level: member.level || '',
+    programme: member.programme || '',
+    membershipStage: member.membershipStage || 'visitor',
+    isAlumni: (member.membershipStage || '') === 'alumni',
+    imageFileId: member.profileImageFileId || '',
+    since: member.shepherdTeamSince || null,
+    flockSize: flockByShepherdId.get(member.id) || 0
+  };
+}
+
+app.get('/api/shepherd/team', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const members = await repo.getAll('members', filter);
+    const flockByShepherdId = new Map();
+    for (const m of members) {
+      if (!m.shepherdMemberId) continue;
+      flockByShepherdId.set(m.shepherdMemberId, (flockByShepherdId.get(m.shepherdMemberId) || 0) + 1);
+    }
+    const team = members
+      .filter(m => m.onShepherdTeam)
+      .map(m => shepherdTeamRow(m, flockByShepherdId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    // Everyone who could be put on the team, so the portal can offer a picker
+    // without pulling the whole member list down a second time.
+    const candidates = members
+      .filter(m => !m.onShepherdTeam)
+      .map(m => ({
+        memberId: m.id,
+        name: m.name,
+        membershipStage: m.membershipStage || 'visitor',
+        isAlumni: (m.membershipStage || '') === 'alumni'
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    res.json({ team, candidates, unassignedCount: members.filter(m => !m.shepherdMemberId).length });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the check-up team' });
+  }
+});
+
+app.post('/api/shepherd/team', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const memberId = String(req.body.memberId || '').trim();
+    if (!memberId) return res.status(400).json({ error: 'Choose a member to put on the team' });
+    // Looked up through chapterFilter, so one chapter can never staff its
+    // check-up team with another chapter's members.
+    const member = await repo.getById('members', memberId, filter);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    if (member.onShepherdTeam) return res.status(400).json({ error: 'Already on the check-up team' });
+    const updated = await repo.updateById('members', memberId, {
+      ...member, onShepherdTeam: true, shepherdTeamSince: member.shepherdTeamSince || new Date()
+    }, filter);
+    res.json({ ok: true, member: shepherdTeamRow(updated, new Map()) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not add this member to the team' });
+  }
+});
+
+app.delete('/api/shepherd/team/:memberId', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const member = await repo.getById('members', req.params.memberId, filter);
+    if (!member) return res.status(404).json({ error: 'Member not found' });
+    // Standing someone down while people still look to them would leave those
+    // people shepherded by nobody, silently. Reassign them first.
+    const all = await repo.getAll('members', filter);
+    const flock = all.filter(m => m.shepherdMemberId === member.id);
+    if (flock.length) {
+      return res.status(400).json({
+        error: `${member.name} still shepherds ${flock.length} ${flock.length === 1 ? 'person' : 'people'}. Reassign them first.`,
+        flock: flock.map(m => ({ memberId: m.id, name: m.name }))
+      });
+    }
+    await repo.updateById('members', member.id, { ...member, onShepherdTeam: false, shepherdTeamSince: null }, filter);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove this member from the team' });
+  }
+});
+
 app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
@@ -3526,8 +3638,10 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
         // Membership workflow (section 7).
         membershipStage: m.membershipStage || 'visitor',
         membershipNumber: m.membershipNumber || '',
+        shepherdMemberId: m.shepherdMemberId || '',
         shepherdStaffId: m.shepherdStaffId || '',
-        shepherdName: m.shepherdName || ''
+        shepherdName: m.shepherdName || '',
+        onShepherdTeam: !!m.onShepherdTeam
       };
     });
 
@@ -3989,20 +4103,35 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
     if (!existing.qrToken) updates.qrToken = crypto.randomBytes(16).toString('hex');
 
     // Assigning a shepherd is allowed alongside any stage change, or on its own.
-    if (req.body.shepherdStaffId !== undefined || req.body.shepherdName !== undefined) {
-      const shepherdStaffId = req.body.shepherdStaffId || '';
-      let shepherdName = req.body.shepherdName || '';
-      if (shepherdStaffId) {
-        // A portal account holder — pull their name from the account rather
-        // than trust free text, so it can never drift out of sync.
-        const shepherdStaff = await repo.getById('staffUsers', shepherdStaffId, filter);
-        if (!shepherdStaff) return res.status(400).json({ error: 'Unknown shepherd' });
-        shepherdName = shepherdStaff.name;
+    // A shepherd is a member of this chapter who sits on the check-up team, so
+    // the name is never typed — it is read off the record the id points at and
+    // can never drift out of sync with it.
+    if (req.body.shepherdMemberId !== undefined) {
+      const shepherdMemberId = String(req.body.shepherdMemberId || '').trim();
+      if (shepherdMemberId) {
+        // Nobody shepherds themselves. The team shepherds the members —
+        // themselves excepted — and each of them is looked after by someone
+        // else on the team.
+        if (shepherdMemberId === existing.id) {
+          return res.status(400).json({ error: 'Nobody can be their own shepherd' });
+        }
+        // Through chapterFilter, so a shepherd can never be borrowed from
+        // another chapter.
+        const shepherd = await repo.getById('members', shepherdMemberId, filter);
+        if (!shepherd) return res.status(400).json({ error: 'Unknown shepherd' });
+        // Being on the check-up team is what makes someone assignable. Without
+        // this the field would accept any member at all and the team would mean
+        // nothing.
+        if (!shepherd.onShepherdTeam) {
+          return res.status(400).json({ error: `${shepherd.name} is not on the check-up team` });
+        }
+        updates.shepherdMemberId = shepherd.id;
+        updates.shepherdName = shepherd.name;
+      } else {
+        // Explicitly clearing the assignment.
+        updates.shepherdMemberId = '';
+        updates.shepherdName = '';
       }
-      // Otherwise a lay shepherd with no portal login of their own — the
-      // name typed in is all that's recorded, same as `recordedBy` elsewhere.
-      updates.shepherdStaffId = shepherdStaffId;
-      updates.shepherdName = shepherdName;
     }
 
     // First time reaching 'active' — issue the membership number the digital
@@ -5214,6 +5343,146 @@ app.get('/api/daily-verse', async (req, res) => {
   }
 });
 
+// ---------- the welfare purse ----------
+// Welfare collects the tithe and the semester welfare dues into its own MoMo
+// account and answers for it to the Chapter Coordinator and to the executive
+// body. So this is a book of its own, not rows in the chapter ledger: the
+// money was never in the treasury, and recording it there would say it was.
+//
+// The accountability is that the Coordinator and every executive can read the
+// whole book at any time, without asking the person holding it — see
+// /api/welfare/report below.
+const WELFARE_INCOME_CATEGORIES = ['tithe', 'semester_dues', 'donation', 'other'];
+const WELFARE_EXPENSE_CATEGORIES = ['member_support', 'medical', 'bereavement', 'transport', 'supplies', 'other'];
+
+function welfareTotals(entries) {
+  const sum = (type) => entries.filter(e => e.entryType === type).reduce((t, e) => t + (Number(e.amount) || 0), 0);
+  const income = sum('income');
+  const expense = sum('expense');
+  return {
+    income, expense, balance: income - expense,
+    byCategory: WELFARE_INCOME_CATEGORIES.reduce((acc, c) => {
+      acc[c] = entries.filter(e => e.entryType === 'income' && e.category === c)
+        .reduce((t, e) => t + (Number(e.amount) || 0), 0);
+      return acc;
+    }, {}),
+    entryCount: entries.length
+  };
+}
+
+app.get('/api/welfare/ledger', requireWelfareOfficer, async (req, res) => {
+  try {
+    const entries = await repo.getAll('welfareEntries', rolesLib.chapterFilter(req));
+    const sorted = entries.sort((a, b) => (a.date < b.date ? 1 : -1));
+    res.json({ totals: welfareTotals(sorted), entries: sorted.slice(0, 200) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the welfare book' });
+  }
+});
+
+app.post('/api/welfare/ledger', requireWelfareOfficer, upload.single('receipt'), async (req, res) => {
+  try {
+    const entryType = req.body.entryType === 'expense' ? 'expense' : (req.body.entryType === 'income' ? 'income' : null);
+    if (!entryType) return res.status(400).json({ error: 'Say whether this was money received or money spent.' });
+
+    const amount = Number(req.body.amount);
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'Amount must be greater than zero' });
+
+    const allowed = entryType === 'income' ? WELFARE_INCOME_CATEGORIES : WELFARE_EXPENSE_CATEGORIES;
+    const category = cleanText(req.body.category || '');
+    if (!allowed.includes(category)) {
+      return res.status(400).json({ error: `Choose what this was for: ${allowed.join(', ')}` });
+    }
+
+    const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
+    if (!chapterId) return res.status(400).json({ error: 'A chapter is required.' });
+
+    // Money going OUT is the half that needs evidence — the same rule the
+    // Treasurer files under. Money coming in is evidenced by the member who
+    // paid it and the MoMo reference against it.
+    let receiptFileId = '';
+    if (entryType === 'expense') {
+      if (!req.file) {
+        return res.status(400).json({ error: 'Attach the receipt or transfer screenshot — an expense without evidence cannot be recorded.' });
+      }
+      const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+      receiptFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+        category: 'receipt', placement: 'welfare', contentType: compressed.contentType,
+        title: `${category} — ${amount}`, chapterId
+      }));
+    }
+
+    // Dues are owed by a person, so an income row may name the member who paid.
+    // Looked up inside the chapter, so a row can never be pinned to someone
+    // else's member.
+    let memberId = '';
+    let memberName = cleanText(req.body.memberName || '');
+    if (entryType === 'income' && cleanText(req.body.memberId || '')) {
+      const member = await repo.getById('members', cleanText(req.body.memberId), { chapterId });
+      if (!member) return res.status(400).json({ error: 'That member is not in this chapter.' });
+      memberId = member.id;
+      memberName = member.name || memberName;
+    }
+
+    const item = await repo.create('welfareEntries', {
+      chapterId, entryType, category, amount,
+      date: cleanText(req.body.date) || new Date().toISOString().slice(0, 10),
+      description: cleanText(req.body.description || ''),
+      method: ['momo', 'cash', 'bank', 'other'].includes(req.body.method) ? req.body.method : 'momo',
+      reference: cleanText(req.body.reference || ''),
+      memberId, memberName,
+      payee: entryType === 'expense' ? cleanText(req.body.payee || '') : '',
+      receiptFileId,
+      term: cleanText(req.body.term || ''),
+      recordedBy: actorName(req)
+    }, 'wel');
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not record this' });
+  }
+});
+
+app.delete('/api/welfare/ledger/:id', requireWelfareOfficer, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const existing = await repo.getById('welfareEntries', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (existing.receiptFileId) gridfs.deleteFile(existing.receiptFileId).catch(() => {});
+    await repo.removeById('welfareEntries', req.params.id, filter);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove this entry' });
+  }
+});
+
+// The report Welfare answers with. Readable by the Coordinator and by every
+// member of the executive body, not only by the desk that keeps it — a purse
+// one person can both hold and hide is not accountable to anyone.
+function requireWelfareReportReader(req, res, next) {
+  if (isChapterAdminOrAbove(req) || hasRole(req, 'welfare') || hasRole(req, 'executive')) return next();
+  return res.status(401).json({ error: 'The welfare report is for the Coordinator and the executive body.' });
+}
+
+app.get('/api/welfare/report', requireWelfareReportReader, async (req, res) => {
+  try {
+    const entries = await repo.getAll('welfareEntries', rolesLib.chapterFilter(req));
+    const sorted = entries.sort((a, b) => (a.date < b.date ? 1 : -1));
+    res.json({
+      totals: welfareTotals(sorted),
+      // Who paid what is the welfare desk's own record. The body is owed the
+      // figures and the movements, not a list of which members needed help.
+      entries: sorted.slice(0, 60).map(e => ({
+        id: e.id, date: e.date, entryType: e.entryType, category: e.category,
+        amount: e.amount, description: e.description || '', method: e.method || '',
+        payee: e.payee || '', recordedBy: e.recordedBy || '',
+        hasEvidence: !!e.receiptFileId
+      }))
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the welfare report' });
+  }
+});
+
 // ---------- the money: Treasurer files, Financial Secretary records ----------
 // ACONSU splits the money two ways on purpose. The Treasurer holds and
 // disburses it and must account for every movement with evidence attached;
@@ -5599,6 +5868,9 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
       repo.getAll('smsLogs', filter), repo.getAll('shepherdingRecords', filter), repo.getAll('staffUsers', filter),
       repo.getById('chapters', scope.chapterId)
     ]);
+    // Welfare reports to the Coordinator, so the figures are on the dashboard
+    // rather than somewhere the Coordinator has to remember to go looking.
+    const welfare = welfareTotals(await repo.getAll('welfareEntries', filter));
 
     const now = new Date();
     const monthKey = now.toISOString().slice(0, 7);
@@ -5656,6 +5928,7 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
         newPrayerRequests: prayerRequests.filter(r => r.status === 'new').length,
         unreadMessages: contactMessages.filter(m => m.status !== 'replied').length
       },
+      welfare,
       team: staff.map(({ passwordHash, ...s }) => s),
       // Marked an Executive by Shepherding, still with no account of their
       // own. Counted from rows already read rather than asked for again.
@@ -6607,7 +6880,8 @@ app.put('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => 
     }
     if (hasOwn(req.body, 'payment')) {
       next.payment = mergeTextFields(chapter.payment, req.body.payment, [
-        'provider', 'momoNumber', 'momoName', 'bankName', 'bankAccountName', 'bankAccountNumber', 'donationDestination', 'welfareDestination'
+        'provider', 'momoNumber', 'momoName', 'bankName', 'bankAccountName', 'bankAccountNumber', 'donationDestination', 'welfareDestination',
+        'welfareMomoNumber', 'welfareMomoName'
       ]);
     }
     if (hasOwn(req.body, 'about')) {

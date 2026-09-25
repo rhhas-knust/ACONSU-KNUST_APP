@@ -186,6 +186,11 @@ const fakeModels = {
     chapterId: '', memberId: '', memberName: '', category: 'other', description: '', amountRequested: 0,
     status: 'submitted', notes: '', referredBy: '', handledBy: ''
   }),
+  WelfareEntry: makeModel({
+    chapterId: '', entryType: 'income', category: 'other', amount: 0, date: '', description: '',
+    method: 'momo', reference: '', memberId: '', memberName: '', payee: '', receiptFileId: '',
+    term: '', recordedBy: ''
+  }),
   GivingIntent: makeModel({
     chapterId: '', memberId: '', memberName: '', purpose: 'other', method: 'momo', reference: '',
     status: 'pending', matchedFinanceEntryId: '', reviewNotes: '', reviewedBy: ''
