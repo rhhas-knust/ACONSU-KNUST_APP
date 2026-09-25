@@ -182,6 +182,9 @@ const ICON_HEADPHONES = '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="2.5" y="1
 const ICON_VIDEO = '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>';
 const ICON_BOOK = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
 const ICON_GIVE = '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>';
+const ICON_CHAT = '<path d="M21 11.5a8.5 8.5 0 0 1-9.5 8.4L4 21l1.3-4.2A8.5 8.5 0 1 1 21 11.5z"/>';
+const ICON_INFO = '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r="0.9" fill="currentColor" stroke="none"/>';
+const ICON_MAIL = '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 6.5 9 6 9-6"/>';
 const ICON_CARD = '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>';
 
 // ---------- social platform icons (footer, chapter contact, connect) ----------
@@ -473,17 +476,214 @@ function renderHeader(activePath, customPages, member) {
       </div>
     </nav>
   `;
+  wireNotificationBell();
+}
+
+// ---------- in-app notifications ----------
+// The bell stays a real link to /notifications.html — it works with no script,
+// it can be opened in a new tab, and it is still where the full history lives.
+// The click is only intercepted to show the last few in place, because reading
+// one notice should not cost you the page you were on.
+function wireNotificationBell() {
+  const bell = document.getElementById('navBellLink');
+  if (!bell) return;
+
   getUnreadNotificationCount().then((count) => {
-    if (count > 0) {
-      const bell = document.getElementById('navBellLink');
-      if (bell && !bell.querySelector('.notif-dot')) {
-        const dot = document.createElement('span');
-        dot.className = 'notif-dot';
-        dot.style.cssText = 'position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);';
-        bell.appendChild(dot);
-      }
-    }
+    bell.querySelector('.notif-count')?.remove();
+    if (count <= 0) return;
+    const badge = document.createElement('span');
+    badge.className = 'notif-count';
+    badge.textContent = count > 9 ? '9+' : String(count);
+    badge.setAttribute('aria-label', `${count} unread`);
+    bell.appendChild(badge);
   });
+
+  bell.addEventListener('click', (e) => {
+    // Let a modified click do what the person plainly meant by it.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    toggleNotificationPanel(bell);
+  });
+}
+
+function closeNotificationPanel() {
+  document.getElementById('notifPanel')?.remove();
+  document.removeEventListener('keydown', notifEscHandler);
+}
+
+function notifEscHandler(e) {
+  if (e.key === 'Escape') closeNotificationPanel();
+}
+
+async function toggleNotificationPanel(bell) {
+  if (document.getElementById('notifPanel')) return closeNotificationPanel();
+
+  const panel = document.createElement('div');
+  panel.id = 'notifPanel';
+  panel.className = 'notif-panel';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-label', 'Notifications');
+  panel.innerHTML = `
+    <div class="notif-panel-head">
+      <strong>Notifications</strong>
+      <a href="/notifications.html">See all</a>
+    </div>
+    <div class="notif-panel-body"><p class="notif-empty">Loading\u2026</p></div>
+  `;
+  document.body.appendChild(panel);
+  document.addEventListener('keydown', notifEscHandler);
+
+  // Anything outside closes it — including the bell, which toggles.
+  setTimeout(() => {
+    document.addEventListener('click', function away(e) {
+      if (panel.contains(e.target) || bell.contains(e.target)) return;
+      closeNotificationPanel();
+      document.removeEventListener('click', away);
+    });
+  }, 0);
+
+  const body = panel.querySelector('.notif-panel-body');
+  let items = [];
+  try {
+    items = await fetchJSON('/api/notifications');
+  } catch (err) {
+    body.innerHTML = '<p class="notif-empty">Could not load notifications right now.</p>';
+    return;
+  }
+  if (!items.length) {
+    body.innerHTML = '<p class="notif-empty">Nothing yet. You are all caught up.</p>';
+  } else {
+    const lastSeen = (() => {
+      try { return localStorage.getItem('aconsu_last_seen_notif') || ''; } catch (e) { return ''; }
+    })();
+    body.innerHTML = items.slice(0, 8).map((n) => `
+      <a class="notif-row ${n.createdAt > lastSeen ? 'unread' : ''}" href="${escapeHtml(n.url || '/notifications.html')}">
+        <span class="notif-row-title">${escapeHtml(n.title || 'Notice')}</span>
+        <span class="notif-row-body">${escapeHtml(n.body || '')}</span>
+        <span class="notif-row-when">${timeAgo(n.createdAt)}</span>
+      </a>
+    `).join('');
+  }
+
+  // Marked seen on opening, not on visiting the full page — opening the panel
+  // IS having seen them, and the badge should agree with what you just read.
+  markNotificationsSeen();
+  bell.querySelector('.notif-count')?.remove();
+}
+
+// Short, and tolerant of a clock that disagrees with the server's. A phone
+// running fast makes the difference negative; every branch below already falls
+// through to 'just now' in that case, and the clamp keeps it that way if the
+// order of those branches ever changes.
+function timeAgo(iso) {
+  const then = new Date(iso).getTime();
+  if (!then) return '';
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+// ---------- the side rail (wide screens) ----------
+// The same links the top bar and the bottom tabs already carry, laid out as a
+// rail. Grouped, because a flat list of fourteen is a list you scan rather than
+// a place you know your way around.
+//
+// It is built here rather than written into each page for the same reason the
+// header is: there are twenty-one pages, and a link added in one place should
+// not need finding in twenty-one others.
+const SIDE_NAV_GROUPS = [
+  {
+    title: '',
+    links: [{ href: '/index.html', label: 'Home', icon: ICON_HOME }]
+  },
+  {
+    title: 'Gather',
+    links: [
+      { href: '/content.html?kind=live_service', label: 'Live Service', icon: ICON_VIDEO },
+      { href: '/media.html', label: 'Sermons', icon: ICON_HEADPHONES },
+      { href: '/events.html', label: 'Events', icon: ICON_EVENTS }
+    ]
+  },
+  {
+    title: 'Grow',
+    links: [
+      { href: '/bible.html', label: 'Bible', icon: ICON_BIBLE },
+      { href: '/bible-study.html', label: 'Bible Study', icon: ICON_BOOK },
+      { href: '/prayer.html', label: 'Prayer Wall', icon: ICON_PRAYER }
+    ]
+  },
+  {
+    title: 'Belong',
+    links: [
+      { href: '/departments.html', label: 'Departments', icon: ICON_USERS },
+      { href: '/groups.html', label: 'Groups', icon: ICON_USERS },
+      { href: '/chat.html', label: 'Community Chat', icon: ICON_CHAT },
+      { href: '/alumni.html', label: 'Alumni Connect', icon: ICON_USERS }
+    ]
+  },
+  {
+    title: 'Support',
+    links: [
+      { href: '/give.html', label: 'Giving', icon: ICON_GIVE },
+      { href: '/welfare.html', label: 'Welfare', icon: ICON_GIVE },
+      { href: '/notifications.html', label: 'Notifications', icon: ICON_BELL },
+      { href: '/about.html', label: 'About', icon: ICON_INFO },
+      { href: '/contact.html', label: 'Contact', icon: ICON_MAIL }
+    ]
+  }
+];
+
+function renderSideNav(activePath, customPages, member) {
+  document.getElementById('sideNav')?.remove();
+
+  // A page the chapter added itself is as much part of the app as a built-in
+  // one, so it sits in the rail rather than being reachable only from a menu.
+  const custom = (customPages || []).filter(p => p.showInNav).map(p => ({
+    href: `/page.html?slug=${encodeURIComponent(p.slug)}`,
+    label: p.navLabel || p.title,
+    icon: ICON_BOOK
+  }));
+  const groups = custom.length
+    ? [...SIDE_NAV_GROUPS, { title: 'More from your chapter', links: custom }]
+    : SIDE_NAV_GROUPS;
+
+  const item = (l) => `
+    <a href="${l.href}" class="side-nav-item ${activePath === l.href ? 'active' : ''}">
+      ${svgIcon(l.icon)}<span>${escapeHtml(l.label)}</span>
+    </a>`;
+
+  const account = member
+    ? `<a href="/profile.html" class="side-nav-me">
+         <span class="side-nav-avatar">${escapeHtml((member.name || '?').trim().charAt(0).toUpperCase())}</span>
+         <span class="side-nav-me-text">
+           <strong>${escapeHtml(member.name || 'My profile')}</strong>
+           <small>View profile</small>
+         </span>
+       </a>`
+    : `<a href="/login.html" class="btn btn-primary btn-sm btn-block">Log In</a>`;
+
+  const rail = document.createElement('aside');
+  rail.id = 'sideNav';
+  rail.className = 'side-nav';
+  rail.innerHTML = `
+    <a href="/index.html" class="side-nav-brand">
+      <img src="/images/logo.jpg" alt=""><span>ACONSU</span>
+    </a>
+    <nav class="side-nav-scroll">
+      ${groups.map(g => `
+        ${g.title ? `<p class="side-nav-title">${escapeHtml(g.title)}</p>` : ''}
+        ${g.links.map(item).join('')}
+      `).join('')}
+    </nav>
+    <div class="side-nav-foot">${account}</div>
+  `;
+  document.body.appendChild(rail);
 }
 
 function renderFooter(settings) {
@@ -551,6 +751,7 @@ async function initLayout(activePath) {
   } catch (e) { /* nav still works without custom pages */ }
   renderHeader(activePath, customPages, member);
   renderBottomNav(activePath, customPages, member);
+  renderSideNav(activePath, customPages, member);
   try {
     const settings = await fetchJSON('/api/settings');
     renderFooter(settings);

@@ -801,6 +801,174 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 @media (min-width: 861px) { .bottom-nav { display: none; } }
 @media (max-width: 860px) { body { padding-bottom: 78px; } }
 
+/* ---------- in-app notifications ---------- */
+.notif-count {
+  position: absolute; top: -6px; right: -8px; min-width: 17px; height: 17px;
+  padding: 0 4px; border-radius: 999px; background: var(--flame-red); color: #fff;
+  font-family: var(--font-body); font-size: 0.66rem; font-weight: 800;
+  display: grid; place-items: center; border: 2px solid var(--paper);
+}
+.notif-panel {
+  position: fixed; z-index: 420;
+  top: calc(env(safe-area-inset-top, 0px) + 60px); right: 12px; left: 12px;
+  max-width: 380px; margin-left: auto;
+  background: #fff; border: 1px solid var(--line); border-radius: 16px;
+  box-shadow: 0 20px 48px rgba(36,21,48,0.24);
+  overflow: hidden; animation: notifIn 160ms ease-out;
+}
+@keyframes notifIn { from { opacity: 0; transform: translateY(-6px); } }
+.notif-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; border-bottom: 1px solid var(--line);
+  font-family: var(--font-display);
+}
+.notif-panel-head a { font-family: var(--font-body); font-size: 0.8rem; font-weight: 700; color: var(--purple-deep); }
+.notif-panel-body { max-height: min(60vh, 420px); overflow-y: auto; }
+.notif-empty { padding: 22px 16px; margin: 0; text-align: center; color: #8a7595; font-size: 0.88rem; }
+.notif-row {
+  display: grid; gap: 2px; padding: 12px 16px;
+  border-bottom: 1px solid var(--line); text-decoration: none; color: inherit;
+}
+.notif-row:last-child { border-bottom: none; }
+.notif-row:hover { background: var(--lilac-light); }
+/* Unread is marked on the left edge rather than by colouring the text, so a
+   read and an unread notice are still the same thing to read. */
+.notif-row.unread { box-shadow: inset 3px 0 0 var(--flame-gold); background: rgba(232,151,30,0.05); }
+.notif-row-title { font-weight: 700; font-size: 0.9rem; }
+.notif-row-body { font-size: 0.85rem; color: #5a4468; }
+.notif-row-when { font-size: 0.72rem; color: #9b88ab; }
+@media (prefers-reduced-motion: reduce) { .notif-panel { animation: none; } }
+
+/* ---------- the home dashboard row ----------
+   Three cards that used to be three full-width sections stacked down the page.
+   Same content, same ids, same renderers — only where they sit changed. */
+.home-dash { padding: 18px 0 8px; }
+.dash-grid { display: grid; gap: 16px; }
+.dash-card {
+  background: #fff; border: 1px solid var(--line); border-radius: 18px;
+  padding: 20px; box-shadow: 0 8px 24px rgba(58,27,84,0.06);
+  display: flex; flex-direction: column; min-width: 0;
+}
+.dash-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.dash-head h3 { margin: 0; font-size: 1.05rem; }
+.dash-head a { font-size: 0.8rem; font-weight: 700; color: var(--purple-deep); }
+.dash-head a:hover { text-decoration: underline; }
+
+/* The verse keeps its own colour — it is the one card that is a thing to read
+   rather than a list to scan. */
+.dash-card.dash-verse {
+  background: linear-gradient(135deg, var(--purple-deep), var(--purple-rich) 60%, var(--flame-red));
+  color: #fff; border-color: transparent;
+  box-shadow: 0 16px 36px rgba(58,27,84,0.25);
+}
+
+/* The event rows are the same markup the full events page renders, so they are
+   flattened here rather than re-rendered: a card inside a card reads as a
+   mistake, and duplicating the renderer would be two places to fix later. */
+.dash-list { display: flex; flex-direction: column; gap: 4px; }
+.dash-list .card.event-card {
+  box-shadow: none; border: none; border-radius: 12px;
+  padding: 10px; margin: 0; background: transparent;
+}
+.dash-list .card.event-card:hover { background: var(--lilac-light); }
+.dash-list .card.event-card h3 { font-size: 0.95rem; }
+.dash-list .card.event-card p { margin-bottom: 2px; }
+/* The tile grid widens to six columns on a wide viewport, which is right for
+   the full-width section it was written for and wrong inside a dashboard
+   column a third that width. Column count follows the card, not the window. */
+.dash-quick .tile-grid { grid-template-columns: repeat(3, 1fr) !important; gap: 10px; margin: 0; }
+.dash-quick .tile { padding: 14px 6px; }
+.dash-quick .tile-icon { width: 42px; height: 42px; border-radius: 12px; }
+.dash-quick .tile-icon svg { width: 20px; height: 20px; }
+
+.dash-list:empty::after {
+  content: 'Nothing on the calendar yet.';
+  color: #8a7595; font-size: 0.88rem;
+}
+
+@media (min-width: 1024px) {
+  .dash-grid { grid-template-columns: 1.1fr 1fr 1.1fr; align-items: start; }
+  /* What is happening next leads on a wide screen; the verse closes the row. */
+  .dash-events { order: 1; }
+  .dash-quick  { order: 2; }
+  .dash-verse  { order: 3; }
+}
+
+/* ---------- the side rail (wide screens) ----------
+   Three tiers, not two. On a phone: top bar plus bottom tabs. On a tablet: the
+   top bar carries the links, as it always has. From 1024px there is room for a
+   rail, so the links move into it and the top bar keeps only who you are and
+   what is waiting for you — the shape a person expects of an app on a laptop
+   rather than of a website. */
+.side-nav { display: none; }
+
+@media (min-width: 1024px) {
+  .side-nav {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 248px; z-index: 200;
+    display: flex; flex-direction: column;
+    background: #fff; border-right: 1px solid var(--line);
+    padding: 16px 12px 14px;
+  }
+  /* Only the rail scrolls. The brand and the profile block stay put, so the
+     chapter's name and your own face are never scrolled off the app. */
+  .side-nav-scroll { flex: 1 1 auto; overflow-y: auto; margin: 6px 0; }
+
+  .side-nav-brand {
+    display: flex; align-items: center; gap: 10px; padding: 6px 10px 12px;
+    font-family: var(--font-display); font-weight: 700; font-size: 1.1rem;
+    color: var(--purple-rich); text-decoration: none;
+  }
+  .side-nav-brand img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
+
+  .side-nav-title {
+    margin: 14px 10px 6px; font-size: 0.68rem; font-weight: 800;
+    letter-spacing: 0.12em; text-transform: uppercase; color: #9b88ab;
+  }
+  .side-nav-item {
+    display: flex; align-items: center; gap: 11px;
+    padding: 9px 10px; margin-bottom: 2px; border-radius: 10px;
+    font-size: 0.9rem; font-weight: 600; color: var(--purple-ink);
+    text-decoration: none; transition: background 0.15s ease, color 0.15s ease;
+  }
+  .side-nav-item svg { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.75; }
+  .side-nav-item:hover { background: var(--lilac-light); }
+  .side-nav-item.active { background: var(--purple-deep); color: #fff; font-weight: 700; }
+  .side-nav-item.active svg { opacity: 1; }
+
+  .side-nav-foot { border-top: 1px solid var(--line); padding-top: 12px; }
+  .side-nav-me {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border-radius: 12px; text-decoration: none; color: var(--purple-ink);
+  }
+  .side-nav-me:hover { background: var(--lilac-light); }
+  .side-nav-avatar {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    background: var(--purple-deep); color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-size: 0.95rem;
+  }
+  .side-nav-me-text { display: flex; flex-direction: column; min-width: 0; }
+  .side-nav-me-text strong { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .side-nav-me-text small { font-size: 0.74rem; color: #8a7595; }
+
+  /* The page moves over to make room, and the top bar comes with it. */
+  body { padding-left: 248px; }
+  /* With a rail carrying the navigation, the hero no longer has to introduce
+     the app — so it stops taking the whole screen before the dashboard. */
+  .hero { min-height: 340px; padding: 52px 24px 44px; }
+  #site-header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(253, 251, 255, 0.88);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
+  }
+  /* The rail carries the links now; repeating them across the top would be two
+     menus saying the same thing. */
+  .nav-links { display: none !important; }
+  .nav-brand { display: none; }
+  .nav { max-width: none; padding: 10px 26px; justify-content: flex-end; }
+  #appSplash { padding-left: 248px; }
+}
+
 /* ---------- the More page ---------- */
 /* "More" used to be a pop-up sheet. It is now a page of its own, laid out as
    grouped tiles so it reads like a proper section of the app rather than a
