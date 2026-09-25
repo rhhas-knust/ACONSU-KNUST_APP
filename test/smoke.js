@@ -2607,6 +2607,94 @@ const { fakeModels, fakeDb } = require('./harness.js');
       r2.status === 400 && /member/i.test(r2.data.error), r2.data);
   }
 
+  console.log('\n== the welfare purse: its own account, answerable to the chapter ==');
+  {
+    const money = (fields, withReceipt) => {
+      const fd = new FormData();
+      Object.entries(fields).forEach(([k, v]) => fd.append(k, String(v)));
+      fd.append('chapterId', chapterId);
+      if (withReceipt) fd.append('receipt', new Blob([Buffer.from('receipt')], { type: 'image/png' }), 'r.png');
+      return fd;
+    };
+
+    r = await call('welf', 'POST', '/api/welfare/ledger',
+      money({ entryType: 'income', category: 'tithe', amount: 200, date: '2026-09-06', method: 'momo', reference: 'MM-1' }, false), true);
+    check('welfare records tithe collected into its own account', r.status === 200 && r.data.item.amount === 200, r.data);
+
+    r = await call('welf', 'POST', '/api/welfare/ledger',
+      money({ entryType: 'income', category: 'semester_dues', amount: 50, memberId: welfMemberId, term: '2026/27 Sem 1' }, false), true);
+    check('and semester dues against the member who paid them',
+      r.status === 200 && r.data.item.memberName === 'Efua Welfare' && r.data.item.term === '2026/27 Sem 1', r.data);
+
+    // Money going out is the half that needs evidence.
+    r = await call('welf', 'POST', '/api/welfare/ledger',
+      money({ entryType: 'expense', category: 'medical', amount: 80, payee: 'Clinic' }, false), true);
+    check('an expense with no evidence is refused', r.status === 400 && /evidence/i.test(r.data.error), r.data);
+
+    r = await call('welf', 'POST', '/api/welfare/ledger',
+      money({ entryType: 'expense', category: 'medical', amount: 80, payee: 'Clinic' }, true), true);
+    check('and is recorded once the receipt is attached', r.status === 200 && !!r.data.item.receiptFileId, r.data);
+
+    r = await call('welf', 'POST', '/api/welfare/ledger',
+      money({ entryType: 'income', category: 'harvest', amount: 10 }, false), true);
+    check('a category the purse does not keep is refused', r.status === 400, r.data);
+
+    r = await call('welf', 'GET', '/api/welfare/ledger');
+    check('the book adds up', r.status === 200 && r.data.totals.income === 250 && r.data.totals.expense === 80
+      && r.data.totals.balance === 170, r.data.totals);
+    check('and separates what each kind of income brought in',
+      r.data.totals.byCategory.tithe === 200 && r.data.totals.byCategory.semester_dues === 50, r.data.totals.byCategory);
+
+    // The whole point of the arrangement: the people it answers to can read it.
+    r = await call('coord', 'GET', '/api/welfare/report');
+    check('the Coordinator can read the welfare report', r.status === 200 && r.data.totals.balance === 170, r.data.totals);
+    r = await call('bible', 'GET', '/api/welfare/report');
+    check('and so can the executive body, not only the desk that keeps it', r.status === 200, r.data);
+    r = await call('member', 'GET', '/api/welfare/report');
+    check('while an ordinary member cannot', r.status === 401, r.status);
+
+    // The body is owed the figures, not a list of who needed help.
+    const report = (await call('coord', 'GET', '/api/welfare/report')).data;
+    const reportRows = Array.isArray(report.entries) ? report.entries : [];
+    check('the report carries the movements without naming who paid or was helped',
+      reportRows.length > 0 && reportRows.every(e => !('memberName' in e) && !('memberId' in e)), reportRows[0]);
+    check('though it does say which movements have evidence behind them',
+      reportRows.some(e => e.hasEvidence === true), reportRows[0]);
+
+    r = await call('coord', 'GET', '/api/coordinator/overview');
+    check('and the figures reach the Coordinator\'s dashboard on their own',
+      r.data.welfare && r.data.welfare.balance === 170, r.data.welfare);
+
+    // A separate account is a separate book: these rows are not the treasury's.
+    r = await call('fin', 'GET', '/api/finance/summary');
+    const financeTotal = r.data.totalIncome || 0;
+    r = await call('welf', 'POST', '/api/welfare/ledger', money({ entryType: 'income', category: 'tithe', amount: 999 }, false), true);
+    check('recording in the purse does not move the chapter ledger', r.status === 200, r.data);
+    r = await call('fin', 'GET', '/api/finance/summary');
+    check('the treasury total is unchanged, because that money was never in it',
+      (r.data.totalIncome || 0) === financeTotal, { before: financeTotal, after: r.data.totalIncome });
+
+    r = await call('welf', 'GET', '/api/welfare/ledger');
+    const strayId = r.data.entries[0].id;
+    r = await call('fin', 'GET', '/api/welfare/ledger');
+    check('and Finance is not the welfare desk either', r.status === 401, r.status);
+
+    r = await call('welf', 'DELETE', `/api/welfare/ledger/${strayId}`);
+    check('a mistaken entry can be taken back out', r.status === 200, r.data);
+    r = await call('welf', 'GET', '/api/welfare/ledger');
+    check('and the balance follows it', r.data.totals.balance === 170, r.data.totals);
+
+    // Welfare holds its own account, so members are told its number, not the
+    // chapter's — sending dues to the wrong MoMo is a real way to lose money.
+    r = await call('admin', 'PUT', '/api/admin/chapter-settings', {
+      chapterId, payment: { welfareMomoNumber: '0244000111', welfareMomoName: 'ACONSU Welfare' }
+    });
+    check('a chapter can set the welfare account details', r.status === 200, r.data);
+    r = await call('anon', 'GET', '/api/settings', null, false, { 'X-Chapter-Id': chapterId });
+    check('and members are shown them',
+      r.data.payment.welfareMomoNumber === '0244000111' && r.data.payment.welfareMomoName === 'ACONSU Welfare', r.data.payment);
+  }
+
   console.log('\n== opening the app, and one class name that belonged to two things ==');
   {
     const fs = require('fs');
