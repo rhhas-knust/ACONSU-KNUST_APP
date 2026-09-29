@@ -3537,7 +3537,7 @@ const { fakeModels, fakeDb } = require('./harness.js');
     // of nothing - the grey box this section was built to avoid, wearing a
     // different hat. Seen in a browser once the first two photographs went in.
     check('and a card with no photo yet is not stretched to match one that has',
-      /#ministries \{ align-items: start; \}/.test(css), null);
+      /#ministries, \.founder-grid \{ align-items: start; \}/.test(css), null);
 
     // ---- photos too big to serve ----
     // A phone photo is 4-12MB and several thousand pixels wide. Nothing here
@@ -3753,6 +3753,11 @@ const { fakeModels, fakeDb } = require('./harness.js');
       && css.indexOf('.lead-face, .exec-face, .founder-face {') < css.indexOf('.founder-face {'), null);
     check('with the crop held high, so it keeps the face and not the tie',
       /\.founder-face \{[\s\S]{0,200}object-position: 50% 15%;/.test(css), null);
+    // `about` is optional per founder, so the same stretch that emptied the
+    // activity cards empties these: three founders with no sentence written
+    // about them inherited the fourth one's height as white space.
+    check('and a founder with nothing written about him yet is not stretched either',
+      /#ministries, \.founder-grid \{ align-items: start; \}/.test(css), null);
     // Four standing portraits in one column made this a 2,700px scroll on a
     // 390px screen. Two columns halve it.
     {
