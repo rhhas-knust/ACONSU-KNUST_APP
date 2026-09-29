@@ -113,10 +113,48 @@ const WELFARE_CAT_LABEL = Object.fromEntries([...WELFARE_INCOME_CATEGORIES, ...W
 
 const cedis = (n) => `GHS ${(Number(n) || 0).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Tithe waiting to be confirmed. A member says what they sent; somebody here
+// checks it landed and writes it into the book. Until that happens the money
+// is claimed, not recorded - so this sits above the purse rather than inside
+// it, and is the first thing the desk sees.
+function givingQueueHtml(queue) {
+  if (!queue.length) return '';
+  return `
+    <div class="portal-card" style="margin-bottom:16px;">
+      <h3>Tithe waiting to be confirmed</h3>
+      <p class="hint">${queue.length} member${queue.length === 1 ? '' : 's'} logged a tithe sent to the welfare account. Check it arrived, then confirm it into the book.</p>
+      <div class="table-wrap">
+        <table class="portal-table">
+          <thead><tr><th>Who</th><th>Amount</th><th>How</th><th>Reference</th><th></th></tr></thead>
+          <tbody>
+            ${queue.map(g => `
+              <tr>
+                <td>${escapeHtml(g.memberName || '\u2014')}</td>
+                <td><strong>${cedis(g.amount)}</strong></td>
+                <td class="tiny muted">${escapeHtml(g.method || '')}</td>
+                <td class="tiny muted">${escapeHtml(g.reference || '\u2014')}</td>
+                <td style="white-space:nowrap;">
+                  ${PORTAL.canEdit ? `
+                    <button class="btn btn-primary btn-sm" data-confirm-give="${escapeHtml(g.id)}">Confirm</button>
+                    <button class="btn btn-outline btn-sm" data-reject-give="${escapeHtml(g.id)}">Reject</button>` : ''}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
 async function renderWelfarePurse(el) {
-  const { totals, entries } = await fetchJSON('/api/welfare/ledger');
+  const [{ totals, entries }, queue] = await Promise.all([
+    fetchJSON('/api/welfare/ledger'),
+    fetchJSON('/api/welfare/giving-queue').catch(() => [])
+  ]);
 
   el.innerHTML = `
+    ${givingQueueHtml(queue)}
     <div class="panel-head">
       <div>
         <h2>The Welfare Purse</h2>
@@ -167,6 +205,27 @@ async function renderWelfarePurse(el) {
   `;
 
   document.getElementById('welAddBtn').addEventListener('click', openWelfareEntryForm);
+
+  el.querySelectorAll('[data-confirm-give]').forEach(btn => btn.addEventListener('click', async () => {
+    try {
+      await fetchJSON(`/api/welfare/giving/${btn.dataset.confirmGive}/confirm`, { method: 'POST' });
+      showToast('Tithe confirmed into the book.', 'success');
+      openPanel('purse');
+    } catch (err) { showToast(err.message || 'Could not confirm that.', 'error'); }
+  }));
+  el.querySelectorAll('[data-reject-give]').forEach(btn => btn.addEventListener('click', async () => {
+    const notes = prompt('Why is this being rejected? (the member sees the claim was not confirmed)');
+    if (notes === null) return;
+    try {
+      await fetchJSON(`/api/welfare/giving/${btn.dataset.rejectGive}/reject`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes })
+      });
+      showToast('Claim rejected.', 'success');
+      openPanel('purse');
+    } catch (err) { showToast(err.message || 'Could not reject that.', 'error'); }
+  }));
+
   el.querySelectorAll('[data-del-wel]').forEach(btn => btn.addEventListener('click', async () => {
     if (!confirm('Remove this entry? The figures the Coordinator sees will change.')) return;
     try {

@@ -2333,7 +2333,8 @@ const communityRouteDeps = {
   repo, models, rolesLib, requireMember, requireContentManager, requireShepherd,
   requireViewRole, requireFinance, requireChapterAdmin, isChapterAdminOrAbove,
   hasRole, resolveViewerChapterId, resolveChapterIdForWrite, actorName,
-  createNotification, notifyAdminByEmail, chapterConfidential, requireWelfareOfficer
+  createNotification, notifyAdminByEmail, chapterConfidential, requireWelfareOfficer,
+  givingGoesToWelfare
 };
 registerGroupRoutes(app, communityRouteDeps);
 registerChatRoutes(app, communityRouteDeps);
@@ -5394,6 +5395,18 @@ app.get('/api/daily-verse', async (req, res) => {
 // whole book at any time, without asking the person holding it — see
 // /api/welfare/report below.
 const WELFARE_INCOME_CATEGORIES = ['tithe', 'semester_dues', 'donation', 'other'];
+
+// Which purse a giving purpose belongs to. The chapter decided that tithe goes
+// to Welfare's own account alongside the semester dues, so a tithe never
+// touches the treasury and must never be recorded as though it had.
+//
+// One place says this. The page that shows a member where to send, the queue
+// Finance works, the queue Welfare works and both confirm routes all ask here,
+// so they cannot come to different answers.
+const WELFARE_GIVING_PURPOSES = ['tithe'];
+function givingGoesToWelfare(purpose) {
+  return WELFARE_GIVING_PURPOSES.includes(purpose);
+}
 const WELFARE_EXPENSE_CATEGORIES = ['member_support', 'medical', 'bereavement', 'transport', 'supplies', 'other'];
 
 function welfareTotals(entries) {
@@ -5475,7 +5488,8 @@ app.post('/api/welfare/ledger', requireWelfareOfficer, upload.single('receipt'),
       payee: entryType === 'expense' ? cleanText(req.body.payee || '') : '',
       receiptFileId,
       term: cleanText(req.body.term || ''),
-      recordedBy: actorName(req)
+      recordedBy: actorName(req),
+      recordedByMemberId: (currentStaff(req) || {}).memberId || ''
     }, 'wel');
     res.json({ success: true, item });
   } catch (e) {
@@ -5504,6 +5518,73 @@ function requireWelfareReportReader(req, res, next) {
   return res.status(401).json({ error: 'The welfare report is for the Coordinator and the executive body.' });
 }
 
+// ---------- tithe reaches the welfare book, not the treasury ----------
+// A member logs what they sent; somebody in the office confirms it against the
+// account it actually landed in. Tithe lands in Welfare's account, so Welfare
+// is the office that confirms it - Finance confirming money that never touched
+// the treasury would put a figure in the books against nothing.
+
+app.get('/api/welfare/giving-queue', requireWelfareOfficer, async (req, res) => {
+  try {
+    const items = await repo.getAll('givingIntents', { ...rolesLib.chapterFilter(req), status: 'pending' });
+    res.json(items
+      .filter(i => givingGoesToWelfare(i.purpose))
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the giving queue' });
+  }
+});
+
+app.post('/api/welfare/giving/:id/confirm', requireWelfareOfficer, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const intent = await repo.getById('givingIntents', req.params.id, filter);
+    if (!intent) return res.status(404).json({ error: 'Not found' });
+    if (intent.status !== 'pending') return res.status(400).json({ error: 'This has already been reviewed.' });
+    // Welfare's queue is welfare's money. Anything else belongs to Finance, and
+    // confirming it here would put it in the wrong purse.
+    if (!givingGoesToWelfare(intent.purpose)) {
+      return res.status(400).json({ error: 'That gift went to the chapter account. Finance confirms it, not Welfare.' });
+    }
+    const entry = await repo.create('welfareEntries', {
+      chapterId: intent.chapterId,
+      entryType: 'income',
+      category: intent.purpose,
+      amount: intent.amount,
+      date: new Date().toISOString().slice(0, 10),
+      description: `Giving confirmed \u2014 ${intent.memberName}`,
+      method: intent.method,
+      reference: intent.reference,
+      memberId: intent.memberId || '',
+      memberName: intent.memberName || '',
+      recordedBy: actorName(req),
+      recordedByMemberId: (currentStaff(req) || {}).memberId || ''
+    }, 'wel');
+    const updated = await repo.updateById('givingIntents', req.params.id, {
+      ...intent, status: 'confirmed', matchedWelfareEntryId: entry.id, reviewedBy: actorName(req)
+    }, filter);
+    res.json({ success: true, item: updated, entry });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not confirm this' });
+  }
+});
+
+app.patch('/api/welfare/giving/:id/reject', requireWelfareOfficer, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const intent = await repo.getById('givingIntents', req.params.id, filter);
+    if (!intent) return res.status(404).json({ error: 'Not found' });
+    if (!givingGoesToWelfare(intent.purpose)) {
+      return res.status(400).json({ error: 'That gift went to the chapter account. Finance reviews it, not Welfare.' });
+    }
+    res.json({ success: true, item: await repo.updateById('givingIntents', req.params.id, {
+      ...intent, status: 'rejected', reviewNotes: cleanText(req.body.notes || ''), reviewedBy: actorName(req)
+    }, filter) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not reject this' });
+  }
+});
+
 app.get('/api/welfare/report', requireWelfareReportReader, async (req, res) => {
   try {
     const entries = await repo.getAll('welfareEntries', rolesLib.chapterFilter(req));
@@ -5518,8 +5599,15 @@ app.get('/api/welfare/report', requireWelfareReportReader, async (req, res) => {
         amount: e.amount, description: e.description || '', method: e.method || '',
         payee: e.payee || '', recordedBy: e.recordedBy || '',
         memberId: e.memberId || '', memberName: e.memberName || '',
+        // The Welfare head gives like anybody else, and when they do they are
+        // recording their own money. That is not wrong and it is not hidden -
+        // it is marked, so the Coordinator can see at a glance which rows the
+        // keeper of the book wrote about themselves.
+        selfRecorded: !!(e.memberId && e.recordedByMemberId && e.memberId === e.recordedByMemberId),
         hasEvidence: !!e.receiptFileId
-      }))
+      })),
+      selfRecordedCount: sorted.filter(e =>
+        e.memberId && e.recordedByMemberId && e.memberId === e.recordedByMemberId).length
     });
   } catch (e) {
     res.status(500).json({ error: 'Could not load the welfare report' });

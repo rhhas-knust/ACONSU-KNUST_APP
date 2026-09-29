@@ -1573,7 +1573,9 @@ const { fakeModels, fakeDb } = require('./harness.js');
   r = await call('member', 'GET', '/api/giving/chapter-info');
   check('giving now shows the chapter\'s real MoMo details', r.data.configured === true && r.data.payment.momoNumber === '0244000000', r.data);
 
-  r = await call('member', 'POST', '/api/giving/intents', { amount: 50, purpose: 'tithe', method: 'momo', reference: 'MM998877' });
+  // Offertory goes to the chapter account, so Finance confirms it. Tithe goes
+  // to Welfare's own account and is exercised further down.
+  r = await call('member', 'POST', '/api/giving/intents', { amount: 50, purpose: 'offertory', method: 'momo', reference: 'MM998877' });
   check('a member logs a gift they sent', r.status === 200 && r.data.item.status === 'pending', r.data);
   const givingIntentId = r.data.item.id;
   r = await call('fin', 'GET', '/api/finance/giving-queue');
@@ -3506,6 +3508,100 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('and what to fill in before doing so', /serviceTimes/.test(readme), null);
     check('and does not tell anyone to pick a folder Pages cannot serve',
       !/folder: `\/site`/.test(readme), null);
+  }
+
+  console.log('\n== tithe goes to the welfare account, and the desk cannot hide its own giving ==');
+  {
+    // The chapter decided tithe belongs with the semester dues in Welfare's
+    // own account. That is not a label change: the money never touches the
+    // treasury, so it must not be confirmable into the treasury books, and the
+    // member must be shown the right number before they send it.
+    let r4 = await call('admin', 'PUT', '/api/admin/chapter-settings', {
+      chapterId, payment: { welfareMomoNumber: '0500111222', welfareMomoName: 'ACONSU Welfare' }
+    });
+    check('the chapter publishes a welfare account', r4.status === 200, r4.data);
+
+    r4 = await call('member', 'GET', '/api/giving/chapter-info');
+    check('the giving page is told which purposes go to welfare',
+      Array.isArray(r4.data.welfarePurposes) && r4.data.welfarePurposes.includes('tithe'), r4.data);
+    check('and is given the welfare account to show for them',
+      r4.data.payment.welfareMomoNumber === '0500111222', r4.data.payment);
+
+    r4 = await call('member', 'POST', '/api/giving/intents',
+      { amount: 60, purpose: 'tithe', method: 'momo', reference: 'TITHE-1' });
+    check('a member logs a tithe', r4.status === 200, r4.data);
+    const titheId = r4.data.item.id;
+
+    // Finance must not be able to put it in the treasury books, by either door.
+    r4 = await call('fin', 'GET', '/api/finance/giving-queue');
+    check('the tithe is not in Finance\'s queue',
+      !r4.data.some(g => g.id === titheId), r4.data.map(g => g.purpose));
+    r4 = await call('fin', 'PATCH', `/api/finance/giving/${titheId}/confirm`, {});
+    check('and Finance cannot confirm it into the treasury ledger',
+      r4.status === 400 && /welfare account/i.test(r4.data.error), r4.data);
+    r4 = await call('fin', 'POST', '/api/finance/giving/reconcile-batch', { intentIds: [titheId] });
+    check('nor slip it through in a batch, which reaches the same ledger',
+      r4.status === 400 && /welfare account/i.test(r4.data.error), r4.data);
+
+    // Welfare's queue, and Welfare's book.
+    r4 = await call('welf', 'GET', '/api/welfare/giving-queue');
+    check('Welfare sees the tithe waiting', r4.data.some(g => g.id === titheId), r4.data);
+    const balanceBefore = (await call('welf', 'GET', '/api/welfare/ledger')).data.totals.balance;
+    r4 = await call('welf', 'POST', `/api/welfare/giving/${titheId}/confirm`, {});
+    check('and confirms it into the welfare book',
+      r4.status === 200 && r4.data.item.status === 'confirmed', r4.data);
+    check('which links the claim to a welfare entry, not a finance one',
+      !!r4.data.item.matchedWelfareEntryId && !r4.data.item.matchedFinanceEntryId, r4.data.item);
+    const balanceAfter = (await call('welf', 'GET', '/api/welfare/ledger')).data.totals.balance;
+    check('the welfare balance actually moved by the amount given',
+      balanceAfter === balanceBefore + 60, { balanceBefore, balanceAfter });
+    r4 = await call('member', 'GET', '/api/giving/mine');
+    check('and the member sees their tithe confirmed',
+      r4.data.find(g => g.id === titheId).status === 'confirmed', r4.data);
+
+    // The boundary holds in the other direction too.
+    r4 = await call('member', 'POST', '/api/giving/intents',
+      { amount: 15, purpose: 'offertory', method: 'momo', reference: 'OFF-1' });
+    const offeringId = r4.data.item.id;
+    r4 = await call('welf', 'POST', `/api/welfare/giving/${offeringId}/confirm`, {});
+    check('Welfare cannot pull a chapter offering into its own book',
+      r4.status === 400 && /Finance confirms it/i.test(r4.data.error), r4.data);
+    r4 = await call('welf', 'GET', '/api/welfare/giving-queue');
+    check('and never sees it in their queue', !r4.data.some(g => g.id === offeringId), r4.data);
+
+    // The welfare desk gives too, and when they do they are recording their own
+    // money. Not hidden, not forbidden - marked, so the Coordinator can see it.
+    const selfMoney = async (fields) => {
+      const fd = new FormData();
+      for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+      return call('welf', 'POST', '/api/welfare/ledger', fd, true);
+    };
+    r4 = await selfMoney({ entryType: 'income', category: 'tithe', amount: '40',
+      date: '2026-09-22', memberId: welfMemberId });
+    check('the welfare head can record their own tithe', r4.status === 200, r4.data);
+
+    const rep = (await call('coord', 'GET', '/api/welfare/report')).data;
+    const own = (rep.entries || []).find(e => e.memberName === 'Efua Welfare' && e.amount === 40);
+    check('the Coordinator can see it at all', !!own, rep.entries);
+    check('and it is marked as the keeper of the book recording themselves',
+      own && own.selfRecorded === true, own);
+    check('with a count, so it is visible without reading every row',
+      rep.selfRecordedCount >= 1, rep.selfRecordedCount);
+    const others = (rep.entries || []).filter(e => e.memberName && e.memberName !== 'Efua Welfare');
+    check('while somebody else\'s giving is not marked that way',
+      others.length > 0 && others.every(e => e.selfRecorded === false), others);
+
+    // The page has to show the right number, or the routing is only on paper.
+    const giveHtml = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'public', 'give.html'), 'utf8');
+    check('the giving page swaps the account to match the purpose',
+      /welfarePurposes\.includes\(purpose\)/.test(giveHtml), null);
+    check('and redraws it when the purpose changes, rather than once on load',
+      /getElementById\('purpose'\)\.addEventListener\('change', renderPayInfo\)/.test(giveHtml), null);
+    check('saying plainly where a tithe is going',
+      /Tithe goes to the Welfare account/.test(giveHtml), null);
+    check('and admitting when welfare has published no account yet',
+      /Welfare has not published its account yet/.test(giveHtml), null);
   }
 
   // The send loop only ticks once a minute, so this one is opt-in: run it with

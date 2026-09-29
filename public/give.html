@@ -105,19 +105,39 @@ async function loadHistory() {
       document.getElementById('payInfo').innerHTML = '<p class="empty-state">Your chapter hasn\'t set up giving details yet — check back soon.</p>';
     } else {
       const p = info.payment;
-      document.getElementById('payInfo').innerHTML = `
-        <div class="pay-details">
-          <h3 style="margin-bottom:4px;">${escapeHtml(info.chapterName)}</h3>
-          ${p.provider ? `<dt>Giving Channel</dt><dd>${escapeHtml(p.provider)}</dd>` : ''}
-          ${p.momoNumber ? `<dt>Mobile Money</dt><dd>${escapeHtml(p.momoNumber)}${p.momoName ? ' — ' + escapeHtml(p.momoName) : ''}</dd>` : ''}
-          ${p.bankName ? `<dt>Bank</dt><dd>${escapeHtml(p.bankName)}</dd>` : ''}
-          ${p.bankAccountNumber ? `<dt>Account</dt><dd>${escapeHtml(p.bankAccountName || '')} ${escapeHtml(p.bankAccountNumber)}</dd>` : ''}
-          ${p.donationDestination ? `<dt>General Giving</dt><dd>${escapeHtml(p.donationDestination)}</dd>` : ''}
-          ${p.welfareDestination ? `<dt>Welfare Giving</dt><dd>${escapeHtml(p.welfareDestination)}</dd>` : ''}
-          <p style="font-size:0.8rem; color:var(--ink-faint); margin-top:14px;">Sent via your own MoMo/bank app — this page doesn't process payments directly.</p>
-        </div>
-      `;
+      const welfarePurposes = info.welfarePurposes || [];
+
+      // Tithe goes to Welfare's own account. Telling somebody that in a
+      // footnote while showing them the chapter number is how money ends up in
+      // the wrong purse, so the number on screen changes with the purpose.
+      function renderPayInfo() {
+        const purpose = document.getElementById('purpose').value;
+        const toWelfare = welfarePurposes.includes(purpose);
+        const momoNumber = toWelfare ? p.welfareMomoNumber : p.momoNumber;
+        const momoName = toWelfare ? p.welfareMomoName : p.momoName;
+        document.getElementById('payInfo').innerHTML = `
+          <div class="pay-details">
+            <h3 style="margin-bottom:4px;">${escapeHtml(info.chapterName)}</h3>
+            ${toWelfare
+              ? `<p class="pill amber" style="margin:6px 0 12px;">Tithe goes to the Welfare account</p>`
+              : ''}
+            ${!toWelfare && p.provider ? `<dt>Giving Channel</dt><dd>${escapeHtml(p.provider)}</dd>` : ''}
+            ${momoNumber
+              ? `<dt>${toWelfare ? 'Welfare Mobile Money' : 'Mobile Money'}</dt><dd>${escapeHtml(momoNumber)}${momoName ? ' — ' + escapeHtml(momoName) : ''}</dd>`
+              : `<p class="empty-state" style="margin:8px 0;">${toWelfare
+                  ? 'Welfare has not published its account yet — ask the Welfare team before sending your tithe.'
+                  : 'No mobile money number on file yet.'}</p>`}
+            ${!toWelfare && p.bankName ? `<dt>Bank</dt><dd>${escapeHtml(p.bankName)}</dd>` : ''}
+            ${!toWelfare && p.bankAccountNumber ? `<dt>Account</dt><dd>${escapeHtml(p.bankAccountName || '')} ${escapeHtml(p.bankAccountNumber)}</dd>` : ''}
+            ${!toWelfare && p.donationDestination ? `<dt>General Giving</dt><dd>${escapeHtml(p.donationDestination)}</dd>` : ''}
+            ${!toWelfare && p.welfareDestination ? `<dt>Welfare Giving</dt><dd>${escapeHtml(p.welfareDestination)}</dd>` : ''}
+            <p style="font-size:0.8rem; color:var(--ink-faint); margin-top:14px;">Sent via your own MoMo/bank app — this page doesn't process payments directly.</p>
+          </div>
+        `;
+      }
       document.getElementById('giveForm').style.display = 'block';
+      document.getElementById('purpose').addEventListener('change', renderPayInfo);
+      renderPayInfo();
     }
   } catch (e) {
     document.getElementById('payInfo').innerHTML = '<p class="empty-state">Could not load giving details right now.</p>';

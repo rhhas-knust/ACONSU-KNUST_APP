@@ -629,7 +629,7 @@ const WELFARE_REPORT_LABELS = {
 };
 
 async function renderWelfarePurseReport(el) {
-  const { totals, entries } = await fetchJSON('/api/welfare/report');
+  const { totals, entries, selfRecordedCount } = await fetchJSON('/api/welfare/report');
 
   el.innerHTML = `
     <div class="panel-head">
@@ -645,6 +645,10 @@ async function renderWelfarePurseReport(el) {
       ${statCard('Paid out', money(totals.expense))}
       ${statCard('Balance', money(totals.balance), { tone: totals.balance < 0 ? 'bad' : 'good' })}
       ${statCard('Movements', totals.entryCount)}
+      ${statCard('Recorded by the payer', selfRecordedCount || 0, {
+        tone: selfRecordedCount ? 'bad' : '',
+        foot: 'rows where the welfare desk entered their own giving'
+      })}
     </div>
 
     <div class="portal-card" style="margin-top:16px;">
@@ -669,7 +673,7 @@ async function renderWelfarePurseReport(el) {
               </td>
               <td class="tiny muted">${escapeHtml(
                 e.entryType === 'income' ? (e.memberName || e.payee || '\u2014') : (e.payee || '\u2014')
-              )}</td>
+              )}${e.selfRecorded ? ' <span class="pill amber">recorded it themselves</span>' : ''}</td>
               <td><strong>${e.entryType === 'income' ? '+' : '\u2212'}${money(e.amount)}</strong></td>
               <td>${e.hasEvidence ? pill('attached', 'green') : '<span class="tiny muted">\u2014</span>'}</td>
               <td class="tiny muted">${escapeHtml(e.recordedBy || '\u2014')}</td>
