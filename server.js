@@ -5524,6 +5524,63 @@ function requireWelfareReportReader(req, res, next) {
 // is the office that confirms it - Finance confirming money that never touched
 // the treasury would put a figure in the books against nothing.
 
+// What Welfare has recorded from this member, and what they have told us
+// about that is not confirmed yet. Two sources on purpose: a tithe logged
+// through the app starts as a claim, and a dues payment handed over in cash is
+// written straight into the book by the desk. A member should see both.
+//
+// INCOME ONLY. A welfare expense can name a member because they were helped,
+// and help received is nobody's business but theirs and the desk's - it must
+// never surface as though it were something they paid.
+app.get('/api/member/welfare-giving', requireMember, async (req, res) => {
+  try {
+    const memberId = req.session.memberId;
+    const member = await repo.getById('members', memberId);
+    if (!member) return res.status(404).json({ error: 'Account not found' });
+    const scope = { chapterId: member.chapterId };
+
+    const [intents, entries] = await Promise.all([
+      repo.getAll('givingIntents', { ...scope, memberId }),
+      repo.getAll('welfareEntries', { ...scope, memberId })
+    ]);
+
+    // Confirmed claims already exist as a ledger row, so showing both would
+    // count the same money twice on the member's own page.
+    const recorded = entries
+      .filter(e => e.entryType === 'income')
+      .map(e => ({
+        kind: 'received',
+        id: e.id,
+        category: e.category,
+        amount: e.amount,
+        receivedOn: e.date || '',
+        reference: e.reference || '',
+        recordedBy: e.recordedBy || ''
+      }));
+
+    const awaiting = intents
+      .filter(i => givingGoesToWelfare(i.purpose) && i.status !== 'confirmed')
+      .map(i => ({
+        kind: i.status === 'rejected' ? 'rejected' : 'awaiting',
+        id: i.id,
+        category: i.purpose,
+        amount: i.amount,
+        reference: i.reference || '',
+        loggedOn: i.createdAt || null,
+        note: i.reviewNotes || ''
+      }));
+
+    const totalReceived = recorded.reduce((t, r) => t + (Number(r.amount) || 0), 0);
+    res.json({
+      totalReceived,
+      received: recorded.sort((a, b) => (a.receivedOn < b.receivedOn ? 1 : -1)),
+      awaiting: awaiting.sort((a, b) => new Date(b.loggedOn) - new Date(a.loggedOn))
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load your welfare giving' });
+  }
+});
+
 app.get('/api/welfare/giving-queue', requireWelfareOfficer, async (req, res) => {
   try {
     const items = await repo.getAll('givingIntents', { ...rolesLib.chapterFilter(req), status: 'pending' });
@@ -5546,23 +5603,45 @@ app.post('/api/welfare/giving/:id/confirm', requireWelfareOfficer, async (req, r
     if (!givingGoesToWelfare(intent.purpose)) {
       return res.status(400).json({ error: 'That gift went to the chapter account. Finance confirms it, not Welfare.' });
     }
+    // The day the money landed, which is not always the day somebody got round
+    // to checking. Defaults to today so confirming stays one click when they
+    // are the same.
+    const today = new Date().toISOString().slice(0, 10);
+    const receivedOn = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.receivedOn || '')) ? req.body.receivedOn : today;
+    if (receivedOn > today) {
+      return res.status(400).json({ error: 'Money cannot have arrived in the future — check the date.' });
+    }
+    const reference = cleanText(req.body.reference || '') || intent.reference || '';
+
     const entry = await repo.create('welfareEntries', {
       chapterId: intent.chapterId,
       entryType: 'income',
       category: intent.purpose,
       amount: intent.amount,
-      date: new Date().toISOString().slice(0, 10),
+      date: receivedOn,
       description: `Giving confirmed \u2014 ${intent.memberName}`,
       method: intent.method,
-      reference: intent.reference,
+      reference,
       memberId: intent.memberId || '',
       memberName: intent.memberName || '',
       recordedBy: actorName(req),
       recordedByMemberId: (currentStaff(req) || {}).memberId || ''
     }, 'wel');
     const updated = await repo.updateById('givingIntents', req.params.id, {
-      ...intent, status: 'confirmed', matchedWelfareEntryId: entry.id, reviewedBy: actorName(req)
+      ...intent, status: 'confirmed', matchedWelfareEntryId: entry.id,
+      reference, receivedOn, confirmedAt: new Date(), reviewedBy: actorName(req)
     }, filter);
+
+    // The member gave and then heard nothing. Telling them it arrived is the
+    // other half of the transaction, and it has to reach them rather than wait
+    // on a page they might not open again.
+    if (intent.memberId) {
+      createNotification(
+        'Your giving was received',
+        `Welfare confirmed GH\u20b5 ${Number(intent.amount).toFixed(2)} received on ${receivedOn}. Thank you.`,
+        '/give.html', 'welfare', intent.chapterId, { memberIds: [intent.memberId] }
+      ).catch(() => {});
+    }
     res.json({ success: true, item: updated, entry });
   } catch (e) {
     res.status(500).json({ error: 'Could not confirm this' });
@@ -5577,9 +5656,22 @@ app.patch('/api/welfare/giving/:id/reject', requireWelfareOfficer, async (req, r
     if (!givingGoesToWelfare(intent.purpose)) {
       return res.status(400).json({ error: 'That gift went to the chapter account. Finance reviews it, not Welfare.' });
     }
-    res.json({ success: true, item: await repo.updateById('givingIntents', req.params.id, {
-      ...intent, status: 'rejected', reviewNotes: cleanText(req.body.notes || ''), reviewedBy: actorName(req)
-    }, filter) });
+    const notes = cleanText(req.body.notes || '');
+    const item = await repo.updateById('givingIntents', req.params.id, {
+      ...intent, status: 'rejected', reviewNotes: notes, reviewedBy: actorName(req)
+    }, filter);
+    // Silence after a rejection is worse than after a confirmation: the member
+    // thinks it went through.
+    if (intent.memberId) {
+      createNotification(
+        'Your giving could not be confirmed',
+        notes
+          ? `Welfare could not match GH\u20b5 ${Number(intent.amount).toFixed(2)} against the account: ${notes}`
+          : `Welfare could not match GH\u20b5 ${Number(intent.amount).toFixed(2)} against the account. Please check with the welfare team.`,
+        '/give.html', 'welfare', intent.chapterId, { memberIds: [intent.memberId] }
+      ).catch(() => {});
+    }
+    res.json({ success: true, item });
   } catch (e) {
     res.status(500).json({ error: 'Could not reject this' });
   }

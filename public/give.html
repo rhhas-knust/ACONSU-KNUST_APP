@@ -76,14 +76,41 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <script src="/js/main.js"></script>
 <script>
+// The raw keys are not English, and a badge reading "confirmed" is not an
+// acknowledgement. Somebody who gave wants to know it arrived, who says so and
+// when — so the row says that in words.
+const PURPOSE_LABELS = {
+  tithe: 'Tithe', offertory: 'Offertory', harvest: 'Harvest',
+  momo: 'General giving', other: 'Other'
+};
+const niceDate = (d) => {
+  if (!d) return '';
+  const dt = new Date(d);
+  return isNaN(dt) ? String(d) : dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+function giveStatusLine(g) {
+  if (g.status === 'confirmed') {
+    const who = g.reviewedBy ? ` by ${escapeHtml(g.reviewedBy)}` : '';
+    const on = g.receivedOn ? ` on ${escapeHtml(niceDate(g.receivedOn))}` : '';
+    return `<span class="tiny" style="color:var(--ok-ink, #2E7D4F); font-weight:700;">Received${on}${who}</span>`;
+  }
+  if (g.status === 'rejected') {
+    return `<span class="tiny" style="color:var(--bad-ink, #A93226); font-weight:700;">Not confirmed${g.reviewNotes ? ' — ' + escapeHtml(g.reviewNotes) : ''}</span>`;
+  }
+  return '<span class="tiny muted">Waiting to be confirmed against the account</span>';
+}
+
 async function loadHistory() {
   const wrap = document.getElementById('giveHistory');
   try {
     const items = await fetchJSON('/api/giving/mine');
     wrap.innerHTML = items.map(g => `
       <div class="give-history-row">
-        <span>${escapeHtml(g.purpose)} — GH₵ ${Number(g.amount).toFixed(2)}</span>
-        <span class="badge">${escapeHtml(g.status)}</span>
+        <span>
+          ${escapeHtml(PURPOSE_LABELS[g.purpose] || g.purpose)} — GH₵ ${Number(g.amount).toFixed(2)}
+          <br>${giveStatusLine(g)}
+        </span>
       </div>
     `).join('') || '<p class="empty-state">No giving history yet.</p>';
   } catch (e) {

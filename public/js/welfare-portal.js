@@ -135,7 +135,10 @@ function givingQueueHtml(queue) {
                 <td class="tiny muted">${escapeHtml(g.reference || '\u2014')}</td>
                 <td style="white-space:nowrap;">
                   ${PORTAL.canEdit ? `
-                    <button class="btn btn-primary btn-sm" data-confirm-give="${escapeHtml(g.id)}">Confirm</button>
+                    <button class="btn btn-primary btn-sm" data-confirm-give="${escapeHtml(g.id)}"
+                      data-give-who="${escapeHtml(g.memberName || '')}"
+                      data-give-amount="${escapeHtml(String(g.amount))}"
+                      data-give-ref="${escapeHtml(g.reference || '')}">Confirm</button>
                     <button class="btn btn-outline btn-sm" data-reject-give="${escapeHtml(g.id)}">Reject</button>` : ''}
                 </td>
               </tr>
@@ -206,12 +209,44 @@ async function renderWelfarePurse(el) {
 
   document.getElementById('welAddBtn').addEventListener('click', openWelfareEntryForm);
 
-  el.querySelectorAll('[data-confirm-give]').forEach(btn => btn.addEventListener('click', async () => {
-    try {
-      await fetchJSON(`/api/welfare/giving/${btn.dataset.confirmGive}/confirm`, { method: 'POST' });
-      showToast('Tithe confirmed into the book.', 'success');
-      openPanel('purse');
-    } catch (err) { showToast(err.message || 'Could not confirm that.', 'error'); }
+  el.querySelectorAll('[data-confirm-give]').forEach(btn => btn.addEventListener('click', () => {
+    // Confirming is somebody saying "I looked at the account and it is there",
+    // so it asks when it landed and lets the reference be corrected against
+    // what the account actually shows. Today is filled in, so when the two are
+    // the same it stays one click.
+    const today = new Date().toISOString().slice(0, 10);
+    showModal(`
+      <h3>Confirm it arrived</h3>
+      <p class="hint">${escapeHtml(btn.dataset.giveWho || 'This member')} says they sent
+        <strong>${cedis(btn.dataset.giveAmount)}</strong>. Check the welfare account, then record the day it landed.</p>
+      <form id="confirmGiveForm">
+        <div class="field"><label>Date it arrived in the account</label>
+          <input type="date" id="cgDate" value="${today}" max="${today}" required></div>
+        <div class="field"><label>Reference on the account (optional)</label>
+          <input type="text" id="cgRef" value="${escapeHtml(btn.dataset.giveRef || '')}"
+            placeholder="MoMo transaction id, as the account shows it"></div>
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary">Yes, it arrived</button>
+          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+        </div>
+        <div class="form-msg" id="cgMsg"></div>
+      </form>
+    `);
+    document.getElementById('confirmGiveForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await fetchJSON(`/api/welfare/giving/${btn.dataset.confirmGive}/confirm`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            receivedOn: document.getElementById('cgDate').value,
+            reference: document.getElementById('cgRef').value
+          })
+        });
+        closeModal();
+        showToast('Confirmed — the member has been told.', 'success');
+        openPanel('purse');
+      } catch (err) { showToast(err.message || 'Could not confirm that.', 'error'); }
+    });
   }));
   el.querySelectorAll('[data-reject-give]').forEach(btn => btn.addEventListener('click', async () => {
     const notes = prompt('Why is this being rejected? (the member sees the claim was not confirmed)');
