@@ -29,14 +29,14 @@ window.CHAPTER = {
   // ---- when and where you meet ---------------------------------------
   // Each line is one meeting. Leave the list empty and the whole section goes.
   serviceTimes: [
-    // { what: 'Sunday Service',   when: 'Sundays, 6:20am',     where: 'Acci Ayeduase Auditorium' },
+    { what: 'Sunday Service',   when: 'Sundays, 6:20am',     where: 'Acci Ayeduase Auditorium' },
 { what: 'Holy Ghost Drink-up',   when: 'Sundays, 4:00pm',     where: 'Acci Ayeduase Auditorium' },
-    // { what: 'Midweek Service',  when: 'Thursdays, 6:30pm',  where: 'Acci Ayeduase Auditorium' },
-    // { what: 'Prayer Meeting',   when: 'Tuesdays, 6:30pm',     where: 'Royal Parade grounds' },
+     { what: 'Midweek Service',  when: 'Thursdays, 6:30pm',  where: 'Acci Ayeduase Auditorium' },
+     { what: 'Prayer Meeting',   when: 'Tuesdays, 6:30pm',     where: 'Royal Parade grounds' },
   ],
   address: 'Acci Ayeduase Auditorium, KNUST, Kumasi',
   // Paste a Google Maps link to your meeting place. Blank hides the button.
-  mapUrl: '',
+  mapUrl: 'https://maps.app.goo.gl/UzeXchSvjjCmi3nH9?g_st=aw',
 
   // ---- what you believe ----------------------------------------------
   story: 'ACONSU exists to see students encounter God and continue steadfastly '
@@ -71,8 +71,8 @@ window.CHAPTER = {
 
   // ---- reaching you ------------------------------------------------------
   contact: {
-    email: '',        // e.g. 'aconsuknust@gmail.com'
-    phone: '',        // e.g. '+233 24 000 0000'
+    email: 'aconsuknust@gmail.com',        // e.g. 'aconsuknust@gmail.com'
+    phone: '+233 547541623',        // e.g. '+233 24 000 0000'
     whatsapp: '',     // full link or just the number
     facebook: '',
     instagram: '',
