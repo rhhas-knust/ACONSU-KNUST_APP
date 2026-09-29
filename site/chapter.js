@@ -38,7 +38,7 @@ window.CHAPTER = {
   // SIZE IT FIRST. About 1600px wide and under 300KB. A 4MB photo straight off
   // a phone costs a fresher on campus data real money and several seconds, and
   // it is the first thing on the page - nothing else shows until it loads.
-  heroImage: '',
+  heroImage: 'images/header.jpg',
 
   // 'dark' puts the heading in white over a darkened photo. 'light' keeps the
   // purple heading and lays a pale wash over instead. Dark suits most photos;
@@ -118,22 +118,24 @@ window.CHAPTER = {
   // from a number inside the app, which is behind a login. Leave `phone` blank
   // and the line simply does not appear; an email alone is often enough.
   coordinators: [
-    // {
-    //   name: 'Yaw Mensah',
-    //   role: 'Chapter Coordinator',
-    //   about: 'One or two sentences — how long they have served, what they carry.',
-    //   photo: 'images/coordinator-yaw.jpg',
-    //   phone: '',
-    //   email: '',
-    // },
+    {
+      name: 'Pas. Gideon Amo Darko',
+      role: 'Chapter Coordinator',
+      about: '',      // a sentence or two — how long he has served, what he carries
+      photo: 'images/coordinator-gideon.jpg',
+      phone: '',      // left blank on purpose; this page is on the open internet
+      email: '',
+    },
+    // The chapter's second coordinator goes here, in the same shape.
   ],
 
   // Just the name and the office. Add or remove rows as the year turns over.
   executives: [
-    // { position: 'President',             name: '', photo: '' },
-    // { position: 'Vice President',        name: '', photo: '' },
-    // { position: 'General Secretary',     name: '', photo: '' },
-    // { position: 'Organising Secretary',  name: '', photo: '' },
+    { position: 'President',                     name: 'James Gyamfi',     photo: 'images/exec-james.jpg' },
+    { position: 'Vice President',                name: 'Keziah',           photo: 'images/exec-keziah.jpg' },
+    { position: 'General Secretary',             name: 'Anna Dompreh',     photo: 'images/exec-anna.jpg' },
+    { position: 'Assistant General Secretary',   name: 'Emmanuel Awuah',   photo: 'images/exec-emmanuel.jpg' },
+    { position: 'Organizer',                     name: 'Derick Owusu Ansah', photo: 'images/exec-derick.jpg' },
   ],
 
   // ---- what happens here ----------------------------------------------
@@ -144,12 +146,12 @@ window.CHAPTER = {
   // take them. Same sizing advice as the header photo: about 1200px wide is
   // plenty for these - they are shown as a band roughly 400px across.
   ministries: [
-    { name: 'Bible Study',     blurb: 'Working through Scripture together, week by week.', photo: '' },
+    { name: 'Bible Study',     blurb: 'Working through Scripture together, week by week.', photo: 'images/bible-study.jpg' },
     { name: 'Prayer',          blurb: 'Standing together for the campus, the nation and each other.', photo: '' },
     { name: 'Music & Worship', blurb: 'Leading the family before God in song.', photo: '' },
     { name: 'Evangelism',      blurb: 'Taking the message into halls, hostels and the city.', photo: '' },
     { name: 'Welfare',         blurb: 'Looking after one another when life on campus is hard.', photo: '' },
-    { name: 'Media',           blurb: 'Carrying what happens here to those who could not come.', photo: '' },
+    { name: 'Media',           blurb: 'Carrying what happens here to those who could not come.', photo: 'images/media.jpg' },
   ],
 
   // ---- a word to carry --------------------------------------------------

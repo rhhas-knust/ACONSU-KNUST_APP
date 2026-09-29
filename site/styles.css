@@ -172,6 +172,12 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
 /* A card with a photo puts it edge to edge across the top, so the padding
    moves off the card and onto the text. A fixed band height rather than the
    photo's own proportions, so a row of cards lines up whatever was uploaded. */
+/* Only the activities mix cards with and without a photo, and a grid row
+   stretches every card to the tallest in it - so a card with three lines of
+   text sitting beside one with a photo band became three lines of text and
+   200px of nothing. Each card keeps its own height here instead. The other
+   grids hold cards of one shape, so they stay stretched and tidy. */
+#ministries { align-items: start; }
 .card.has-photo { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .card-photo {
   width: 100%; height: 168px; object-fit: cover;

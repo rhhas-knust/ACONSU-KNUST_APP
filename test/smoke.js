@@ -3531,6 +3531,13 @@ const { fakeModels, fakeDb } = require('./harness.js');
     // down. The band is a fixed height and the photo is cropped into it.
     check('the photos line up however they were shot',
       /\.card-photo \{[\s\S]{0,120}object-fit: cover;/.test(css), null);
+    // A grid row stretches every card to the tallest in it, so while only some
+    // activities have been photographed, a card with three lines of text sat
+    // beside a card with a photo band and became three lines of text and 200px
+    // of nothing - the grey box this section was built to avoid, wearing a
+    // different hat. Seen in a browser once the first two photographs went in.
+    check('and a card with no photo yet is not stretched to match one that has',
+      /#ministries \{ align-items: start; \}/.test(css), null);
 
     // ---- photos too big to serve ----
     // A phone photo is 4-12MB and several thousand pixels wide. Nothing here
@@ -3763,6 +3770,9 @@ const { fakeModels, fakeDb } = require('./harness.js');
       // Stripping every word would otherwise leave an empty circle.
       check('and somebody known only by their office keeps it',
         initials('Elder') === 'E', initials('Elder'));
+      // Ghanaian usage, and the chapter's own coordinator is written this way.
+      check('Pas. is a title here too, as it is written on the ground',
+        initials('Pas. Gideon Amo Darko') === 'GA', initials('Pas. Gideon Amo Darko'));
       check('a photograph is still used whenever there is one',
         /<img class="founder-face" src="images\/f\.jpg"/.test(
           faceHtml({ name: 'Apostle Kwame Anane', photo: 'images/f.jpg' }, 'founder-face')), null);
