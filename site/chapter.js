@@ -84,5 +84,5 @@ window.CHAPTER = {
   // ---- the app -----------------------------------------------------------
   // Where members go to sign in. Blank hides every link to it, so this page
   // works on its own before the app is ready to show anyone.
-  appUrl: 'https://aconsu-knust-app.onrender.com',
+  //appUrl: 'https://aconsu-knust-app.onrender.com',
 };
