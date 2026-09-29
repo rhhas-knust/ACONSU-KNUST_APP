@@ -140,12 +140,20 @@ this page is displayed wider than 1600px, so all that weight buys nothing and
 costs a visitor on campus data real money and several seconds. The shrinker
 brings a 12MB photo down to a couple of hundred KB.
 
-It only ever makes files smaller:
+It only ever makes files smaller, and it only ever asks one question: **is
+this wider than 1600px?**
 
-- Anything already small and narrow is left byte for byte as it was.
+- Anything already that narrow is left byte for byte as it was — however many
+  times the workflow runs.
 - If re-encoding would make a file *bigger*, the original is kept.
 - Which way up the phone was held is honoured, so nothing arrives sideways.
 - PNGs stay PNGs, so a logo keeps its transparency.
+
+Deciding on **file size** instead would look more thorough and would be wrong:
+whether a file is "too big" does not stop being true after one pass, so a photo
+that is still large after shrinking comes back every run, gives up another
+slice of quality, and is committed again. Width settles after one pass and
+stays settled.
 
 You can also run it yourself before committing:
 

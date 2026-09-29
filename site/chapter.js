@@ -126,7 +126,14 @@ window.CHAPTER = {
       phone: '',      // left blank on purpose; this page is on the open internet
       email: '',
     },
-    // The chapter's second coordinator goes here, in the same shape.
+    {
+      name: 'Pastor Sarpong',
+      role: 'Chapter Coordinator',
+      about: '',      // a sentence or two — how long he has served, what he carries
+      photo: 'images/coordinator-sarpong.jpg',
+      phone: '',
+      email: '',
+    },
   ],
 
   // Just the name and the office. Add or remove rows as the year turns over.

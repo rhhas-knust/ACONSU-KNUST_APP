@@ -3600,7 +3600,41 @@ const { fakeModels, fakeDb } = require('./harness.js');
       const again = await shrinker.run(tmp);
       check('and running it again changes nothing', again.length === 0, again);
 
+      // The three files above all end up small, so a size-based rule skips
+      // them on the second pass and this passed while the real thing churned.
+      // A file that is still LARGE after being shrunk is the case that
+      // matters: under a size rule it comes back every run, gives up another
+      // slice of quality and is committed again. Random noise is used here
+      // because it does not compress, so it stays large however often it is
+      // re-encoded - the worst case for any rule that looks at bytes.
+      const noisy = path.join(tmp, 'noisy.jpg');
+      const px = Buffer.alloc(2400 * 1800 * 3);
+      for (let i = 0; i < px.length; i++) px[i] = (i * 2654435761) % 256;
+      await sharpLib(px, { raw: { width: 2400, height: 1800, channels: 3 } })
+        .jpeg({ quality: 100 }).toFile(noisy);
+
+      await shrinker.run(tmp);
+      const settled = fs.readFileSync(noisy);
+      check('a shrunk photo that is still large is not shrunk a second time',
+        settled.length > 200 * 1024, settled.length);
+      const third = await shrinker.run(tmp);
+      check('so a run that should find nothing to do writes nothing',
+        third.length === 0, third);
+      check('and leaves the file byte for byte as the first run left it',
+        Buffer.compare(fs.readFileSync(noisy), settled) === 0,
+        { was: settled.length, now: fs.statSync(noisy).size });
+
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    // The property behind all three checks above: the only thing it decides on
+    // is width. A rule that looks at file size cannot be idempotent, because
+    // whether a file is "too big" does not stop being true after one pass.
+    {
+      const tool = fs.readFileSync(path.join(__dirname, '..', 'site', 'tools', 'shrink-images.js'), 'utf8');
+      check('and it decides on width alone, which is what makes that hold',
+        /if \(\(meta\.width \|\| 0\) <= MAX_WIDTH\) return null;/.test(tool)
+        && !/LEAVE_ALONE_UNDER|MIN_SAVING/.test(tool), null);
     }
 
     // A phone writes the orientation in a tag rather than the pixels, so a
