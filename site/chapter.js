@@ -165,7 +165,7 @@ window.CHAPTER = {
   // Just the name and the office. Add or remove rows as the year turns over.
   executives: [
     { position: 'President',                     name: 'James Gyamfi',     photo: 'images/exec-james.jpg' },
-    { position: 'Vice President',                name: 'Keziah',           photo: 'images/exec-keziah.jpg' },
+    { position: 'Vice President',                name: 'Keziah Gyimah',           photo: 'images/exec-keziah.jpg' },
     { position: 'General Secretary',             name: 'Anna Dompreh',     photo: 'images/exec-anna.jpg' },
     { position: 'Assistant General Secretary',   name: 'Emmanuel Awuah',   photo: 'images/exec-emmanuel.jpg' },
     { position: 'Organizer',                     name: 'Derick Owusu Ansah', photo: 'images/exec-derick.jpg' },
