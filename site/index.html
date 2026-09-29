@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACONSU — KNUST</title>
+<meta name="description" content="The Apostles' Continuation Students Union, KNUST chapter. A campus family devoted to the Word, to fellowship and to prayer.">
+<meta name="theme-color" content="#5B2C82">
+<link rel="icon" href="images/logo.jpg">
+<meta property="og:title" content="ACONSU — KNUST">
+<meta property="og:description" content="A campus family devoted to the Word, to fellowship and to prayer.">
+<meta property="og:image" content="images/logo.jpg">
+<meta property="og:type" content="website">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="images/logo.jpg" alt=""><span data-bind="name">ACONSU</span></a>
+    <nav>
+      <a class="nav-link" href="#visit">Visit</a>
+      <a class="nav-link" href="#about">About</a>
+      <a class="nav-link" href="#contact">Contact</a>
+      <a class="btn btn-primary btn-sm" data-app-link hidden>Members</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Welcome</p>
+      <h1 data-bind="tagline">Carrying the fire.</h1>
+      <p class="lede" data-bind="lede"></p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#visit">Plan a Visit</a>
+        <a class="btn btn-ghost" href="#about">Who We Are</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- When and where. Hidden entirely until there is something to say. -->
+  <section id="visit" class="alt" data-section="visit" hidden>
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Come and See</p>
+        <h2>When we meet</h2>
+        <p>You do not need to know anybody, and you do not need to bring anything. Come as you are.</p>
+      </div>
+      <div class="grid" id="services"></div>
+      <p style="margin-top:26px;" id="addressLine" hidden>
+        <strong data-bind="address"></strong>
+        <a class="btn btn-ghost btn-sm" style="margin-left:10px;" data-map-link hidden>Open in Maps</a>
+      </p>
+    </div>
+  </section>
+
+  <section id="about">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Who We Are</p>
+        <h2>Our story</h2>
+      </div>
+      <div class="prose">
+        <p data-bind="story"></p>
+        <p data-bind="belief"></p>
+      </div>
+      <div class="grid" style="margin-top:34px;">
+        <div class="card" data-card="vision" hidden>
+          <p class="eyebrow">Vision</p>
+          <h3>Where we are going</h3>
+          <p data-bind="vision"></p>
+        </div>
+        <div class="card" data-card="values" hidden>
+          <p class="eyebrow">Values</p>
+          <h3>What shapes us</h3>
+          <p data-bind="values"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt" data-section="ministries" hidden>
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Life Here</p>
+        <h2>What happens among us</h2>
+        <p>There is a place to belong and a place to serve. Most people find both.</p>
+      </div>
+      <div class="grid" id="ministries"></div>
+    </div>
+  </section>
+
+  <section data-section="verse" hidden>
+    <div class="wrap">
+      <div class="verse">
+        <blockquote data-bind="verseText"></blockquote>
+        <cite data-bind="verseRef"></cite>
+      </div>
+    </div>
+  </section>
+
+  <section id="contact" class="alt">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Reach Us</p>
+        <h2>Get in touch</h2>
+        <p>Questions, prayer requests, or just wanting to know where to start — we would love to hear from you.</p>
+      </div>
+      <ul class="contact-list" id="contactList"></ul>
+      <div class="socials" id="socials"></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-row">
+      <div>
+        <h4 data-bind="name">ACONSU</h4>
+        <p style="margin:0;" data-bind="fullName"></p>
+        <p style="margin:4px 0 0; font-size:0.86rem;" data-bind="institution"></p>
+      </div>
+      <div>
+        <a class="btn btn-gold btn-sm" data-app-link hidden>Open the ACONSU app</a>
+      </div>
+    </div>
+    <div class="foot-legal">
+      <span>&copy; <span id="year"></span> <span data-bind="name"></span>. All rights reserved.</span>
+      <span data-bind="location"></span>
+    </div>
+  </div>
+</footer>
+
+<script src="chapter.js"></script>
+<script src="site.js"></script>
+</body>
+</html>
