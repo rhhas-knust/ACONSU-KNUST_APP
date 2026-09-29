@@ -3537,7 +3537,7 @@ const { fakeModels, fakeDb } = require('./harness.js');
     // of nothing - the grey box this section was built to avoid, wearing a
     // different hat. Seen in a browser once the first two photographs went in.
     check('and a card with no photo yet is not stretched to match one that has',
-      /#ministries \{ align-items: start; \}/.test(css), null);
+      /#ministries, \.founder-grid \{ align-items: start; \}/.test(css), null);
 
     // ---- photos too big to serve ----
     // A phone photo is 4-12MB and several thousand pixels wide. Nothing here
@@ -3753,6 +3753,11 @@ const { fakeModels, fakeDb } = require('./harness.js');
       && css.indexOf('.lead-face, .exec-face, .founder-face {') < css.indexOf('.founder-face {'), null);
     check('with the crop held high, so it keeps the face and not the tie',
       /\.founder-face \{[\s\S]{0,200}object-position: 50% 15%;/.test(css), null);
+    // `about` is optional per founder, so the same stretch that emptied the
+    // activity cards empties these: three founders with no sentence written
+    // about them inherited the fourth one's height as white space.
+    check('and a founder with nothing written about him yet is not stretched either',
+      /#ministries, \.founder-grid \{ align-items: start; \}/.test(css), null);
     // Four standing portraits in one column made this a 2,700px scroll on a
     // 390px screen. Two columns halve it.
     {
@@ -3810,6 +3815,26 @@ const { fakeModels, fakeDb } = require('./harness.js');
       check('a photograph is still used whenever there is one',
         /<img class="founder-face" src="images\/f\.jpg"/.test(
           faceHtml({ name: 'Apostle Kwame Anane', photo: 'images/f.jpg' }, 'founder-face')), null);
+    }
+
+    // The welcome names the chapter. Bound rather than typed into the HTML, so
+    // the next chapter to copy this folder gets its own name here without
+    // touching anything but chapter.js - the rule the whole folder rests on.
+    check('the welcome names the chapter',
+      /Welcome to <span data-bind="name">/.test(html), null);
+
+    // The same maker's line the app carries, read from the app rather than
+    // retyped, so the two cannot drift apart.
+    {
+      const appMark = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8')
+        .match(/<div class="app-watermark">([^<]+)<\/div>/);
+      const siteMark = html.match(/<div class="app-watermark">([^<]+)<\/div>/);
+      check('the site carries the same maker\'s line as the app',
+        !!siteMark && !!appMark && siteMark[1] === appMark[1], { site: siteMark && siteMark[1], app: appMark && appMark[1] });
+      // In the footer, under the chapter's own name, not competing with it.
+      check('quietly, at the foot of the page',
+        html.indexOf('app-watermark') > html.indexOf('<footer')
+        && /\.app-watermark \{[\s\S]{0,160}font-size: 0\.72rem;/.test(css), null);
     }
 
     check('it follows the reader\'s light or dark setting',
