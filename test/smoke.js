@@ -3394,11 +3394,35 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('and reads on a phone without sideways scrolling',
       /@media \(max-width: 720px\)/.test(css), null);
 
+    // GitHub Pages serves this under /<repo>/, not at a domain root. One
+    // leading slash anywhere and the stylesheet, the script or the logo 404s
+    // there while working perfectly on this machine.
+    const absolute = [];
+    [['index.html', html], ['site.js', js], ['styles.css', css]].forEach(function (pair) {
+      var m = pair[1].match(/(?:href|src|url\()\s*=?\s*["']?\/(?!\/)[^"')\s]*/g) || [];
+      m.forEach(function (hit) { absolute.push(pair[0] + ': ' + hit); });
+    });
+    check('every path is relative, so it survives being served under /<repo>/',
+      absolute.length === 0, absolute);
+
+    // Publishing from a branch, Pages offers the repo root or /docs and
+    // nothing else - it cannot be pointed at site/. A workflow is what makes
+    // this folder publishable without renaming it or keeping a second copy on
+    // a gh-pages branch.
+    const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'pages.yml'), 'utf8');
+    check('a workflow publishes the site folder itself', /path: site\b/.test(wf), null);
+    check('and only when the site changes, not on every app deploy',
+      /paths: \['site\/\*\*'/.test(wf), null);
+    check('with the permissions Pages needs and no more',
+      /pages: write/.test(wf) && /id-token: write/.test(wf) && /contents: read/.test(wf), null);
+
     // A chapter has to be told how to put it up, or it stays in the repo.
     const readme = read('README.md');
     check('the folder says how to publish it for nothing',
       /GitHub Pages/.test(readme) && /Netlify/.test(readme), null);
     check('and what to fill in before doing so', /serviceTimes/.test(readme), null);
+    check('and does not tell anyone to pick a folder Pages cannot serve',
+      !/folder: `\/site`/.test(readme), null);
   }
 
   // The send loop only ticks once a minute, so this one is opt-in: run it with

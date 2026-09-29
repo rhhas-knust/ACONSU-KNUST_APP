@@ -1,0 +1,49 @@
+name: Landing site
+
+# GitHub Pages, publishing from a branch, only offers two folders: the repo
+# root and /docs. It cannot be pointed at site/. So rather than rename the
+# folder to something misleading, or keep a second copy of it on a gh-pages
+# branch that has to be kept in sync by hand, a workflow uploads the folder
+# directly. site/ on main stays the one and only copy.
+on:
+  push:
+    branches: [main]
+    # Only when the site itself changes. An app deploy has no business
+    # republishing the landing page.
+    paths: ['site/**', '.github/workflows/pages.yml']
+  workflow_dispatch:      # ...and a button, for when you want one anyway
+
+# Pages needs these; nothing else in this repo does, so they are scoped to
+# this workflow rather than granted repo-wide.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. `cancel-in-progress: false` because a half-finished
+# publish is worse than a slightly late one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish site/ to GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The site is plain files: no npm install, no build, nothing to go wrong
+      # between the folder and the web.
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

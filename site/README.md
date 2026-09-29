@@ -15,14 +15,44 @@ up first.
 
 | Where | How |
 |---|---|
-| **GitHub Pages** | Repo → Settings → Pages → Source: `main`, folder: `/site`. Live at `<user>.github.io/<repo>/` in a minute. |
+| **GitHub Pages** | Repo → Settings → Pages → Source: **GitHub Actions**. That is all — `.github/workflows/pages.yml` does the rest, and republishes whenever anything in `site/` changes on `main`. |
 | **Netlify** | Drag this `site` folder onto app.netlify.com. That is the whole process. |
 | **Cloudflare Pages** | Connect the repo, set the build output directory to `site`, leave the build command empty. |
+
+### Why a workflow for GitHub Pages and not just a folder setting
+
+Publishing from a branch, GitHub Pages offers exactly two folders: the repo
+root and `/docs`. **It cannot be pointed at `site/`.** The alternatives were to
+rename this folder to `docs/` — misleading, and it would fight with any real
+documentation later — or to keep a second copy of it on a `gh-pages` branch
+that somebody has to remember to sync. The workflow keeps one copy, here, and
+publishes it.
+
+You do not have to run anything. Set the source to GitHub Actions once, and
+every push that touches `site/` republishes.
 
 All three give you a free `https://` address. A custom domain (say
 `aconsuknust.org`) is the only part that costs money, and only if you want one
 — it is roughly GHS 150–250 a year, and the hosting above stays free either
 way.
+
+### About the address
+
+GitHub Pages will serve this at `rhhas-knust.github.io/ACONSU-KNUST_APP/` —
+the app's repository name, in the address of a church landing page. Every path
+in these files is relative, so it works perfectly well there; it just reads
+oddly.
+
+Two ways to a cleaner address, if it matters:
+
+- **A custom domain.** Works with all three hosts above, costs money.
+- **A repository named `rhhas-knust.github.io`**, which GitHub serves at the
+  bare `rhhas-knust.github.io`. That is a *separate repository*, not a branch —
+  copy this folder into it. Free.
+
+Netlify and Cloudflare both hand you a tidier free address than GitHub does
+(`aconsu-knust.netlify.app`), so if the address bothers you and a domain is out
+of reach, start there.
 
 ## Making it yours
 
