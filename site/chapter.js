@@ -187,22 +187,22 @@ window.CHAPTER = {
     { name: 'Prayer',
       blurb: 'Standing together for this campus, this nation and each other. No '
            + 'request is too small to bring.',
-      photo: '' },
+      photo: 'images/prayer.jpg' },
 
     { name: 'Music & Worship',
       blurb: 'The sound of the house. If you sing, play, or simply cannot keep '
            + 'still when the music starts, there is a place for you here.',
-      photo: '' },
+      photo: 'images/worship.jpg' },
 
     { name: 'Evangelism',
       blurb: 'Taking the message out of the auditorium and into the halls, the '
            + 'hostels and the streets of Kumasi.',
-      photo: '' },
+      photo: 'images/evangelism.jpg' },
 
     { name: 'Welfare',
       blurb: 'Nobody should go through a hard semester alone. A meal, a hand, a '
            + 'listening ear, somebody checking on you — quietly, and without fuss.',
-      photo: '' },
+      photo: 'images/welfare.jpg' },
 
     { name: 'Media',
       blurb: 'Cameras, sound, screens and everything else that carries a service to '
