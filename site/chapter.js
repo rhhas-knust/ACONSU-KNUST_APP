@@ -20,7 +20,7 @@ window.CHAPTER = {
   fullName: "The Apostles' Continuation Students Union",
   institution: 'Kwame Nkrumah University of Science and Technology',
   location: 'Kumasi, Ghana',
-  tagline: 'Carrying the fire. Continuing the pattern.',
+  tagline: 'ACONSU!! THE APOSTLES!!!',
 
   // Shown under the name on the opening screen. One or two sentences.
   lede: 'A campus family devoted to the Word, to fellowship, to prayer — '
@@ -29,11 +29,12 @@ window.CHAPTER = {
   // ---- when and where you meet ---------------------------------------
   // Each line is one meeting. Leave the list empty and the whole section goes.
   serviceTimes: [
-    // { what: 'Sunday Service',   when: 'Sundays, 9:00am',     where: 'Campus Fellowship Auditorium' },
-    // { what: 'Midweek Service',  when: 'Wednesdays, 6:30pm',  where: 'Campus Fellowship Auditorium' },
-    // { what: 'Prayer Meeting',   when: 'Fridays, 5:30am',     where: 'Campus Fellowship Auditorium' },
+    // { what: 'Sunday Service',   when: 'Sundays, 6:20am',     where: 'Acci Ayeduase Auditorium' },
+{ what: 'Holy Ghost Drink-up',   when: 'Sundays, 4:00pm',     where: 'Acci Ayeduase Auditorium' },
+    // { what: 'Midweek Service',  when: 'Thursdays, 6:30pm',  where: 'Acci Ayeduase Auditorium' },
+    // { what: 'Prayer Meeting',   when: 'Tuesdays, 6:30pm',     where: 'Royal Parade grounds' },
   ],
-  address: 'Campus Fellowship Auditorium, KNUST, Kumasi',
+  address: 'Acci Ayeduase Auditorium, KNUST, Kumasi',
   // Paste a Google Maps link to your meeting place. Blank hides the button.
   mapUrl: '',
 
