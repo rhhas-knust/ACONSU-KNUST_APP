@@ -153,8 +153,8 @@ window.CHAPTER = {
     {
       name: 'Pastor Sarpong',
       role: 'Chapter Coordinator',
-      about: 'A seasoned teacher of the Word, a former Man of God and President of '
-           + 'the Union. He rightly divides the word of truth, and makes it land '
+      about: 'A seasoned teacher of the Word, a former M.O.G (Men of Glory) and President '
+           + 'of the Union. He rightly divides the word of truth, and makes it land '
            + 'with the young and the old alike.',
       photo: 'images/coordinator-sarpong.jpg',
       phone: '+233 54 378 7233',

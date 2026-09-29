@@ -227,6 +227,14 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
   text-transform: uppercase; color: var(--ink-faint); font-weight: 700;
 }
 
+/* The same line the app carries, in the same quiet weight: present, and not
+   competing with the chapter's own name above it. */
+.app-watermark {
+  text-align: center; padding-top: 14px;
+  font-size: 0.72rem; letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
 /* ---------- the wider church ---------- */
 /* The church's own mark, not the chapter's. A logo is drawn with its own
    space around it and often is not rectangular, so it is fitted whole -

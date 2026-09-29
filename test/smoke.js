@@ -3817,6 +3817,26 @@ const { fakeModels, fakeDb } = require('./harness.js');
           faceHtml({ name: 'Apostle Kwame Anane', photo: 'images/f.jpg' }, 'founder-face')), null);
     }
 
+    // The welcome names the chapter. Bound rather than typed into the HTML, so
+    // the next chapter to copy this folder gets its own name here without
+    // touching anything but chapter.js - the rule the whole folder rests on.
+    check('the welcome names the chapter',
+      /Welcome to <span data-bind="name">/.test(html), null);
+
+    // The same maker's line the app carries, read from the app rather than
+    // retyped, so the two cannot drift apart.
+    {
+      const appMark = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8')
+        .match(/<div class="app-watermark">([^<]+)<\/div>/);
+      const siteMark = html.match(/<div class="app-watermark">([^<]+)<\/div>/);
+      check('the site carries the same maker\'s line as the app',
+        !!siteMark && !!appMark && siteMark[1] === appMark[1], { site: siteMark && siteMark[1], app: appMark && appMark[1] });
+      // In the footer, under the chapter's own name, not competing with it.
+      check('quietly, at the foot of the page',
+        html.indexOf('app-watermark') > html.indexOf('<footer')
+        && /\.app-watermark \{[\s\S]{0,160}font-size: 0\.72rem;/.test(css), null);
+    }
+
     check('it follows the reader\'s light or dark setting',
       /@media \(prefers-color-scheme: dark\)/.test(css), null);
     check('and reads on a phone without sideways scrolling',
