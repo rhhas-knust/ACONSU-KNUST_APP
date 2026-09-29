@@ -215,6 +215,12 @@ section worth publishing, and so are the names before anybody has found the
 logo file. Blank the logo and leave the names out and **the whole section
 disappears**, like everything else here.
 
+**The portraits are framed standing, not cropped to a circle** like the
+chapter's own people. These are formal studio portraits: the head sits in the
+top third, and a circle centred on one shows a tie and a pair of folded arms.
+So a founder's photo can be a full standing shot — it is framed 3:4 with the
+crop held high. A head-and-shoulders photo works just as well.
+
 A note on the initials: a title is not a name, so *Apostle Kwame Anane* gets
 **KA** and not AK. Apostle, Rev, Elder, Pastor, Dr and the rest are skipped —
 unless the title is all you have written, in which case it is kept.

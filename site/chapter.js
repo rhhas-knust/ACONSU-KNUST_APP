@@ -97,10 +97,11 @@ window.CHAPTER = {
   // card rather than changing the picture, so the card reads the same as the
   // others.
   founders: [
-    { name: '', role: 'Founder',                       about: '', photo: '', inMemoriam: false },
-    { name: '', role: 'Chairman',                      about: '', photo: '', inMemoriam: false },
-    { name: '', role: 'Founding Member',               about: '', photo: '', inMemoriam: true  },
-    { name: '', role: 'General Secretary, the Church', about: '', photo: '', inMemoriam: false },
+    { name: '', role: 'Founder',                       about: '', photo: 'images/church-founder.jpg',           inMemoriam: false },
+    { name: '', role: 'Chairman',                      about: '', photo: 'images/church-chairman.jpg',          inMemoriam: false },
+    // No photograph of him yet; his card shows his initials until there is one.
+    { name: '', role: 'Founding Member',               about: '', photo: '',                                    inMemoriam: true  },
+    { name: '', role: 'General Secretary, the Church', about: '', photo: 'images/church-general-secretary.jpg', inMemoriam: false },
   ],
 
   // ---- who leads the chapter --------------------------------------------

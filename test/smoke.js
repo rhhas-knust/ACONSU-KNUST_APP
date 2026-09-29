@@ -3697,6 +3697,51 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('the logo is fitted whole rather than cropped like a photograph',
       /\.church-logo \{[\s\S]{0,220}object-fit: contain;/.test(css), null);
 
+    // These are formal standing studio portraits, not head-and-shoulders
+    // snapshots. A 96px circle centred on one shows a tie and a pair of folded
+    // arms: the head is in the top third and gets cropped straight off. Seen
+    // in a browser the first time the real photographs went in.
+    check('a standing portrait is framed rather than cropped to a circle',
+      /\.founder-face \{[\s\S]{0,200}aspect-ratio: 3 \/ 4;/.test(css)
+      && /\.founder-face \{[\s\S]{0,200}border-radius: 12px;/.test(css), null);
+    // It shares the circle rule with the chapter's faces, and both are (0,1,0),
+    // so the only thing making the square corners win is coming later in the
+    // file. Move this block up and every founder is a circle again.
+    check('and the rule that squares it off comes after the one that rounds it',
+      css.indexOf('.lead-face, .exec-face, .founder-face {') !== -1
+      && css.indexOf('.lead-face, .exec-face, .founder-face {') < css.indexOf('.founder-face {'), null);
+    check('with the crop held high, so it keeps the face and not the tie',
+      /\.founder-face \{[\s\S]{0,200}object-position: 50% 15%;/.test(css), null);
+    // Four standing portraits in one column made this a 2,700px scroll on a
+    // 390px screen. Two columns halve it.
+    {
+      const m = css.match(/\.founder-grid \{[^}]*minmax\((\d+)px/);
+      const other = css.match(/\.lead-grid \{[^}]*minmax\((\d+)px/);
+      check('a phone gets two portraits side by side, not one long column',
+        !!m && Number(m[1]) <= 170 && !!other && Number(m[1]) < Number(other[1]),
+        m && other && { founder: m[1], lead: other[1] });
+    }
+
+    // A path with a typo in it is a broken image on the front of the church's
+    // page, and nothing else here would catch it: the file simply is not
+    // fetched until somebody scrolls to it.
+    {
+      const referenced = [];
+      (CHAPTER.founders || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
+      (CHAPTER.ministries || []).forEach(m => { if (m && m.photo) referenced.push(m.photo); });
+      if (CHAPTER.church && CHAPTER.church.logo) referenced.push(CHAPTER.church.logo);
+      if (CHAPTER.heroImage) referenced.push(CHAPTER.heroImage);
+      (CHAPTER.coordinators || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
+      (CHAPTER.executives || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
+      const missing = referenced.filter(f => !fs.existsSync(path.join(siteDir, f)));
+      check('every photograph the chapter names is actually in the folder',
+        missing.length === 0, missing);
+    }
+    // The three that are in there now.
+    check('the church\'s founder, chairman and general secretary have their portraits',
+      ['church-founder.jpg', 'church-chairman.jpg', 'church-general-secretary.jpg']
+        .every(f => fs.existsSync(path.join(siteDir, 'images', f))), null);
+
     // Nearly every name in this section carries a title, and initialling the
     // title says nothing about the man. This runs the real function rather
     // than reading it, because the rule is the kind that looks right and is

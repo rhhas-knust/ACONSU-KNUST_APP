@@ -234,13 +234,26 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
 .church-blurb { color: var(--ink-soft); margin-bottom: 0; }
 
 .founder-heading { text-align: center; margin: 0 0 22px; }
-.founder-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+/* 160px rather than the 210px the other grids use, so a phone gets two
+   columns instead of one. Standing portraits are tall: four of them in a
+   single column turned this section into a 2,700px scroll on a 390px screen. */
+.founder-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .founder-card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 26px 18px; text-align: center;
+  border-radius: var(--radius); padding: 18px 14px 22px; text-align: center;
   box-shadow: var(--shadow);
 }
-.founder-face { width: 96px; height: 96px; font-size: 1.7rem; margin: 0 auto 14px; }
+/* Not a circle, unlike the chapter's own people. These are formal
+   full-length studio portraits, and a 96px circle centred on one shows a tie
+   and a pair of folded arms - the head is in the top third and gets cropped
+   straight off. A standing portrait frame keeps the man in the picture, and
+   the crop sits high for the same reason. */
+.founder-face {
+  width: 100%; height: auto; aspect-ratio: 3 / 4;
+  border-radius: 12px; margin: 0 0 16px;
+  object-position: 50% 15%;
+  font-size: 2rem;
+}
 .founder-card h3 { margin: 0 0 2px; font-size: 1.02rem; }
 .founder-role {
   font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
