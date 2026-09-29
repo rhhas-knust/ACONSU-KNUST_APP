@@ -46,20 +46,6 @@
   //   chat.whatsapp.com/...  a group invite. Cannot carry a prefilled message.
   //   a bare number          a chat with one person, which can.
   // Anything already a URL is left alone rather than guessed at.
-  // wa.me wants the full international number with no + and NO LEADING ZERO.
-  // A Ghanaian number written the way everybody writes it - 0547541623 - is
-  // not that: the 0 is a national trunk prefix, and wa.me/0547541623 simply
-  // fails. Nobody should have to know that to paste their own number in.
-  function waNumber(raw) {
-    var cc = String(C.countryCode || '233').replace(/[^\d]/g, '') || '233';
-    var digits = String(raw || '').replace(/[^\d]/g, '');
-    if (!digits) return '';
-    if (digits.indexOf('00') === 0) digits = digits.slice(2);        // 00233... dialled out
-    else if (digits.charAt(0) === '0') digits = cc + digits.slice(1); // 0547... local form
-    else if (digits.indexOf(cc) !== 0 && digits.length <= 9) digits = cc + digits; // 547... bare
-    return digits;
-  }
-
   function whatsappLink(raw, message) {
     var v = String(raw || '').trim();
     if (!v) return '';
@@ -108,6 +94,72 @@
       });
     }
   }
+
+  // wa.me wants the full international number with no + and NO LEADING ZERO.
+  // A Ghanaian number written the way everybody writes it - 0547541623 - is
+  // not that: the 0 is a national trunk prefix, and wa.me/0547541623 simply
+  // fails. Nobody should have to know that to paste their own number in.
+  function waNumber(raw) {
+    var cc = String(C.countryCode || '233').replace(/[^\d]/g, '') || '233';
+    var digits = String(raw || '').replace(/[^\d]/g, '');
+    if (!digits) return '';
+    if (digits.indexOf('00') === 0) digits = digits.slice(2);        // 00233... dialled out
+    else if (digits.charAt(0) === '0') digits = cc + digits.slice(1); // 0547... local form
+    else if (digits.indexOf(cc) !== 0 && digits.length <= 9) digits = cc + digits; // 547... bare
+    return digits;
+  }
+
+  // ---- who leads the chapter --------------------------------------------
+  // A photo when there is one, initials when there is not. A broken image icon
+  // says "this site is unfinished" far louder than a circle with a letter in it,
+  // and a chapter should be able to put the names up before the photos exist.
+  function faceHtml(person, cls) {
+    if (has(person.photo)) {
+      return '<img class="' + cls + '" src="' + esc(person.photo) + '" alt="'
+        + esc(person.name || '') + '" loading="lazy">';
+    }
+    var initials = String(person.name || '?').trim().split(/\s+/)
+      .slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('');
+    return '<span class="' + cls + ' is-initials">' + esc(initials || '?') + '</span>';
+  }
+
+  var coordinators = (C.coordinators || []).filter(function (p) { return p && has(p.name); });
+  var executives = (C.executives || []).filter(function (p) { return p && (has(p.name) || has(p.position)); });
+
+  if (coordinators.length) {
+    document.getElementById('coordinators').innerHTML = coordinators.map(function (p) {
+      var lines = [];
+      // A blank number is a line that does not appear, not an empty row. The
+      // same rule as everywhere else, and here it is also the privacy setting.
+      if (has(p.email)) lines.push('<a href="mailto:' + esc(p.email) + '">' + esc(p.email) + '</a>');
+      // Displayed as they wrote it; dialled in international form, so it works
+      // for somebody calling from outside Ghana as well as on campus.
+      if (has(p.phone)) lines.push('<a href="tel:+' + esc(waNumber(p.phone)) + '">' + esc(p.phone) + '</a>');
+      return '<div class="lead-card">'
+        + faceHtml(p, 'lead-face')
+        + '<div class="lead-body">'
+        + '<h3>' + esc(p.name) + '</h3>'
+        + (has(p.role) ? '<p class="lead-role">' + esc(p.role) + '</p>' : '')
+        + (has(p.about) ? '<p>' + esc(p.about) + '</p>' : '')
+        + (lines.length ? '<p class="lead-contact">' + lines.join('<br>') + '</p>' : '')
+        + '</div></div>';
+    }).join('');
+  }
+
+  if (executives.length) {
+    document.getElementById('executives').innerHTML = executives.map(function (p) {
+      return '<div class="exec-card">'
+        + faceHtml(p, 'exec-face')
+        + '<p class="exec-name">' + esc(p.name || '\u2014') + '</p>'
+        + (has(p.position) ? '<p class="exec-role">' + esc(p.position) + '</p>' : '')
+        + '</div>';
+    }).join('');
+    // The heading only earns its place when there is a list under it, and only
+    // when the coordinators above give it something to be distinguished from.
+    if (coordinators.length) show(document.getElementById('execHeading'));
+  }
+
+  if (coordinators.length || executives.length) show(document.querySelector('[data-section="leadership"]'));
 
   // ---- what happens here ----------------------------------------------
   var ministries = (C.ministries || []).filter(function (m) { return m && has(m.name); });

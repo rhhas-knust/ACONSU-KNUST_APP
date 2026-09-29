@@ -90,6 +90,30 @@ A group invite cannot carry a prefilled message; WhatsApp does not allow it, so
 **Blank the link and the whole band disappears** — which is how you take it
 down when freshers' week is over.
 
+### Who leads the chapter
+
+Two lists in `chapter.js`, both optional:
+
+- **`coordinators`** — photo, name, role, a sentence or two, and contact. A
+  chapter with two coordinators lists two; the cards sit side by side.
+- **`executives`** — just the name and the office. President, Vice President,
+  General Secretary, Organising Secretary, and whatever else you hold.
+
+Photos go in `images/` and the path is written relative to this folder:
+`photo: 'images/coordinator-yaw.jpg'`. **Somebody with no photo yet gets their
+initials in a circle**, so put the names up now and add the pictures when you
+have them.
+
+Phone numbers can be written however you normally write them; they are dialled
+in international form so a call works from outside Ghana too.
+
+> **On publishing phone numbers.** This page is on the open internet — anyone
+> can read it, and so can anything that scrapes it. That is a different thing
+> from a number inside the app, which is behind a login. Leave `phone` blank
+> and the line simply does not appear; an email alone is often enough.
+
+Empty both lists and the whole Leadership section goes.
+
 ### Before you publish, fill in at least
 
 - `serviceTimes` — when and where you actually meet. Until this is set, the
