@@ -2730,8 +2730,42 @@ const { fakeModels, fakeDb } = require('./harness.js');
     // Three tiers. The phone must not inherit the desktop shell.
     check('the rail is hidden until there is room for it',
       /\.side-nav \{ display: none; \}/.test(css) && /@media \(min-width: 1024px\)/.test(css), null);
+    // Read the whole 1024px block rather than counting characters from its
+    // opening brace: how far into the block a rule sits is incidental, and a
+    // test that measures it fails the next time a comment is added above it.
+    // There is more than one 1024px block, so take the one that actually
+    // builds the rail rather than whichever comes first.
+    const railBlock = (() => {
+      const blocks = [];
+      let at = css.indexOf('@media (min-width: 1024px) {');
+      while (at !== -1) {
+        const end = css.indexOf('\n}', at);
+        blocks.push(end === -1 ? css.slice(at) : css.slice(at, end));
+        at = css.indexOf('@media (min-width: 1024px) {', at + 1);
+      }
+      return blocks.find(b => /\.side-nav-item/.test(b)) || '';
+    })();
+    check('the rail has a block of its own at 1024px', railBlock.length > 0, null);
     check('and where it shows, the top bar stops repeating the same links',
-      /@media \(min-width: 1024px\)[\s\S]{0,3000}?\.nav-links \{ display: none !important; \}/.test(css), null);
+      /\.nav-links \{ display: none !important; \}/.test(railBlock), null);
+    // The reported bug: the rail's 248px gap was on `body`, so it applied to
+    // every page loading this stylesheet - including the two admin consoles and
+    // the six staff portals, which carry their own side navigation and never
+    // get this rail. For them it was 248px of nothing: the console shoved
+    // right, a blank strip down the left.
+    check('the gap for the rail is tied to the page having one',
+      /body\.has-side-rail \{ padding-left: 248px; \}/.test(railBlock)
+      && !/^\s*body \{ padding-left: 248px/m.test(railBlock), null);
+    // Which pages those are is not a judgement call: the rail is drawn by
+    // initLayout, so the pages that call it are exactly the pages that get it.
+    const htmlPages = fs.readdirSync(path.join(__dirname, '..', 'public')).filter(f => f.endsWith('.html'));
+    const railPages = htmlPages.filter(f => /initLayout\(/.test(pub(f)));
+    const unmarked = railPages.filter(f => !/<body[^>]*class="[^"]*has-side-rail/.test(pub(f)));
+    check(`all ${railPages.length} pages that draw the rail make room for it`,
+      unmarked.length === 0, unmarked);
+    const wrongly = htmlPages.filter(f => !/initLayout\(/.test(pub(f)) && /has-side-rail/.test(pub(f)));
+    check('and no page without the rail reserves space for one', wrongly.length === 0, wrongly);
+
     check('the bottom tabs stay the phone\'s navigation',
       /@media \(min-width: 861px\) \{ \.bottom-nav \{ display: none; \} \}/.test(css), null);
 
