@@ -3517,6 +3517,27 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('a chapter can say what its dialling code is',
       'countryCode' in CHAPTER, Object.keys(CHAPTER));
 
+    // ---- who leads the chapter ----
+    check('a chapter can list its coordinators', 'coordinators' in CHAPTER, Object.keys(CHAPTER));
+    check('and its executives', 'executives' in CHAPTER, Object.keys(CHAPTER));
+    check('there is a section for them', /data-section="leadership"/.test(html), null);
+    check('hidden until at least one of the two lists has somebody in it',
+      /if \(coordinators\.length \|\| executives\.length\) show/.test(js), null);
+    // A broken image icon says "this site is unfinished" far louder than a
+    // circle with a letter in it, and the names should be able to go up before
+    // the photographs exist.
+    check('somebody with no photo yet gets their initials, not a broken image',
+      /function faceHtml\(person, cls\)/.test(js) && /is-initials/.test(js), null);
+    // These numbers sit on the open internet. Blank is a real choice, and it
+    // has to remove the line rather than leave an empty one.
+    check('a coordinator with no phone shows no phone line',
+      /if \(has\(p\.phone\)\) lines\.push/.test(js), null);
+    // tel:0547541623 only dials from inside Ghana.
+    check('and the number that is there dials from anywhere',
+      /href="tel:\+' \+ esc\(waNumber\(p\.phone\)\)/.test(js), null);
+    check('the executive heading only appears when there is a list under it',
+      /if \(coordinators\.length\) show\(document\.getElementById\('execHeading'\)\)/.test(js), null);
+
     check('it follows the reader\'s light or dark setting',
       /@media \(prefers-color-scheme: dark\)/.test(css), null);
     check('and reads on a phone without sideways scrolling',

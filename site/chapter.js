@@ -51,6 +51,38 @@ window.CHAPTER = {
   values: 'Scripture, prayer, fellowship, service, and holy living remain central '
         + 'to our chapter life.',
 
+  // ---- who leads the chapter --------------------------------------------
+  // Two lists, both optional. An empty list hides its half; empty both and the
+  // whole Leadership section goes.
+  //
+  // PHOTOS go in this folder's images/ directory, and the path is written
+  // relative to it: 'images/coordinator-ama.jpg'. Somebody with no photo yet
+  // gets their initials in a circle rather than a broken image, so you can add
+  // the names now and the pictures when you have them.
+  //
+  // A NOTE ON PHONE NUMBERS. This page is on the open internet - anyone can
+  // read it, and so can anything that scrapes it. That is a different thing
+  // from a number inside the app, which is behind a login. Leave `phone` blank
+  // and the line simply does not appear; an email alone is often enough.
+  coordinators: [
+    // {
+    //   name: 'Yaw Mensah',
+    //   role: 'Chapter Coordinator',
+    //   about: 'One or two sentences — how long they have served, what they carry.',
+    //   photo: 'images/coordinator-yaw.jpg',
+    //   phone: '',
+    //   email: '',
+    // },
+  ],
+
+  // Just the name and the office. Add or remove rows as the year turns over.
+  executives: [
+    // { position: 'President',             name: '', photo: '' },
+    // { position: 'Vice President',        name: '', photo: '' },
+    // { position: 'General Secretary',     name: '', photo: '' },
+    // { position: 'Organising Secretary',  name: '', photo: '' },
+  ],
+
   // ---- what happens here ----------------------------------------------
   // Remove any that do not apply; add your own. An empty list hides the section.
   ministries: [
