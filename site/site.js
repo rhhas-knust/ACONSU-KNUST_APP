@@ -177,9 +177,18 @@
   // ---- what happens here ----------------------------------------------
   var ministries = (C.ministries || []).filter(function (m) { return m && has(m.name); });
   if (ministries.length) {
+    // A photo across the top when there is one. A card without one simply
+    // starts at its heading rather than showing a grey box where a picture
+    // was meant to be, so the section is worth publishing before every
+    // photograph exists.
     document.getElementById('ministries').innerHTML = ministries.map(function (m) {
-      return '<div class="card"><h3>' + esc(m.name) + '</h3>'
-        + (has(m.blurb) ? '<p>' + esc(m.blurb) + '</p>' : '') + '</div>';
+      return '<div class="card' + (has(m.photo) ? ' has-photo' : '') + '">'
+        + (has(m.photo)
+            ? '<img class="card-photo" src="' + esc(m.photo) + '" alt="" loading="lazy">'
+            : '')
+        + '<div class="card-body"><h3>' + esc(m.name) + '</h3>'
+        + (has(m.blurb) ? '<p>' + esc(m.blurb) + '</p>' : '')
+        + '</div></div>';
     }).join('');
     show(document.querySelector('[data-section="ministries"]'));
   }

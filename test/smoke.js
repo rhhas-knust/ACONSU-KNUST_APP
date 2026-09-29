@@ -3517,6 +3517,101 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('a chapter can say what its dialling code is',
       'countryCode' in CHAPTER, Object.keys(CHAPTER));
 
+    // ---- a picture on each activity ----
+    check('each ministry can carry its own photo',
+      (CHAPTER.ministries || []).every(m => 'photo' in m), CHAPTER.ministries);
+    check('a card with one puts it across the top',
+      /has\(m\.photo\)\s*\?\s*'<img class="card-photo"/.test(js), null);
+    check('and a card without one starts at its heading, not at a grey box',
+      /\.card:not\(\.has-photo\) \.card-body \{ padding: 0; \}/.test(css)
+      // The class has to follow the photo. Putting has-photo on every card
+      // leaves the ones without a picture claiming a band they do not have.
+      && /'<div class="card' \+ \(has\(m\.photo\) \? ' has-photo' : ''\)/.test(js), null);
+    // A row of cards with differently proportioned photos would step up and
+    // down. The band is a fixed height and the photo is cropped into it.
+    check('the photos line up however they were shot',
+      /\.card-photo \{[\s\S]{0,120}object-fit: cover;/.test(css), null);
+
+    // ---- photos too big to serve ----
+    // A phone photo is 4-12MB and several thousand pixels wide. Nothing here
+    // is shown wider than 1600px, so the weight buys nothing and costs a
+    // visitor on campus data real money.
+    {
+      const os = require('os');
+      const shrinker = require(path.join(__dirname, '..', 'site', 'tools', 'shrink-images.js'));
+      const sharpLib = require('sharp');
+      const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'shrink-'));
+
+      // Something the size of a real phone photo.
+      const big = path.join(tmp, 'big.jpg');
+      let noise = '';
+      for (let i = 0; i < 600; i++) {
+        noise += `<circle cx="${(i * 337) % 4032}" cy="${(i * 911) % 3024}" r="${8 + (i % 40)}" fill="rgb(${(i*37)%255},${(i*61)%255},${(i*97)%255})"/>`;
+      }
+      await sharpLib(Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="4032" height="3024"><rect width="100%" height="100%" fill="#8a6a4a"/>${noise}</svg>`
+      )).jpeg({ quality: 100 }).toFile(big);
+      const bigBefore = fs.statSync(big).size;
+
+      // And something already small, which must be left completely alone.
+      const small = path.join(tmp, 'small.png');
+      await sharpLib({ create: { width: 120, height: 120, channels: 3, background: '#5B2C82' } })
+        .png().toFile(small);
+      const smallBefore = fs.readFileSync(small);
+
+      // A file wide enough to be processed but already squeezed so hard that
+      // re-encoding it would make it BIGGER. This is the case the "only write
+      // if it helped" guard exists for - the tiny png above never reaches it,
+      // because it returns early for being small and narrow.
+      const squeezed = path.join(tmp, 'squeezed.jpg');
+      let grain = '';
+      for (let i = 0; i < 400; i++) {
+        grain += `<circle cx="${(i * 71) % 1700}" cy="${(i * 53) % 900}" r="${3 + (i % 7)}" fill="rgb(${(i*29)%255},${(i*53)%255},${(i*83)%255})"/>`;
+      }
+      await sharpLib(Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="900"><rect width="100%" height="100%" fill="#777"/>${grain}</svg>`
+      )).jpeg({ quality: 12 }).toFile(squeezed);
+      const squeezedBefore = fs.readFileSync(squeezed);
+
+      const done = await shrinker.run(tmp);
+
+      const after = fs.statSync(big).size;
+      const meta = await sharpLib(big).metadata();
+      check('an oversized photo is actually made smaller', after < bigBefore, { bigBefore, after });
+      check('and no wider than anything on the page displays',
+        meta.width === shrinker.MAX_WIDTH, meta.width);
+      check('it reports what it did, so the log says why a file changed',
+        done.some(r => r.file === 'big.jpg'), done);
+      // Re-encoding an already-optimised file can make it bigger, and a
+      // pointless commit is still a commit.
+      check('a file already small enough is left byte for byte as it was',
+        Buffer.compare(fs.readFileSync(small), smallBefore) === 0, null);
+      check('and one that re-encoding would only make bigger is left alone too',
+        Buffer.compare(fs.readFileSync(squeezed), squeezedBefore) === 0,
+        { before: squeezedBefore.length, after: fs.statSync(squeezed).size });
+      // Running twice must not keep churning the same file.
+      const again = await shrinker.run(tmp);
+      check('and running it again changes nothing', again.length === 0, again);
+
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    // A phone writes the orientation in a tag rather than the pixels, so a
+    // photo held sideways arrives sideways unless it is honoured.
+    check('the shrinker honours which way up the phone was',
+      /\.rotate\(\)/.test(fs.readFileSync(path.join(__dirname, '..', 'site', 'tools', 'shrink-images.js'), 'utf8')), null);
+
+    // Shrinking after the upload would publish the 12MB original and only
+    // replace it on some later push, because a GITHUB_TOKEN commit does not
+    // trigger another run. The order is the whole point.
+    {
+      const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'pages.yml'), 'utf8');
+      check('the publish shrinks before it uploads',
+        wf.indexOf('shrink-images.js') < wf.indexOf('upload-pages-artifact')
+        && wf.indexOf('shrink-images.js') !== -1, null);
+      check('and can commit the smaller file back', /contents: write/.test(wf), null);
+    }
+
     // ---- a photo behind the heading ----
     check('a chapter can put a photo behind the heading', 'heroImage' in CHAPTER, Object.keys(CHAPTER));
     check('and say whether it needs light words or dark ones', 'heroImageTone' in CHAPTER, Object.keys(CHAPTER));
@@ -3581,8 +3676,13 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('a workflow publishes the site folder itself', /path: site\b/.test(wf), null);
     check('and only when the site changes, not on every app deploy',
       /paths: \['site\/\*\*'/.test(wf), null);
-    check('with the permissions Pages needs and no more',
-      /pages: write/.test(wf) && /id-token: write/.test(wf) && /contents: read/.test(wf), null);
+    // contents:write is there so the shrink step can commit a resized photo
+    // back - it was contents:read until that existed. Still scoped to this
+    // workflow rather than granted repo-wide, and still nothing wider.
+    check('with the permissions Pages and the shrinker need',
+      /pages: write/.test(wf) && /id-token: write/.test(wf) && /contents: write/.test(wf), null);
+    check('and nothing wider than that',
+      !/write-all/.test(wf) && !/permissions: write/.test(wf), null);
 
     // A chapter has to be told how to put it up, or it stays in the repo.
     const readme = read('README.md');

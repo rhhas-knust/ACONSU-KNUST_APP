@@ -104,13 +104,18 @@ window.CHAPTER = {
 
   // ---- what happens here ----------------------------------------------
   // Remove any that do not apply; add your own. An empty list hides the section.
+  //
+  // `photo` is optional, per ministry. A card without one starts at its
+  // heading rather than showing a grey box, so you can add pictures as you
+  // take them. Same sizing advice as the header photo: about 1200px wide is
+  // plenty for these - they are shown as a band roughly 400px across.
   ministries: [
-    { name: 'Bible Study',     blurb: 'Working through Scripture together, week by week.' },
-    { name: 'Prayer',          blurb: 'Standing together for the campus, the nation and each other.' },
-    { name: 'Music & Worship', blurb: 'Leading the family before God in song.' },
-    { name: 'Evangelism',      blurb: 'Taking the message into halls, hostels and the city.' },
-    { name: 'Welfare',         blurb: 'Looking after one another when life on campus is hard.' },
-    { name: 'Media',           blurb: 'Carrying what happens here to those who could not come.' },
+    { name: 'Bible Study',     blurb: 'Working through Scripture together, week by week.', photo: '' },
+    { name: 'Prayer',          blurb: 'Standing together for the campus, the nation and each other.', photo: '' },
+    { name: 'Music & Worship', blurb: 'Leading the family before God in song.', photo: '' },
+    { name: 'Evangelism',      blurb: 'Taking the message into halls, hostels and the city.', photo: '' },
+    { name: 'Welfare',         blurb: 'Looking after one another when life on campus is hard.', photo: '' },
+    { name: 'Media',           blurb: 'Carrying what happens here to those who could not come.', photo: '' },
   ],
 
   // ---- a word to carry --------------------------------------------------
