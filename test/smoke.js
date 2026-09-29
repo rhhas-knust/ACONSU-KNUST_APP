@@ -389,6 +389,10 @@ const { fakeModels, fakeDb } = require('./harness.js');
   // A shepherd is a member of this chapter who sits on the check-up team, so
   // one has to exist before anyone can be assigned to them.
   const graceId = await registerMember('Sister Grace', 'sister.grace@test.com');
+  r = await call('shep', 'POST', '/api/shepherd/team', { memberId: graceId });
+  check('someone still being received cannot join the check-up team',
+    r.status === 400 && /not an active member/i.test(r.data.error), r.data);
+  await call('shep', 'PATCH', `/api/shepherd/members/${graceId}/stage`, { stage: 'active' });
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active', shepherdMemberId: graceId });
   check('someone not on the check-up team cannot be made a shepherd',
     r.status === 400 && /check-up team/i.test(r.data.error), r.data);
@@ -2664,11 +2668,21 @@ const { fakeModels, fakeDb } = require('./harness.js');
     r = await call('member', 'GET', '/api/welfare/report');
     check('while an ordinary member cannot', r.status === 401, r.status);
 
-    // The body is owed the figures, not a list of who needed help.
+    // Tithe and semester dues are money members hand over, and they expect it
+    // accounted for by name. "GHS 50, tithe" against nobody is not a record
+    // anyone can check their own giving against.
     const report = (await call('coord', 'GET', '/api/welfare/report')).data;
     const reportRows = Array.isArray(report.entries) ? report.entries : [];
-    check('the report carries the movements without naming who paid or was helped',
-      reportRows.length > 0 && reportRows.every(e => !('memberName' in e) && !('memberId' in e)), reportRows[0]);
+    const named = reportRows.filter(e => e.entryType === 'income' && e.memberName);
+    check('the report names who paid', named.length > 0, reportRows);
+    {
+      const coordJs = require('fs').readFileSync(
+        require('path').join(__dirname, '..', 'public', 'js', 'coordinator.js'), 'utf8');
+      check('and the Coordinator\'s panel actually shows the name, not just carries it',
+        /e\.entryType === 'income' \? \(e\.memberName \|\| e\.payee/.test(coordJs), null);
+    }
+    check('and links the name to the member record, so it cannot drift',
+      named.every(e => !!e.memberId), named);
     check('though it does say which movements have evidence behind them',
       reportRows.some(e => e.hasEvidence === true), reportRows[0]);
 
@@ -3254,8 +3268,12 @@ const { fakeModels, fakeDb } = require('./harness.js');
       return res.member.id;
     };
 
+    // A shepherd has to be an active member, so the fixtures have to get there
+    // first - a freshly registered person is a visitor.
     const kwameId = await registerMember('Bro Kwame', 'bro.kwame@test.com');
     const abenaId = await registerMember('Sis Abena', 'sis.abena@test.com');
+    await call('shep', 'PATCH', `/api/shepherd/members/${kwameId}/stage`, { stage: 'active' });
+    await call('shep', 'PATCH', `/api/shepherd/members/${abenaId}/stage`, { stage: 'active' });
 
     let r3 = await call('shep', 'POST', '/api/shepherd/team', { memberId: kwameId });
     check('a member can be put on the check-up team', r3.status === 200, r3.data);
@@ -3329,6 +3347,29 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('leaving them off the roster',
       !r3.data.team.some(t => t.memberId === kwameId), r3.data.team);
 
+    // The Chapter Coordinator shepherds by virtue of the office. Derived from
+    // the account, never written onto the member: nothing to do when one is
+    // appointed, nothing to undo when they leave, and the two cannot disagree.
+    r3 = await call('shep', 'GET', '/api/shepherd/team');
+    const coordRow = r3.data.team.find(t => t.memberId === officeMemberIds['coord.yaw']);
+    check('the Chapter Coordinator is on the check-up team without being added',
+      !!coordRow, r3.data.team.map(t => t.name));
+    check('and is marked as being there by office, not by choice',
+      coordRow && coordRow.byOffice === true, coordRow);
+    check('so they are not offered again in the picker',
+      !r3.data.candidates.some(c => c.memberId === officeMemberIds['coord.yaw']), r3.data.candidates);
+    r3 = await call('shep', 'DELETE', `/api/shepherd/team/${officeMemberIds['coord.yaw']}`);
+    check('standing the Coordinator down is refused rather than quietly undone',
+      r3.status === 400 && /virtue of the office/i.test(r3.data.error), r3.data);
+    // Being on the team by office has to mean assignable, or it means nothing.
+    r3 = await call('shep', 'PATCH', `/api/shepherd/members/${abenaId}/stage`,
+      { stage: 'active', shepherdMemberId: officeMemberIds['coord.yaw'] });
+    check('and someone can actually be assigned to them',
+      r3.status === 200 && r3.data.item.shepherdMemberId === officeMemberIds['coord.yaw'], r3.data.item);
+    // Put Abena back where the rest of this section expects her.
+    await call('shep', 'PATCH', `/api/shepherd/members/${abenaId}/stage`,
+      { stage: 'active', shepherdMemberId: elderId });
+
     // The team is Shepherding's to keep, not an ordinary member's.
     r3 = await call('member', 'POST', '/api/shepherd/team', { memberId: abenaId });
     check('an ordinary member cannot put anyone on the check-up team', r3.status === 401, r3.data);
@@ -3356,6 +3397,14 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /key: 'team', label: 'Check-up Team'/.test(shep), null);
     check('and a way to move a flock, or standing someone down could never be undone',
       /data-reshepherd/.test(shep), null);
+    // A Stand down button beside the Coordinator would be a button that always
+    // fails: the server refuses it, and the next read derives them back.
+    check('the portal offers no stand-down for someone there by office',
+      /PORTAL\.canEdit && !t\.byOffice/.test(shep), null);
+    check('and says so on the row, so it does not read as an omission',
+      /t\.byOffice \? ' <span class="tiny muted">\(Coordinator\)/.test(shep), null);
+    check('the panel states the active-member rule rather than only enforcing it',
+      /someone still being received is shepherded, not a shepherd/.test(shep), null);
   }
 
   console.log('\n== the chapter landing site: standalone, and honest when empty ==');
