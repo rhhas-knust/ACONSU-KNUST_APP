@@ -177,6 +177,48 @@ in international form so a call works from outside Ghana too.
 
 Empty both lists and the whole Leadership section goes.
 
+### The wider church, and the founding fathers
+
+This chapter is one part of The Apostles' Continuation Church, and the men who
+founded the church are not the chapter's own leadership — so they get their own
+section, under the **church's** logo rather than the chapter's, and above the
+coordinators who lead here.
+
+Two things in `chapter.js`:
+
+```js
+church: {
+  name: "The Apostles' Continuation Church",
+  logo: 'images/church-logo.png',
+  blurb: 'Our chapter is one part of the wider church.',
+},
+
+founders: [
+  { name: 'Apostle Kwame Anane', role: 'Founder',        about: 'Began the work in 1961.', photo: 'images/founder.jpg' },
+  { name: 'Elder Kofi Mensah',   role: 'Founding Member', about: '', photo: '', inMemoriam: true },
+],
+```
+
+- **`church.logo`** is the general logo of the whole church, shown above the
+  founders. It is **fitted whole rather than cropped**, so it keeps the space
+  drawn around it and a round seal does not come out square. A PNG keeps its
+  transparency.
+- **`founders`** is the list. A row with no name is skipped, and somebody with
+  no photo yet gets their initials — so put the names up now and add the
+  pictures as you find them.
+- **`inMemoriam: true`** marks one who has gone. It adds a quiet line under the
+  card rather than doing anything to his picture, so his card reads like the
+  others'.
+
+The two halves stand on their own: the logo with no photographs yet is a
+section worth publishing, and so are the names before anybody has found the
+logo file. Blank the logo and leave the names out and **the whole section
+disappears**, like everything else here.
+
+A note on the initials: a title is not a name, so *Apostle Kwame Anane* gets
+**KA** and not AK. Apostle, Rev, Elder, Pastor, Dr and the rest are skipped —
+unless the title is all you have written, in which case it is kept.
+
 ### Before you publish, fill in at least
 
 - `serviceTimes` — when and where you actually meet. Until this is set, the

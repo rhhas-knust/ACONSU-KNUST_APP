@@ -189,7 +189,7 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow);
 }
-.lead-face, .exec-face {
+.lead-face, .exec-face, .founder-face {
   border-radius: 50%; object-fit: cover; flex: none;
   background: var(--surface-2); color: var(--brand);
   display: grid; place-items: center;
@@ -218,6 +218,39 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
 .exec-role {
   margin: 0; font-size: 0.74rem; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--ink-faint); font-weight: 700;
+}
+
+/* ---------- the wider church ---------- */
+/* The church's own mark, not the chapter's. A logo is drawn with its own
+   space around it and often is not rectangular, so it is fitted whole -
+   `cover`, which is right for a photograph, would cut the edge off a wordmark
+   and crop a round seal into a square. */
+.church-mark { text-align: center; max-width: 62ch; margin: 0 auto 36px; }
+.church-logo {
+  margin: 0 auto 18px;
+  max-width: 220px; max-height: 120px; width: auto; height: auto;
+  object-fit: contain;
+}
+.church-blurb { color: var(--ink-soft); margin-bottom: 0; }
+
+.founder-heading { text-align: center; margin: 0 0 22px; }
+.founder-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.founder-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 26px 18px; text-align: center;
+  box-shadow: var(--shadow);
+}
+.founder-face { width: 96px; height: 96px; font-size: 1.7rem; margin: 0 auto 14px; }
+.founder-card h3 { margin: 0 0 2px; font-size: 1.02rem; }
+.founder-role {
+  font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
+  font-weight: 800; color: var(--flame-gold); margin: 0 0 10px;
+}
+.founder-about { color: var(--ink-soft); font-size: 0.9rem; margin: 0; }
+/* Quiet, and under everything else on the card. */
+.founder-memoriam {
+  margin: 12px 0 0; font-size: 0.74rem; letter-spacing: 0.08em;
+  text-transform: uppercase; font-weight: 700; color: var(--ink-faint);
 }
 
 @media (max-width: 520px) {

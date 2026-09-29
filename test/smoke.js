@@ -3652,6 +3652,77 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('the executive heading only appears when there is a list under it',
       /if \(coordinators\.length\) show\(document\.getElementById\('execHeading'\)\)/.test(js), null);
 
+    // ---- the wider church, and the men who began it ----
+    // The chapter is a fraction of the church. The men who founded the church
+    // are not the chapter's executive, so they are not a row among the
+    // coordinators - they get their own section, under the CHURCH's mark.
+    check('a chapter can name the church it belongs to', 'church' in CHAPTER, Object.keys(CHAPTER));
+    check('and list the men who began it', 'founders' in CHAPTER, Object.keys(CHAPTER));
+    check('a missing church block cannot throw',
+      /var CH = C\.church \|\| \{\};/.test(js)
+      && /churchName: C\.church && C\.church\.name/.test(js), null);
+    check('there is a section for the founding fathers', /data-section="heritage"/.test(html), null);
+    check('separate from the people who lead this chapter',
+      html.indexOf('data-section="heritage"') !== -1
+      && html.indexOf('id="founders"') < html.indexOf('data-section="leadership"'), null);
+    // The chapter asked for the church's logo above them, and that is also the
+    // only thing that says whose founders these are.
+    check('with the church\'s own logo standing above them',
+      html.indexOf('id="churchLogo"') !== -1
+      && html.indexOf('id="churchLogo"') < html.indexOf('id="founders"'), null);
+    check('hidden until there is a logo or a name to put in it',
+      /if \(has\(CH\.logo\) \|\| founders\.length\)/.test(js), null);
+    // Either half can arrive first: the mark with no photographs yet, or the
+    // names before anybody has found the logo file.
+    check('the heading belongs to the list, so the mark can stand on its own',
+      /if \(founders\.length\) \{/.test(js)
+      && /show\(document\.getElementById\('founderHeading'\)\)/.test(js), null);
+    check('and no empty frame where a mark has not been added',
+      /churchLogo\.remove\(\);/.test(js), null);
+    check('a row with no name is skipped rather than shown blank',
+      /\(C\.founders \|\| \[\]\)\.filter\(function \(p\) \{ return p && has\(p\.name\); \}\)/.test(js), null);
+    check('every founder has a place for a photograph',
+      (CHAPTER.founders || []).length > 0 && (CHAPTER.founders || []).every(p => 'photo' in p),
+      CHAPTER.founders);
+    check('and one who has gone can be marked as such',
+      (CHAPTER.founders || []).some(p => 'inMemoriam' in p)
+      && /p\.inMemoriam \? '<p class="founder-memoriam">/.test(js), CHAPTER.founders);
+    // Said in a line under the card rather than done to his picture, so his
+    // card reads like the others'.
+    check('quietly, and without changing his picture',
+      /\.founder-memoriam \{/.test(css) && /faceHtml\(p, 'founder-face'\)/.test(js), null);
+    // A logo is drawn with its own space around it and is often not
+    // rectangular. `cover`, which is right for a photograph of a congregation,
+    // cuts the edge off a wordmark and crops a round seal square.
+    check('the logo is fitted whole rather than cropped like a photograph',
+      /\.church-logo \{[\s\S]{0,220}object-fit: contain;/.test(css), null);
+
+    // Nearly every name in this section carries a title, and initialling the
+    // title says nothing about the man. This runs the real function rather
+    // than reading it, because the rule is the kind that looks right and is
+    // not.
+    {
+      const src = js.slice(js.indexOf('var TITLE ='), js.indexOf('var coordinators ='));
+      const faceHtml = new Function('has', 'esc', src + '\nreturn faceHtml;')(
+        (v) => !!(v && String(v).trim()), (v) => String(v == null ? '' : v));
+      const initials = (name) => {
+        const m = faceHtml({ name }, 'founder-face').match(/is-initials">([^<]*)</);
+        return m ? m[1] : null;
+      };
+      check('a title is not a name, so the initials skip over it',
+        initials('Apostle Kwame Anane') === 'KA', initials('Apostle Kwame Anane'));
+      check('however it is punctuated', initials('Rev. Samuel Adjei') === 'SA',
+        initials('Rev. Samuel Adjei'));
+      check('a plain name is untouched', initials('Kofi Mensah') === 'KM',
+        initials('Kofi Mensah'));
+      // Stripping every word would otherwise leave an empty circle.
+      check('and somebody known only by their office keeps it',
+        initials('Elder') === 'E', initials('Elder'));
+      check('a photograph is still used whenever there is one',
+        /<img class="founder-face" src="images\/f\.jpg"/.test(
+          faceHtml({ name: 'Apostle Kwame Anane', photo: 'images/f.jpg' }, 'founder-face')), null);
+    }
+
     check('it follows the reader\'s light or dark setting',
       /@media \(prefers-color-scheme: dark\)/.test(css), null);
     check('and reads on a phone without sideways scrolling',
@@ -3691,6 +3762,8 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('and what to fill in before doing so', /serviceTimes/.test(readme), null);
     check('and does not tell anyone to pick a folder Pages cannot serve',
       !/folder: `\/site`/.test(readme), null);
+    check('and how to put the church\'s own mark and its founders up',
+      /church\.logo/.test(readme) && /inMemoriam/.test(readme), null);
   }
 
   console.log('\n== tithe goes to the welfare account, and the desk cannot hide its own giving ==');

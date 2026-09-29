@@ -70,6 +70,39 @@ window.CHAPTER = {
   values: 'Scripture, prayer, fellowship, service, and holy living remain central '
         + 'to our chapter life.',
 
+  // ---- the wider church, and the men who began it -------------------------
+  // This chapter is one part of The Apostles' Continuation Church, not the
+  // whole of it, and the men who founded the church are not the chapter's own
+  // leadership. So they get their own section, under the CHURCH's logo rather
+  // than the chapter's, and above the coordinators who lead here.
+  //
+  // Leave `founders` empty and blank the logo and the whole section goes.
+  church: {
+    name: "The Apostles' Continuation Church",
+    // The general logo of the whole church. Put the file in images/ and write
+    // the path relative to this folder. A logo is fitted whole rather than
+    // cropped, so it keeps whatever space was drawn around it; a PNG keeps its
+    // transparency.
+    logo: '',        // e.g. 'images/church-logo.png'
+    blurb: 'Our chapter is one part of the wider church — one fraction of a '
+         + 'family that has been continuing steadfastly a good while longer '
+         + 'than any of us have been on this campus.',
+  },
+
+  // The founding fathers. Same rule as everywhere else: somebody with no photo
+  // yet gets their initials in a circle, so put the names up now and add the
+  // pictures when you have them. A row with no name is skipped entirely.
+  //
+  // `inMemoriam: true` marks one who has gone. It adds a quiet line under the
+  // card rather than changing the picture, so the card reads the same as the
+  // others.
+  founders: [
+    { name: '', role: 'Founder',                       about: '', photo: '', inMemoriam: false },
+    { name: '', role: 'Chairman',                      about: '', photo: '', inMemoriam: false },
+    { name: '', role: 'Founding Member',               about: '', photo: '', inMemoriam: true  },
+    { name: '', role: 'General Secretary, the Church', about: '', photo: '', inMemoriam: false },
+  ],
+
   // ---- who leads the chapter --------------------------------------------
   // Two lists, both optional. An empty list hides its half; empty both and the
   // whole Leadership section goes.
