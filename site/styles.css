@@ -139,6 +139,49 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
 .card .when { font-weight: 800; color: var(--brand); }
 .card .where { color: var(--ink-faint); font-size: 0.9rem; }
 
+/* ---------- leadership ---------- */
+.lead-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.lead-card {
+  display: flex; gap: 18px; align-items: flex-start;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow);
+}
+.lead-face, .exec-face {
+  border-radius: 50%; object-fit: cover; flex: none;
+  background: var(--surface-2); color: var(--brand);
+  display: grid; place-items: center;
+  font-family: 'Fraunces', serif; font-weight: 700;
+}
+.lead-face { width: 84px; height: 84px; font-size: 1.5rem; }
+.exec-face { width: 72px; height: 72px; font-size: 1.25rem; margin: 0 auto 12px; }
+.lead-body { min-width: 0; }
+.lead-body h3 { margin-bottom: 2px; }
+.lead-role {
+  font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase;
+  font-weight: 800; color: var(--flame-gold); margin-bottom: 10px;
+}
+.lead-body p { color: var(--ink-soft); font-size: 0.93rem; margin-bottom: 10px; }
+.lead-contact { font-size: 0.88rem; }
+.lead-contact a { color: var(--brand); font-weight: 700; text-decoration: none; }
+.lead-contact a:hover { text-decoration: underline; }
+
+.exec-heading { margin: 38px 0 18px; }
+.exec-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.exec-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px 14px; text-align: center;
+}
+.exec-name { font-weight: 800; margin: 0 0 2px; font-size: 0.95rem; }
+.exec-role {
+  margin: 0; font-size: 0.74rem; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint); font-weight: 700;
+}
+
+@media (max-width: 520px) {
+  .lead-card { flex-direction: column; align-items: center; text-align: center; }
+  .lead-contact { word-break: break-word; }
+}
+
 .alt { background: var(--surface-2); }
 .section-head { max-width: 62ch; margin-bottom: 34px; }
 .section-head p { color: var(--ink-soft); margin-bottom: 0; }
