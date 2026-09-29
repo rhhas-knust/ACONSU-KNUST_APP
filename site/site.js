@@ -129,7 +129,7 @@
   // and a chapter should be able to put the names up before the photos exist.
   // Nearly every name here carries a title, and "Apostle Kwame Anane" initialled
   // straight off the front is AK - the A belongs to the office, not the man.
-  var TITLE = /^(apostle|prophet|prophetess|evangelist|pastor|rev|reverend|bishop|elder|deacon|deaconess|dr|prof|mr|mrs|ms|miss|sis|sister|bro|brother)\.?$/i;
+  var TITLE = /^(apostle|prophet|prophetess|evangelist|pastor|rev|reverend|bishop|elder|deacon|deaconess|pas|dr|prof|mr|mrs|ms|miss|sis|sister|bro|brother)\.?$/i;
   function faceHtml(person, cls) {
     if (has(person.photo)) {
       return '<img class="' + cls + '" src="' + esc(person.photo) + '" alt="'

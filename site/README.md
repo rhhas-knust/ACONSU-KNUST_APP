@@ -140,12 +140,20 @@ this page is displayed wider than 1600px, so all that weight buys nothing and
 costs a visitor on campus data real money and several seconds. The shrinker
 brings a 12MB photo down to a couple of hundred KB.
 
-It only ever makes files smaller:
+It only ever makes files smaller, and it only ever asks one question: **is
+this wider than 1600px?**
 
-- Anything already small and narrow is left byte for byte as it was.
+- Anything already that narrow is left byte for byte as it was — however many
+  times the workflow runs.
 - If re-encoding would make a file *bigger*, the original is kept.
 - Which way up the phone was held is honoured, so nothing arrives sideways.
 - PNGs stay PNGs, so a logo keeps its transparency.
+
+Deciding on **file size** instead would look more thorough and would be wrong:
+whether a file is "too big" does not stop being true after one pass, so a photo
+that is still large after shrinking comes back every run, gives up another
+slice of quality, and is committed again. Width settles after one pass and
+stays settled.
 
 You can also run it yourself before committing:
 
@@ -214,6 +222,12 @@ The two halves stand on their own: the logo with no photographs yet is a
 section worth publishing, and so are the names before anybody has found the
 logo file. Blank the logo and leave the names out and **the whole section
 disappears**, like everything else here.
+
+**The portraits are framed standing, not cropped to a circle** like the
+chapter's own people. These are formal studio portraits: the head sits in the
+top third, and a circle centred on one shows a tie and a pair of folded arms.
+So a founder's photo can be a full standing shot — it is framed 3:4 with the
+crop held high. A head-and-shoulders photo works just as well.
 
 A note on the initials: a title is not a name, so *Apostle Kwame Anane* gets
 **KA** and not AK. Apostle, Rev, Elder, Pastor, Dr and the rest are skipped —

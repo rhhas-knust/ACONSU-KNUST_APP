@@ -3531,6 +3531,13 @@ const { fakeModels, fakeDb } = require('./harness.js');
     // down. The band is a fixed height and the photo is cropped into it.
     check('the photos line up however they were shot',
       /\.card-photo \{[\s\S]{0,120}object-fit: cover;/.test(css), null);
+    // A grid row stretches every card to the tallest in it, so while only some
+    // activities have been photographed, a card with three lines of text sat
+    // beside a card with a photo band and became three lines of text and 200px
+    // of nothing - the grey box this section was built to avoid, wearing a
+    // different hat. Seen in a browser once the first two photographs went in.
+    check('and a card with no photo yet is not stretched to match one that has',
+      /#ministries \{ align-items: start; \}/.test(css), null);
 
     // ---- photos too big to serve ----
     // A phone photo is 4-12MB and several thousand pixels wide. Nothing here
@@ -3593,7 +3600,41 @@ const { fakeModels, fakeDb } = require('./harness.js');
       const again = await shrinker.run(tmp);
       check('and running it again changes nothing', again.length === 0, again);
 
+      // The three files above all end up small, so a size-based rule skips
+      // them on the second pass and this passed while the real thing churned.
+      // A file that is still LARGE after being shrunk is the case that
+      // matters: under a size rule it comes back every run, gives up another
+      // slice of quality and is committed again. Random noise is used here
+      // because it does not compress, so it stays large however often it is
+      // re-encoded - the worst case for any rule that looks at bytes.
+      const noisy = path.join(tmp, 'noisy.jpg');
+      const px = Buffer.alloc(2400 * 1800 * 3);
+      for (let i = 0; i < px.length; i++) px[i] = (i * 2654435761) % 256;
+      await sharpLib(px, { raw: { width: 2400, height: 1800, channels: 3 } })
+        .jpeg({ quality: 100 }).toFile(noisy);
+
+      await shrinker.run(tmp);
+      const settled = fs.readFileSync(noisy);
+      check('a shrunk photo that is still large is not shrunk a second time',
+        settled.length > 200 * 1024, settled.length);
+      const third = await shrinker.run(tmp);
+      check('so a run that should find nothing to do writes nothing',
+        third.length === 0, third);
+      check('and leaves the file byte for byte as the first run left it',
+        Buffer.compare(fs.readFileSync(noisy), settled) === 0,
+        { was: settled.length, now: fs.statSync(noisy).size });
+
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+
+    // The property behind all three checks above: the only thing it decides on
+    // is width. A rule that looks at file size cannot be idempotent, because
+    // whether a file is "too big" does not stop being true after one pass.
+    {
+      const tool = fs.readFileSync(path.join(__dirname, '..', 'site', 'tools', 'shrink-images.js'), 'utf8');
+      check('and it decides on width alone, which is what makes that hold',
+        /if \(\(meta\.width \|\| 0\) <= MAX_WIDTH\) return null;/.test(tool)
+        && !/LEAVE_ALONE_UNDER|MIN_SAVING/.test(tool), null);
     }
 
     // A phone writes the orientation in a tag rather than the pixels, so a
@@ -3697,6 +3738,51 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('the logo is fitted whole rather than cropped like a photograph',
       /\.church-logo \{[\s\S]{0,220}object-fit: contain;/.test(css), null);
 
+    // These are formal standing studio portraits, not head-and-shoulders
+    // snapshots. A 96px circle centred on one shows a tie and a pair of folded
+    // arms: the head is in the top third and gets cropped straight off. Seen
+    // in a browser the first time the real photographs went in.
+    check('a standing portrait is framed rather than cropped to a circle',
+      /\.founder-face \{[\s\S]{0,200}aspect-ratio: 3 \/ 4;/.test(css)
+      && /\.founder-face \{[\s\S]{0,200}border-radius: 12px;/.test(css), null);
+    // It shares the circle rule with the chapter's faces, and both are (0,1,0),
+    // so the only thing making the square corners win is coming later in the
+    // file. Move this block up and every founder is a circle again.
+    check('and the rule that squares it off comes after the one that rounds it',
+      css.indexOf('.lead-face, .exec-face, .founder-face {') !== -1
+      && css.indexOf('.lead-face, .exec-face, .founder-face {') < css.indexOf('.founder-face {'), null);
+    check('with the crop held high, so it keeps the face and not the tie',
+      /\.founder-face \{[\s\S]{0,200}object-position: 50% 15%;/.test(css), null);
+    // Four standing portraits in one column made this a 2,700px scroll on a
+    // 390px screen. Two columns halve it.
+    {
+      const m = css.match(/\.founder-grid \{[^}]*minmax\((\d+)px/);
+      const other = css.match(/\.lead-grid \{[^}]*minmax\((\d+)px/);
+      check('a phone gets two portraits side by side, not one long column',
+        !!m && Number(m[1]) <= 170 && !!other && Number(m[1]) < Number(other[1]),
+        m && other && { founder: m[1], lead: other[1] });
+    }
+
+    // A path with a typo in it is a broken image on the front of the church's
+    // page, and nothing else here would catch it: the file simply is not
+    // fetched until somebody scrolls to it.
+    {
+      const referenced = [];
+      (CHAPTER.founders || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
+      (CHAPTER.ministries || []).forEach(m => { if (m && m.photo) referenced.push(m.photo); });
+      if (CHAPTER.church && CHAPTER.church.logo) referenced.push(CHAPTER.church.logo);
+      if (CHAPTER.heroImage) referenced.push(CHAPTER.heroImage);
+      (CHAPTER.coordinators || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
+      (CHAPTER.executives || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
+      const missing = referenced.filter(f => !fs.existsSync(path.join(siteDir, f)));
+      check('every photograph the chapter names is actually in the folder',
+        missing.length === 0, missing);
+    }
+    // The three that are in there now.
+    check('the church\'s founder, chairman and general secretary have their portraits',
+      ['church-founder.jpg', 'church-chairman.jpg', 'church-general-secretary.jpg']
+        .every(f => fs.existsSync(path.join(siteDir, 'images', f))), null);
+
     // Nearly every name in this section carries a title, and initialling the
     // title says nothing about the man. This runs the real function rather
     // than reading it, because the rule is the kind that looks right and is
@@ -3718,6 +3804,9 @@ const { fakeModels, fakeDb } = require('./harness.js');
       // Stripping every word would otherwise leave an empty circle.
       check('and somebody known only by their office keeps it',
         initials('Elder') === 'E', initials('Elder'));
+      // Ghanaian usage, and the chapter's own coordinator is written this way.
+      check('Pas. is a title here too, as it is written on the ground',
+        initials('Pas. Gideon Amo Darko') === 'GA', initials('Pas. Gideon Amo Darko'));
       check('a photograph is still used whenever there is one',
         /<img class="founder-face" src="images\/f\.jpg"/.test(
           faceHtml({ name: 'Apostle Kwame Anane', photo: 'images/f.jpg' }, 'founder-face')), null);
