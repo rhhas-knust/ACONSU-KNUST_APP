@@ -26,6 +26,25 @@ window.CHAPTER = {
   lede: 'A campus family devoted to the Word, to fellowship, to prayer — '
       + 'continuing steadfastly in the pattern the apostles left us. Come as you are.',
 
+  // ---- a photo behind the heading ---------------------------------------
+  // Put the file in this folder's images/ directory and write the path
+  // relative to it. Blank keeps the purple-and-gold gradient, which is a
+  // perfectly good header - only use a photo if it is a good one.
+  //
+  // WHAT MAKES A GOOD ONE: wide rather than tall (it is cropped to a band),
+  // busy at the edges rather than the middle, since the heading sits over the
+  // centre. A congregation, the auditorium, the campus.
+  //
+  // SIZE IT FIRST. About 1600px wide and under 300KB. A 4MB photo straight off
+  // a phone costs a fresher on campus data real money and several seconds, and
+  // it is the first thing on the page - nothing else shows until it loads.
+  heroImage: '',
+
+  // 'dark' puts the heading in white over a darkened photo. 'light' keeps the
+  // purple heading and lays a pale wash over instead. Dark suits most photos;
+  // try light only if yours is very pale.
+  heroImageTone: 'dark',
+
   // ---- when and where you meet ---------------------------------------
   // Each line is one meeting. Leave the list empty and the whole section goes.
   serviceTimes: [

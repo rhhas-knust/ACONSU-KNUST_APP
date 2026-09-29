@@ -3517,6 +3517,25 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('a chapter can say what its dialling code is',
       'countryCode' in CHAPTER, Object.keys(CHAPTER));
 
+    // ---- a photo behind the heading ----
+    check('a chapter can put a photo behind the heading', 'heroImage' in CHAPTER, Object.keys(CHAPTER));
+    check('and say whether it needs light words or dark ones', 'heroImageTone' in CHAPTER, Object.keys(CHAPTER));
+    check('blank keeps the gradient rather than an empty frame',
+      /if \(has\(C\.heroImage\)\)/.test(js), null);
+    // The heading has to stay readable whatever was photographed. A chapter
+    // should not have to test their own photo to discover it is not.
+    check('the photo never goes on bare - a wash sits over it',
+      /\.hero\[data-hero-tone\]::before \{/.test(css)
+      && /\.hero\[data-hero-tone="dark"\]::before/.test(css), null);
+    check('and the words flip to match the wash, not the picture',
+      /\.hero\[data-hero-tone="dark"\] h1 \{ color: #fff; \}/.test(css), null);
+    // The wash is inset:0 over the whole hero, so without this it would cover
+    // the heading it exists to make readable.
+    check('the heading sits above the wash rather than under it',
+      /\.hero\[data-hero-tone\] \.wrap \{ position: relative; z-index: 1; \}/.test(css), null);
+    check('an unrecognised tone falls back to the safe one rather than no wash',
+      /C\.heroImageTone === 'light' \? 'light' : 'dark'/.test(js), null);
+
     // ---- who leads the chapter ----
     check('a chapter can list its coordinators', 'coordinators' in CHAPTER, Object.keys(CHAPTER));
     check('and its executives', 'executives' in CHAPTER, Object.keys(CHAPTER));

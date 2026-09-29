@@ -114,6 +114,38 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
     linear-gradient(180deg, var(--hero-a, #E4D0F2) 0%, var(--hero-b, #F7F0FC) 54%, var(--bg) 100%);
 }
 @media (prefers-color-scheme: dark) { .hero { --hero-a: #301344; --hero-b: #1C082B; } }
+
+/* A chapter's own photo behind the heading. The photo never goes on bare: a
+   wash sits over it so the words stay readable whatever was photographed, and
+   the text colours flip to match the wash rather than the picture. */
+.hero[data-hero-tone] {
+  background-image: var(--hero-photo);
+  background-size: cover;
+  background-position: center;
+}
+.hero[data-hero-tone]::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+}
+.hero[data-hero-tone] .wrap { position: relative; z-index: 1; }
+
+/* A dark wash, white words. Suits almost any photograph. */
+.hero[data-hero-tone="dark"]::before {
+  background: linear-gradient(180deg, rgba(36,21,48,0.62) 0%, rgba(36,21,48,0.78) 100%);
+}
+.hero[data-hero-tone="dark"] h1 { color: #fff; }
+.hero[data-hero-tone="dark"] .lede { color: rgba(255,255,255,0.9); }
+.hero[data-hero-tone="dark"] .btn-ghost { border-color: rgba(255,255,255,0.5); color: #fff; }
+.hero[data-hero-tone="dark"] .btn-ghost:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.12); }
+
+/* A pale wash, the purple heading kept. Only for a very light photograph. */
+.hero[data-hero-tone="light"]::before {
+  background: linear-gradient(180deg, rgba(253,251,255,0.72) 0%, rgba(253,251,255,0.86) 100%);
+}
+@media (prefers-color-scheme: dark) {
+  .hero[data-hero-tone="light"]::before {
+    background: linear-gradient(180deg, rgba(23,16,31,0.70) 0%, rgba(23,16,31,0.84) 100%);
+  }
+}
 .hero h1 { margin-bottom: 18px; }
 .hero .lede { margin: 0 auto 30px; }
 .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
