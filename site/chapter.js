@@ -130,7 +130,7 @@ window.CHAPTER = {
     {
       name: 'Pastor Sarpong',
       role: 'Chapter Coordinator',
-      about: 'A seasoned teache rof the word, former M.O.G and President of the Union. He rightly divides the word of truth to fit the contest of the young and old',      // a sentence or two — how long he has served, what he carries
+      about: 'A seasoned teacher of the word, former M.O.G and President of the Union. He rightly divides the word of truth to fit the contest of the young and old',      // a sentence or two — how long he has served, what he carries
       photo: 'images/coordinator-sarpong.jpg',
       phone: '+233 54 378 7233',
       email: 'kobbysarpong66@gmail.com',
@@ -140,7 +140,7 @@ window.CHAPTER = {
   // Just the name and the office. Add or remove rows as the year turns over.
   executives: [
     { position: 'President',                     name: 'James Gyamfi',     photo: 'images/exec-james.jpg' },
-    { position: 'Vice President',                name: 'Keziah',           photo: 'images/exec-keziah.jpg' },
+    { position: 'Vice President',                name: 'Keziah Gyimah',           photo: 'images/exec-keziah.jpg' },
     { position: 'General Secretary',             name: 'Anna Dompreh',     photo: 'images/exec-anna.jpg' },
     { position: 'Assistant General Secretary',   name: 'Emmanuel Awuah',   photo: 'images/exec-emmanuel.jpg' },
     { position: 'Organizer',                     name: 'Derick Owusu Ansah', photo: 'images/exec-derick.jpg' },
