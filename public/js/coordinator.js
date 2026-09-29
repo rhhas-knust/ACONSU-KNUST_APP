@@ -658,7 +658,7 @@ async function renderWelfarePurseReport(el) {
 
     <div class="table-wrap" style="margin-top:16px;">
       <table class="portal-table">
-        <thead><tr><th>Date</th><th>What</th><th>Paid to</th><th>Amount</th><th>Evidence</th><th>Recorded by</th></tr></thead>
+        <thead><tr><th>Date</th><th>What</th><th>Who</th><th>Amount</th><th>Evidence</th><th>Recorded by</th></tr></thead>
         <tbody>
           ${entries.map(e => `
             <tr>
@@ -667,7 +667,9 @@ async function renderWelfarePurseReport(el) {
                 <strong>${escapeHtml(WELFARE_REPORT_LABELS[e.category] || e.category)}</strong>
                 ${e.description ? `<br><small class="muted">${escapeHtml(e.description)}</small>` : ''}
               </td>
-              <td class="tiny muted">${escapeHtml(e.payee || '\u2014')}</td>
+              <td class="tiny muted">${escapeHtml(
+                e.entryType === 'income' ? (e.memberName || e.payee || '\u2014') : (e.payee || '\u2014')
+              )}</td>
               <td><strong>${e.entryType === 'income' ? '+' : '\u2212'}${money(e.amount)}</strong></td>
               <td>${e.hasEvidence ? pill('attached', 'green') : '<span class="tiny muted">\u2014</span>'}</td>
               <td class="tiny muted">${escapeHtml(e.recordedBy || '\u2014')}</td>

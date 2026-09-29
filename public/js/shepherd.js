@@ -809,7 +809,7 @@ async function assignShepherdForm(person, stage) {
       <div class="field"><label>Shepherd</label>
         <select id="shepherdPick" required>
           <option value="">Choose from the check-up team…</option>
-          ${choices.map(t => `<option value="${escapeHtml(t.memberId)}"${t.memberId === person.shepherdMemberId ? ' selected' : ''}>${escapeHtml(t.name)}${t.isAlumni ? ' (alumni)' : ''} — looking after ${t.flockSize}</option>`).join('')}
+          ${choices.map(t => `<option value="${escapeHtml(t.memberId)}"${t.memberId === person.shepherdMemberId ? ' selected' : ''}>${escapeHtml(t.name)}${t.isAlumni ? ' (alumni)' : ''}${t.byOffice ? ' (Coordinator)' : ''} — looking after ${t.flockSize}</option>`).join('')}
         </select>
       </div>
       <div style="display:flex; gap:10px;">
@@ -851,12 +851,12 @@ async function renderShepTeam(el) {
     ${PORTAL.canEdit ? `
     <div class="portal-card">
       <h3>Add to the team</h3>
-      <p class="hint">A shepherd is always a member of this chapter. Alumni included — being off campus does not end it.</p>
+      <p class="hint">A shepherd is an <strong>active</strong> member of this chapter. Alumni included — being off campus does not end it — but someone still being received is shepherded, not a shepherd. The Chapter Coordinator is on the team by virtue of the office.</p>
       <form id="addToTeamForm" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
         <div class="field" style="flex:1; min-width:220px; margin:0;">
           <label>Add a member to the team</label>
           <select id="teamCandidate" required>
-            <option value="">Choose a member…</option>
+            <option value="">${candidates.length ? 'Choose a member…' : 'No active members left to add'}</option>
             ${candidates.map(c => `<option value="${escapeHtml(c.memberId)}">${escapeHtml(c.name)}${c.isAlumni ? ' (alumni)' : ''}</option>`).join('')}
           </select>
         </div>
@@ -873,11 +873,11 @@ async function renderShepTeam(el) {
             ${team.map(t => `
               <tr>
                 <td>${avatar(t)}</td>
-                <td>${escapeHtml(t.name)}${t.isAlumni ? ' <span class="tiny muted">(alumni)</span>' : ''}</td>
+                <td>${escapeHtml(t.name)}${t.isAlumni ? ' <span class="tiny muted">(alumni)</span>' : ''}${t.byOffice ? ' <span class="tiny muted">(Coordinator)</span>' : ''}</td>
                 <td>${pill(STAGE_LABELS[t.membershipStage] || t.membershipStage)}</td>
                 <td class="tiny">${t.flockSize}</td>
                 <td class="tiny muted">${t.since ? new Date(t.since).toLocaleDateString() : '—'}</td>
-                <td>${PORTAL.canEdit ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-standdown="${escapeHtml(t.memberId)}">Stand down</button>` : ''}</td>
+                <td>${PORTAL.canEdit && !t.byOffice ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-standdown="${escapeHtml(t.memberId)}">Stand down</button>` : ''}</td>
               </tr>
             `).join('') || emptyRow(6, 'Nobody on the check-up team yet.')}
           </tbody>

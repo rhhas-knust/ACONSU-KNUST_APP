@@ -3512,7 +3512,27 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
 // Turns a member record into the roster row the portal shows. flockSize is
 // counted rather than stored, so it can never fall out of step with the
 // assignments themselves.
-function shepherdTeamRow(member, flockByShepherdId) {
+// A shepherd has to be an active member of the chapter. Worker and executive
+// are further along the same road, not short of it, and alumni keep
+// shepherding after they leave - so the rule is really "past acceptance".
+// Visitor, under review and accepted are people still being received; they are
+// shepherded, they do not yet shepherd.
+const SHEPHERD_ELIGIBLE_STAGES = ['active', 'worker', 'executive', 'alumni'];
+
+function canBeShepherd(member) {
+  return SHEPHERD_ELIGIBLE_STAGES.includes(member.membershipStage || '');
+}
+
+// The Chapter Coordinator shepherds by virtue of the office, so it is derived
+// from the account rather than stored on the member. Nothing has to be written
+// when a Coordinator is appointed, nothing has to be unwritten when they leave,
+// and the two can never disagree.
+async function coordinatorMemberIds(filter) {
+  const staff = await repo.getAll('staffUsers', filter);
+  return new Set(staff.filter(s => s.role === 'coordinator' && s.memberId).map(s => s.memberId));
+}
+
+function shepherdTeamRow(member, flockByShepherdId, byOffice) {
   return {
     memberId: member.id,
     name: member.name,
@@ -3524,27 +3544,32 @@ function shepherdTeamRow(member, flockByShepherdId) {
     isAlumni: (member.membershipStage || '') === 'alumni',
     imageFileId: member.profileImageFileId || '',
     since: member.shepherdTeamSince || null,
-    flockSize: flockByShepherdId.get(member.id) || 0
+    flockSize: flockByShepherdId.get(member.id) || 0,
+    byOffice: !!(byOffice && byOffice.has(member.id))
   };
 }
 
 app.get('/api/shepherd/team', requireShepherd, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
-    const members = await repo.getAll('members', filter);
+    const [members, byOffice] = await Promise.all([
+      repo.getAll('members', filter),
+      coordinatorMemberIds(filter)
+    ]);
     const flockByShepherdId = new Map();
     for (const m of members) {
       if (!m.shepherdMemberId) continue;
       flockByShepherdId.set(m.shepherdMemberId, (flockByShepherdId.get(m.shepherdMemberId) || 0) + 1);
     }
     const team = members
-      .filter(m => m.onShepherdTeam)
-      .map(m => shepherdTeamRow(m, flockByShepherdId))
+      .filter(m => m.onShepherdTeam || byOffice.has(m.id))
+      .map(m => shepherdTeamRow(m, flockByShepherdId, byOffice))
       .sort((a, b) => a.name.localeCompare(b.name));
     // Everyone who could be put on the team, so the portal can offer a picker
-    // without pulling the whole member list down a second time.
+    // without pulling the whole member list down a second time. Someone still
+    // being received is not offered, because the server would refuse them.
     const candidates = members
-      .filter(m => !m.onShepherdTeam)
+      .filter(m => !m.onShepherdTeam && !byOffice.has(m.id) && canBeShepherd(m))
       .map(m => ({
         memberId: m.id,
         name: m.name,
@@ -3568,6 +3593,11 @@ app.post('/api/shepherd/team', requireShepherd, async (req, res) => {
     const member = await repo.getById('members', memberId, filter);
     if (!member) return res.status(404).json({ error: 'Member not found' });
     if (member.onShepherdTeam) return res.status(400).json({ error: 'Already on the check-up team' });
+    if (!canBeShepherd(member)) {
+      return res.status(400).json({
+        error: `${member.name} is not an active member yet. Someone still being received is shepherded, not a shepherd.`
+      });
+    }
     const updated = await repo.updateById('members', memberId, {
       ...member, onShepherdTeam: true, shepherdTeamSince: member.shepherdTeamSince || new Date()
     }, filter);
@@ -3582,6 +3612,15 @@ app.delete('/api/shepherd/team/:memberId', requireShepherd, async (req, res) => 
     const filter = rolesLib.chapterFilter(req);
     const member = await repo.getById('members', req.params.memberId, filter);
     if (!member) return res.status(404).json({ error: 'Member not found' });
+    // The Coordinator is on the team by virtue of the office. Standing them
+    // down here would not hold - the next read derives them back - so say so
+    // rather than appear to do something.
+    const byOffice = await coordinatorMemberIds(filter);
+    if (byOffice.has(member.id)) {
+      return res.status(400).json({
+        error: `${member.name} is the Chapter Coordinator, and shepherds by virtue of the office. Change the office, not the team.`
+      });
+    }
     // Standing someone down while people still look to them would leave those
     // people shepherded by nobody, silently. Reassign them first.
     const all = await repo.getAll('members', filter);
@@ -4121,8 +4160,10 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
         if (!shepherd) return res.status(400).json({ error: 'Unknown shepherd' });
         // Being on the check-up team is what makes someone assignable. Without
         // this the field would accept any member at all and the team would mean
-        // nothing.
-        if (!shepherd.onShepherdTeam) {
+        // nothing. The Coordinator is on it by virtue of the office, so this
+        // has to ask the same question the roster answers.
+        const byOffice = await coordinatorMemberIds(filter);
+        if (!shepherd.onShepherdTeam && !byOffice.has(shepherd.id)) {
           return res.status(400).json({ error: `${shepherd.name} is not on the check-up team` });
         }
         updates.shepherdMemberId = shepherd.id;
@@ -5469,12 +5510,14 @@ app.get('/api/welfare/report', requireWelfareReportReader, async (req, res) => {
     const sorted = entries.sort((a, b) => (a.date < b.date ? 1 : -1));
     res.json({
       totals: welfareTotals(sorted),
-      // Who paid what is the welfare desk's own record. The body is owed the
-      // figures and the movements, not a list of which members needed help.
+      // Who paid is named. Tithe and semester dues are money members hand over
+      // and expect to be accounted for by name - "GHS 50, tithe" with nobody
+      // against it is not a record anyone can check against their own giving.
       entries: sorted.slice(0, 60).map(e => ({
         id: e.id, date: e.date, entryType: e.entryType, category: e.category,
         amount: e.amount, description: e.description || '', method: e.method || '',
         payee: e.payee || '', recordedBy: e.recordedBy || '',
+        memberId: e.memberId || '', memberName: e.memberName || '',
         hasEvidence: !!e.receiptFileId
       }))
     });
