@@ -645,7 +645,7 @@ async function renderGivingQueue(el) {
     <div class="panel-head">
       <div>
         <h2>Giving Claims (${items.length})</h2>
-        <p class="sub">Members log what they sent via MoMo/bank; reconcile in batches, then approve with dual-control.</p>
+        <p class="sub">Members log what they sent via MoMo/bank. Check it landed, record the day it did, and the member is told. Or reconcile several as a batch, then approve with dual-control.</p>
       </div>
       <div class="panel-actions">
         <button class="btn btn-primary btn-sm" id="reconcileBatchBtn">Reconcile Selected as Batch</button>
@@ -664,7 +664,9 @@ async function renderGivingQueue(el) {
               <td>${escapeHtml(g.method)}</td>
               <td class="tiny muted">${escapeHtml(g.reference || '—')}</td>
               <td class="row-actions">
-                <button data-confirm="${g.id}">Confirm</button>
+                <button data-confirm="${g.id}" data-who="${escapeHtml(g.memberName || '')}"
+                  data-amount="${escapeHtml(String(g.amount))}"
+                  data-ref="${escapeHtml(g.reference || '')}">Confirm</button>
                 <button data-reject="${g.id}" class="danger">Reject</button>
               </td>
             </tr>
@@ -706,12 +708,44 @@ async function renderGivingQueue(el) {
       openPanel('giving');
     } catch (err) { showToast(err.message || 'Could not reconcile this batch.', 'error'); }
   });
-  el.querySelectorAll('[data-confirm]').forEach(btn => btn.addEventListener('click', async () => {
-    try {
-      await fetchJSON(`/api/finance/giving/${btn.dataset.confirm}/confirm`, { method: 'PATCH' });
-      showToast('Confirmed and booked to the ledger.', 'success');
-      openPanel('giving');
-    } catch (err) { showToast(err.message || 'Could not confirm this.', 'error'); }
+  el.querySelectorAll('[data-confirm]').forEach(btn => btn.addEventListener('click', () => {
+    // Confirming is somebody saying "I looked at the account and the money is
+    // there". The day it landed is not always the day anyone got round to
+    // checking, and booking a gift to the wrong month is a real error in the
+    // books - so it is asked for, with today filled in.
+    const today = new Date().toISOString().slice(0, 10);
+    showModal(`
+      <h3>Confirm it arrived</h3>
+      <p class="hint">${escapeHtml(btn.dataset.who || 'This member')} says they sent
+        <strong>${money(btn.dataset.amount)}</strong>. Check the account, then record the day it landed.</p>
+      <form id="confirmGiveForm">
+        <div class="field"><label>Date it arrived in the account</label>
+          <input type="date" id="cgDate" value="${today}" max="${today}" required></div>
+        <div class="field"><label>Reference on the account (optional)</label>
+          <input type="text" id="cgRef" value="${escapeHtml(btn.dataset.ref || '')}"
+            placeholder="MoMo transaction id, as the account shows it"></div>
+        <div style="display:flex; gap:10px;">
+          <button type="submit" class="btn btn-primary">Yes, it arrived</button>
+          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+        </div>
+        <div class="form-msg" id="cgMsg"></div>
+      </form>
+    `);
+    document.getElementById('confirmGiveForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await fetchJSON(`/api/finance/giving/${btn.dataset.confirm}/confirm`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            receivedOn: document.getElementById('cgDate').value,
+            reference: document.getElementById('cgRef').value
+          })
+        });
+        closeModal();
+        showToast('Confirmed — the member has been told.', 'success');
+        openPanel('giving');
+      } catch (err) { showToast(err.message || 'Could not confirm this.', 'error'); }
+    });
   }));
   el.querySelectorAll('[data-reject]').forEach(btn => btn.addEventListener('click', async () => {
     const notes = prompt('Optional note for why this was rejected:') || '';

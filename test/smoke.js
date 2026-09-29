@@ -3765,6 +3765,99 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /Welfare has not published its account yet/.test(giveHtml), null);
   }
 
+  console.log('\n== an offering is confirmed the same way a tithe is ==');
+  {
+    // Somebody sends an offering by MoMo and logs it. Finance checks the
+    // account and says it arrived. There is no reason that should be a quieter
+    // transaction than the tithe one, or a less accurate one.
+    let r5 = await call('member', 'POST', '/api/giving/intents',
+      { amount: 45, purpose: 'offertory', method: 'momo', reference: 'OFF-MM-1' });
+    const off1 = r5.data.item.id;
+    check('a member logs an offering they sent', r5.status === 200, r5.data);
+
+    r5 = await call('fin', 'PATCH', `/api/finance/giving/${off1}/confirm`, { receivedOn: '2099-01-01' });
+    check('money cannot have arrived in the future here either',
+      r5.status === 400 && /future/i.test(r5.data.error), r5.data);
+
+    r5 = await call('fin', 'PATCH', `/api/finance/giving/${off1}/confirm`,
+      { receivedOn: '2026-09-12', reference: 'STMT-4417' });
+    check('Finance records the day it actually landed',
+      r5.status === 200 && r5.data.item.receivedOn === '2026-09-12', r5.data.item);
+    check('and who checked, and when they checked',
+      !!r5.data.item.reviewedBy && !!r5.data.item.confirmedAt, r5.data.item);
+    // Booking a gift to the month it was noticed in rather than the month it
+    // arrived is a real error in the books, not a cosmetic one.
+    check('the ledger entry is dated by arrival, not by when it was confirmed',
+      r5.data.entry.date === '2026-09-12', r5.data.entry);
+    check('and carries the reference the statement shows',
+      r5.data.entry.reference === 'STMT-4417', r5.data.entry);
+
+    r5 = await call('member', 'GET', '/api/notifications');
+    const heard = (r5.data || []).filter(n => /giving was received/i.test(n.title || ''));
+    check('the member is told an offering was received', heard.length > 0, (r5.data || []).map(n => n.title));
+    check('and the notice says it was Finance, how much, and when',
+      heard.some(n => /Finance confirmed/.test(n.body) && /45\.00/.test(n.body) && /2026-09-12/.test(n.body)), heard);
+
+    // The same words the tithe path produces, because it is the same page.
+    r5 = await call('member', 'GET', '/api/giving/mine');
+    const seen = r5.data.find(g => g.id === off1);
+    check('their own history carries the date and the person',
+      seen.receivedOn === '2026-09-12' && !!seen.reviewedBy, seen);
+
+    // Rejection reaches them too.
+    r5 = await call('member', 'POST', '/api/giving/intents',
+      { amount: 8, purpose: 'harvest', method: 'cash', reference: 'HRV-1' });
+    const off2 = r5.data.item.id;
+    r5 = await call('fin', 'PATCH', `/api/finance/giving/${off2}/reject`, { notes: 'Nothing on the statement.' });
+    check('Finance can reject a claim', r5.status === 200, r5.data);
+    r5 = await call('member', 'GET', '/api/notifications');
+    check('and the member is told that too, rather than left thinking it went through',
+      (r5.data || []).some(n => /could not be confirmed/i.test(n.title || '')), (r5.data || []).map(n => n.title));
+
+    // The batch door leads to the same ledger, so it needs the same treatment.
+    r5 = await call('member', 'POST', '/api/giving/intents',
+      { amount: 12, purpose: 'offertory', method: 'bank', reference: 'B-1' });
+    const b1 = r5.data.item.id;
+    r5 = await call('member', 'POST', '/api/giving/intents',
+      { amount: 18, purpose: 'momo', method: 'momo', reference: 'B-2' });
+    const b2 = r5.data.item.id;
+    r5 = await call('fin', 'POST', '/api/finance/giving/reconcile-batch',
+      { intentIds: [b1, b2], receivedOn: '2099-01-01' });
+    check('a batch cannot be dated in the future either',
+      r5.status === 400 && /future/i.test(r5.data.error), r5.data);
+    r5 = await call('fin', 'POST', '/api/finance/giving/reconcile-batch',
+      { intentIds: [b1, b2], receivedOn: '2026-09-14' });
+    check('a batch reconciles as of the day the statement was read', r5.status === 200, r5.data);
+    r5 = await call('member', 'GET', '/api/giving/mine');
+    check('and every claim in it carries that date',
+      [b1, b2].every(id => r5.data.find(g => g.id === id).receivedOn === '2026-09-14'), r5.data.slice(0, 3));
+    // The claim saying the right date is not the same as the books saying it.
+    // The ledger row is the thing that lands in a month's figures.
+    r5 = await call('fin', 'GET', '/api/finance/entries');
+    const batchRows = (r5.data || []).filter(e => ['B-1', 'B-2'].includes(e.reference));
+    check('and so does every ledger row the batch created',
+      batchRows.length === 2 && batchRows.every(e => e.date === '2026-09-14'), batchRows);
+    // Counting every "giving was received" notice counts the welfare ones too,
+    // which carry the same title - so it has to be the amounts from THIS batch,
+    // from Finance, or the check passes on somebody else's work.
+    r5 = await call('member', 'GET', '/api/notifications');
+    const batchNotices = (r5.data || []).filter(n =>
+      /giving was received/i.test(n.title || '') && /Finance confirmed/.test(n.body || '')
+      && /2026-09-14/.test(n.body || ''));
+    check('confirmed in a batch is still confirmed, and still said out loud',
+      [12, 18].every(amt => batchNotices.some(n => n.body.includes(amt.toFixed(2)))),
+      batchNotices.map(n => n.body));
+
+    // The words the desk actually reads.
+    const finJs = require('fs').readFileSync(
+      require('path').join(__dirname, '..', 'public', 'js', 'finance.js'), 'utf8');
+    check('the finance desk is asked when it arrived, not just whether to confirm',
+      /id="cgDate"/.test(finJs) && /Date it arrived in the account/.test(finJs), null);
+    check('and cannot pick a day in the future from the form either',
+      /max="\$\{today\}"/.test(finJs), null);
+    check('the panel says the member gets told', /the member is told/.test(finJs), null);
+  }
+
   // The send loop only ticks once a minute, so this one is opt-in: run it with
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
   if (process.env.SMOKE_SLOW === '1') {
