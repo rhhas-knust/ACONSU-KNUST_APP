@@ -1058,8 +1058,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .side-nav-me-text strong { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .side-nav-me-text small { font-size: 0.74rem; color: var(--ink-faint); }
 
-  /* The page moves over to make room, and the top bar comes with it. */
-  body { padding-left: 248px; }
+  /* The page moves over to make room, and the top bar comes with it - but
+     ONLY on a page that actually has the rail. The staff portals and the two
+     admin consoles carry their own side navigation and never get this one, so
+     for them the padding was 248px of nothing: the whole console shoved right,
+     with a blank strip down the left. Tie the gap to the thing that fills it. */
+  body.has-side-rail { padding-left: 248px; }
   /* With a rail carrying the navigation, the hero no longer has to introduce
      the app — so it stops taking the whole screen before the dashboard. */
   .hero { min-height: 340px; padding: 52px 24px 44px; }
@@ -1074,7 +1078,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .nav-links { display: none !important; }
   .nav-brand { display: none; }
   .nav { max-width: none; padding: 10px 26px; justify-content: flex-end; }
-  #appSplash { padding-left: 248px; }
+  body.has-side-rail #appSplash { padding-left: 248px; }
 }
 
 /* ---------- the More page ---------- */

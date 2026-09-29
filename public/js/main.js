@@ -756,6 +756,10 @@ function renderSideNav(activePath, customPages, member) {
     <div class="side-nav-foot">${account}</div>
   `;
   document.body.appendChild(rail);
+  // The markup says which pages get the rail so the gap is right on the first
+  // paint rather than after a fetch. Setting it here too means a page that
+  // starts rendering the rail can never be left without the room for it.
+  document.body.classList.add('has-side-rail');
 }
 
 function renderFooter(settings) {
