@@ -552,6 +552,154 @@ async function renderFeatures(el) {
   document.getElementById('featuresForm').addEventListener('submit',async e=>{e.preventDefault();const modules={};Object.keys(FEATURE_LABELS).forEach(k=>modules[k]=document.querySelector(`#featuresForm [name="${k}"]`).checked);try{await fetchJSON('/api/national/features',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({modules})});setFormMsg('featuresMsg','Saved.','success');showToast('Feature configuration saved','success')}catch(err){setFormMsg('featuresMsg',err.message||'Could not save.','error')}});
 }
 
+// ---------- the wider church, and the men who began it ----------
+// Edited here and nowhere else, on purpose. A chapter's coordinator cannot
+// touch these — not because they belong to another chapter, but because they
+// belong to all of them. Every chapter's About page reads the same list, so
+// there is one account of who founded the church rather than one per chapter,
+// drifting apart with every typo.
+function founderForm(man) {
+  const isEdit = !!man;
+  showModal(`
+    <h3>${isEdit ? 'Edit Founding Father' : 'Add a Founding Father'}</h3>
+    <p class="hint">Shown on every chapter's About page, under the church's own logo. These are the church's founders, not this or any chapter's executives.</p>
+    <form id="founderForm">
+      <div class="field"><label>Name</label>
+        <input type="text" id="fdName" value="${escapeHtml(man?.name || '')}" placeholder="Apostle E. K. Owusu" required></div>
+      <div class="field"><label>Role</label>
+        <input type="text" id="fdRole" value="${escapeHtml(man?.role || '')}" placeholder="Founder"></div>
+      <div class="field"><label>About (optional)</label>
+        <textarea id="fdAbout" rows="3" placeholder="A sentence or two.">${escapeHtml(man?.about || '')}</textarea></div>
+      <div class="field-row">
+        <div class="field"><label>Order</label>
+          <input type="number" id="fdOrder" value="${Number(man?.order || 0)}"></div>
+        <div class="field"><label>Photograph (optional)</label>
+          <input type="file" id="fdImage" accept="image/*">
+          <small class="muted">Upload it straight off the phone — it is resized on the way in. Someone with no photograph yet shows his initials instead.</small></div>
+      </div>
+      <div class="field checkbox-field">
+        <input type="checkbox" id="fdMemoriam" ${man?.inMemoriam ? 'checked' : ''}>
+        <label for="fdMemoriam" style="margin:0;">He has gone — show “In loving memory” on his card</label>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:22px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="founderMsg"></div>
+    </form>
+  `);
+
+  document.getElementById('founderForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = new FormData();
+    body.append('name', document.getElementById('fdName').value);
+    body.append('role', document.getElementById('fdRole').value);
+    body.append('about', document.getElementById('fdAbout').value);
+    body.append('order', document.getElementById('fdOrder').value || '0');
+    body.append('inMemoriam', document.getElementById('fdMemoriam').checked ? 'true' : 'false');
+    const file = document.getElementById('fdImage').files[0];
+    if (file) body.append('image', file);
+    try {
+      const url = isEdit ? `/api/national/founders/${man.id}` : '/api/national/founders';
+      const res = await fetch(url, { method: isEdit ? 'PUT' : 'POST', body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save.');
+      closeModal();
+      showToast(isEdit ? 'Founder updated' : 'Founder added', 'success');
+      openPanel('church');
+    } catch (err) {
+      setFormMsg('founderMsg', err.message || 'Could not save.', 'error');
+    }
+  });
+}
+
+async function renderChurch(el) {
+  const [church, founders] = await Promise.all([
+    fetchJSON('/api/public/church'),
+    fetchJSON('/api/national/founders')
+  ]);
+
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>The Wider Church</h2>
+        <p class="sub">The Apostles' Continuation Church itself — its logo and the men who began it. Every chapter is a fraction of it, so every chapter's About page shows exactly what is set here.</p>
+      </div>
+      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newFounderBtn">+ Add a Founder</button></div>
+    </div>
+
+    <form class="portal-card" id="churchForm" style="margin-bottom:22px;">
+      <div class="field"><label>Church Name</label>
+        <input type="text" id="chName" value="${escapeHtml(church.name || '')}" placeholder="The Apostles' Continuation Church"></div>
+      <div class="field"><label>A sentence about the wider church</label>
+        <textarea id="chBlurb" rows="2">${escapeHtml(church.blurb || '')}</textarea></div>
+      <div class="field"><label>Church Logo</label>
+        ${church.logoFileId ? `<img src="/api/files/${church.logoFileId}" alt="" style="max-height:80px; width:auto; margin-bottom:10px; display:block;">` : ''}
+        <input type="file" id="chLogo" accept="image/*">
+        <small class="muted">The whole church's logo, not a chapter's. A PNG keeps its transparent background.</small></div>
+      <div style="margin-top:18px;">
+        <button class="btn btn-primary">Save Church Details</button>
+        <span class="form-msg" id="churchMsg"></span>
+      </div>
+    </form>
+
+    <div class="table-wrap">
+      <table class="portal-table">
+        <thead><tr><th>Name</th><th>Role</th><th class="num">Order</th><th></th></tr></thead>
+        <tbody>
+          ${founders.length ? founders.map(f => `
+            <tr>
+              <td><strong>${escapeHtml(f.name || '—')}</strong>${f.inMemoriam ? ' <span class="tiny muted">(in loving memory)</span>' : ''}${f.about ? `<br><small class="muted">${escapeHtml(f.about.slice(0, 80))}${f.about.length > 80 ? '…' : ''}</small>` : ''}</td>
+              <td>${escapeHtml(f.role || '—')}</td>
+              <td class="num">${Number(f.order || 0)}</td>
+              <td>
+                <div class="row-actions">
+                  <button data-edit-founder="${f.id}">Edit</button>
+                  <button data-delete-founder="${f.id}" class="danger">Remove</button>
+                </div>
+              </td>
+            </tr>
+          `).join('') : '<tr><td colspan="4" class="muted">Nobody added yet. The section stays hidden on every chapter\'s page until there is a logo or a name here.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  document.getElementById('churchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = new FormData();
+    body.append('name', document.getElementById('chName').value);
+    body.append('blurb', document.getElementById('chBlurb').value);
+    const file = document.getElementById('chLogo').files[0];
+    if (file) body.append('logo', file);
+    try {
+      const res = await fetch('/api/national/church', { method: 'PUT', body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Could not save.');
+      setFormMsg('churchMsg', 'Saved.', 'success');
+      showToast('Church details saved', 'success');
+      openPanel('church');
+    } catch (err) {
+      setFormMsg('churchMsg', err.message || 'Could not save.', 'error');
+    }
+  });
+
+  document.getElementById('newFounderBtn').addEventListener('click', () => founderForm(null));
+  el.querySelectorAll('[data-edit-founder]').forEach(btn => btn.addEventListener('click', () =>
+    founderForm(founders.find(f => f.id === btn.dataset.editFounder))
+  ));
+  el.querySelectorAll('[data-delete-founder]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm('Remove this founder from every chapter\'s page?')) return;
+    try {
+      await fetchJSON(`/api/national/founders/${btn.dataset.deleteFounder}`, { method: 'DELETE' });
+      showToast('Founder removed', 'success');
+      openPanel('church');
+    } catch (err) {
+      showToast(err.message || 'Could not remove.', 'error');
+    }
+  }));
+}
+
 // This portal is always national scope, never chapter-scoped — so a chapter
 // chosen elsewhere in the same browser (the admin dashboard's own scope
 // selector, or the public site's chapter picker — both share fetchJSON's
@@ -569,6 +717,7 @@ initPortal({
     { key: 'dashboard', label: 'National Dashboard', render: renderNationalDashboard },
     { key: 'chapters', label: 'Chapters', render: renderChapters },
     { key: 'executives', label: 'National Executives', render: renderNationalExecutives },
+    { key: 'church', label: 'The Wider Church', render: renderChurch },
     { key: 'events', label: 'National Events', render: renderNationalEvents },
     { key: 'reports', label: 'National Reports', render: renderNationalReports },
     { key: 'features', label: 'Feature Configuration', render: renderFeatures },

@@ -3299,6 +3299,38 @@ app.get('/api/public/leadership', async (req, res) => {
   }
 });
 
+// The wider church: its own mark, and the men who began it.
+//
+// No chapter filter anywhere in here, and that is the point rather than an
+// omission. A chapter is a fraction of the church; its founders belong to all
+// of it, so every chapter's About page shows the same men. The chapter
+// isolation rule that governs the rest of this file is about a chapter's OWN
+// people and money, and does not apply to something the whole union shares.
+app.get('/api/public/church', async (req, res) => {
+  try {
+    const settings = await repo.getSettings();
+    const church = settings.church || {};
+    const founders = await repo.getAll('churchFounders', {});
+    founders.sort((a, b) => (a.order || 0) - (b.order || 0)
+      || String(a.name || '').localeCompare(String(b.name || '')));
+    res.json({
+      name: church.name || '',
+      blurb: church.blurb || '',
+      logoFileId: church.logoFileId || '',
+      founders: founders.map(f => ({
+        id: f.id,
+        name: f.name || '',
+        role: f.role || '',
+        about: f.about || '',
+        imageFileId: f.imageFileId || '',
+        inMemoriam: !!f.inMemoriam
+      }))
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the church details' });
+  }
+});
+
 
 app.post('/api/join-requests', formLimiter, async (req, res) => {
   const { departmentId, name, email, phone, level, message } = req.body;
@@ -6367,6 +6399,110 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
     });
   } catch (e) {
     res.status(500).json({ error: 'Could not load the national dashboard' });
+  }
+});
+
+// ---- the wider church, and the men who began it -------------------------
+// Written here and nowhere else. A chapter coordinator cannot edit the
+// church's founders, in the same way they cannot edit another chapter's
+// executives — but for the opposite reason: not because these are somebody
+// else's, because they are everybody's.
+app.put('/api/national/church', rolesLib.requireNational, upload.single('logo'), async (req, res) => {
+  try {
+    const settings = await repo.getSettings();
+    const church = { ...(settings.church || {}) };
+    if (typeof req.body.name === 'string') church.name = req.body.name.trim();
+    if (typeof req.body.blurb === 'string') church.blurb = req.body.blurb.trim();
+    if (req.file) {
+      // A logo is usually a PNG with a transparent background; compressIfImage
+      // keeps it one, so the mark does not arrive with a box behind it.
+      const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+      church.logoFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+        category: 'churchLogo', contentType: compressed.contentType,
+        title: church.name || 'Church logo', chapterId: rolesLib.NATIONAL_CHAPTER_ID
+      }));
+    }
+    await repo.setSettings({ church });
+    res.json({ success: true, church });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save the church details' });
+  }
+});
+
+app.get('/api/national/founders', rolesLib.requireNational, async (req, res) => {
+  try {
+    const founders = await repo.getAll('churchFounders', {});
+    founders.sort((a, b) => (a.order || 0) - (b.order || 0));
+    res.json(founders);
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the founders' });
+  }
+});
+
+app.post('/api/national/founders', rolesLib.requireNational, upload.single('image'), async (req, res) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'A name is required' });
+    let imageFileId = '';
+    if (req.file) {
+      const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+      imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+        category: 'founder', contentType: compressed.contentType,
+        title: name, chapterId: rolesLib.NATIONAL_CHAPTER_ID
+      }));
+    }
+    const item = await repo.create('churchFounders', {
+      name,
+      role: String(req.body.role || '').trim(),
+      about: String(req.body.about || '').trim(),
+      imageFileId,
+      inMemoriam: String(req.body.inMemoriam) === 'true',
+      order: Number(req.body.order || 0) || 0
+    }, 'founder');
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save the founder' });
+  }
+});
+
+app.put('/api/national/founders/:id', rolesLib.requireNational, upload.single('image'), async (req, res) => {
+  try {
+    const existing = await repo.getById('churchFounders', req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Not found' });
+    // A photograph left out of the form means "keep the one he has", not
+    // "remove it" — the form is used to fix a spelling far more often than to
+    // replace a picture.
+    let imageFileId = existing.imageFileId || '';
+    if (req.file) {
+      const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+      imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+        category: 'founder', contentType: compressed.contentType,
+        title: req.body.name || existing.name, chapterId: rolesLib.NATIONAL_CHAPTER_ID
+      }));
+    }
+    const item = await repo.updateById('churchFounders', req.params.id, {
+      name: String(req.body.name ?? existing.name).trim() || existing.name,
+      role: String(req.body.role ?? (existing.role || '')).trim(),
+      about: String(req.body.about ?? (existing.about || '')).trim(),
+      imageFileId,
+      inMemoriam: req.body.inMemoriam === undefined
+        ? !!existing.inMemoriam
+        : String(req.body.inMemoriam) === 'true',
+      order: Number(req.body.order ?? (existing.order || 0)) || 0
+    });
+    res.json({ success: true, item });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update the founder' });
+  }
+});
+
+app.delete('/api/national/founders/:id', rolesLib.requireNational, async (req, res) => {
+  try {
+    const removed = await repo.removeById('churchFounders', req.params.id);
+    if (!removed) return res.status(404).json({ error: 'Not found' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not remove the founder' });
   }
 });
 

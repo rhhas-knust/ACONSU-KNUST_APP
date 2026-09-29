@@ -3409,6 +3409,213 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /someone still being received is shepherded, not a shepherd/.test(shep), null);
   }
 
+  console.log('\n== the founding fathers: one church, not one list per chapter ==');
+  {
+    // Everything else in this system is scoped to a chapter, and rightly so.
+    // The founders are the exception the whole feature turns on: there is one
+    // Apostles' Continuation Church, and a chapter is a fraction of it. If
+    // each chapter kept its own list they would drift, and the church would
+    // end up with two different accounts of who founded it.
+    let r5 = await call('anon', 'GET', '/api/public/church');
+    check('the church reads publicly, with no login', r5.status === 200, r5.data);
+    check('and says nothing before anyone has filled it in',
+      r5.data.founders.length === 0 && !r5.data.logoFileId, r5.data);
+
+    // Only National writes. A chapter coordinator is refused — not because
+    // these belong to another chapter, but because they belong to all of them.
+    // Signed in fresh here: the shared `coord` jar has been through a lot by
+    // this point, and a refusal that was really an expired session would pass
+    // this test while proving nothing.
+    r5 = await call('coordChurch', 'POST', '/api/portal/login', { username: 'coord.yaw', password: 'password123' });
+    check('a chapter coordinator is signed in to try it', r5.status === 200, r5.data);
+    r5 = await call('coordChurch', 'GET', '/api/portal/me');
+    check('and really is one', r5.status === 200 && r5.data.staff.role === 'coordinator', r5.data);
+
+    r5 = await call('coordChurch', 'POST', '/api/national/founders', { name: 'Not Mine To Add' });
+    check('a chapter coordinator cannot add a founder', r5.status === 401, r5.data);
+    r5 = await call('coordChurch', 'PUT', '/api/national/church', { name: 'Not Mine Either' });
+    check('nor rename the church', r5.status === 401, r5.data);
+    r5 = await call('anon', 'POST', '/api/national/founders', { name: 'Anonymous' });
+    check('and a signed-out visitor certainly cannot', r5.status === 401, r5.data);
+
+    // The National Coordinator fills it in.
+    r5 = await call('admin', 'PUT', '/api/national/church',
+      { name: "The Apostles' Continuation Church", blurb: 'One family, many chapters.' });
+    check('the National Coordinator names the church', r5.status === 200, r5.data);
+
+    const add = async (name, role, order, extra) => call('admin', 'POST', '/api/national/founders',
+      { name, role, order: String(order), ...(extra || {}) });
+    r5 = await add('Apostle E. K. Owusu', 'Founder', 1);
+    check('and adds the founder', r5.status === 200, r5.data);
+    const founderId = r5.data.item.id;
+    r5 = await add('Apostle Paul Manu', 'Founding Member', 3, { inMemoriam: 'true' });
+    check('and one who has gone', r5.status === 200 && r5.data.item.inMemoriam === true, r5.data);
+    r5 = await add('Apostle Clement Brakatu', 'Chairman', 2);
+    check('and the chairman', r5.status === 200, r5.data);
+
+    r5 = await call('admin', 'POST', '/api/national/founders', { role: 'Nobody' });
+    check('a founder with no name is refused', r5.status === 400, r5.data);
+
+    // The order column is what the National Coordinator arranges them by, and
+    // it has to survive the trip to the public page — the founder must not
+    // appear after the chairman just because he was typed in first.
+    r5 = await call('anon', 'GET', '/api/public/church');
+    check('every chapter sees the same men, in the order they were given',
+      r5.data.founders.map(f => f.role).join(' > ') === 'Founder > Chairman > Founding Member',
+      r5.data.founders.map(f => f.role));
+    check('with the church named above them',
+      r5.data.name === "The Apostles' Continuation Church", r5.data);
+    check('and the one who has gone marked as such',
+      r5.data.founders.filter(f => f.inMemoriam).map(f => f.name).join() === 'Apostle Paul Manu',
+      r5.data.founders);
+
+    // A chapter-scoped read must not filter these out. The chapter isolation
+    // rule is about a chapter's OWN people; applying it here would leave every
+    // chapter with an empty section, since these belong to no chapter at all.
+    r5 = await call('anon', 'GET', '/api/public/church', null, false, { 'X-Chapter-Id': chapterId });
+    check('asking as a chapter does not hide them', r5.data.founders.length === 3, r5.data.founders);
+
+    // Editing a name must not wipe the photograph. This form is used to fix a
+    // spelling far more often than to change a picture, and losing the picture
+    // every time somebody corrects a middle initial would be maddening.
+    const withPhoto = new FormData();
+    withPhoto.append('name', 'Apostle Ebenezer Annan');
+    withPhoto.append('role', 'General Secretary');
+    withPhoto.append('order', '4');
+    withPhoto.append('image', new Blob([Buffer.from('a picture')], { type: 'image/png' }), 'g.png');
+    r5 = await call('admin', 'POST', '/api/national/founders', withPhoto, true);
+    const photographed = r5.data.item;
+    check('a founder can be added with his photograph',
+      r5.status === 200 && !!photographed.imageFileId, r5.data);
+
+    r5 = await call('admin', 'PUT', `/api/national/founders/${photographed.id}`,
+      { name: 'Apostle Ebenezer Annan Jnr', role: 'General Secretary', order: '4' });
+    check('correcting his name keeps the photograph he already had',
+      r5.status === 200 && r5.data.item.imageFileId === photographed.imageFileId,
+      { was: photographed.imageFileId, now: r5.data.item.imageFileId });
+    check('and the correction actually took', r5.data.item.name === 'Apostle Ebenezer Annan Jnr', r5.data.item);
+
+    // A founder with no photograph yet shows his initials, and nearly every
+    // name here carries a title: taking the first letter as written gives
+    // "Apostle E. K. Owusu" the initials AE, which is the office and not the
+    // man. The real function is run rather than read, because this is the kind
+    // of rule that looks right and is not.
+    {
+      const fs5 = require('fs');
+      const path5 = require('path');
+      const mainJs = fs5.readFileSync(path5.join(__dirname, '..', 'public', 'js', 'main.js'), 'utf8');
+      const src = mainJs.slice(mainJs.indexOf('const NAME_TITLE ='), mainJs.indexOf('function formatDate'));
+      const initialsOf = new Function(src + '\nreturn initialsOf;')();
+      check('the initials skip the title, not the name',
+        initialsOf('Apostle E. K. Owusu') === 'EK', initialsOf('Apostle E. K. Owusu'));
+      check('however it is punctuated', initialsOf('Pas. Gideon Amo Darko') === 'GA',
+        initialsOf('Pas. Gideon Amo Darko'));
+      check('a plain name is untouched', initialsOf('Anna Dompreh') === 'AD', initialsOf('Anna Dompreh'));
+      check('and somebody known only by their office keeps it',
+        initialsOf('Elder') === 'E', initialsOf('Elder'));
+      check('and an empty name does not produce an empty circle',
+        initialsOf('') === '?', initialsOf(''));
+    }
+
+    r5 = await call('coordChurch', 'DELETE', `/api/national/founders/${founderId}`);
+    check('a chapter coordinator cannot remove one either', r5.status === 401, r5.data);
+    r5 = await call('admin', 'DELETE', '/api/national/founders/no-such-man');
+    check('removing somebody who is not there is a 404, not a silent success', r5.status === 404, r5.data);
+  }
+
+  console.log('\n== the founders read the same on the app as on the site ==');
+  {
+    const fs6 = require('fs');
+    const path6 = require('path');
+    const pub = (f) => fs6.readFileSync(path6.join(__dirname, '..', 'public', f), 'utf8');
+    const aboutHtml = pub('about.html');
+    const appCss = pub('css/style.css');
+
+    check('the About page has a section for the wider church',
+      /id="churchSection"/.test(aboutHtml), null);
+    // Hidden until National has filled something in, so a chapter never shows
+    // an empty frame or a bare heading where the founders will go.
+    check('hidden until there is a logo or a name to put in it',
+      /if \(church\.logoFileId \|\| founders\.length\)/.test(aboutHtml), null);
+    check('with the church\'s own logo above them, not the chapter\'s',
+      aboutHtml.indexOf('id="churchLogo"') !== -1
+      && aboutHtml.indexOf('id="churchLogo"') < aboutHtml.indexOf('id="foundersGrid"'), null);
+    // Above the chapter's own leadership, because the chapter is a fraction of
+    // the church and these men are not its executives.
+    check('and placed above this chapter\'s own leadership',
+      aboutHtml.indexOf('id="churchSection"') < aboutHtml.indexOf('id="execGrid"'), null);
+    check('a founder with no photograph yet gets his initials, not a broken image',
+      /initialsOf\(man\.name\)/.test(aboutHtml), null);
+    check('and the one who has gone is marked',
+      /man\.inMemoriam \? '<p class="founder-memoriam">/.test(aboutHtml), null);
+
+    // Same reasoning as the landing site's: a standing studio portrait cropped
+    // into a circle is a picture of a chest.
+    check('the portraits are framed standing, not cropped to a circle',
+      /\.founder-face \{[\s\S]{0,300}aspect-ratio: 3 \/ 4;/.test(appCss)
+      && /\.founder-face \{[\s\S]{0,300}object-position: 50% 15%;/.test(appCss), null);
+    // .grid comes first and both are one class deep, so the narrower tracks
+    // only win by being declared after it. Move this block up and four men go
+    // back to breaking three-then-one.
+    {
+      const m = appCss.match(/\.founder-grid \{[^}]*minmax\((\d+)px/);
+      check('and sit in narrower tracks than the generic grid, so four fit',
+        !!m && Number(m[1]) <= 170 && appCss.indexOf('.grid {') < appCss.indexOf('.founder-grid {'),
+        m && m[1]);
+    }
+    // The church block is extra to this page, not the point of it: About must
+    // still stand if that one request fails.
+    check('and a failure to load them does not take the rest of About down',
+      /\/\/ The church block is additional to this page/.test(aboutHtml), null);
+  }
+
+  console.log('\n== an uploaded logo keeps its transparent background ==');
+  {
+    // compressIfImage turned every image into a JPEG, and JPEG has no
+    // transparency to give: a church logo uploaded as a PNG came out with a
+    // solid box behind it, on whatever colour the page happened to be. Only
+    // flat photographs become JPEG now.
+    const sharpLib = require('sharp');
+    const { compressIfImage } = require('../lib/imageProcess.js');
+
+    // Big enough to pass the "already tiny, skip it" gate, or nothing happens
+    // and this would pass for the wrong reason.
+    let circles = '';
+    for (let i = 0; i < 500; i++) {
+      circles += `<circle cx="${(i * 137) % 1200}" cy="${(i * 211) % 1200}" r="${5 + (i % 30)}" fill="rgb(${(i*37)%255},${(i*61)%255},${(i*97)%255})"/>`;
+    }
+    const logo = await sharpLib(Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200">${circles}</svg>`
+    )).png().toBuffer();
+    check('the test logo is big enough to actually be processed',
+      logo.length > 80 * 1024, logo.length);
+
+    const outLogo = await compressIfImage(logo, 'image/png');
+    const logoMeta = await sharpLib(outLogo.buffer).metadata();
+    check('a logo with transparency stays a format that can hold it',
+      logoMeta.hasAlpha === true, { format: logoMeta.format, alpha: logoMeta.hasAlpha });
+    check('and is served as what it actually is',
+      outLogo.contentType === 'image/png', outLogo.contentType);
+
+    // A photograph has no alpha to lose, so it must still become a JPEG —
+    // otherwise every portrait on the site turns into a much larger PNG.
+    let noise = '';
+    for (let i = 0; i < 400; i++) {
+      noise += `<circle cx="${(i * 71) % 1400}" cy="${(i * 53) % 1000}" r="${8 + (i % 20)}" fill="rgb(${(i*29)%255},${(i*53)%255},${(i*83)%255})"/>`;
+    }
+    const photo = await sharpLib(Buffer.from(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1800"><rect width="100%" height="100%" fill="#8a6a4a"/>${noise}</svg>`
+    )).jpeg({ quality: 100 }).toBuffer();
+    const outPhoto = await compressIfImage(photo, 'image/jpeg');
+    const photoMeta = await sharpLib(outPhoto.buffer).metadata();
+    check('a photograph with nothing to protect is still compressed to JPEG',
+      outPhoto.contentType === 'image/jpeg' && photoMeta.format === 'jpeg', outPhoto.contentType);
+    check('and still resized down to what a screen displays',
+      photoMeta.width === 1600, photoMeta.width);
+    check('and is smaller than it arrived', outPhoto.buffer.length < photo.length,
+      { before: photo.length, after: outPhoto.buffer.length });
+  }
+
   console.log('\n== the chapter landing site: standalone, and honest when empty ==');
   {
     const fs = require('fs');
