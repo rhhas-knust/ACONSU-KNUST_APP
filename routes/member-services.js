@@ -138,9 +138,59 @@ function registerMemberServiceRoutes(app, deps) {
   // Finance would be confirming money that never reached the treasury.
   app.get('/api/finance/giving-queue', requireViewRole('finance'), async (req, res) => { try { const items = await repo.getAll('givingIntents', { ...rolesLib.chapterFilter(req), status: 'pending' }); res.json(items.filter((i) => !givingGoesToWelfare(i.purpose)).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))); } catch (e) { res.status(500).json({ error: 'Could not load the giving queue' }); } });
   app.patch('/api/finance/giving/:id/confirm', requireFinance, async (req, res) => {
-    try { const filter = rolesLib.chapterFilter(req); const intent = await repo.getById('givingIntents', req.params.id, filter); if (!intent) return res.status(404).json({ error: 'Not found' }); if (intent.status !== 'pending') return res.status(400).json({ error: 'This has already been reviewed.' }); if (givingGoesToWelfare(intent.purpose)) return res.status(400).json({ error: 'Tithe goes to the welfare account. Welfare confirms it into their own book, not the treasury ledger.' }); const entry = await repo.create('financeEntries', { chapterId: intent.chapterId, entryType: 'income', category: intent.purpose, amount: intent.amount, date: new Date().toISOString().slice(0, 10), description: `Giving confirmed — ${intent.memberName}`, method: intent.method, reference: intent.reference, payee: intent.memberName, approvalStatus: 'approved', approvedBy: actorName(req), recordedBy: actorName(req) }, 'fin'); const updated = await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'confirmed', matchedFinanceEntryId: entry.id, reviewedBy: actorName(req) }, filter); res.json({ success: true, item: updated, entry }); } catch (e) { res.status(500).json({ error: 'Could not confirm this' }); }
+    try {
+      const filter = rolesLib.chapterFilter(req);
+      const intent = await repo.getById('givingIntents', req.params.id, filter);
+      if (!intent) return res.status(404).json({ error: 'Not found' });
+      if (intent.status !== 'pending') return res.status(400).json({ error: 'This has already been reviewed.' });
+      if (givingGoesToWelfare(intent.purpose)) return res.status(400).json({ error: 'Tithe goes to the welfare account. Welfare confirms it into their own book, not the treasury ledger.' });
+
+      // Same as the welfare desk: confirming is somebody saying "I looked at
+      // the account and the money is there". The day it landed is not always
+      // the day anyone got round to checking, so it is asked for rather than
+      // assumed - and a member giving on the 1st should not have their gift
+      // booked to the month it was noticed in.
+      const today = new Date().toISOString().slice(0, 10);
+      const receivedOn = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.receivedOn || '')) ? req.body.receivedOn : today;
+      if (receivedOn > today) return res.status(400).json({ error: 'Money cannot have arrived in the future — check the date.' });
+      const reference = String(req.body.reference || '').trim() || intent.reference || '';
+
+      const entry = await repo.create('financeEntries', { chapterId: intent.chapterId, entryType: 'income', category: intent.purpose, amount: intent.amount, date: receivedOn, description: `Giving confirmed — ${intent.memberName}`, method: intent.method, reference, payee: intent.memberName, approvalStatus: 'approved', approvedBy: actorName(req), recordedBy: actorName(req) }, 'fin');
+      const updated = await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'confirmed', matchedFinanceEntryId: entry.id, reference, receivedOn, confirmedAt: new Date(), reviewedBy: actorName(req) }, filter);
+
+      // They gave and then heard nothing. The tithe path tells them; there is
+      // no reason an offering should be quieter.
+      if (intent.memberId) {
+        createNotification(
+          'Your giving was received',
+          `Finance confirmed GH\u20b5 ${Number(intent.amount).toFixed(2)} received on ${receivedOn}. Thank you.`,
+          '/give.html', 'finance', intent.chapterId, { memberIds: [intent.memberId] }
+        ).catch(() => {});
+      }
+      res.json({ success: true, item: updated, entry });
+    } catch (e) { res.status(500).json({ error: 'Could not confirm this' }); }
   });
-  app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => { try { const filter = rolesLib.chapterFilter(req); const intent = await repo.getById('givingIntents', req.params.id, filter); if (!intent) return res.status(404).json({ error: 'Not found' }); res.json({ success: true, item: await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'rejected', reviewNotes: req.body.notes || '', reviewedBy: actorName(req) }, filter) }); } catch (e) { res.status(500).json({ error: 'Could not reject this' }); } });
+  app.patch('/api/finance/giving/:id/reject', requireFinance, async (req, res) => {
+    try {
+      const filter = rolesLib.chapterFilter(req);
+      const intent = await repo.getById('givingIntents', req.params.id, filter);
+      if (!intent) return res.status(404).json({ error: 'Not found' });
+      const notes = String(req.body.notes || '').trim();
+      const item = await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'rejected', reviewNotes: notes, reviewedBy: actorName(req) }, filter);
+      // Silence after a rejection is worse than after a confirmation: they go
+      // on thinking it went through.
+      if (intent.memberId) {
+        createNotification(
+          'Your giving could not be confirmed',
+          notes
+            ? `Finance could not match GH\u20b5 ${Number(intent.amount).toFixed(2)} against the account: ${notes}`
+            : `Finance could not match GH\u20b5 ${Number(intent.amount).toFixed(2)} against the account. Please check with the finance team.`,
+          '/give.html', 'finance', intent.chapterId, { memberIds: [intent.memberId] }
+        ).catch(() => {});
+      }
+      res.json({ success: true, item });
+    } catch (e) { res.status(500).json({ error: 'Could not reject this' }); }
+  });
 
   app.get('/api/finance/reconciliation-batches', requireViewRole('finance'), async (req, res) => {
     try {
@@ -163,6 +213,12 @@ function registerMemberServiceRoutes(app, deps) {
       if (intents.some((i) => givingGoesToWelfare(i.purpose))) {
         return res.status(400).json({ error: 'Tithe goes to the welfare account — leave it out of a treasury batch. Welfare confirms it into their own book.' });
       }
+      // A batch is reconciled as of a date too. Defaulting to today keeps it
+      // one click when that is when the statement was read.
+      const today = new Date().toISOString().slice(0, 10);
+      const receivedOn = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.receivedOn || '')) ? req.body.receivedOn : today;
+      if (receivedOn > today) return res.status(400).json({ error: 'Money cannot have arrived in the future — check the date.' });
+
       const entries = [];
       for (const intent of intents) {
         const entry = await repo.create('financeEntries', {
@@ -170,7 +226,7 @@ function registerMemberServiceRoutes(app, deps) {
           entryType: 'income',
           category: intent.purpose,
           amount: intent.amount,
-          date: new Date().toISOString().slice(0, 10),
+          date: receivedOn,
           description: `Batch reconciled giving — ${intent.memberName}`,
           method: intent.method,
           reference: intent.reference,
@@ -191,8 +247,20 @@ function registerMemberServiceRoutes(app, deps) {
         notes: req.body.notes || ''
       }, 'recon');
       await Promise.all(intents.map((intent, idx) => repo.updateById('givingIntents', intent.id, {
-        ...intent, status: 'confirmed', matchedFinanceEntryId: entries[idx].id, reviewedBy: actorName(req), reviewNotes: `In batch ${batch.id}`
+        ...intent, status: 'confirmed', matchedFinanceEntryId: entries[idx].id,
+        receivedOn, confirmedAt: new Date(),
+        reviewedBy: actorName(req), reviewNotes: `In batch ${batch.id}`
       }, filter)));
+      // Confirmed in a batch is still confirmed. A member should not hear
+      // about their gift only when it happened to be reconciled on its own.
+      for (const intent of intents) {
+        if (!intent.memberId) continue;
+        createNotification(
+          'Your giving was received',
+          `Finance confirmed GH\u20b5 ${Number(intent.amount).toFixed(2)} received on ${receivedOn}. Thank you.`,
+          '/give.html', 'finance', intent.chapterId, { memberIds: [intent.memberId] }
+        ).catch(() => {});
+      }
       res.json({ success: true, item: batch, entriesCreated: entries.length });
     } catch (e) { res.status(500).json({ error: 'Could not reconcile this batch' }); }
   });
