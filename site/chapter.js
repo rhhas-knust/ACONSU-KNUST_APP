@@ -94,7 +94,7 @@ window.CHAPTER = {
     blurb: 'Come and find us. Join the freshers group and somebody will look out '
          + 'for you on your first Sunday.',
     buttonLabel: 'Join the freshers WhatsApp group',
-    link: '',
+    link: 'https://chat.whatsapp.com/ETj54WcQMe14bc4kAwwAFd?s=cl&p=i&mlu=0&ilr=4',
     message: "Hi! I'm a fresher and I'd like to join ACONSU.",
   },
 
@@ -107,7 +107,7 @@ window.CHAPTER = {
   contact: {
     email: 'aconsuknust@gmail.com',        // e.g. 'aconsuknust@gmail.com'
     phone: '+233 547541623',        // e.g. '+233 24 000 0000'
-    whatsapp: '',     // full link or just the number
+    whatsapp: 'https://chat.whatsapp.com/Clo28L7xENEKsaeqmRJchC?s=sw&p=a&mlu=4&ilr=4',     // full link or just the number
     facebook: 'https://www.facebook.com/share/1Efaz1Zg1w/?mibextid=wwXIfr',
     instagram: '',
     youtube: 'https://youtube.com/@aconsu_knust?si=aVWLz2kPJkeoeQip',
