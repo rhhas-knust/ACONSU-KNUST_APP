@@ -70,6 +70,39 @@ window.CHAPTER = {
   values: 'Scripture, prayer, fellowship, service, and holy living remain central '
         + 'to our chapter life.',
 
+  // ---- the wider church, and the men who began it -------------------------
+  // This chapter is one part of The Apostles' Continuation Church, not the
+  // whole of it, and the men who founded the church are not the chapter's own
+  // leadership. So they get their own section, under the CHURCH's logo rather
+  // than the chapter's, and above the coordinators who lead here.
+  //
+  // Leave `founders` empty and blank the logo and the whole section goes.
+  church: {
+    name: "The Apostles' Continuation Church",
+    // The general logo of the whole church. Put the file in images/ and write
+    // the path relative to this folder. A logo is fitted whole rather than
+    // cropped, so it keeps whatever space was drawn around it; a PNG keeps its
+    // transparency.
+    logo: '',        // e.g. 'images/church-logo.png'
+    blurb: 'Our chapter is one part of the wider church — one fraction of a '
+         + 'family that has been continuing steadfastly a good while longer '
+         + 'than any of us have been on this campus.',
+  },
+
+  // The founding fathers. Same rule as everywhere else: somebody with no photo
+  // yet gets their initials in a circle, so put the names up now and add the
+  // pictures when you have them. A row with no name is skipped entirely.
+  //
+  // `inMemoriam: true` marks one who has gone. It adds a quiet line under the
+  // card rather than changing the picture, so the card reads the same as the
+  // others.
+  founders: [
+    { name: '', role: 'Founder',                       about: '', photo: '', inMemoriam: false },
+    { name: '', role: 'Chairman',                      about: '', photo: '', inMemoriam: false },
+    { name: '', role: 'Founding Member',               about: '', photo: '', inMemoriam: true  },
+    { name: '', role: 'General Secretary, the Church', about: '', photo: '', inMemoriam: false },
+  ],
+
   // ---- who leads the chapter --------------------------------------------
   // Two lists, both optional. An empty list hides its half; empty both and the
   // whole Leadership section goes.
@@ -104,13 +137,18 @@ window.CHAPTER = {
 
   // ---- what happens here ----------------------------------------------
   // Remove any that do not apply; add your own. An empty list hides the section.
+  //
+  // `photo` is optional, per ministry. A card without one starts at its
+  // heading rather than showing a grey box, so you can add pictures as you
+  // take them. Same sizing advice as the header photo: about 1200px wide is
+  // plenty for these - they are shown as a band roughly 400px across.
   ministries: [
-    { name: 'Bible Study',     blurb: 'Working through Scripture together, week by week.' },
-    { name: 'Prayer',          blurb: 'Standing together for the campus, the nation and each other.' },
-    { name: 'Music & Worship', blurb: 'Leading the family before God in song.' },
-    { name: 'Evangelism',      blurb: 'Taking the message into halls, hostels and the city.' },
-    { name: 'Welfare',         blurb: 'Looking after one another when life on campus is hard.' },
-    { name: 'Media',           blurb: 'Carrying what happens here to those who could not come.' },
+    { name: 'Bible Study',     blurb: 'Working through Scripture together, week by week.', photo: '' },
+    { name: 'Prayer',          blurb: 'Standing together for the campus, the nation and each other.', photo: '' },
+    { name: 'Music & Worship', blurb: 'Leading the family before God in song.', photo: '' },
+    { name: 'Evangelism',      blurb: 'Taking the message into halls, hostels and the city.', photo: '' },
+    { name: 'Welfare',         blurb: 'Looking after one another when life on campus is hard.', photo: '' },
+    { name: 'Media',           blurb: 'Carrying what happens here to those who could not come.', photo: '' },
   ],
 
   // ---- a word to carry --------------------------------------------------

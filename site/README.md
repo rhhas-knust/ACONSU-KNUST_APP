@@ -116,6 +116,43 @@ heading and lays a pale wash over instead, for a very pale photo. The photo
 never goes on bare either way, so the heading stays readable whatever you
 photographed.
 
+### Pictures on the activities
+
+Each entry in `ministries` takes an optional `photo`, shown as a band across
+the top of its card:
+
+```js
+{ name: 'Prayer', blurb: '…', photo: 'images/prayer.jpg' },
+```
+
+A card without one starts at its heading rather than showing a grey box, so
+you can add pictures as you take them. About 1200px wide is plenty — they are
+displayed roughly 400px across.
+
+### You do not have to resize anything
+
+Upload the photo straight off your phone. **A workflow shrinks anything
+oversized before the site is published**, and commits the smaller file back to
+the repo.
+
+A phone photo is typically 4–12MB and several thousand pixels wide. Nothing on
+this page is displayed wider than 1600px, so all that weight buys nothing and
+costs a visitor on campus data real money and several seconds. The shrinker
+brings a 12MB photo down to a couple of hundred KB.
+
+It only ever makes files smaller:
+
+- Anything already small and narrow is left byte for byte as it was.
+- If re-encoding would make a file *bigger*, the original is kept.
+- Which way up the phone was held is honoured, so nothing arrives sideways.
+- PNGs stay PNGs, so a logo keeps its transparency.
+
+You can also run it yourself before committing:
+
+```
+node site/tools/shrink-images.js
+```
+
 ### Who leads the chapter
 
 Two lists in `chapter.js`, both optional:
@@ -139,6 +176,48 @@ in international form so a call works from outside Ghana too.
 > and the line simply does not appear; an email alone is often enough.
 
 Empty both lists and the whole Leadership section goes.
+
+### The wider church, and the founding fathers
+
+This chapter is one part of The Apostles' Continuation Church, and the men who
+founded the church are not the chapter's own leadership — so they get their own
+section, under the **church's** logo rather than the chapter's, and above the
+coordinators who lead here.
+
+Two things in `chapter.js`:
+
+```js
+church: {
+  name: "The Apostles' Continuation Church",
+  logo: 'images/church-logo.png',
+  blurb: 'Our chapter is one part of the wider church.',
+},
+
+founders: [
+  { name: 'Apostle Kwame Anane', role: 'Founder',        about: 'Began the work in 1961.', photo: 'images/founder.jpg' },
+  { name: 'Elder Kofi Mensah',   role: 'Founding Member', about: '', photo: '', inMemoriam: true },
+],
+```
+
+- **`church.logo`** is the general logo of the whole church, shown above the
+  founders. It is **fitted whole rather than cropped**, so it keeps the space
+  drawn around it and a round seal does not come out square. A PNG keeps its
+  transparency.
+- **`founders`** is the list. A row with no name is skipped, and somebody with
+  no photo yet gets their initials — so put the names up now and add the
+  pictures as you find them.
+- **`inMemoriam: true`** marks one who has gone. It adds a quiet line under the
+  card rather than doing anything to his picture, so his card reads like the
+  others'.
+
+The two halves stand on their own: the logo with no photographs yet is a
+section worth publishing, and so are the names before anybody has found the
+logo file. Blank the logo and leave the names out and **the whole section
+disappears**, like everything else here.
+
+A note on the initials: a title is not a name, so *Apostle Kwame Anane* gets
+**KA** and not AK. Apostle, Rev, Elder, Pastor, Dr and the rest are skipped —
+unless the title is all you have written, in which case it is kept.
 
 ### Before you publish, fill in at least
 

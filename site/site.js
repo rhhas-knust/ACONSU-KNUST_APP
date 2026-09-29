@@ -25,7 +25,8 @@
     name: C.name, fullName: C.fullName, institution: C.institution,
     location: C.location, tagline: C.tagline, lede: C.lede, address: C.address,
     story: C.story, belief: C.belief, vision: C.vision, values: C.values,
-    verseText: C.verse && C.verse.text, verseRef: C.verse && C.verse.reference
+    verseText: C.verse && C.verse.text, verseRef: C.verse && C.verse.reference,
+    churchName: C.church && C.church.name, churchBlurb: C.church && C.church.blurb
   };
   Object.keys(TEXT).forEach(function (key) {
     var value = TEXT[key];
@@ -126,12 +127,18 @@
   // A photo when there is one, initials when there is not. A broken image icon
   // says "this site is unfinished" far louder than a circle with a letter in it,
   // and a chapter should be able to put the names up before the photos exist.
+  // Nearly every name here carries a title, and "Apostle Kwame Anane" initialled
+  // straight off the front is AK - the A belongs to the office, not the man.
+  var TITLE = /^(apostle|prophet|prophetess|evangelist|pastor|rev|reverend|bishop|elder|deacon|deaconess|dr|prof|mr|mrs|ms|miss|sis|sister|bro|brother)\.?$/i;
   function faceHtml(person, cls) {
     if (has(person.photo)) {
       return '<img class="' + cls + '" src="' + esc(person.photo) + '" alt="'
         + esc(person.name || '') + '" loading="lazy">';
     }
-    var initials = String(person.name || '?').trim().split(/\s+/)
+    var words = String(person.name || '?').trim().split(/\s+/);
+    var named = words.filter(function (w) { return !TITLE.test(w); });
+    if (named.length) words = named;   // somebody called only "Elder" keeps it
+    var initials = words
       .slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('');
     return '<span class="' + cls + ' is-initials">' + esc(initials || '?') + '</span>';
   }
@@ -174,12 +181,58 @@
 
   if (coordinators.length || executives.length) show(document.querySelector('[data-section="leadership"]'));
 
+  // ---- the wider church, and the men who began it ------------------------
+  // (Higher up the page than this, but it leans on the face helper above.)
+  // The chapter is a fraction of the church, so the founders sit under the
+  // CHURCH's logo rather than among the chapter's coordinators. The logo and
+  // the list stand on their own: a chapter with the mark but no photographs
+  // yet still has something true to show.
+  var CH = C.church || {};
+  var founders = (C.founders || []).filter(function (p) { return p && has(p.name); });
+
+  if (has(CH.logo) || founders.length) {
+    var churchLogo = document.getElementById('churchLogo');
+    if (has(CH.logo)) {
+      churchLogo.src = CH.logo;
+      churchLogo.alt = has(CH.name) ? CH.name : '';
+      churchLogo.hidden = false;
+    } else {
+      churchLogo.remove();   // rather than an empty frame where a mark goes
+    }
+
+    if (founders.length) {
+      document.getElementById('founders').innerHTML = founders.map(function (p) {
+        // One of them has gone. That is said in a line under the card rather
+        // than done to the picture, so his card reads like the others'.
+        return '<div class="founder-card">'
+          + faceHtml(p, 'founder-face')
+          + '<h3>' + esc(p.name) + '</h3>'
+          + (has(p.role) ? '<p class="founder-role">' + esc(p.role) + '</p>' : '')
+          + (has(p.about) ? '<p class="founder-about">' + esc(p.about) + '</p>' : '')
+          + (p.inMemoriam ? '<p class="founder-memoriam">In loving memory</p>' : '')
+          + '</div>';
+      }).join('');
+      // The heading belongs to the list, not to the logo above it.
+      show(document.getElementById('founderHeading'));
+    }
+    show(document.querySelector('[data-section="heritage"]'));
+  }
+
   // ---- what happens here ----------------------------------------------
   var ministries = (C.ministries || []).filter(function (m) { return m && has(m.name); });
   if (ministries.length) {
+    // A photo across the top when there is one. A card without one simply
+    // starts at its heading rather than showing a grey box where a picture
+    // was meant to be, so the section is worth publishing before every
+    // photograph exists.
     document.getElementById('ministries').innerHTML = ministries.map(function (m) {
-      return '<div class="card"><h3>' + esc(m.name) + '</h3>'
-        + (has(m.blurb) ? '<p>' + esc(m.blurb) + '</p>' : '') + '</div>';
+      return '<div class="card' + (has(m.photo) ? ' has-photo' : '') + '">'
+        + (has(m.photo)
+            ? '<img class="card-photo" src="' + esc(m.photo) + '" alt="" loading="lazy">'
+            : '')
+        + '<div class="card-body"><h3>' + esc(m.name) + '</h3>'
+        + (has(m.blurb) ? '<p>' + esc(m.blurb) + '</p>' : '')
+        + '</div></div>';
     }).join('');
     show(document.querySelector('[data-section="ministries"]'));
   }

@@ -13,10 +13,11 @@ on:
     paths: ['site/**', '.github/workflows/pages.yml']
   workflow_dispatch:      # ...and a button, for when you want one anyway
 
-# Pages needs these; nothing else in this repo does, so they are scoped to
-# this workflow rather than granted repo-wide.
+# Pages needs pages/id-token; contents:write is for the shrink step committing
+# a resized photo back. Nothing else in this repo needs any of it, so they are
+# scoped to this workflow rather than granted repo-wide.
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -30,15 +31,48 @@ jobs:
   deploy:
     name: Publish site/ to GitHub Pages
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
-      # The site is plain files: no npm install, no build, nothing to go wrong
-      # between the folder and the web.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Shrink BEFORE the upload, in the same run, so the small file is the one
+      # that gets published. Doing it in a separate workflow would publish the
+      # 12MB original first and only replace it on some later push - commits
+      # made with GITHUB_TOKEN deliberately do not trigger another run.
+      - name: Shrink oversized images
+        run: node site/tools/shrink-images.js
+
+      - name: Commit the shrunk images
+        run: |
+          if git diff --quiet -- site/images; then
+            echo "nothing was shrunk"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/images
+          git commit -m "Shrink oversized landing-page images
+
+          Done automatically so nobody has to remember to resize before
+          uploading. Only ever makes files smaller; anything already small
+          enough is left exactly as it was."
+          # Somebody may have pushed while this ran.
+          git pull --rebase --autostash origin main
+          git push origin HEAD:main
+
+      # The site is plain files: no build, nothing to go wrong between the
+      # folder and the web.
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v3
