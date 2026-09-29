@@ -74,10 +74,10 @@ window.CHAPTER = {
     email: 'aconsuknust@gmail.com',        // e.g. 'aconsuknust@gmail.com'
     phone: '+233 547541623',        // e.g. '+233 24 000 0000'
     whatsapp: '',     // full link or just the number
-    facebook: '',
+    facebook: 'https://www.facebook.com/share/1Efaz1Zg1w/?mibextid=wwXIfr',
     instagram: '',
-    youtube: '',
-    tiktok: '',
+    youtube: 'https://youtube.com/@aconsu_knust?si=aVWLz2kPJkeoeQip',
+    tiktok: 'https://www.tiktok.com/@aconsu.knust?_r=1&_t=ZS-99PFlIdM6Ld',
     twitter: '',
   },
 
