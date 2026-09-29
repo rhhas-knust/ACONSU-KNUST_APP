@@ -1,0 +1,171 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+/* ACONSU's own colours, so this reads as the same family as the app. */
+:root {
+  --purple-deep: #5B2C82;
+  --purple-rich: #3A1B54;
+  --purple-ink: #241530;
+  --flame-gold: #E8971E;
+  --lilac-light: #F6EEFB;
+
+  --bg: #FDFBFF;
+  --surface: #FFFFFF;
+  --surface-2: #F6EEFB;
+  --ink: #241530;
+  --ink-soft: #5a4468;
+  --ink-faint: #8a7595;
+  --heading: #3A1B54;
+  --brand: #5B2C82;
+  --border: rgba(58, 27, 84, 0.12);
+  --shadow: 0 12px 32px rgba(58, 27, 84, 0.10);
+  --radius: 16px;
+  --max-w: 1100px;
+}
+
+/* Follows the reader's device. There is no switch on a landing page: someone
+   arriving for the first time has not come here to set a preference. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17101F;
+    --surface: #221831;
+    --surface-2: #2C2040;
+    --ink: #F1E9F7;
+    --ink-soft: #C6B4D6;
+    --ink-faint: #9B87AE;
+    --heading: #EBDDF6;
+    --brand: #C9A3E8;
+    --border: rgba(233, 217, 245, 0.14);
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Manrope', system-ui, sans-serif;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; color: var(--heading); line-height: 1.15; margin: 0 0 0.5em; font-weight: 600; }
+h1 { font-size: clamp(2.3rem, 6vw, 3.9rem); }
+h2 { font-size: clamp(1.6rem, 3.4vw, 2.3rem); }
+h3 { font-size: 1.12rem; }
+p { margin: 0 0 1em; }
+a { color: inherit; }
+img { max-width: 100%; display: block; }
+
+.wrap { max-width: var(--max-w); margin: 0 auto; padding: 0 20px; }
+section { padding: clamp(52px, 8vw, 88px) 0; }
+.eyebrow {
+  font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase;
+  font-weight: 800; color: var(--flame-gold); margin: 0 0 10px;
+}
+.lede { font-size: clamp(1rem, 2vw, 1.15rem); color: var(--ink-soft); max-width: 46ch; }
+
+/* ---------- top bar ---------- */
+.top {
+  position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 12px; padding-bottom: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--heading); font-family: 'Fraunces', serif; font-weight: 700; }
+.brand img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
+.top nav { display: flex; align-items: center; gap: 22px; font-size: 0.9rem; font-weight: 600; }
+/* `:not(.btn)` matters. `.top nav a` is (0,1,2) and `.btn-primary` is (0,1,0),
+   so without it this rule wins on colour and paints the button's label
+   --ink-soft on --purple-deep: dark purple on dark purple. A button carries
+   its own colours; a nav link rule has no business overriding them. */
+.top nav a:not(.btn) { text-decoration: none; color: var(--ink-soft); }
+.top nav a:not(.btn):hover { color: var(--brand); }
+@media (max-width: 720px) { .top nav a.nav-link { display: none; } }
+
+.btn {
+  display: inline-block; padding: 12px 24px; border-radius: 999px;
+  font-weight: 700; font-size: 0.92rem; text-decoration: none;
+  border: 2px solid transparent; cursor: pointer; white-space: nowrap;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-primary { background: var(--purple-deep); color: #fff; }
+.btn-primary:hover { background: var(--purple-rich); }
+.btn-ghost { border-color: var(--border); color: var(--ink); }
+.btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
+.btn-sm { padding: 9px 18px; font-size: 0.85rem; }
+.btn-gold { background: var(--flame-gold); color: #241530; }
+
+/* ---------- hero ---------- */
+.hero {
+  position: relative; overflow: hidden; text-align: center;
+  padding: clamp(64px, 11vw, 132px) 0 clamp(56px, 9vw, 104px);
+  background:
+    radial-gradient(78% 52% at 50% 112%, rgba(232,151,30,0.42) 0%, rgba(232,151,30,0) 62%),
+    radial-gradient(58% 44% at 6% -10%, rgba(91,44,130,0.38) 0%, rgba(91,44,130,0) 68%),
+    linear-gradient(180deg, var(--hero-a, #E4D0F2) 0%, var(--hero-b, #F7F0FC) 54%, var(--bg) 100%);
+}
+@media (prefers-color-scheme: dark) { .hero { --hero-a: #301344; --hero-b: #1C082B; } }
+.hero h1 { margin-bottom: 18px; }
+.hero .lede { margin: 0 auto 30px; }
+.hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+/* ---------- cards ---------- */
+.grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow);
+}
+.card p:last-child { margin-bottom: 0; }
+.card .when { font-weight: 800; color: var(--brand); }
+.card .where { color: var(--ink-faint); font-size: 0.9rem; }
+
+.alt { background: var(--surface-2); }
+.section-head { max-width: 62ch; margin-bottom: 34px; }
+.section-head p { color: var(--ink-soft); margin-bottom: 0; }
+
+.prose { max-width: 66ch; }
+.prose p { color: var(--ink-soft); }
+
+/* ---------- verse ---------- */
+.verse {
+  background: var(--purple-rich); color: #fff; text-align: center;
+  border-radius: var(--radius); padding: clamp(32px, 6vw, 56px) 28px;
+}
+.verse blockquote {
+  margin: 0 auto 14px; max-width: 34ch;
+  font-family: 'Fraunces', serif; font-size: clamp(1.25rem, 3vw, 1.75rem);
+  line-height: 1.35;
+}
+.verse cite { font-style: normal; font-weight: 800; letter-spacing: 0.06em; font-size: 0.8rem; text-transform: uppercase; color: var(--flame-gold); }
+
+/* ---------- contact ---------- */
+.contact-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.contact-list a { color: var(--brand); font-weight: 700; text-decoration: none; }
+.contact-list a:hover { text-decoration: underline; }
+.contact-list span.label { display: block; font-size: 0.76rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 700; }
+
+.socials { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+.socials a {
+  width: 42px; height: 42px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-2); color: var(--brand);
+  border: 1px solid var(--border); text-decoration: none;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.socials a:hover { transform: translateY(-2px); background: var(--purple-deep); color: #fff; }
+.socials svg { width: 20px; height: 20px; }
+
+/* ---------- footer ---------- */
+footer { background: var(--purple-ink); color: #C9B3D8; padding: 44px 0 30px; }
+footer h4 { color: #fff; font-family: 'Fraunces', serif; margin: 0 0 8px; }
+footer a { color: #C9B3D8; }
+.foot-row { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; align-items: flex-end; }
+.foot-legal { border-top: 1px solid rgba(255,255,255,0.14); margin-top: 26px; padding-top: 18px; font-size: 0.82rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .btn:hover, .socials a:hover { transform: none; }
+}

@@ -3358,6 +3358,107 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /data-reshepherd/.test(shep), null);
   }
 
+  console.log('\n== the chapter landing site: standalone, and honest when empty ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const siteDir = path.join(__dirname, '..', 'site');
+    const read = (f) => fs.readFileSync(path.join(siteDir, f), 'utf8');
+    const html = read('index.html');
+    const js = read('site.js');
+    const css = read('styles.css');
+    const cfgSrc = read('chapter.js');
+
+    // The whole point is that it does not need the app. A landing page that
+    // calls the API is a landing page that goes down when Render sleeps - which
+    // is the thing it exists to avoid.
+    check('the site calls no API', !/\/api\//.test(html + js), null);
+    check('and pulls nothing out of the app folder',
+      !/\.\.\/public|\/public\//.test(html + js + css), null);
+    check('every script it loads is its own',
+      (html.match(/<script src="([^"]+)"/g) || []).every(t => !/^<script src="(https?:|\/)/.test(t)), null);
+    check('so the whole thing is a folder of files with nothing to build',
+      !fs.existsSync(path.join(siteDir, 'package.json')), null);
+
+    // chapter.js is the one file a chapter edits, so it has to be valid on its
+    // own and has to carry every field site.js reads out of it.
+    const CHAPTER = (() => {
+      const win = {};
+      new Function('window', cfgSrc)(win);
+      return win.CHAPTER;
+    })();
+    check('chapter.js parses and defines the chapter', !!CHAPTER && !!CHAPTER.name, null);
+    ['name', 'fullName', 'institution', 'tagline', 'lede', 'serviceTimes',
+     'address', 'story', 'belief', 'vision', 'values', 'ministries', 'verse',
+     'contact', 'appUrl'].forEach((key) => {
+      check(`chapter.js has a ${key} to fill in`, key in CHAPTER, Object.keys(CHAPTER));
+    });
+    check('and the contact block names every channel the site can show',
+      ['email', 'phone', 'whatsapp', 'facebook', 'instagram', 'youtube', 'tiktok', 'twitter']
+        .every(k => k in CHAPTER.contact), CHAPTER.contact);
+
+    // The rule the whole site rests on: a chapter can publish it half-filled
+    // and it still reads as finished rather than abandoned.
+    check('an empty field removes what would have shown it',
+      /function has\(v\)/.test(js) && /if \(links\.length\) socialsEl\.innerHTML/.test(js), null);
+    // A button that scrolls nowhere is worse than no button.
+    check('and a link to a section that is not there is removed with it',
+      /if \(!target \|\| target\.hidden\) a\.remove\(\);/.test(js), null);
+    check('leaving no empty button row behind either',
+      /if \(cta && !cta\.children\.length\) cta\.remove\(\);/.test(js), null);
+    check('a blank app link hides every way into the app',
+      /if \(has\(C\.appUrl\)\)/.test(js), null);
+
+    // Same collision as the social icons, written fresh: `.top nav a` is
+    // (0,1,2) and `.btn-primary` is (0,1,0), so the nav rule won on colour and
+    // painted the button's label dark purple on dark purple.
+    check('the nav link colour keeps its hands off buttons',
+      /\.top nav a:not\(\.btn\) \{/.test(css), null);
+    check('on hover too', /\.top nav a:not\(\.btn\):hover/.test(css), null);
+
+    // Text the page injects comes from a file a chapter edits by hand; a stray
+    // angle bracket in a service name should not become markup.
+    check('anything a chapter types is escaped before it reaches the page',
+      /function esc\(s\)/.test(js) && /\.replace\(\/&\/g, '&amp;'\)/.test(js), null);
+    check('and outbound links cannot reach back through window.opener',
+      !/target="_blank"(?![^>]*rel=)/.test(html) && /rel="noopener"/.test(js), null);
+
+    check('it follows the reader\'s light or dark setting',
+      /@media \(prefers-color-scheme: dark\)/.test(css), null);
+    check('and reads on a phone without sideways scrolling',
+      /@media \(max-width: 720px\)/.test(css), null);
+
+    // GitHub Pages serves this under /<repo>/, not at a domain root. One
+    // leading slash anywhere and the stylesheet, the script or the logo 404s
+    // there while working perfectly on this machine.
+    const absolute = [];
+    [['index.html', html], ['site.js', js], ['styles.css', css]].forEach(function (pair) {
+      var m = pair[1].match(/(?:href|src|url\()\s*=?\s*["']?\/(?!\/)[^"')\s]*/g) || [];
+      m.forEach(function (hit) { absolute.push(pair[0] + ': ' + hit); });
+    });
+    check('every path is relative, so it survives being served under /<repo>/',
+      absolute.length === 0, absolute);
+
+    // Publishing from a branch, Pages offers the repo root or /docs and
+    // nothing else - it cannot be pointed at site/. A workflow is what makes
+    // this folder publishable without renaming it or keeping a second copy on
+    // a gh-pages branch.
+    const wf = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'pages.yml'), 'utf8');
+    check('a workflow publishes the site folder itself', /path: site\b/.test(wf), null);
+    check('and only when the site changes, not on every app deploy',
+      /paths: \['site\/\*\*'/.test(wf), null);
+    check('with the permissions Pages needs and no more',
+      /pages: write/.test(wf) && /id-token: write/.test(wf) && /contents: read/.test(wf), null);
+
+    // A chapter has to be told how to put it up, or it stays in the repo.
+    const readme = read('README.md');
+    check('the folder says how to publish it for nothing',
+      /GitHub Pages/.test(readme) && /Netlify/.test(readme), null);
+    check('and what to fill in before doing so', /serviceTimes/.test(readme), null);
+    check('and does not tell anyone to pick a folder Pages cannot serve',
+      !/folder: `\/site`/.test(readme), null);
+  }
+
   // The send loop only ticks once a minute, so this one is opt-in: run it with
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
   if (process.env.SMOKE_SLOW === '1') {
