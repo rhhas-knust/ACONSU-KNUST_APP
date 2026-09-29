@@ -97,11 +97,12 @@ window.CHAPTER = {
   // card rather than changing the picture, so the card reads the same as the
   // others.
   founders: [
-    { name: '', role: 'Founder',                       about: '', photo: 'images/church-founder.jpg',           inMemoriam: false },
-    { name: '', role: 'Chairman',                      about: '', photo: 'images/church-chairman.jpg',          inMemoriam: false },
+    { name: 'Apostle E.K Owusu', role: 'Founder',                       about: ' He saw the vision and belevied in the word of the lord'
+                         + 'his favourite bible verse he starte dthe movement with was Galatians  5:19-25', photo: 'images/church-founder.jpg',           inMemoriam: false },
+    { name: 'Apostle Clement Brakatu', role: 'Chairman of the Church',                      about: '', photo: 'images/church-chairman.jpg',          inMemoriam: false },
     // No photograph of him yet; his card shows his initials until there is one.
-    { name: '', role: 'Founding Member',               about: '', photo: '',                                    inMemoriam: true  },
-    { name: '', role: 'General Secretary, the Church', about: '', photo: 'images/church-general-secretary.jpg', inMemoriam: false },
+    { name: 'Apostle Paul Manu', role: 'Founding Member',               about: '', photo: '',                                    inMemoriam: true  },
+    { name: 'Apostle Ebenezer Annan', role: 'General Secretary, the Church', about: '', photo: 'images/church-general-secretary.jpg', inMemoriam: false },
   ],
 
   // ---- who leads the chapter --------------------------------------------
@@ -121,18 +122,18 @@ window.CHAPTER = {
     {
       name: 'Pas. Gideon Amo Darko',
       role: 'Chapter Coordinator',
-      about: '',      // a sentence or two — how long he has served, what he carries
+      about: 'He first entered the university as an undergrad in the year 2016, who then became our Prayer secertary now our co-ordinator a man who carries the Apostolic Prophetic gift like Apostle John in the bible a great teacher of the word and a great father to the whole union.',      // a sentence or two — how long he has served, what he carries
       photo: 'images/coordinator-gideon.jpg',
-      phone: '',      // left blank on purpose; this page is on the open internet
-      email: '',
+      phone: '+233 54 754 1623',      // left blank on purpose; this page is on the open internet
+      email: 'amodarkogideon@gmail.com',
     },
     {
       name: 'Pastor Sarpong',
       role: 'Chapter Coordinator',
-      about: '',      // a sentence or two — how long he has served, what he carries
+      about: 'A seasoned teache rof the word, former M.O.G and President of the Union. He rightly divides the word of truth to fit the contest of the young and old',      // a sentence or two — how long he has served, what he carries
       photo: 'images/coordinator-sarpong.jpg',
-      phone: '',
-      email: '',
+      phone: '+233 54 378 7233',
+      email: 'kobbysarpong66@gmail.com',
     },
   ],
 
