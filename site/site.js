@@ -41,6 +41,19 @@
   if (has(C.vision)) show(document.querySelector('[data-card="vision"]'));
   if (has(C.values)) show(document.querySelector('[data-card="values"]'));
 
+  // ---- a photo behind the heading ----------------------------------------
+  // The heading has to stay readable whatever the photograph is, so the image
+  // never goes on bare - it carries a wash over it, and the text colours flip
+  // to match. A chapter should not have to test their own photo to find that
+  // out.
+  if (has(C.heroImage)) {
+    var hero = document.querySelector('.hero');
+    if (hero) {
+      hero.style.setProperty('--hero-photo', 'url("' + String(C.heroImage).replace(/"/g, '%22') + '")');
+      hero.setAttribute('data-hero-tone', C.heroImageTone === 'light' ? 'light' : 'dark');
+    }
+  }
+
   // ---- freshers ---------------------------------------------------------
   // Two kinds of WhatsApp link, and they behave differently:
   //   chat.whatsapp.com/...  a group invite. Cannot carry a prefilled message.

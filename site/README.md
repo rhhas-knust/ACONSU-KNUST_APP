@@ -90,6 +90,32 @@ A group invite cannot carry a prefilled message; WhatsApp does not allow it, so
 **Blank the link and the whole band disappears** — which is how you take it
 down when freshers' week is over.
 
+### A photo behind the heading
+
+Set `heroImage` to a file in `images/`, written relative to this folder:
+
+```js
+heroImage: 'images/header.jpg',
+heroImageTone: 'dark',
+```
+
+Blank keeps the purple-and-gold gradient, which is a perfectly good header —
+only use a photo if it is a good one.
+
+**What makes a good one:** wide rather than tall (it is cropped to a band),
+busy at the edges rather than the middle, since the heading sits over the
+centre. A congregation, the auditorium, the campus.
+
+**Size it first.** About 1600px wide and under 300KB. A 4MB photo straight off
+a phone costs a fresher on campus data real money and several seconds — and it
+is the first thing on the page, so nothing else shows until it loads.
+
+`heroImageTone` decides the words, not the picture: `dark` puts the heading in
+white over a darkened photo and suits almost anything; `light` keeps the purple
+heading and lays a pale wash over instead, for a very pale photo. The photo
+never goes on bare either way, so the heading stays readable whatever you
+photographed.
+
 ### Who leads the chapter
 
 Two lists in `chapter.js`, both optional:
