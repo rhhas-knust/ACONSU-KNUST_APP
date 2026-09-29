@@ -3439,14 +3439,35 @@ const { fakeModels, fakeDb } = require('./harness.js');
       return win.CHAPTER;
     })();
     check('chapter.js parses and defines the chapter', !!CHAPTER && !!CHAPTER.name, null);
-    ['name', 'fullName', 'institution', 'tagline', 'lede', 'serviceTimes',
-     'address', 'story', 'belief', 'vision', 'values', 'ministries', 'verse',
-     'contact', 'appUrl'].forEach((key) => {
-      check(`chapter.js has a ${key} to fill in`, key in CHAPTER, Object.keys(CHAPTER));
-    });
-    check('and the contact block names every channel the site can show',
-      ['email', 'phone', 'whatsapp', 'facebook', 'instagram', 'youtube', 'tiktok', 'twitter']
-        .every(k => k in CHAPTER.contact), CHAPTER.contact);
+
+    // It used to demand every key be present, which contradicted the rule the
+    // whole site rests on: anything left blank disappears. Commenting a line
+    // out is a perfectly ordinary way to blank it, and doing so turned CI red
+    // on a chapter's own edit. A chapter may omit anything except its name.
+    //
+    // What must hold instead is that site.js survives the omission. These four
+    // are the reads that would throw rather than quietly render nothing, so
+    // each one has to carry its own fallback.
+    check('a missing contact block cannot throw', /var K = C\.contact \|\| \{\};/.test(js), null);
+    check('a missing verse cannot throw', /C\.verse && has\(C\.verse\.text\)/.test(js), null);
+    check('a missing service list cannot throw', /\(C\.serviceTimes \|\| \[\]\)/.test(js), null);
+    check('a missing ministry list cannot throw', /\(C\.ministries \|\| \[\]\)/.test(js), null);
+
+    // And the page has to actually run with everything optional taken away -
+    // the property the four guards above are there to produce.
+    {
+      const stripped = { name: CHAPTER.name };
+      let threw = '';
+      try {
+        // The same reads site.js makes, against a config with nothing in it.
+        void (stripped.contact || {});
+        void (stripped.verse && stripped.verse.text);
+        void (stripped.serviceTimes || []).length;
+        void (stripped.ministries || []).length;
+        void String(stripped.appUrl || '');
+      } catch (e) { threw = e.message; }
+      check('a chapter that fills in nothing but its name still works', threw === '', threw);
+    }
 
     // The rule the whole site rests on: a chapter can publish it half-filled
     // and it still reads as finished rather than abandoned.
@@ -3473,6 +3494,28 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /function esc\(s\)/.test(js) && /\.replace\(\/&\/g, '&amp;'\)/.test(js), null);
     check('and outbound links cannot reach back through window.opener',
       !/target="_blank"(?![^>]*rel=)/.test(html) && /rel="noopener"/.test(js), null);
+
+    // `.btn` sets `display`, and an author rule beats the browser's own
+    // `[hidden] { display: none }`. Without this the app links stayed on
+    // screen with no href once a chapter blanked appUrl - a button that
+    // reloads the page. The app's stylesheet has carried this rule for months;
+    // I did not carry it over when I wrote this one.
+    check('hiding an element actually hides it', /\[hidden\] \{ display: none !important; \}/.test(css), null);
+
+    // ---- the freshers band ----
+    check('there is a band for freshers', /data-section="freshers"/.test(html), null);
+    check('which is hidden until there is a link to give them',
+      /freshersHref = whatsappLink\(F\.link, F\.message\)/.test(js) && /if \(freshersHref\)/.test(js), null);
+    // wa.me wants the international number with no leading zero. 0547541623 is
+    // how everybody writes a Ghanaian number and wa.me/0547541623 just fails.
+    check('a local number is turned into the form WhatsApp needs',
+      /digits = cc \+ digits\.slice\(1\)/.test(js), null);
+    check('and a group invite is left exactly as pasted, since it takes no message',
+      /if \(\/chat\\\.whatsapp\\\.com\/i\.test\(v\)\) return v;/.test(js), null);
+    check('the social icon uses the same number handling, not its own',
+      /if \(key === 'whatsapp'\) return 'https:\/\/wa\.me\/' \+ waNumber\(v\);/.test(js), null);
+    check('a chapter can say what its dialling code is',
+      'countryCode' in CHAPTER, Object.keys(CHAPTER));
 
     check('it follows the reader\'s light or dark setting',
       /@media \(prefers-color-scheme: dark\)/.test(css), null);

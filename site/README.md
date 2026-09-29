@@ -71,6 +71,25 @@ a link to a section that is not there is a promise the page does not keep.
 So **publish it today with half of it filled in.** It will look finished, not
 abandoned. Fill in the rest as you get it.
 
+### The freshers link
+
+`freshers.link` takes either of two things, and they are not the same:
+
+| What you paste | What it does |
+|---|---|
+| `https://chat.whatsapp.com/XXXXXXXX` | Joins the group. In WhatsApp: open the group → tap its name → **Invite to group via link** → Copy link. This is almost certainly what you want. |
+| `0547541623` | Opens a chat with that person, with `freshers.message` typed in ready to send. |
+
+Write a number however you normally would — `0547541623`, `+233 547 541 623`,
+`(0244) 000-000` all work. WhatsApp actually needs the international form with
+no leading zero, and the page converts it for you using `countryCode`.
+
+A group invite cannot carry a prefilled message; WhatsApp does not allow it, so
+`message` is ignored for one.
+
+**Blank the link and the whole band disappears** — which is how you take it
+down when freshers' week is over.
+
 ### Before you publish, fill in at least
 
 - `serviceTimes` — when and where you actually meet. Until this is set, the

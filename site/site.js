@@ -41,6 +41,55 @@
   if (has(C.vision)) show(document.querySelector('[data-card="vision"]'));
   if (has(C.values)) show(document.querySelector('[data-card="values"]'));
 
+  // ---- freshers ---------------------------------------------------------
+  // Two kinds of WhatsApp link, and they behave differently:
+  //   chat.whatsapp.com/...  a group invite. Cannot carry a prefilled message.
+  //   a bare number          a chat with one person, which can.
+  // Anything already a URL is left alone rather than guessed at.
+  // wa.me wants the full international number with no + and NO LEADING ZERO.
+  // A Ghanaian number written the way everybody writes it - 0547541623 - is
+  // not that: the 0 is a national trunk prefix, and wa.me/0547541623 simply
+  // fails. Nobody should have to know that to paste their own number in.
+  function waNumber(raw) {
+    var cc = String(C.countryCode || '233').replace(/[^\d]/g, '') || '233';
+    var digits = String(raw || '').replace(/[^\d]/g, '');
+    if (!digits) return '';
+    if (digits.indexOf('00') === 0) digits = digits.slice(2);        // 00233... dialled out
+    else if (digits.charAt(0) === '0') digits = cc + digits.slice(1); // 0547... local form
+    else if (digits.indexOf(cc) !== 0 && digits.length <= 9) digits = cc + digits; // 547... bare
+    return digits;
+  }
+
+  function whatsappLink(raw, message) {
+    var v = String(raw || '').trim();
+    if (!v) return '';
+    if (/^https?:\/\//i.test(v)) {
+      // A group invite takes no ?text=, so adding one would break the link.
+      if (/chat\.whatsapp\.com/i.test(v)) return v;
+      if (/wa\.me|api\.whatsapp\.com/i.test(v) && has(message) && v.indexOf('text=') === -1) {
+        return v + (v.indexOf('?') === -1 ? '?' : '&') + 'text=' + encodeURIComponent(message);
+      }
+      return v;
+    }
+    var n = waNumber(v);
+    if (!n) return '';
+    return 'https://wa.me/' + n + (has(message) ? '?text=' + encodeURIComponent(message) : '');
+  }
+
+  var F = C.freshers || {};
+  var freshersHref = whatsappLink(F.link, F.message);
+  if (freshersHref) {
+    var fSec = document.querySelector('[data-section="freshers"]');
+    var fBtn = document.getElementById('freshersLink');
+    fBtn.href = freshersHref;
+    fBtn.textContent = has(F.buttonLabel) ? F.buttonLabel : 'Join us on WhatsApp';
+    var fh = document.querySelector('[data-bind="freshersHeading"]');
+    var fb = document.querySelector('[data-bind="freshersBlurb"]');
+    if (has(F.heading)) fh.textContent = F.heading; else fh.remove();
+    if (has(F.blurb)) fb.textContent = F.blurb; else fb.remove();
+    show(fSec);
+  }
+
   // ---- when we meet ----------------------------------------------------
   var services = (C.serviceTimes || []).filter(function (s) { return s && has(s.what); });
   if (services.length) {
@@ -98,7 +147,7 @@
   function socialHref(key, value) {
     var v = String(value).trim();
     if (/^https?:\/\//i.test(v)) return v;
-    if (key === 'whatsapp') return 'https://wa.me/' + v.replace(/[^\d]/g, '');
+    if (key === 'whatsapp') return 'https://wa.me/' + waNumber(v);
     return v;
   }
   var socialsEl = document.getElementById('socials');

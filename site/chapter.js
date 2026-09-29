@@ -69,7 +69,41 @@ window.CHAPTER = {
     reference: 'Acts 2:42',
   },
 
+  // ---- freshers ----------------------------------------------------------
+  // A band near the top of the page, for the weeks when new students are
+  // arriving and need one obvious next step. Blank the link and the whole band
+  // disappears, so it comes down by deleting one line when freshers' week is
+  // over.
+  //
+  // THE LINK can be either of two things, and they are not the same:
+  //
+  //   1. A GROUP INVITE   https://chat.whatsapp.com/XXXXXXXXXXXX
+  //      In WhatsApp: open the group -> tap its name -> Invite to group via
+  //      link -> Copy link. Paste the whole thing here. This is almost
+  //      certainly what you want for a freshers group.
+  //
+  //   2. ONE PERSON'S NUMBER   0547541623  (or +233547541623)
+  //      Just type the number. It becomes a chat with that person, and the
+  //      `message` below is typed in for them so they do not have to open
+  //      with "hi".
+  //
+  // A group invite cannot carry a prefilled message - WhatsApp does not allow
+  // it - so `message` is ignored for one.
+  freshers: {
+    heading: 'New on campus?',
+    blurb: 'Come and find us. Join the freshers group and somebody will look out '
+         + 'for you on your first Sunday.',
+    buttonLabel: 'Join the freshers WhatsApp group',
+    link: '',
+    message: "Hi! I'm a fresher and I'd like to join ACONSU.",
+  },
+
   // ---- reaching you ------------------------------------------------------
+  // Your country's dialling code, no + and no zeros. Ghana is 233. It is used
+  // to turn a local number like 0547541623 into the international form WhatsApp
+  // needs, so you can write numbers the normal way everywhere on this page.
+  countryCode: '233',
+
   contact: {
     email: 'aconsuknust@gmail.com',        // e.g. 'aconsuknust@gmail.com'
     phone: '+233 547541623',        // e.g. '+233 24 000 0000'
