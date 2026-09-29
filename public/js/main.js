@@ -165,6 +165,23 @@ function escapeHtml(str) {
   }[m]));
 }
 
+// Initials for somebody with no photograph yet.
+//
+// Nearly every name on these pages carries a title, and taking the first
+// letter of the name as written gives "Apostle E. K. Owusu" the initials AE —
+// the A belongs to the office, not the man. Titles are skipped, unless the
+// title is all that was written, in which case it is kept rather than leaving
+// an empty circle.
+const NAME_TITLE = /^(apostle|prophet|prophetess|evangelist|pastor|pas|rev|reverend|bishop|elder|deacon|deaconess|dr|prof|mr|mrs|ms|miss|sis|sister|bro|brother)\.?$/i;
+function initialsOf(name) {
+  let words = String(name || '?').trim().split(/\s+/);
+  const named = words.filter((w) => !NAME_TITLE.test(w));
+  if (named.length) words = named;
+  const initials = words.slice(0, 2)
+    .map((w) => w.charAt(0).toUpperCase()).join('');
+  return initials || '?';
+}
+
 function formatDate(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });

@@ -712,6 +712,43 @@ section { padding: 72px 24px; }
 .exec-role { color: var(--flame-gold); font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
 .exec-bio { font-size: 0.88rem; color: var(--ink-soft); }
 
+/* ---------- the wider church, and its founding fathers ---------- */
+/* The church's own mark, not a chapter's. A logo is drawn with its own space
+   around it and is often not rectangular, so it is fitted whole — `cover`,
+   right for a photograph, would cut the edge off a wordmark and crop a round
+   seal square. */
+.church-mark { text-align: center; max-width: 62ch; margin: 0 auto 34px; }
+.church-mark img {
+  display: block; margin: 0 auto 18px;
+  max-width: 220px; max-height: 120px; width: auto; height: auto;
+  object-fit: contain;
+}
+/* Narrower tracks than the generic .grid, for the same reason the landing
+   site's founders use them: standing portraits are tall, so four of them in
+   one column is an enormous scroll on a phone, and at the generic width four
+   men break three-then-one on a laptop. Defined after .grid, which is what
+   makes it win — both are one class deep. */
+.founder-grid {
+  align-items: start;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.founder-card { text-align: center; }
+/* Formal standing portraits, so these are framed rather than cropped into a
+   circle: the head sits in the top third of such a photograph and a circle
+   centred on one shows a tie and a pair of folded arms. */
+.founder-face {
+  display: grid; place-items: center;
+  width: 100%; height: auto; aspect-ratio: 3 / 4;
+  margin: 0 auto 16px; border-radius: 12px;
+  object-fit: cover; object-position: 50% 15%;
+  background: var(--lilac-light); color: var(--brand);
+  font-family: var(--font-display); font-size: 2rem; font-weight: 700;
+}
+.founder-memoriam {
+  margin: 12px 0 0; font-size: 0.74rem; letter-spacing: 0.08em;
+  text-transform: uppercase; font-weight: 700; color: var(--ink-soft);
+}
+
 /* ---------- floating decorative images ---------- */
 .float-deco {
   position: absolute;

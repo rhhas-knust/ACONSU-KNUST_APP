@@ -56,6 +56,23 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   </div>
 </section>
 
+<!-- The wider church: its own mark, and the men who began it. Above the
+     chapter's own leadership because this chapter is a fraction of the church,
+     and its founders are not the chapter's executive. Hidden entirely until
+     the National Coordinator has filled it in. -->
+<section id="churchSection" hidden>
+  <div class="container">
+    <div class="church-mark">
+      <img id="churchLogo" alt="" hidden>
+      <p class="eyebrow">Our Roots</p>
+      <h2 id="churchName">The wider church</h2>
+      <p style="color:var(--ink-soft);" id="churchBlurb"></p>
+    </div>
+    <h3 id="foundersHeading" style="text-align:center; margin:0 0 20px;" hidden>The founding fathers</h3>
+    <div class="grid founder-grid" id="foundersGrid"></div>
+  </div>
+</section>
+
 <section class="alt-bg">
   <div class="container">
     <div class="section-head">
@@ -146,6 +163,47 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     }
   } catch (e) {
     document.getElementById('execGrid').innerHTML = '<p class="empty-state">Could not load leadership right now.</p>';
+  }
+
+  // ---- the wider church, and the men who began it ------------------------
+  // Read from a national endpoint, not a chapter one: every chapter shows the
+  // same men. The whole section stays hidden until there is something real to
+  // put in it, so a chapter never displays an empty frame or a bare heading.
+  try {
+    const church = await fetchJSON('/api/public/church');
+    const founders = (church.founders || []).filter(f => f && f.name);
+    if (church.logoFileId || founders.length) {
+      if (church.logoFileId) {
+        const logo = document.getElementById('churchLogo');
+        logo.src = `/api/files/${church.logoFileId}`;
+        logo.alt = church.name || '';
+        logo.hidden = false;
+      }
+      if (church.name) document.getElementById('churchName').textContent = church.name;
+      const blurbEl = document.getElementById('churchBlurb');
+      if (church.blurb) blurbEl.textContent = church.blurb; else blurbEl.remove();
+
+      if (founders.length) {
+        document.getElementById('foundersGrid').innerHTML = founders.map((man) => `
+          <div class="card founder-card">
+            ${man.imageFileId
+              ? `<img class="founder-face" src="/api/files/${man.imageFileId}" alt="${escapeHtml(man.name)}" loading="lazy">`
+              : `<span class="founder-face is-initials">${escapeHtml(initialsOf(man.name))}</span>`}
+            <h3 style="margin:0 0 2px;">${escapeHtml(man.name)}</h3>
+            ${man.role ? `<div class="exec-role">${escapeHtml(man.role)}</div>` : ''}
+            ${man.about ? `<p style="margin:10px 0 0; color:var(--ink-soft); font-size:0.9rem;">${escapeHtml(man.about)}</p>` : ''}
+            ${man.inMemoriam ? '<p class="founder-memoriam">In loving memory</p>' : ''}
+          </div>
+        `).join('');
+        document.getElementById('foundersHeading').hidden = false;
+      }
+      document.getElementById('churchSection').hidden = false;
+      initScrollReveal('#foundersGrid .card');
+    }
+  } catch (e) {
+    // The church block is additional to this page, not the point of it. If it
+    // cannot be loaded the rest of About still stands, so this stays quiet
+    // rather than showing an error for something the reader did not ask for.
   }
 })();
 </script>

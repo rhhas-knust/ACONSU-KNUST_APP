@@ -164,6 +164,8 @@ const fakeModels = {
     chapterId: '', order: 0, imageFileId: '', department: '', contact: { phone: '', email: '' },
     history: [], staffId: ''
   }),
+  // No chapterId, deliberately: one set of founders for the whole church.
+  ChurchFounder: makeModel({ role: '', about: '', imageFileId: '', inMemoriam: false, order: 0 }),
   Form: makeModel({ chapterId: '', description: '', category: 'custom', linkedEventId: '', fields: [], isOpen: true, closesAt: '', createdBy: '' }),
   FormSubmission: makeModel({ chapterId: '', memberId: '', submitterName: '', submitterEmail: '', answers: {} }),
   BibleStudy: makeModel({ chapterId: '', date: '', scriptureReference: '', studyMaterial: '', questions: [], notes: '', resources: [], createdBy: '' }),
