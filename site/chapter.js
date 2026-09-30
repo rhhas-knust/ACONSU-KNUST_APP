@@ -119,14 +119,9 @@ window.CHAPTER = {
       photo: 'images/church-chairman.jpg', inMemoriam: false },
 
     { name: 'Apostle Paul Manu', role: 'Founding Member',
-      about: 'A man of sacrifice, who left his government job to assume full-time '
-           + 'ministry. He established the church in Chiraa, Aworowa, Ayesu, Kintampo, '
-           + 'Apesika, Nkoranza and other areas in the Bono and Ahafo regions of Ghana. '
-           + 'He is also the man who sent the message of Christ from the church to the '
-           + 'Greater Accra region, and on to Germany. His sacrifice has birthed more '
-           + 'than 50 churches, and thousands of souls have been won. He was ordained '
-           + 'together with Apostle Clement Brakatu, the current Chairman, as the first '
-           + 'Apostles of the church.',
+      about: 'A man of sacrifice, who left his government job for full-time ministry. '
+           + 'He planted the church across the Bono and Ahafo regions and carried its '
+           + 'message as far as Germany — more than 50 churches have come of it.',
       photo: 'images/church-founding-member.jpg', inMemoriam: true },
 
     { name: 'Apostle Ebenezer Annan', role: 'General Secretary, the Church',
