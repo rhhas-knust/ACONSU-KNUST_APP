@@ -3640,7 +3640,19 @@ const { fakeModels, fakeDb } = require('./harness.js');
 
     // chapter.js is the one file a chapter edits, so it has to be valid on its
     // own and has to carry every field site.js reads out of it.
+    //
+    // The parse is checked FIRST and the evaluation is guarded, because this
+    // used to run unguarded: one unclosed quote and the suite died right here
+    // with a stack trace, skipping every check below it. An unhandled throw
+    // does turn CI red, but it names a line number rather than the problem,
+    // and it hides anything else that was also wrong. A syntax error in the
+    // one file edited by hand deserves to be reported, not to be a crash.
+    let parseErr = '';
+    try { new Function('window', cfgSrc); } catch (e) { parseErr = e.message; }
+    check('chapter.js has no syntax error in it', parseErr === '', parseErr);
+
     const CHAPTER = (() => {
+      if (parseErr) return {};
       const win = {};
       new Function('window', cfgSrc)(win);
       return win.CHAPTER;
@@ -3858,6 +3870,20 @@ const { fakeModels, fakeDb } = require('./harness.js');
         wf.indexOf('shrink-images.js') < wf.indexOf('upload-pages-artifact')
         && wf.indexOf('shrink-images.js') !== -1, null);
       check('and can commit the smaller file back', /contents: write/.test(wf), null);
+      // A broken chapter.js took the whole live page down: one unclosed quote,
+      // the file stops parsing, window.CHAPTER is never defined, and site.js
+      // fills in nothing. The smoke suite caught it, but CI and the publish are
+      // separate workflows that run at the same moment, so a red suite had
+      // never stopped a deploy - the failure and the broken publish landed in
+      // the same minute. The publish checks for itself now.
+      check('the publish refuses a site that does not parse',
+        /node --check "\$f"/.test(wf), null);
+      check('and checks before it uploads, not after',
+        wf.indexOf('node --check') !== -1
+        && wf.indexOf('node --check') < wf.indexOf('upload-pages-artifact'), null);
+      // Exit non-zero, or the step reports the error and publishes anyway.
+      check('and actually fails the run rather than only logging it',
+        /::error file=\$f::[\s\S]{0,200}exit 1/.test(wf), null);
     }
 
     // ---- a photo behind the heading ----

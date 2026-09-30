@@ -110,21 +110,24 @@ window.CHAPTER = {
       photo: 'images/church-founder.jpg', inMemoriam: false },
 
     { name: 'Apostle Clement Brakatu', role: 'Chairman of the Church',
-      about: 'His dedication to his faith in Christ led him to resign from his work and join the movement'
-         +'He was the first man to Prophesy and one of the first ordained Apostles'
-         +'He planted the church in the Ashanti Region with the help of the Holy Spirit'
-         +'His ministry exploits extended outside the borders of our continent to Canada, Europe and the Americas'
-         +'He is currently the Chairman of the church',
+      about: 'His dedication to his faith in Christ led him to resign from his work '
+           + 'and join the movement. He was the first man to prophesy, and one of the '
+           + 'first ordained Apostles. He planted the church in the Ashanti Region with '
+           + 'the help of the Holy Spirit. His ministry exploits extended outside the '
+           + 'borders of our continent, to Canada, Europe and the Americas. He is '
+           + 'currently the Chairman of the church.',
       photo: 'images/church-chairman.jpg', inMemoriam: false },
-    
-     // No photograph of him yet; his card shows his initials until there is one.
+
     { name: 'Apostle Paul Manu', role: 'Founding Member',
-      about: 'A man of Sacrifice who left his government job to assume full-time ministry'
-         +'He established the church in Chiraa, Aworowa, Ayesu, Kintampo, Apesika, Nkoranza and other areas in the Bono and Ahafo regions of Ghana'+
-         +'He is also the man who sent the message of Christ from the church to the Greater Accra region and also to Germany'
-         +'His Sacrifice has birthed more than 50 churches, thousands of souls have been won'
-         +'He was ordained together with APostle Clement Brakatu(Current Chairman) as the first Apostles of the church  ',
-      photo: '', inMemoriam: true },
+      about: 'A man of sacrifice, who left his government job to assume full-time '
+           + 'ministry. He established the church in Chiraa, Aworowa, Ayesu, Kintampo, '
+           + 'Apesika, Nkoranza and other areas in the Bono and Ahafo regions of Ghana. '
+           + 'He is also the man who sent the message of Christ from the church to the '
+           + 'Greater Accra region, and on to Germany. His sacrifice has birthed more '
+           + 'than 50 churches, and thousands of souls have been won. He was ordained '
+           + 'together with Apostle Clement Brakatu, the current Chairman, as the first '
+           + 'Apostles of the church.',
+      photo: 'images/church-founding-member.jpg', inMemoriam: true },
 
     { name: 'Apostle Ebenezer Annan', role: 'General Secretary, the Church',
       about: '',
@@ -146,7 +149,7 @@ window.CHAPTER = {
   // and the line simply does not appear; an email alone is often enough.
   coordinators: [
     {
-      name: 'Pas. Gideon Amo Darko,
+      name: 'Pas. Gideon Amo Darko',
       role: 'Chapter Coordinator',
       about: 'He arrived on this campus as an undergraduate in 2016, served as our '
            + 'Prayer Secretary, and now coordinates the chapter. He carries an '
