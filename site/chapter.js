@@ -110,12 +110,10 @@ window.CHAPTER = {
       photo: 'images/church-founder.jpg', inMemoriam: false },
 
     { name: 'Apostle Clement Brakatu', role: 'Chairman of the Church',
-      about: 'His dedication to his faith in Christ led him to resign from his work '
-           + 'and join the movement. He was the first man to prophesy, and one of the '
-           + 'first ordained Apostles. He planted the church in the Ashanti Region with '
-           + 'the help of the Holy Spirit. His ministry exploits extended outside the '
-           + 'borders of our continent, to Canada, Europe and the Americas. He is '
-           + 'currently the Chairman of the church.',
+      about: 'He resigned his work to join the movement, and was the first man to '
+           + 'prophesy and among the first ordained Apostles. He planted the church '
+           + 'across the Ashanti Region, and his ministry has carried beyond this '
+           + 'continent to Canada, Europe and the Americas.',
       photo: 'images/church-chairman.jpg', inMemoriam: false },
 
     { name: 'Apostle Paul Manu', role: 'Founding Member',
