@@ -46,6 +46,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Refuse to publish a site that will not run.
+      #
+      # chapter.js is edited by hand, often by somebody who does not write
+      # JavaScript for a living, and one unclosed quote in it takes the WHOLE
+      # page down: the file stops parsing, window.CHAPTER is never defined, and
+      # site.js fills in nothing. The visitor gets a blank page.
+      #
+      # The smoke suite does catch it, but CI and this workflow are separate
+      # and run at the same moment, so a red suite has never stopped a publish.
+      # That is exactly what happened: CI failed and the broken page went live
+      # in the same minute. A parse check here is the cheap half of the fix -
+      # the publish now fails instead, and the last good version stays up.
+      - name: Check the site parses before publishing it
+        run: |
+          for f in site/*.js; do
+            node --check "$f" || {
+              echo "::error file=$f::$f does not parse — refusing to publish. The last published version stays up."
+              exit 1
+            }
+          done
+          echo "site/*.js all parse"
+
       # Shrink BEFORE the upload, in the same run, so the small file is the one
       # that gets published. Doing it in a separate workflow would publish the
       # 12MB original first and only replace it on some later push - commits
