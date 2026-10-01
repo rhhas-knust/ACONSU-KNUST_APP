@@ -247,6 +247,7 @@ reports: [
     title: 'Orphanage Outreach',
     date: 'September 2026',          // free text, shown under the title
     blurb: 'Where we went, what we took, and what it cost.',
+    photo: 'images/orphanage-2026.jpg',   // optional, shown across the top
     file: 'files/orphanage-outreach-2026.pdf',
   },
 ],
@@ -254,6 +255,11 @@ reports: [
 
 The whole card is the link, so there is no small target to miss on a phone, and
 it opens in a new tab rather than navigating the reader away from the page.
+
+**`photo` is optional**, and the easiest place to find one is inside the report
+itself — a group shot from the week it describes. It is shown as a band across
+the top of the card, the same as an activity. A card without one starts at its
+title rather than showing a grey box.
 
 - **A row needs both a `title` and a `file`.** A title with nothing behind it is
   a card that goes nowhere, so it is skipped.

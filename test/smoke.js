@@ -3937,7 +3937,15 @@ const { fakeModels, fakeDb } = require('./harness.js');
       /return r && has\(r\.title\) && has\(r\.file\);/.test(js), null);
     // The tap target on a phone should be the card, not a line of text in it.
     check('the whole card is the link',
-      /'<a class="card report-card" href="' \+ esc\(r\.file\)/.test(js), null);
+      /'<a class="card report-card' \+ \(has\(r\.photo\) \? ' has-photo' : ''\)/.test(js)
+      && /' href="' \+ esc\(r\.file\) \+ '" target="_blank" rel="noopener">'/.test(js), null);
+    // Same treatment the activities get: a picture across the top when there is
+    // one, and no grey band promising a photograph that was never added.
+    check('a report can carry a picture, usually lifted out of the report itself',
+      (CHAPTER.reports || []).some(r => r.photo), CHAPTER.reports);
+    check('and a card without one starts at its title, not at a grey box',
+      /\.report-card:not\(\.has-photo\) \.report-row/.test(css)
+      && /has\(r\.photo\)\s*\?\s*'<img class="card-photo"/.test(js), null);
     check('and opens in its own tab, without handing over the page',
       /report-card[\s\S]{0,120}target="_blank" rel="noopener"/.test(js), null);
 

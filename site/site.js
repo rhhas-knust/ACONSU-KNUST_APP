@@ -249,13 +249,18 @@
       // The whole card is the link, so there is no small target to miss on a
       // phone. It opens in a new tab rather than navigating away, because a
       // reader who opens the report has not finished with the page.
-      return '<a class="card report-card" href="' + esc(r.file) + '" target="_blank" rel="noopener">'
+      return '<a class="card report-card' + (has(r.photo) ? ' has-photo' : '') + '"'
+        + ' href="' + esc(r.file) + '" target="_blank" rel="noopener">'
+        + (has(r.photo)
+            ? '<img class="card-photo" src="' + esc(r.photo) + '" alt="" loading="lazy">'
+            : '')
+        + '<span class="report-row">'
         + '<span class="report-badge" aria-hidden="true">PDF</span>'
         + '<span class="report-body">'
         + '<h3>' + esc(r.title) + '</h3>'
         + (has(r.date) ? '<span class="report-date">' + esc(r.date) + '</span>' : '')
         + (has(r.blurb) ? '<span class="report-blurb">' + esc(r.blurb) + '</span>' : '')
-        + '</span></a>';
+        + '</span></span></a>';
     }).join('');
     show(document.querySelector('[data-section="reports"]'));
   }

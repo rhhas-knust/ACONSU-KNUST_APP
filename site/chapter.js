@@ -230,6 +230,10 @@ window.CHAPTER = {
   // An empty list hides the whole section, so this costs nothing until there
   // is something to put in it.
   //
+  // `photo` is optional, and the easiest place to find one is inside the report
+  // itself - a group shot from the week it describes. A card without one starts
+  // at its title rather than showing a grey box.
+  //
   // ONE WARNING THE IMAGES DO NOT NEED: the shrinker only touches pictures. A
   // PDF goes up exactly as large as it is, and a 20MB report costs a reader on
   // campus data real money. If yours is heavy, export it again at a lower
@@ -243,6 +247,7 @@ window.CHAPTER = {
            + 'back to my Father". We went with clothes as well as a message — people '
            + 'we met in earlier years had told us they had nothing to wear to '
            + 'church, so the Union gathered and carried them.',
+      photo: 'images/report-kwamang-2026.jpg',
       file: 'files/aconsu-annual-outreach-2026.pdf',
     },
     {
@@ -251,6 +256,7 @@ window.CHAPTER = {
       blurb: 'Sixty of us, one week, and about two thirds of the town heard the '
            + 'gospel. Twelve gave their lives to Christ, and 111 more chose to '
            + 'fellowship with the Offinso Old Town branch.',
+      photo: 'images/report-offinso-2024.jpg',
       file: 'files/offinso-evangelism-outreach-2024.pdf',
     },
   ],
