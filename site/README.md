@@ -233,6 +233,39 @@ A note on the initials: a title is not a name, so *Apostle Kwame Anane* gets
 **KA** and not AK. Apostle, Rev, Elder, Pastor, Dr and the rest are skipped —
 unless the title is all you have written, in which case it is kept.
 
+### Reports anyone can read
+
+A PDF the page links to — an outreach write-up, an annual review, the things a
+chapter gets asked for and ends up digging out of WhatsApp.
+
+Put the file in a `files/` folder inside this one (make it if it is not there),
+then add a row:
+
+```js
+reports: [
+  {
+    title: 'Orphanage Outreach',
+    date: 'September 2026',          // free text, shown under the title
+    blurb: 'Where we went, what we took, and what it cost.',
+    file: 'files/orphanage-outreach-2026.pdf',
+  },
+],
+```
+
+The whole card is the link, so there is no small target to miss on a phone, and
+it opens in a new tab rather than navigating the reader away from the page.
+
+- **A row needs both a `title` and a `file`.** A title with nothing behind it is
+  a card that goes nowhere, so it is skipped.
+- **An empty list hides the whole section**, like everything else here.
+- **A mistyped path fails the build**, the same check that guards the
+  photographs — better than a reader finding a 404.
+
+> **The shrinker does not touch PDFs.** It only ever resizes pictures. A report
+> goes up exactly as large as it is, and a 20MB PDF costs a reader on campus
+> data real money. If yours is heavy, export it again at a lower quality before
+> putting it here.
+
 ### Before you publish, fill in at least
 
 - `serviceTimes` — when and where you actually meet. Until this is set, the
