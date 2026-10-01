@@ -4424,6 +4424,97 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('the panel says the member gets told', /the member is told/.test(finJs), null);
   }
 
+  console.log('\n== National oversees chapters, it does not run them ==');
+  {
+    // The dashboard already hid the chapter panels from a National
+    // Coordinator. Hiding is not refusing: every /api/admin/* route still
+    // accepted one, because isChapterAdminOrAbove() returns true for the role.
+    // Anything that can send an HTTP request had the whole chapter dashboard,
+    // and a chapter's tagline really could be rewritten from the National
+    // account - it was, while this was being found.
+    let r6 = await call('admin', 'POST', '/api/admin/staff',
+      { username: 'nat.oversight', name: 'National Oversight', role: 'nationalCoordinator', password: 'password123' });
+    check('a National Coordinator account exists to test with', r6.status === 200, r6.data);
+    r6 = await call('natOv', 'POST', '/api/portal/login', { username: 'nat.oversight', password: 'password123' });
+    check('and signs in', r6.status === 200, r6.data);
+    r6 = await call('natOv', 'GET', '/api/portal/me');
+    check('as national, holding no chapter of their own',
+      r6.data.staff.role === 'nationalCoordinator' && !r6.data.staff.chapterId, r6.data.staff);
+
+    const asChapter = { 'X-Chapter-Id': chapterId };
+
+    // ---- what National may no longer do ----
+    r6 = await call('natOv', 'PUT', '/api/admin/chapter-settings',
+      { chapterId, tagline: 'NATIONAL WROTE THIS' }, false, asChapter);
+    check('national cannot rewrite a chapter\'s settings', r6.status === 403, r6.data);
+    r6 = await call('natOv', 'POST', '/api/admin/events',
+      { chapterId, title: 'National put this here', date: '2026-12-01', time: '10:00' }, false, asChapter);
+    check('nor put an event in a chapter\'s calendar', r6.status === 403, r6.data);
+    r6 = await call('natOv', 'POST', '/api/admin/departments', { chapterId, name: 'Dept by national' }, false, asChapter);
+    check('nor open a department inside one', r6.status === 403, r6.data);
+    r6 = await call('natOv', 'POST', '/api/admin/sermons',
+      { chapterId, title: 'S', preacher: 'P', date: '2026-12-01' }, false, asChapter);
+    check('nor post into its media', r6.status === 403, r6.data);
+    // With one active chapter the server used to infer it, so omitting the
+    // chapter was a way straight through a guard that only read what was named.
+    r6 = await call('natOv', 'POST', '/api/admin/departments', { name: 'Unnamed chapter' });
+    check('and naming no chapter at all is not a way round it', r6.status === 403, r6.data);
+
+    // ---- what National keeps ----
+    // Read stays: that is what makes it oversight rather than exile.
+    r6 = await call('natOv', 'GET', '/api/admin/members', null, false, asChapter);
+    check('national still reads a chapter\'s roster, which is the oversight', r6.status === 200, r6.data);
+    r6 = await call('natOv', 'GET', '/api/admin/chapter-settings', null, false, asChapter);
+    check('and still sees its settings without being able to change them', r6.status === 200, r6.data);
+    r6 = await call('natOv', 'GET', '/api/national/dashboard');
+    check('the national dashboard still answers', r6.status === 200, r6.data);
+
+    // The two jobs the chapter cannot do for itself: existing, and having an
+    // account to run it with.
+    r6 = await call('natOv', 'POST', '/api/national/chapters', { id: 'oversight-test', name: 'Oversight Test' });
+    check('national still opens a chapter', r6.status === 200, r6.data);
+    const ovMemberId = await registerMember('ov.admin', 'ovadmin@test.com');
+    r6 = await call('natOv', 'POST', '/api/admin/staff',
+      { username: 'ov.chapteradmin', name: 'Oversight Chapter Admin', role: 'chapterAdmin',
+        password: 'password123', memberId: ovMemberId, chapterId });
+    check('and still issues the chapter admin\'s username and password', r6.status === 200, r6.data);
+
+    // The union's own work names no chapter, and must not be caught by this.
+    r6 = await call('natOv', 'POST', '/api/admin/events',
+      { title: 'National Convention', date: '2026-12-01', time: '10:00', isNational: true });
+    check('a national event is still national work, not a chapter\'s', r6.status === 200, r6.data);
+    r6 = await call('natOv', 'POST', '/api/admin/executives',
+      { name: 'National Exec', chapterId: '__national__' });
+    check('and so is a national executive', r6.status === 200, r6.data);
+
+    // ---- the chapter runs itself ----
+    r6 = await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password123' });
+    check('the chapter admin signs in', r6.status === 200, r6.data);
+    r6 = await call('ovAdmin', 'PUT', '/api/admin/chapter-settings', { tagline: 'SET BY THE CHAPTER' });
+    check('and sets the settings national was refused', r6.status === 200, r6.data);
+    r6 = await call('admin', 'GET', '/api/admin/chapter-settings', null, false, asChapter);
+    check('so the chapter\'s own words are what stuck',
+      r6.data.tagline === 'SET BY THE CHAPTER', r6.data.tagline);
+
+    // ---- break-glass ----
+    // ADMIN_USERNAME/ADMIN_PASSWORD keeps full reach on purpose: it is how a
+    // locked-out deployment is recovered, and how the first chapter is opened
+    // before any chapter admin exists to do it.
+    //
+    // Signed in through the PORTAL door on purpose. That door sets isAdmin AND
+    // a staff record whose role is nationalCoordinator, so this session looks
+    // exactly like a National Coordinator to the guard and is let through only
+    // by the isAdmin check. Through the /api/admin/login door the session
+    // carries no staff at all, so it would pass whether that check existed or
+    // not - which is how the first version of this test proved nothing.
+    r6 = await call('breakGlass', 'POST', '/api/portal/login', { username: 'admin', password: 'admin123' });
+    check('the recovery login signs in', r6.status === 200, r6.data);
+    check('and looks like a national coordinator while doing it',
+      r6.data.staff.role === 'nationalCoordinator', r6.data.staff);
+    r6 = await call('breakGlass', 'POST', '/api/admin/departments', { chapterId, name: 'Break glass dept' });
+    check('yet is deliberately still allowed to reach into a chapter', r6.status === 200, r6.data);
+  }
+
   // The send loop only ticks once a minute, so this one is opt-in: run it with
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
   if (process.env.SMOKE_SLOW === '1') {
