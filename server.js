@@ -112,6 +112,60 @@ function requireAdmin(req, res, next) {
   return res.status(401).json({ error: 'Not authenticated' });
 }
 
+// ---------- National is oversight, not an operator ----------
+//
+// A National Coordinator may READ any chapter — that is what oversight means —
+// may open a chapter, and may issue the accounts that run it. What it may not
+// do is operate a chapter: its settings, its events, its departments, its
+// people. Those belong to the chapter's own admin.
+//
+// Enforced HERE, in one place, and not route by route. The dashboard already
+// hid the chapter panels from National, but hiding is not refusing: every
+// /api/admin/* route still accepted a National Coordinator, because
+// isChapterAdminOrAbove() returns true for one. Anything able to send an HTTP
+// request — curl, or a nav item un-hidden in the browser — had the whole
+// chapter dashboard. The tagline of a chapter could be rewritten from the
+// National account, and was, while testing this.
+//
+// Default deny: a national write is refused unless it is one of the national
+// duties below. New chapter routes are therefore closed the day they are
+// written, rather than open until somebody remembers them.
+const NATIONAL_MAY_WRITE = [
+  /^\/api\/national\//,          // chapters, founders, the church, features, reports
+  /^\/api\/admin\/staff\b/,      // the chapter admin's own username and password
+  /^\/api\/admin\/settings\b/,   // global settings — already requireNational
+  /^\/api\/admin\/(login|logout)\b/,
+  /^\/api\/portal\//,            // their own sign-in, sign-out and password
+  /^\/api\/auth\//,
+  /^\/api\/public\//
+];
+
+// Two writes name no chapter because they belong to the union itself: a
+// national event, and a national executive. Both already say so in the body,
+// and both are how the National portal does its own work.
+function writeIsExplicitlyNational(req) {
+  const body = req.body || {};
+  if (String(body.chapterId || '') === rolesLib.NATIONAL_SCOPE) return true;
+  return body.isNational === true;
+}
+
+app.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  if (!req.path.startsWith('/api/')) return next();
+  // The break-glass login (ADMIN_USERNAME / ADMIN_PASSWORD) is deliberately
+  // untouched: it is how a locked-out deployment is recovered and how the
+  // first chapter is created, before any chapter admin exists to do it.
+  if (req.session && req.session.isAdmin) return next();
+  const staff = currentStaff(req);
+  if (!staff || staff.role !== 'nationalCoordinator') return next();
+  if (NATIONAL_MAY_WRITE.some((re) => re.test(req.path))) return next();
+  if (writeIsExplicitlyNational(req)) return next();
+  return res.status(403).json({
+    error: 'National oversees chapters, it does not run them. '
+         + "This change belongs to the chapter's own admin."
+  });
+});
+
 // ---------- auth routes ----------
 // One session carries every identity this browser holds — the env admin flag,
 // a staff record, the shepherd flag, a member id — and the portals' own login
