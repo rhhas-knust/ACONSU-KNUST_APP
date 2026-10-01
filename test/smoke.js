@@ -3926,6 +3926,29 @@ const { fakeModels, fakeDb } = require('./harness.js');
     check('the executive heading only appears when there is a list under it',
       /if \(coordinators\.length\) show\(document\.getElementById\('execHeading'\)\)/.test(js), null);
 
+    // ---- reports anyone can read ----
+    check('a chapter can publish a report', 'reports' in CHAPTER, Object.keys(CHAPTER));
+    check('a missing reports list cannot throw', /\(C\.reports \|\| \[\]\)/.test(js), null);
+    check('there is a section for them', /data-section="reports"/.test(html), null);
+    check('hidden until there is one to show', /if \(reports\.length\) \{/.test(js), null);
+    // A title with no file behind it is a card that goes nowhere - the same
+    // rule that strips a nav link to a section which is not on the page.
+    check('a row with no file behind it is skipped, not shown as a dead card',
+      /return r && has\(r\.title\) && has\(r\.file\);/.test(js), null);
+    // The tap target on a phone should be the card, not a line of text in it.
+    check('the whole card is the link',
+      /'<a class="card report-card' \+ \(has\(r\.photo\) \? ' has-photo' : ''\)/.test(js)
+      && /' href="' \+ esc\(r\.file\) \+ '" target="_blank" rel="noopener">'/.test(js), null);
+    // Same treatment the activities get: a picture across the top when there is
+    // one, and no grey band promising a photograph that was never added.
+    check('a report can carry a picture, usually lifted out of the report itself',
+      (CHAPTER.reports || []).some(r => r.photo), CHAPTER.reports);
+    check('and a card without one starts at its title, not at a grey box',
+      /\.report-card:not\(\.has-photo\) \.report-row/.test(css)
+      && /has\(r\.photo\)\s*\?\s*'<img class="card-photo"/.test(js), null);
+    check('and opens in its own tab, without handing over the page',
+      /report-card[\s\S]{0,120}target="_blank" rel="noopener"/.test(js), null);
+
     // ---- the wider church, and the men who began it ----
     // The chapter is a fraction of the church. The men who founded the church
     // are not the chapter's executive, so they are not a row among the
@@ -4002,10 +4025,12 @@ const { fakeModels, fakeDb } = require('./harness.js');
     }
 
     // A path with a typo in it is a broken image on the front of the church's
-    // page, and nothing else here would catch it: the file simply is not
-    // fetched until somebody scrolls to it.
+    // page, or a report that 404s for the one person who went looking for it,
+    // and nothing else here would catch either: the file is not fetched until
+    // somebody scrolls to it or clicks it.
     {
       const referenced = [];
+      (CHAPTER.reports || []).forEach(r => { if (r && r.file) referenced.push(r.file); });
       (CHAPTER.founders || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
       (CHAPTER.ministries || []).forEach(m => { if (m && m.photo) referenced.push(m.photo); });
       if (CHAPTER.church && CHAPTER.church.logo) referenced.push(CHAPTER.church.logo);
@@ -4013,7 +4038,7 @@ const { fakeModels, fakeDb } = require('./harness.js');
       (CHAPTER.coordinators || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
       (CHAPTER.executives || []).forEach(p => { if (p && p.photo) referenced.push(p.photo); });
       const missing = referenced.filter(f => !fs.existsSync(path.join(siteDir, f)));
-      check('every photograph the chapter names is actually in the folder',
+      check('every file the chapter names is actually in the folder',
         missing.length === 0, missing);
     }
     // The three that are in there now.
@@ -4111,6 +4136,8 @@ const { fakeModels, fakeDb } = require('./harness.js');
       !/folder: `\/site`/.test(readme), null);
     check('and how to put the church\'s own mark and its founders up',
       /church\.logo/.test(readme) && /inMemoriam/.test(readme), null);
+    check('and how to publish a report, including that PDFs are not shrunk',
+      /reports: \[/.test(readme) && /does not touch PDFs/.test(readme), null);
   }
 
   console.log('\n== tithe goes to the welfare account, and the desk cannot hide its own giving ==');

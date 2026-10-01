@@ -235,6 +235,42 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
   color: rgba(255, 255, 255, 0.45);
 }
 
+/* ---------- reports ---------- */
+/* The whole card is the anchor, so the tap target is the card and not a line
+   of text inside it. */
+.report-card {
+  display: flex; gap: 16px; align-items: flex-start;
+  text-decoration: none; color: inherit;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+/* With a picture the card becomes a column: the band across the top, then the
+   badge and the words beneath it. `.card.has-photo` already sets the column
+   and strips the padding; these two put the padding back on the text and take
+   away the row gap, which would otherwise sit between the photo and the row. */
+.report-card.has-photo { gap: 0; }
+.report-card.has-photo .report-row {
+  display: flex; gap: 16px; align-items: flex-start;
+  padding: 20px 24px 24px;
+}
+.report-card:not(.has-photo) .report-row {
+  display: flex; gap: 16px; align-items: flex-start;
+}
+.report-card:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(58, 27, 84, 0.16); }
+.report-badge {
+  flex: none; display: grid; place-items: center;
+  width: 46px; height: 56px; border-radius: 8px;
+  background: var(--purple-deep); color: #fff;
+  font-size: 0.64rem; font-weight: 800; letter-spacing: 0.08em;
+}
+.report-body { min-width: 0; display: block; }
+.report-card h3 { margin: 0 0 2px; }
+.report-date {
+  display: block; font-size: 0.74rem; letter-spacing: 0.1em;
+  text-transform: uppercase; font-weight: 800; color: var(--flame-gold);
+  margin-bottom: 8px;
+}
+.report-blurb { display: block; color: var(--ink-soft); font-size: 0.92rem; }
+
 /* ---------- the wider church ---------- */
 /* The church's own mark, not the chapter's. A logo is drawn with its own
    space around it and often is not rectangular, so it is fitted whole -

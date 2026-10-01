@@ -215,6 +215,52 @@ window.CHAPTER = {
       photo: 'images/media.jpg' },
   ],
 
+  // ---- reports anyone can read -------------------------------------------
+  // A PDF the page links to: an outreach write-up, an annual review, the
+  // things a chapter gets asked for and ends up digging out of WhatsApp.
+  //
+  // PUT THE FILE in this folder's files/ directory - make the folder if it is
+  // not there yet - and write the path relative to this folder, exactly as you
+  // do for a photograph. The whole site folder is published, so the file goes
+  // up with it and the link works.
+  //
+  // A row needs BOTH a title and a file. A title with no file behind it is a
+  // card that goes nowhere, which is worse than no card, so it is skipped.
+  //
+  // An empty list hides the whole section, so this costs nothing until there
+  // is something to put in it.
+  //
+  // `photo` is optional, and the easiest place to find one is inside the report
+  // itself - a group shot from the week it describes. A card without one starts
+  // at its title rather than showing a grey box.
+  //
+  // ONE WARNING THE IMAGES DO NOT NEED: the shrinker only touches pictures. A
+  // PDF goes up exactly as large as it is, and a 20MB report costs a reader on
+  // campus data real money. If yours is heavy, export it again at a lower
+  // quality before putting it here.
+  // Newest first: somebody who clicks in is almost always after the latest one.
+  reports: [
+    {
+      title: 'Annual Evangelism Outreach',
+      date: 'Sekyere Kwamang · September 2026',
+      blurb: 'About forty-five of us spent a week there on the theme "I will go '
+           + 'back to my Father". We went with clothes as well as a message — people '
+           + 'we met in earlier years had told us they had nothing to wear to '
+           + 'church, so the Union gathered and carried them.',
+      photo: 'images/report-kwamang-2026.jpg',
+      file: 'files/aconsu-annual-outreach-2026.pdf',
+    },
+    {
+      title: 'Offinso Evangelism Outreach',
+      date: 'Offinso Old Town · August 2024',
+      blurb: 'Sixty of us, one week, and about two thirds of the town heard the '
+           + 'gospel. Twelve gave their lives to Christ, and 111 more chose to '
+           + 'fellowship with the Offinso Old Town branch.',
+      photo: 'images/report-offinso-2024.jpg',
+      file: 'files/offinso-evangelism-outreach-2024.pdf',
+    },
+  ],
+
   // ---- a word to carry --------------------------------------------------
   verse: {
     text: 'And they continued steadfastly in the apostles’ doctrine and fellowship, '
