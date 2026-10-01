@@ -234,13 +234,25 @@ window.CHAPTER = {
   // PDF goes up exactly as large as it is, and a 20MB report costs a reader on
   // campus data real money. If yours is heavy, export it again at a lower
   // quality before putting it here.
+  // Newest first: somebody who clicks in is almost always after the latest one.
   reports: [
-    // {
-    //   title: 'Orphanage Outreach',
-    //   date: 'September 2026',        // free text, shown under the title
-    //   blurb: 'Where we went, what we took, and what it cost.',
-    //   file: 'files/orphanage-outreach-2026.pdf',
-    // },
+    {
+      title: 'Annual Evangelism Outreach',
+      date: 'Sekyere Kwamang · September 2026',
+      blurb: 'About forty-five of us spent a week there on the theme "I will go '
+           + 'back to my Father". We went with clothes as well as a message — people '
+           + 'we met in earlier years had told us they had nothing to wear to '
+           + 'church, so the Union gathered and carried them.',
+      file: 'files/aconsu-annual-outreach-2026.pdf',
+    },
+    {
+      title: 'Offinso Evangelism Outreach',
+      date: 'Offinso Old Town · August 2024',
+      blurb: 'Sixty of us, one week, and about two thirds of the town heard the '
+           + 'gospel. Twelve gave their lives to Christ, and 111 more chose to '
+           + 'fellowship with the Offinso Old Town branch.',
+      file: 'files/offinso-evangelism-outreach-2024.pdf',
+    },
   ],
 
   // ---- a word to carry --------------------------------------------------
