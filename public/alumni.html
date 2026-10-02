@@ -101,7 +101,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div class="section-head">
       <p class="eyebrow">Are you ACONSU alumni?</p>
       <h2>Ask to be on the wall</h2>
-      <p style="color:var(--ink-soft);">Finished your studies and still part of the family? Send us a photo, your name and a few lines about you and what you do now. National looks at every request, and once it is approved you appear here and on the website. You do not need an account.</p>
+      <p style="color:var(--ink-soft);">Finished your studies and still part of the family? Send us a photo, your name and a few lines about you and what you do now. An admin looks at every request, and once it is approved you appear here and on the website. You do not need an account.</p>
     </div>
     <div class="ask">
       <form class="form-card" id="alumniForm" novalidate>
@@ -137,7 +137,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <div class="field">
           <label for="alContact">An email or phone number (optional)</label>
           <input type="text" id="alContact" maxlength="120" autocomplete="email">
-          <p class="hint">So National can check it is really you. It is never shown to anyone.</p>
+          <p class="hint">So an admin can check it is really you. It is never shown to anyone.</p>
         </div>
         <div class="trap" aria-hidden="true"><label>Company <input type="text" id="alCompany" tabindex="-1" autocomplete="off"></label></div>
         <label class="consent"><input type="checkbox" id="alConsent" required>
@@ -334,7 +334,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       fd.append('via', 'app');
       fd.append('photo', await shrink(photoInput.files[0], 1000), 'me.jpg');
       var data = await fetchJSON('/api/public/alumni-requests', { method: 'POST', body: fd });
-      document.getElementById('alDoneText').textContent = data.message || 'Your request has gone to National for review.';
+      document.getElementById('alDoneText').textContent = data.message || 'Your request has gone to the admins for review.';
       document.getElementById('alumniForm').hidden = true;
       document.getElementById('alDone').hidden = false;
       showToast('Request sent', 'success');

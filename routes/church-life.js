@@ -208,7 +208,7 @@ function registerChurchLifeRoutes(app, deps) {
   app.post('/api/public/alumni-requests', siteCors, requestLimiter, photoUpload('photo'), async (req, res) => {
     const thanks = (name) => ({
       success: true,
-      message: `Thank you${name ? ', ' + name.split(' ')[0] : ''}. Your request has gone to National for review. Once it is approved you will appear on the Alumni wall.`
+      message: `Thank you${name ? ', ' + name.split(' ')[0] : ''}. Your request has gone to the admins for review. Once it is approved you will appear on the Alumni wall.`
     });
     try {
       // A hidden field no person ever sees or fills. A bot fills every field it
