@@ -479,7 +479,7 @@
       }).then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (data) {
           if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
-          document.getElementById('alDoneText').textContent = data.message || 'Your request has gone to National for review.';
+          document.getElementById('alDoneText').textContent = data.message || 'Your request has gone to the admins for review.';
           form.hidden = true;
           show(document.getElementById('alDone'));
         });
