@@ -115,9 +115,16 @@ jobs:
           Done automatically. The alumni and monthly theme are copied in from the
           app (site/tools/sync-feed.js); images are only ever made smaller, and
           anything already small enough is left exactly as it was."
-          # Somebody may have pushed while this ran.
-          git pull --rebase --autostash origin main
-          git push origin HEAD:main
+          # Somebody may have pushed while this ran. Saving the files back is a
+          # convenience (it is what keeps the last good copy if the app is asleep
+          # next time); it must never be the reason the site is not published, so a
+          # refused push - a protected branch, say - is a warning, not a failure.
+          if git pull --rebase --autostash origin main && git push origin HEAD:main; then
+            echo "saved to main"
+          else
+            git rebase --abort 2>/dev/null || true
+            echo "::warning::Could not save the refreshed alumni and pictures back to the repository (is main protected against pushes?). They are published this time, but the repository still holds the older copy."
+          fi
 
       # The site is plain files: no build, nothing to go wrong between the
       # folder and the web.

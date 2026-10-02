@@ -4939,7 +4939,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
         new RegExp(`<section[^>]*data-section="${sec}"[^>]*\\bhidden\\b`).test(html), null);
     }
     check('the Alumni link in the menu waits for the feed before it is kept or dropped',
-      /function pruneDeadLinks\(includeAlumni\)/.test(siteJs) && /pruneDeadLinks\(false\);/.test(siteJs) && /pruneDeadLinks\(true\);/.test(siteJs), null);
+      /function pruneDeadLinks\(includeAlumni\)/.test(siteJs) && /pruneDeadLinks\(false\);/.test(siteJs) && /pruneDeadLinks\(true\);/.test(siteJs)
+      && /if \(id === 'alumni' && !includeAlumni\) return;/.test(siteJs), null);
     check('a missing or broken feed leaves the page standing',
       /\.catch\(function \(\) \{ return null; \}\)/.test(siteJs) && /try \{ renderTheme\(feed\.theme\); \}/.test(siteJs), null);
     check('the request form carries the chapter, a hidden trap field and the consent box',
@@ -4954,6 +4955,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('what it saves is committed from the staged files, so new photos are not missed',
       /git add site\/images site\/data/.test(wf) && /git diff --cached --quiet/.test(wf) && !/git diff --quiet -- site\/images/.test(wf), null);
     check('and the tools folder is parse-checked before anything is published', /site\/tools\/\*\.js/.test(wf), null);
+    check('a refused push back to main is a warning and never stops the publish',
+      /git push origin HEAD:main; then/.test(wf) && /::warning::Could not save/.test(wf) && !/^\s*git push origin HEAD:main\s*$/m.test(wf), null);
   }
 
   // The send loop only ticks once a minute, so this one is opt-in: run it with
