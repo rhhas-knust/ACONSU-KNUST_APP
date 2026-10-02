@@ -1501,6 +1501,16 @@ const { fakeModels, fakeDb } = require('./harness.js');
   check('an admin/chapter-admin hides a reported message', r.status === 200 && r.data.item.hidden === true, r.data);
   r = await call('member', 'GET', `/api/chat/topics/${topicId}/messages`);
   check('a hidden message no longer shows, but is not destroyed', r.data.length === 0, r.data);
+  // The moderation panel loads these two reads. They were members-only, so no
+  // admin login of any kind could open the panel at all.
+  r = await call('admin', 'GET', '/api/chat/topics');
+  check('the moderation panel can list the discussions', r.status === 200 && r.data.some(t => t.id === topicId), r.data);
+  r = await call('admin', 'GET', `/api/chat/topics/${topicId}/messages`);
+  check('and read one to moderate it', r.status === 200, r.data);
+  r = await call('anon', 'GET', '/api/chat/topics');
+  check('a signed-out visitor still cannot read discussions', r.status === 401, r.data);
+  r = await call('fin', 'GET', '/api/chat/topics');
+  check('nor can a finance officer, who moderates nothing', r.status === 401, r.data);
   r = await call('admin', 'PATCH', `/api/chat/topics/${topicId}/lock`, { locked: true });
   check('an admin locks the discussion', r.status === 200, r.data);
   r = await call('member', 'POST', `/api/chat/topics/${topicId}/messages`, { body: 'Late reply' });
@@ -4478,6 +4488,18 @@ const { fakeModels, fakeDb } = require('./harness.js');
       { username: 'ov.chapteradmin', name: 'Oversight Chapter Admin', role: 'chapterAdmin',
         password: 'password123', memberId: ovMemberId, chapterId });
     check('and still issues the chapter admin\'s username and password', r6.status === 200, r6.data);
+
+    // Discussions are a chapter's own. The chapter's admin reads them (that is
+    // the moderation panel); National, with more than one chapter in play,
+    // does not read individual conversations.
+    r6 = await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password123' });
+    r6 = await call('ovAdmin', 'GET', '/api/chat/topics');
+    check('the chapter admin\'s moderation panel lists its own chapter\'s discussions',
+      r6.status === 200 && r6.data.length > 0 && r6.data.every(t => t.chapterId === chapterId), r6.data);
+    r6 = await call('natOv', 'GET', '/api/chat/topics', null, false, asChapter);
+    check('national is not handed a chapter\'s conversations once there are several chapters', r6.status === 403, r6.data);
+    r6 = await call('natOv', 'GET', '/api/chat/topics');
+    check('and naming no chapter does not turn that into every chapter\'s', r6.status === 403, r6.data);
 
     // The union's own work names no chapter, and must not be caught by this.
     r6 = await call('natOv', 'POST', '/api/admin/events',
