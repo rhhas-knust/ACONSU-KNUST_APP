@@ -272,6 +272,55 @@ title rather than showing a grey box.
 > data real money. If yours is heavy, export it again at a lower quality before
 > putting it here.
 
+### Alumni, and the month's theme
+
+Neither of these is typed into `chapter.js`. They are written in the **app**, by
+National, and the site picks them up by itself.
+
+- **Alumni.** An alumnus sends a photo, a name and a few lines — from this page
+  or from the app. National approves it in the app (National portal → Alumni).
+  Once approved they appear in the app's Alumni Connect at once, and on this page
+  the next time the site refreshes.
+- **This week's alumnus.** One person is celebrated each week, the same one in the
+  app and here. It changes on Monday. National can choose who, or leave it to the
+  rotation, which gives everybody a turn before anyone gets a second.
+- **The month's theme**, with its prayer flyers. National sets it in the app
+  (National portal → Monthly Theme), and can write next month's ahead of time. It
+  appears on the first of the month. A month with no theme shows nothing at all.
+
+**How it gets here.** This page never asks the app while someone is looking: the
+app sleeps on free hosting and takes up to a minute to wake, and a visitor should
+not wait for that. Instead the *Landing site* workflow runs **every three hours**
+(and whenever the site changes), asks the app once — waiting for it to wake if it
+has to — and saves the answer as plain files next to the page:
+`data/feed.json`, and the photos in `images/alumni/` and `images/theme/`. If the
+app cannot be reached, nothing changes and the site is still published, so the
+last good copy stays up. To see a change straight away rather than within three
+hours: GitHub → **Actions** → **Landing site** → **Run workflow**.
+
+You do not edit those files. They are rewritten on every refresh.
+
+Two settings in `chapter.js` (the `alumni` block):
+
+```js
+alumni: {
+  chapterId: 'aconsu-knust',   // this chapter's id in the app: only its own alumni are listed
+  requestUrl: 'https://aconsu-knust-app.onrender.com',   // where "Ask to be listed" sends a request
+},
+```
+
+- **`chapterId`** must match the chapter's id in the app exactly. If it does not,
+  the wall will be empty. (National portal → Chapters shows it.)
+- **`requestUrl`** is the app's address. It is the *only* place this page talks to
+  the app, and only when someone presses **Send**. Blank it and the form goes away;
+  the wall still shows.
+- Point the refresh at a different app by setting a repository variable called
+  `APP_URL` (Settings → Secrets and variables → Actions → Variables).
+
+> **GitHub switches off scheduled workflows in a public repository after 60 days
+> with no activity at all.** If the wall ever stops updating, open Actions and
+> re-enable *Landing site*; a push to `main` also wakes it.
+
 ### Before you publish, fill in at least
 
 - `serviceTimes` — when and where you actually meet. Until this is set, the
@@ -293,10 +342,14 @@ Nothing in the other files is specific to KNUST.
 | `chapter.js` | **Your details.** The only file you edit. |
 | `index.html` | The page structure. |
 | `styles.css` | ACONSU's colours and type. Follows the reader's light/dark setting. |
-| `site.js` | Fills the page from `chapter.js` and hides what is empty. |
-| `images/` | Your logo, and any photos you add. |
+| `site.js` | Fills the page from `chapter.js` and `data/feed.json`, and hides what is empty. |
+| `images/` | Your logo, and any photos you add. `images/alumni/` and `images/theme/` are filled in automatically. |
+| `data/feed.json` | The alumni, this week's spotlight and the month's theme. Written automatically; do not edit. |
+| `tools/` | Resizes oversized photos, and copies the alumni and theme in from the app. Both run on their own. |
 
 ## Looking at it before you publish
 
 Open `index.html` in a browser. It works straight off the disk — no server
-needed. What you see is what gets published.
+needed. What you see is what gets published, with one exception: a browser will
+not read `data/feed.json` from a file on your disk, so the alumni and the theme
+only appear once the site is online. Everything else is exactly as it will be.

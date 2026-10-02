@@ -4887,6 +4887,10 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     let served;
     const evil = http.createServer((req, rsp) => {
       if (req.url.startsWith('/api/public/site-feed')) { rsp.setHeader('content-type', 'application/json'); return rsp.end(JSON.stringify(served)); }
+      // Hands a perfectly good picture to ANY file id it is asked for, so the only
+      // thing standing between a hostile id and a file outside the site is the
+      // script's own check of the id.
+      if (req.url.startsWith('/api/files/')) { rsp.setHeader('content-type', 'image/jpeg'); return rsp.end(portrait); }
       rsp.statusCode = 404; rsp.end('nope');
     });
     await new Promise(r => evil.listen(0, '127.0.0.1', r));
@@ -4900,8 +4904,10 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     };
     res = await run({ APP_URL: evilUrl });
     const hostile = readFeed();
-    check('a file id that tries to climb out of the folder is ignored', hostile.alumni[0].photo === '' && !fs.existsSync(path.join(siteDir, '..', 'escape')) && !fs.existsSync(path.join(siteDir, '..', 'escape.jpg')), hostile.alumni[0]);
-    check('and writes nothing outside the site', fs.readdirSync(path.dirname(siteDir)).every(f => !/^escape/.test(f)), null);
+    check('a file id that tries to climb out of the folder is ignored', hostile.alumni[0].photo === '', hostile.alumni[0]);
+    check('and writes nothing outside the site, even though the app would have served the picture',
+      fs.readdirSync(path.dirname(siteDir)).every(f => !/^escape/.test(f)) && fs.readdirSync(path.dirname(path.dirname(siteDir))).every(f => !/^escape/.test(f)), null);
+    check('and a flyer id with a slash in it is ignored too', hostile.theme.flyers.length === 0, hostile.theme);
     check('fields the app should never have sent are not copied',
       !/secret@example\.com|pending|declineReason|"via"/.test(fs.readFileSync(feedPath, 'utf8')), hostile.alumni[0]);
     check('and long text is cut to the limits the app enforces', hostile.alumni[0].about.length === 400 && hostile.theme.blurb.length === 1200, [hostile.alumni[0].about.length, hostile.theme.blurb.length]);
@@ -4920,6 +4926,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // ---- the page and the workflow around it ----
     const html = fs.readFileSync(path.join(siteSrc, 'index.html'), 'utf8');
     const siteJs = fs.readFileSync(path.join(siteSrc, 'site.js'), 'utf8');
+    // A site that has never been synced still has a feed to read - an empty one -
+    // so a fresh deploy does not log a failed request for a file that is not there.
+    {
+      let shipped = null;
+      try { shipped = JSON.parse(fs.readFileSync(path.join(siteSrc, 'data', 'feed.json'), 'utf8')); } catch (e) { shipped = null; }
+      check('a site that has never been synced ships an empty feed rather than none',
+        shipped && shipped.version === 1 && shipped.alumni.length === 0 && shipped.theme === null && shipped.spotlight === null, shipped);
+    }
     for (const sec of ['theme', 'alumni']) {
       check(`the ${sec} section is hidden until the feed says there is something`,
         new RegExp(`<section[^>]*data-section="${sec}"[^>]*\\bhidden\\b`).test(html), null);
