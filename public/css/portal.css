@@ -238,21 +238,3 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
   .portal-main { padding: 20px 16px 56px; }
   .portal-topbar .who .name { display: none; }
 }
-
-/* ---- National: the Alumni wall and the monthly theme ---- */
-.al-thumb { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; flex: none; background: var(--lilac-mid); }
-.al-thumb.al-initial { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: var(--brand); }
-.al-queue { display: grid; gap: 14px; margin-bottom: 26px; }
-.al-request { display: flex; gap: 16px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--flame-gold); border-radius: 14px; padding: 16px; }
-.al-request .al-thumb { width: 84px; height: 84px; border-radius: 14px; }
-.al-request h4 { margin: 0 0 2px; font-size: 1.02rem; }
-.al-request .meta { font-size: 0.8rem; color: var(--ink-faint); margin: 0 0 6px; }
-.al-request p { margin: 0 0 8px; font-size: 0.9rem; }
-.al-request .private { font-size: 0.8rem; background: var(--surface-2); border-radius: 8px; padding: 6px 10px; display: inline-block; }
-.al-celebrate { display: flex; gap: 14px; align-items: center; background: var(--surface-2); border-radius: 14px; padding: 14px 16px; margin-bottom: 22px; }
-.al-celebrate strong { display: block; }
-.badge-soft { display: inline-block; font-size: 0.7rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; background: var(--warn-bg); color: var(--warn-ink); }
-.flag-warn { background: var(--warn-bg); color: var(--warn-ink); border-radius: 12px; padding: 12px 16px; margin-bottom: 18px; font-weight: 600; font-size: 0.9rem; }
-.flyer-keep { display: flex; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
-.flyer-keep label { display: block; font-size: 0.78rem; text-align: center; font-weight: 600; }
-.flyer-keep img { height: 110px; width: auto; border-radius: 8px; display: block; margin-bottom: 4px; }
