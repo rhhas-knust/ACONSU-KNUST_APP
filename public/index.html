@@ -76,6 +76,17 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 .theme-flyers a:first-child { margin-left:auto; }
 .theme-flyers a:last-child { margin-right:auto; }
 .theme-flyers img { height:260px; width:auto; max-width:78vw; border-radius:12px; box-shadow:0 10px 26px rgba(0,0,0,0.35); display:block; }
+
+.alumni-teaser { display:flex; align-items:center; gap:16px; padding:14px 18px; border-radius:16px; text-decoration:none; color:inherit;
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); }
+.alumni-teaser:hover { border-color:var(--brand); }
+.at-photo { width:56px; height:56px; border-radius:50%; overflow:hidden; flex:none; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--brand); }
+.at-photo img { width:100%; height:100%; object-fit:cover; object-position:50% 20%; }
+.at-body { display:flex; flex-direction:column; min-width:0; }
+.at-eyebrow { font-size:0.72rem; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--flame-gold); }
+.at-body strong { font-size:1.05rem; color:var(--heading); }
+.at-work { font-size:0.88rem; color:var(--ink-soft); }
+.at-go { margin-left:auto; font-size:1.6rem; color:var(--brand); }
 </style>
 <script>
   // Runs while the head is still parsing, so the decision is made before the
@@ -199,6 +210,21 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <p class="theme-blurb" id="themeBlurb"></p>
       <div class="theme-flyers" id="themeFlyers"></div>
     </div>
+  </div>
+</section>
+
+<!-- This week's celebrated alumnus: the same person the website shows. -->
+<section id="alumniTeaser" style="display:none; padding-bottom:12px;">
+  <div class="container">
+    <a class="alumni-teaser" href="/alumni.html">
+      <span class="at-photo" id="atPhoto"></span>
+      <span class="at-body">
+        <span class="at-eyebrow">Alumni spotlight · this week</span>
+        <strong id="atName"></strong>
+        <span class="at-work" id="atWork"></span>
+      </span>
+      <span class="at-go" aria-hidden="true">›</span>
+    </a>
   </div>
 </section>
 
@@ -615,6 +641,20 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         ).join('');
       } else fl.remove();
       document.getElementById('themeSection').style.display = 'block';
+    }
+  } catch (e) { /* non-critical */ }
+
+  try {
+    const sp = await fetch('/api/public/alumni/spotlight').then(r => r.ok ? r.json() : null);
+    const a = sp && sp.alumnus;
+    if (a) {
+      document.getElementById('atPhoto').innerHTML = a.imageFileId
+        ? `<img src="/api/files/${encodeURIComponent(a.imageFileId)}" alt="" loading="lazy">`
+        : escapeHtml((a.name || '?').charAt(0));
+      document.getElementById('atName').textContent = a.name;
+      const w = document.getElementById('atWork');
+      if (a.currentWork) w.textContent = a.currentWork; else w.remove();
+      document.getElementById('alumniTeaser').style.display = 'block';
     }
   } catch (e) { /* non-critical */ }
 
