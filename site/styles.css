@@ -322,6 +322,92 @@ section { padding: clamp(52px, 8vw, 88px) 0; }
   .lead-contact { word-break: break-word; }
 }
 
+/* ---------- the month's theme ---------- */
+/* Purple like the freshers band, so the two read as the page's two "announcements". */
+.theme {
+  background: linear-gradient(135deg, var(--purple-deep) 0%, var(--purple-rich) 100%);
+  color: #fff; text-align: center; padding: clamp(34px, 5vw, 56px) 0;
+}
+.theme .eyebrow { color: var(--flame-gold); }
+.theme h2 { color: #fff; margin-bottom: 8px; }
+.theme-scripture { color: #FFD79A; font-weight: 800; margin: 0 0 12px; }
+.theme-blurb { max-width: 58ch; margin: 0 auto; color: rgba(255,255,255,0.88); }
+/* Centred when they fit, scrollable from the first one when they do not
+   (justify-content: center would clip the left edge of a long row). */
+.theme-flyers { display: flex; gap: 14px; overflow-x: auto; padding: 22px 4px 6px; -webkit-overflow-scrolling: touch; }
+.theme-flyers a { flex: none; }
+.theme-flyers a:first-child { margin-left: auto; }
+.theme-flyers a:last-child { margin-right: auto; }
+.theme-flyers img { height: 280px; width: auto; max-width: 80vw; display: block; border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.38); }
+
+/* ---------- alumni ---------- */
+/* One celebrated this week: the same person the app celebrates. */
+.spotlight {
+  display: grid; grid-template-columns: 200px 1fr; gap: 28px; align-items: center;
+  background: linear-gradient(135deg, var(--purple-deep) 0%, var(--purple-rich) 100%);
+  color: #fff; border-radius: 20px; padding: 24px; margin-bottom: 30px;
+  box-shadow: 0 18px 40px rgba(58, 27, 84, 0.22);
+}
+.spot-face {
+  width: 200px; height: 200px; border-radius: 16px; object-fit: cover; object-position: 50% 20%;
+  background: var(--surface-2); color: var(--brand); display: grid; place-items: center;
+  font-family: 'Fraunces', serif; font-weight: 700; font-size: 3rem;
+}
+.spotlight .eyebrow { color: var(--flame-gold); margin-bottom: 6px; }
+.spotlight h3 { color: #fff; font-size: 1.6rem; margin: 0 0 4px; }
+.spot-work { color: #FFD79A; font-weight: 800; margin: 0 0 10px; }
+.spotlight p { color: rgba(255,255,255,0.9); margin: 0 0 8px; }
+.spotlight .spot-meta { font-size: 0.82rem; color: rgba(255,255,255,0.7); margin: 0; }
+@media (max-width: 640px) {
+  .spotlight { grid-template-columns: 1fr; padding: 20px; gap: 18px; }
+  .spot-face { width: 100%; max-width: 260px; height: auto; aspect-ratio: 1; }
+}
+
+/* Cards keep their own height: some alumni will have written more than others,
+   and a short card stretched to match a long one is a block of empty white. */
+.alumni-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); align-items: start; }
+.alumnus {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow);
+}
+/* Square, with the crop held high so a head is never the part that is cut off. */
+.alum-face {
+  width: 100%; aspect-ratio: 1; border-radius: 12px; object-fit: cover; object-position: 50% 20%;
+  background: var(--surface-2); color: var(--brand); display: grid; place-items: center;
+  font-family: 'Fraunces', serif; font-weight: 700; font-size: 2.4rem; margin-bottom: 14px;
+}
+.alumnus h3 { margin: 0 0 2px; font-size: 1.05rem; }
+.alum-work { color: var(--brand); font-weight: 800; font-size: 0.88rem; margin: 0 0 8px; }
+.alum-about { color: var(--ink-soft); font-size: 0.9rem; margin: 0 0 8px; }
+.alum-meta { color: var(--ink-faint); font-size: 0.78rem; font-weight: 700; margin: 0; }
+.alumni-more { text-align: center; margin: 22px 0 0; }
+
+/* "Ask to be listed" */
+.ask { max-width: 640px; margin: 44px auto 0; padding-top: 34px; border-top: 1px solid var(--border); }
+.ask-intro { color: var(--ink-soft); }
+.ask .field { margin-bottom: 16px; }
+.ask .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 560px) { .ask .field-row { grid-template-columns: 1fr; } }
+.ask label { display: block; font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; color: var(--heading); }
+.ask input[type="text"], .ask input[type="number"], .ask textarea, .ask input[type="file"] {
+  width: 100%; padding: 11px 14px; font: inherit; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+}
+.ask textarea { resize: vertical; }
+.ask input:focus, .ask textarea:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+.ask .hint { font-size: 0.8rem; color: var(--ink-faint); margin: 5px 0 0; }
+.ask .ask-count { text-align: right; }
+.ask-preview { width: 96px; height: 96px; border-radius: 50%; object-fit: cover; margin-top: 10px; display: block; border: 2px solid var(--border); }
+.ask .consent { display: flex; gap: 10px; align-items: flex-start; font-weight: 500; font-size: 0.9rem; color: var(--ink-soft); margin: 4px 0 18px; }
+.ask .consent input { margin-top: 5px; flex: none; }
+/* A field no person sees. A bot fills every field it finds. */
+.ask .trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.ask-msg { margin: 12px 0 0; font-size: 0.9rem; color: var(--ink-soft); min-height: 1.4em; }
+.ask-msg.is-error { color: #A93226; font-weight: 700; }
+@media (prefers-color-scheme: dark) { .ask-msg.is-error { color: #F0897C; } }
+.ask-done { text-align: center; padding: 26px 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.ask-done p { color: var(--ink-soft); margin-bottom: 0; }
+
 .alt { background: var(--surface-2); }
 .section-head { max-width: 62ch; margin-bottom: 34px; }
 .section-head p { color: var(--ink-soft); margin-bottom: 0; }

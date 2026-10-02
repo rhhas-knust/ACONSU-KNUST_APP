@@ -315,6 +315,21 @@ window.CHAPTER = {
     twitter: '',
   },
 
+  // ---- alumni, and the month's theme -------------------------------------
+  // Both are written in the app, by National, and arrive on this page by
+  // themselves: a scheduled job copies them in (site/tools/sync-feed.js), usually
+  // within three hours. There is nothing to type here for the wall or the theme.
+  // This page never asks the app while somebody is looking at it - the app
+  // sleeps on free hosting, and a visitor should not wait for it.
+  alumni: {
+    // This chapter's id in the app, so only its own alumni are listed.
+    chapterId: 'aconsu-knust',
+    // Where "Ask to be listed" sends a request: the app's address. This is the
+    // one thing on the page that talks to the app, and only when someone presses
+    // Send. Blank hides the form.
+    requestUrl: 'https://aconsu-knust-app.onrender.com',
+  },
+
   // ---- the app -----------------------------------------------------------
   // Where members go to sign in. Blank hides every link to it, so this page
   // works on its own before the app is ready to show anyone.

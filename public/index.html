@@ -63,6 +63,19 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     #appSplash { animation: splashOut 200ms ease 160ms forwards; }
     #appSplash .splash-mark { animation: none; }
   }
+
+.month-theme { border-radius:20px; padding:28px 26px; color:#fff; text-align:center;
+  background:linear-gradient(135deg, var(--purple-deep), var(--purple-rich)); box-shadow:0 18px 40px rgba(58,27,84,0.22); }
+.month-theme .eyebrow { color:var(--flame-gold); margin-bottom:8px; }
+.month-theme h2 { color:#fff; margin:0 0 8px; }
+.month-theme .theme-scripture { color:#FFD79A; font-weight:800; margin:0 0 10px; }
+.month-theme .theme-blurb { max-width:60ch; margin:0 auto 4px; color:rgba(255,255,255,0.9); line-height:1.65; }
+/* Centred when they fit, scrollable from the first one when they do not (justify-content:center would clip the left edge). */
+.theme-flyers { display:flex; gap:14px; overflow-x:auto; padding:18px 4px 4px; -webkit-overflow-scrolling:touch; }
+.theme-flyers a { flex:none; }
+.theme-flyers a:first-child { margin-left:auto; }
+.theme-flyers a:last-child { margin-right:auto; }
+.theme-flyers img { height:260px; width:auto; max-width:78vw; border-radius:12px; box-shadow:0 10px 26px rgba(0,0,0,0.35); display:block; }
 </style>
 <script>
   // Runs while the head is still parsing, so the decision is made before the
@@ -172,6 +185,19 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <div class="dash-list" id="eventPreview"></div>
       </div>
 
+    </div>
+  </div>
+</section>
+
+<!-- The church's theme for the month, set by National. Hidden until there is one. -->
+<section id="themeSection" style="display:none; padding-bottom:12px;">
+  <div class="container">
+    <div class="month-theme">
+      <p class="eyebrow" id="themeMonth"></p>
+      <h2 id="themeTitle"></h2>
+      <p class="theme-scripture" id="themeScripture"></p>
+      <p class="theme-blurb" id="themeBlurb"></p>
+      <div class="theme-flyers" id="themeFlyers"></div>
     </div>
   </div>
 </section>
@@ -567,6 +593,30 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   }
 
   initScrollReveal('.card, .tile, .highlight-card');
+
+  // This month's theme, and this week's celebrated alumnus. Both are public
+  // and both are optional: a failure or an empty answer leaves the page as it was.
+  try {
+    const t = await fetch('/api/public/theme').then(r => r.ok ? r.json() : null);
+    const theme = t && t.theme;
+    if (theme && theme.title) {
+      const [y, m] = String(theme.month).split('-').map(Number);
+      document.getElementById('themeMonth').textContent =
+        new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) + ' · Our theme';
+      document.getElementById('themeTitle').textContent = theme.title;
+      const sc = document.getElementById('themeScripture');
+      if (theme.scripture) sc.textContent = theme.scripture; else sc.remove();
+      const bl = document.getElementById('themeBlurb');
+      if (theme.blurb) bl.textContent = theme.blurb; else bl.remove();
+      const fl = document.getElementById('themeFlyers');
+      if (theme.flyerFileIds.length) {
+        fl.innerHTML = theme.flyerFileIds.map(id =>
+          `<a href="/api/files/${encodeURIComponent(id)}" target="_blank" rel="noopener"><img src="/api/files/${encodeURIComponent(id)}" alt="Prayer flyer for ${escapeHtml(theme.title)}" loading="lazy"></a>`
+        ).join('');
+      } else fl.remove();
+      document.getElementById('themeSection').style.display = 'block';
+    }
+  } catch (e) { /* non-critical */ }
 
   // Floating background photos
   try {

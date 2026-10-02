@@ -313,18 +313,222 @@
     });
   }
 
+  // ---- the month's theme, and the alumni ---------------------------------
+  // These two come from the app, but never from the app while somebody is
+  // looking: a scheduled job copies them into data/feed.json (see
+  // tools/sync-feed.js). So this is an ordinary file next to the page. If it is
+  // missing, empty or unreadable, both sections simply stay hidden.
+  var A = C.alumni || {};
+  var requestUrl = String(A.requestUrl || '').replace(/\/+$/, '');
+
+  function monthLabel(key) {
+    var p = String(key || '').split('-'), y = +p[0], m = +p[1];
+    if (!y || !m) return '';
+    return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  }
+
+  function renderTheme(t) {
+    if (!t || !has(t.title)) return;
+    document.getElementById('themeMonth').textContent = (monthLabel(t.month) + ' · Our theme').replace(/^ · /, '');
+    document.getElementById('themeTitle').textContent = t.title;
+    [['themeScripture', t.scripture], ['themeBlurb', t.blurb]].forEach(function (pair) {
+      var el = document.getElementById(pair[0]);
+      if (has(pair[1])) el.textContent = pair[1]; else el.remove();
+    });
+    var fl = document.getElementById('themeFlyers');
+    var flyers = (t.flyers || []).filter(has);
+    if (flyers.length) {
+      fl.innerHTML = flyers.map(function (src) {
+        return '<a href="' + esc(src) + '" target="_blank" rel="noopener"><img src="' + esc(src)
+          + '" alt="Prayer flyer: ' + esc(t.title) + '" loading="lazy"></a>';
+      }).join('');
+    } else fl.remove();
+    show(document.querySelector('[data-section="theme"]'));
+  }
+
+  function alumnusMeta(a) {
+    return [has(a.classOf) ? 'Class of ' + a.classOf : ''].filter(Boolean).join(' · ');
+  }
+
+  function renderAlumni(feed) {
+    var people = (feed.alumni || []).filter(function (a) { return a && has(a.name); });
+    var spot = feed.spotlight && has(feed.spotlight.name) ? feed.spotlight : null;
+    var canAsk = has(requestUrl);
+
+    if (spot) {
+      document.getElementById('spotlight').innerHTML =
+        '<div class="spot-photo">' + faceHtml(spot, 'spot-face') + '</div>'
+        + '<div class="spot-body"><p class="eyebrow">Celebrating this week</p>'
+        + '<h3>' + esc(spot.name) + '</h3>'
+        + (has(spot.currentWork) ? '<p class="spot-work">' + esc(spot.currentWork) + '</p>' : '')
+        + '<p>' + esc(spot.about) + '</p>'
+        + (has(alumnusMeta(spot)) ? '<p class="spot-meta">' + esc(alumnusMeta(spot)) + '</p>' : '')
+        + '</div>';
+      show(document.getElementById('spotlight'));
+    }
+
+    if (people.length) {
+      // A long wall is a long scroll on a phone. The newest are shown, and the
+      // rest are one tap away rather than gone.
+      var FIRST = 12;
+      var card = function (a) {
+        return '<article class="alumnus">' + faceHtml(a, 'alum-face')
+          + '<h3>' + esc(a.name) + '</h3>'
+          + (has(a.currentWork) ? '<p class="alum-work">' + esc(a.currentWork) + '</p>' : '')
+          + (has(a.about) ? '<p class="alum-about">' + esc(a.about) + '</p>' : '')
+          + (has(alumnusMeta(a)) ? '<p class="alum-meta">' + esc(alumnusMeta(a)) + '</p>' : '')
+          + '</article>';
+      };
+      var grid = document.getElementById('alumniGrid');
+      grid.innerHTML = people.slice(0, FIRST).map(card).join('');
+      if (people.length > FIRST) {
+        var more = document.getElementById('alumniMore');
+        var btn = document.getElementById('alumniMoreBtn');
+        btn.textContent = 'Show everyone (' + people.length + ')';
+        btn.addEventListener('click', function () {
+          grid.innerHTML = people.map(card).join('');
+          more.remove();
+        });
+        show(more);
+      }
+    } else {
+      document.getElementById('alumniGrid').remove();
+    }
+
+    // With nobody to show yet, the heading's promise would be an empty room.
+    if (!spot && !people.length) {
+      document.getElementById('alumniIntro').textContent =
+        'Did you pass through ACONSU? We would love to have you on our wall.';
+    }
+    if (canAsk) show(document.getElementById('alumniAsk'));
+    // The section stands on its own once there is anyone to show, or a way to be added.
+    if (spot || people.length || canAsk) show(document.querySelector('[data-section="alumni"]'));
+  }
+
+  // The form sends one request to the app, and only when somebody presses Send.
+  function initAskForm() {
+    var form = document.getElementById('alumniForm');
+    if (!form || !has(requestUrl)) return;
+    var photoInput = document.getElementById('alPhoto');
+    var preview = document.getElementById('alPreview');
+    var about = document.getElementById('alAbout');
+    var msg = document.getElementById('alMsg');
+    var btn = document.getElementById('alSubmit');
+
+    // Shrunk here first: a 6MB phone photo should not cross a mobile connection
+    // to an app that may still be waking up.
+    function shrink(file, max) {
+      return new Promise(function (resolve) {
+        var url = URL.createObjectURL(file);
+        var im = new Image();
+        im.onload = function () {
+          try {
+            var scale = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+            var c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(im.naturalWidth * scale));
+            c.height = Math.max(1, Math.round(im.naturalHeight * scale));
+            var ctx = c.getContext('2d');
+            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+            ctx.drawImage(im, 0, 0, c.width, c.height);
+            c.toBlob(function (blob) { URL.revokeObjectURL(url); resolve(blob || file); }, 'image/jpeg', 0.85);
+          } catch (e) { URL.revokeObjectURL(url); resolve(file); }
+        };
+        im.onerror = function () { URL.revokeObjectURL(url); resolve(file); }; // the app decides what it can read
+        im.src = url;
+      });
+    }
+
+    photoInput.addEventListener('change', function () {
+      var f = photoInput.files[0];
+      if (!f) { preview.hidden = true; return; }
+      preview.src = URL.createObjectURL(f);
+      preview.hidden = false;
+    });
+    about.addEventListener('input', function () { document.getElementById('alCount').textContent = about.value.length; });
+
+    function say(text, bad) { msg.textContent = text; msg.className = 'ask-msg' + (bad ? ' is-error' : ''); }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      say('');
+      if (!document.getElementById('alName').value.trim()) return say('Please tell us your name.', true);
+      if (!photoInput.files[0]) return say('Please add a photo of you.', true);
+      if (about.value.trim().length < 15) return say('Please add a few words about you.', true);
+      if (!document.getElementById('alConsent').checked) return say('Please tick the box to say you are happy for this to be shown publicly.', true);
+
+      btn.disabled = true; btn.textContent = 'Sending…';
+      // The app sleeps when nobody has used it for a while and takes up to a
+      // minute to wake. Say so, rather than leave a button that looks dead.
+      var waking = setTimeout(function () { say('The app is waking up — this can take up to a minute. Please keep this page open.'); }, 6000);
+      var ctl = window.AbortController ? new AbortController() : null;
+      var giveUp = setTimeout(function () { if (ctl) ctl.abort(); }, 100000);
+
+      shrink(photoInput.files[0], 1000).then(function (photo) {
+        var fd = new FormData();
+        fd.append('name', document.getElementById('alName').value);
+        fd.append('chapterId', String(A.chapterId || ''));
+        fd.append('about', about.value);
+        fd.append('currentWork', document.getElementById('alWork').value);
+        fd.append('classOf', document.getElementById('alClass').value);
+        fd.append('contact', document.getElementById('alContact').value);
+        fd.append('company', document.getElementById('alCompany').value);
+        fd.append('consent', 'true');
+        fd.append('via', 'site');
+        fd.append('photo', photo, 'me.jpg');
+        return fetch(requestUrl + '/api/public/alumni-requests', { method: 'POST', body: fd, signal: ctl ? ctl.signal : undefined });
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (data) {
+          if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
+          document.getElementById('alDoneText').textContent = data.message || 'Your request has gone to National for review.';
+          form.hidden = true;
+          show(document.getElementById('alDone'));
+        });
+      }).catch(function (err) {
+        // A thrown TypeError / AbortError is "could not reach the app"; an
+        // Error we made from the app's own reply carries its own words.
+        var unreachable = err && (err.name === 'TypeError' || err.name === 'AbortError');
+        say(unreachable
+          ? 'We could not reach the app just now. Please try again in a minute.'
+          : err.message, true);
+      }).then(function () {
+        clearTimeout(waking); clearTimeout(giveUp);
+        btn.disabled = false; btn.textContent = 'Send my request';
+      });
+    });
+  }
+  initAskForm();
+
   // A link to a section that is not on the page is a promise the page does not
   // keep: "Plan a Visit" scrolling nowhere because no service times were filled
-  // in is worse than no button. Done last, once every section has decided
-  // whether it exists.
-  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
-    var id = a.getAttribute('href').slice(1);
-    if (!id || id === 'top') return;
-    var target = document.getElementById(id);
-    if (!target || target.hidden) a.remove();
-  });
-  var cta = document.querySelector('.hero-cta');
-  if (cta && !cta.children.length) cta.remove();
+  // in is worse than no button. Done once every section has decided whether it
+  // exists. The Alumni link waits for the feed, which decides that section.
+  function pruneDeadLinks(includeAlumni) {
+    document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      if (!id || id === 'top') return;
+      if (id === 'alumni' && !includeAlumni) return;
+      var target = document.getElementById(id);
+      if (!target || target.hidden) a.remove();
+    });
+    var cta = document.querySelector('.hero-cta');
+    if (cta && !cta.children.length) cta.remove();
+  }
+  pruneDeadLinks(false);
+
+  fetch('data/feed.json', { cache: 'no-cache' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .catch(function () { return null; })
+    .then(function (feed) {
+      // One bad field must not take the other section down with it.
+      if (feed && feed.version === 1) {
+        try { renderTheme(feed.theme); } catch (e) { /* the theme stays hidden */ }
+        try { renderAlumni(feed); } catch (e) { /* the alumni stay hidden */ }
+      } else {
+        // No feed: the wall is empty, but a chapter that can take requests still shows the form.
+        try { renderAlumni({}); } catch (e) { /* hidden */ }
+      }
+      pruneDeadLinks(true);
+    });
 
   var y = document.getElementById('year');
   if (y) y.textContent = String(new Date().getFullYear());
