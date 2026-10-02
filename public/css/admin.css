@@ -38,6 +38,10 @@ body { background: var(--lilac-light); }
 .admin-main { flex: 1; padding: 28px 36px; overflow-x: auto; background: var(--lilac-light); }
 .admin-panel { display: none; }
 .admin-panel.active { display: block; }
+/* National is oversight: the strip at the top of every panel it can only look at. */
+.oversight-note { margin: 0 0 16px; padding: 10px 14px; border-radius: 10px; font-size: 0.86rem; font-weight: 600;
+  background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--line); }
+body.oversight-only .admin-panel :is(input, select, textarea):disabled { opacity: 0.75; cursor: default; }
 .kpi-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 18px; }
 .kpi-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer; }
 .kpi-card:hover { border-color: #d2c3de; box-shadow: 0 6px 20px rgba(58,27,84,0.08); }

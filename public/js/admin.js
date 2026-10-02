@@ -73,6 +73,73 @@ function isTrueNationalScope() {
   return ADMIN_SCOPE.isNational && ADMIN_CHAPTERS.length !== 1;
 }
 
+// ---------- National oversees, it does not run ----------
+// The server already refuses a National Coordinator's writes to anything a
+// chapter runs (the oversight chokepoint in server.js), so this is not the
+// security boundary. It is what keeps the screen honest: without it National
+// was shown every Save, Delete and Approve a chapter admin gets, and every
+// one of them answered with a refusal.
+//
+// Only the nationalCoordinator role, exactly as on the server. The env admin
+// login is the break-glass account and keeps every button.
+const NATIONAL_WRITABLE_PANELS = new Set(['staff', 'settings']);
+// Default-deny, like the server: in a read-only panel every control is hidden
+// unless it is listed here as one that only looks. A control left off this
+// list is hidden, which costs a view; a write left visible costs a refusal.
+const OVERSIGHT_READ_CONTROLS = [
+  '[data-activity-panel]', '[data-open-kpi-panel]', // overview drill-downs
+  '[data-view-regs]', '[data-view-topic]', '[data-view-form-subs]',
+  '[data-add-note]',                                // opens the case notes; saving them is hidden
+  '#cancelModalBtn'
+].join(',');
+let CURRENT_PANEL = 'overview';
+
+function isOversightOnly() {
+  return ADMIN_SCOPE.role === 'nationalCoordinator';
+}
+function oversightLocks(panelName) {
+  return isOversightOnly() && !NATIONAL_WRITABLE_PANELS.has(panelName);
+}
+
+// Idempotent, so it can run on every re-render: hiding and disabling are
+// attribute changes, and the note is only added when it is missing.
+function lockForOversight(root, { note = false } = {}) {
+  root.querySelectorAll('button, input[type="submit"], input[type="button"]').forEach(el => {
+    if (!el.matches(OVERSIGHT_READ_CONTROLS)) el.style.display = 'none';
+  });
+  root.querySelectorAll('input, select, textarea').forEach(el => { el.disabled = true; });
+  if (note && !root.querySelector(':scope > .oversight-note')) {
+    const p = document.createElement('p');
+    p.className = 'oversight-note';
+    p.textContent = '👁 View only. National oversees chapters — changes here are made by the chapter’s own admin.';
+    root.prepend(p);
+  }
+}
+
+// Panels re-render themselves after every action and modals are rebuilt on
+// every open, so rather than touch twenty renderers, watch for new content
+// and lock it as it lands.
+function initOversightMode() {
+  if (!isOversightOnly()) return;
+  document.body.classList.add('oversight-only');
+  const hub = document.getElementById('navContentHubBtn');
+  if (hub) hub.style.display = 'none';
+  const quick = document.getElementById('mobileQuickActionsBtn');
+  if (quick) quick.style.display = 'none';
+  const watch = (el, locks, opts) => {
+    if (!el) return;
+    const run = () => { if (locks()) lockForOversight(el, opts); };
+    new MutationObserver(run).observe(el, { childList: true, subtree: true });
+    run();
+  };
+  document.querySelectorAll('.admin-panel').forEach(panel => {
+    const name = panel.id.replace(/^panel-/, '');
+    watch(panel, () => oversightLocks(name), { note: true });
+  });
+  // A modal belongs to whichever panel opened it.
+  watch(document.getElementById('modalContent'), () => oversightLocks(CURRENT_PANEL));
+}
+
 // Phase D — the national actor's admin nav is a wall of 22 chapter-operations
 // panels that were never national's to begin with (see Finding 1). Panels
 // tagged data-scope="chapter" in admin.html are hidden at true national
@@ -116,13 +183,15 @@ async function showAdminShell() {
   // empty chapter list and mis-render on the very first paint.
   await loadAdminChapterCount();
   applyNavScopeVisibility();
+  initOversightMode();
 
   // Chapter badge + brand: national is its own identity; a chapter-scoped
   // account's portal identity IS its chapter, front and center.
   const badge = document.getElementById('adminChapterBadge');
   const brand = document.getElementById('adminBrandName');
   if (ADMIN_SCOPE.isNational) {
-    if (badge) badge.textContent = isTrueNationalScope() ? '🌐 National — Public App & Events' : '🌐 National Admin';
+    if (badge) badge.textContent = isOversightOnly() ? '🌐 National · View only'
+      : (isTrueNationalScope() ? '🌐 National — Public App & Events' : '🌐 National Admin');
     if (brand) brand.textContent = 'ACONSU Admin';
     const natBtn = document.getElementById('navNationalBtn');
     const globBtn = document.getElementById('navGlobalSettingsBtn');
@@ -282,6 +351,7 @@ async function loadPanel(name) {
   // Navigating away from the overview panel leaves nothing listening for its
   // pushes; renderOverview() re-opens the connection when it's shown again.
   if (name !== 'overview') closeOverviewStream();
+  CURRENT_PANEL = name;
   if (handlers[name]) handlers[name]();
 }
 
@@ -2868,7 +2938,8 @@ function initCommandPalette() {
     { title: 'Custom Pages Builder', group: 'System & Chapter Settings', panel: 'pages', icon: '📄', keywords: 'pages custom' },
     { title: 'Media Library & Uploads', group: 'System & Chapter Settings', panel: 'media', icon: '📁', keywords: 'files uploads gridfs' },
     { title: 'Reports & PDF Export', group: 'System & Chapter Settings', panel: 'reports', icon: '📑', keywords: 'reports pdf export' }
-  ];
+  // Every quick action makes something, and National makes nothing in a chapter.
+  ].filter(c => !(isOversightOnly() && c.group === 'Quick Actions'));
 
   function executeCommand(command) {
     if (command.action) command.action();
