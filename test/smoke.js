@@ -4768,6 +4768,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       themeForm({ title: 'Walking in Newness', scripture: 'Romans 6:4', blurb: 'A month of renewal.' }, [flyer(), flyer()]), true);
     check('National sets the month\'s theme with its prayer flyers', w.status === 200 && w.data.item.flyerFileIds.length === 2, w.data);
     const twoFlyers = w.data.item.flyerFileIds;
+    const octThemeId = w.data.item.id;
     w = await call('anon', 'GET', '/api/public/theme');
     check('the app shows it to anyone', w.data.theme && w.data.theme.title === 'Walking in Newness' && w.data.theme.flyerFileIds.length === 2, w.data);
     w = await call('anon', 'GET', '/api/public/site-feed');
@@ -4788,9 +4789,160 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     life._setNowForTests(() => new Date(Date.UTC(2026, 10, 1, 0, 5)));
     w = await call('anon', 'GET', '/api/public/theme');
     check('until its month begins', w.data.theme.title === 'The Year of Open Doors' && w.data.month === nextMonth, w.data);
-    w = await call('natOv', 'DELETE', `/api/national/themes/${thisMonth}`);
+    w = await call('natOv', 'DELETE', `/api/national/themes/${octThemeId}`);
     check('a theme can be removed', w.status === 200, w.data);
     check('with its flyers', await gone(twoFlyers[0]), null);
+    life._setNowForTests(null);
+
+
+    // ---- the admins approve ----
+    // Alumni: National approves any chapter's requests, and a chapter's own admin
+    // approves their own chapter's, and nobody else's. Themes: a chapter's admin
+    // can only propose; National approves; nothing shows until then.
+    const otherChapter = 'oversight-test';
+    const near = { ...valid };
+    await ask({ ...near, name: 'Own Chapter Person', chapterId });
+    await ask({ ...near, name: 'Other Chapter Person', chapterId: otherChapter });
+    const ownReq = (await fakeModels.AlumniEntry.find({ name: 'Own Chapter Person' }))[0];
+    const otherReq = (await fakeModels.AlumniEntry.find({ name: 'Other Chapter Person' }))[0];
+    check('a request can be made to either chapter', !!ownReq && !!otherReq && otherReq.chapterId === otherChapter, [ownReq, otherReq]);
+
+    // a second chapter's own admin, so the walls between chapters can be tested from both sides
+    const fdm = new FormData();
+    fdm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    fdm.append('name', 'Other Admin'); fdm.append('email', 'otheradmin@test.com'); fdm.append('password', 'secret123'); fdm.append('chapterId', otherChapter);
+    const otherMember = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fdm })).json()).member;
+    w = await call('admin', 'POST', '/api/admin/staff', { username: 'other.chapteradmin', name: 'Other Admin', role: 'chapterAdmin', password: 'password123', memberId: otherMember.id, chapterId: otherChapter });
+    check('the other chapter has its own admin', w.status === 200, w.data);
+    await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
+    await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password123' });
+
+    w = await call('ovAdmin', 'GET', '/api/admin/alumni');
+    check('a chapter admin sees their own chapter\'s waiting requests, with the contact to check',
+      w.status === 200 && w.data.items.some(i => i.id === ownReq.id && i.contact === 'efua@example.com'), w.data);
+    check('and none of another chapter\'s', !w.data.items.some(i => i.id === otherReq.id) && w.data.items.every(i => i.chapterId === chapterId), w.data.items.map(i => i.chapterId));
+    w = await call('anon', 'GET', '/api/admin/alumni');
+    check('the chapter door is closed to the public', w.status === 401, w.data);
+    w = await call('fin', 'GET', '/api/admin/alumni');
+    check('and to a finance officer, who reviews nothing', w.status === 401, w.data);
+    w = await call('natOv', 'GET', '/api/admin/alumni');
+    check('National can still look in (oversight)', w.status === 200, w.data);
+    w = await call('natOv', 'POST', `/api/admin/alumni/${ownReq.id}/decision`, { decision: 'approve' });
+    check('but National decides through its own door, not by running a chapter\'s', w.status === 403, w.data);
+
+    w = await call('ovAdmin', 'POST', `/api/admin/alumni/${otherReq.id}/decision`, { decision: 'approve' });
+    check('a chapter admin cannot approve another chapter\'s request', w.status === 404, w.data);
+    w = await call('otherAdmin', 'POST', `/api/admin/alumni/${ownReq.id}/decision`, { decision: 'approve' });
+    check('and the other chapter\'s admin cannot approve this one\'s', w.status === 404, w.data);
+    w = await call('ovAdmin', 'PUT', `/api/admin/alumni/${otherReq.id}`, form({ name: 'Hacked', about: 'A long enough sentence here.' }), true);
+    check('nor edit it', w.status === 404, w.data);
+    w = await call('ovAdmin', 'DELETE', `/api/admin/alumni/${otherReq.id}`);
+    check('nor remove it', w.status === 404, w.data);
+    check('which is still waiting, untouched', (await fakeModels.AlumniEntry.find({ id: otherReq.id }))[0].status === 'pending', null);
+
+    w = await call('ovAdmin', 'POST', `/api/admin/alumni/${ownReq.id}/decision`, { decision: 'approve' });
+    check('a chapter admin approves their own chapter\'s request', w.status === 200 && w.data.item.status === 'approved', w.data);
+    w = await call('anon', 'GET', '/api/public/alumni');
+    check('and it is on the public wall at once', w.data.items.some(i => i.id === ownReq.id), w.data);
+    w = await call('ovAdmin', 'PUT', `/api/admin/alumni/${ownReq.id}`, form({ name: 'Own Chapter Person', about: 'Still a long enough sentence.', chapterId: otherChapter }), true);
+    check('a chapter admin cannot move someone into another chapter', w.status === 200 && w.data.item.chapterId === chapterId, w.data);
+    w = await call('ovAdmin', 'POST', '/api/admin/alumni', form({ name: 'Added By Admin', about: 'Added straight onto the wall by the chapter.', chapterId: otherChapter }), true);
+    check('what a chapter admin adds directly always goes to their own chapter', w.status === 200 && w.data.item.chapterId === chapterId && w.data.item.status === 'approved', w.data);
+    w = await call('ovAdmin', 'POST', '/api/national/alumni/spotlight/pin', { entryId: ownReq.id });
+    check('choosing the week\'s spotlight stays with National', w.status === 401, w.data);
+    w = await call('ovAdmin', 'GET', '/api/national/alumni');
+    check('and so does the all-chapters view', w.status === 401, w.data);
+    w = await call('natOv', 'POST', `/api/national/alumni/${otherReq.id}/decision`, { decision: 'approve' });
+    check('National approves the other chapter\'s request from its own door', w.status === 200, w.data);
+    w = await call('otherAdmin', 'GET', '/api/admin/alumni');
+    check('where the other chapter\'s admin sees theirs, and not this one\'s',
+      w.data.items.some(i => i.id === otherReq.id) && !w.data.items.some(i => i.id === ownReq.id), w.data.items.map(i => i.name));
+    w = await call('ovAdmin', 'POST', `/api/admin/alumni/${(await fakeModels.AlumniEntry.find({ name: 'Added By Admin' }))[0].id}/decision`, { decision: 'unlist' });
+    check('a chapter admin can take down one of their own', w.status === 200 && w.data.item.status === 'unlisted', w.data);
+
+    // ---- themes: propose, then approve ----
+    const far = '2031-03', far2 = '2031-04';
+    const farForm = (title, extra = {}, withFlyer = true) => themeForm({ title, scripture: 'Psalm 1:3', ...extra }, withFlyer ? [flyer()] : []);
+    w = await call('anon', 'PUT', `/api/admin/themes/${far}`, farForm('Nope'), true);
+    check('the public cannot propose a theme', w.status === 401, w.data);
+    w = await call('fin', 'PUT', `/api/admin/themes/${far}`, farForm('Nope'), true);
+    check('nor a finance officer', w.status === 401, w.data);
+    w = await call('ovAdmin', 'PUT', '/api/admin/themes/2020-01', farForm('Too late'), true);
+    check('a month that has already passed cannot be proposed', w.status === 400, w.data);
+    w = await call('ovAdmin', 'PUT', '/api/admin/themes/2031-13', farForm('Bad month'), true);
+    check('nor one that is not a month', w.status === 400, w.data);
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far}`, themeForm({ title: '' }), true);
+    check('a proposal needs a title', w.status === 400, w.data);
+
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far}`, farForm('Roots and Fruit', { blurb: 'Planted by the water.' }), true);
+    check('a chapter admin proposes the church\'s theme for a month', w.status === 200 && w.data.item.status === 'pending' && w.data.item.flyerFileIds.length === 1, w.data);
+    const propId = w.data.item.id;
+    const propFlyer = w.data.item.flyerFileIds[0];
+    life._setNowForTests(() => new Date(Date.UTC(2031, 2, 10, 9, 0)));
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('and, still waiting, it shows nowhere', w.data.theme === null, w.data);
+    w = await call('anon', 'GET', '/api/public/site-feed');
+    check('not even in the website feed', w.data.theme === null, w.data);
+    w = await call('natOv', 'GET', '/api/national/themes');
+    const queued = w.data.items.find(t => t.id === propId);
+    check('National sees it waiting, and from which chapter', queued && queued.status === 'pending' && queued.chapterName && w.data.pending >= 1, queued);
+    check('and the month still counts as having no theme', w.data.hasCurrent === false, w.data);
+    w = await call('ovAdmin', 'POST', `/api/national/themes/${propId}/decision`, { decision: 'approve' });
+    check('a chapter admin cannot approve their own proposal', w.status === 401, w.data);
+    w = await call('otherAdmin', 'GET', '/api/admin/themes');
+    check('another chapter\'s admin does not see it', w.status === 200 && !w.data.items.some(t => t.id === propId), w.data);
+    w = await call('otherAdmin', 'DELETE', `/api/admin/themes/${propId}`);
+    check('nor withdraw it', w.status === 404, w.data);
+    w = await call('ovAdmin', 'GET', '/api/admin/themes');
+    check('the proposing admin sees it, waiting', w.data.items.some(t => t.id === propId && t.status === 'pending'), w.data);
+
+    w = await call('natOv', 'POST', `/api/national/themes/${propId}/decision`, { decision: 'approve' });
+    check('National approves it', w.status === 200 && w.data.item.status === 'approved', w.data);
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('and now the church shows it', w.data.theme && w.data.theme.title === 'Roots and Fruit' && w.data.theme.flyerFileIds.length === 1, w.data);
+    w = await call('anon', 'GET', '/api/public/site-feed');
+    check('and so does the website feed', w.data.theme && w.data.theme.title === 'Roots and Fruit', w.data);
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far}`, farForm('Changed after approval'), true);
+    check('once live, the chapter admin can no longer change it', w.status === 403, w.data);
+    w = await call('ovAdmin', 'DELETE', `/api/admin/themes/${propId}`);
+    check('nor take it down', w.status === 403, w.data);
+
+    // a different chapter proposes the same month; approving it replaces the live one
+    w = await call('otherAdmin', 'PUT', `/api/admin/themes/${far}`, farForm('A Better Word'), true);
+    check('another chapter can propose for the same month', w.status === 200 && w.data.item.status === 'pending', w.data);
+    const rivalId = w.data.item.id;
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('while the first stays live', w.data.theme.title === 'Roots and Fruit', w.data);
+    w = await call('natOv', 'POST', `/api/national/themes/${rivalId}/decision`, { decision: 'approve' });
+    check('approving the second replaces the first', w.status === 200 && w.data.replaced === true, w.data);
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('so the church shows the second', w.data.theme.title === 'A Better Word', w.data);
+    check('and the first one\'s flyer is deleted with it', await gone(propFlyer), null);
+    check('leaving exactly one live theme for the month', (await fakeModels.MonthlyTheme.find({ month: far, status: 'approved' })).length === 1, null);
+    w = await call('natOv', 'PUT', `/api/national/themes/${far}`, themeForm({ title: 'National has the last word' }), true);
+    check('National writing the month directly updates the live theme, not a second one',
+      w.status === 200 && w.data.item.id === rivalId && (await fakeModels.MonthlyTheme.find({ month: far, status: 'approved' })).length === 1, w.data);
+
+    // declined, corrected, sent again, withdrawn
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far2}`, farForm('First try'), true);
+    const tryId = w.data.item.id, tryFlyer = w.data.item.flyerFileIds[0];
+    w = await call('natOv', 'POST', `/api/national/themes/${tryId}/decision`, { decision: 'decline', reason: 'Please use the church\'s wording' });
+    check('National can decline a proposal, with a reason', w.status === 200 && w.data.item.status === 'declined', w.data);
+    w = await call('ovAdmin', 'GET', '/api/admin/themes');
+    const seen = w.data.items.find(t => t.id === tryId);
+    check('and the chapter admin is told why', seen && seen.status === 'declined' && /church's wording/.test(seen.declineReason), seen);
+    w = await call('natOv', 'POST', `/api/national/themes/${tryId}/decision`, { decision: 'decline' });
+    check('a decision on something already decided is refused', w.status === 400, w.data);
+    life._setNowForTests(null);
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far2}`, farForm('Second try', { keepFlyers: JSON.stringify([tryFlyer]) }, false), true);
+    check('the chapter admin corrects it and sends it again', w.status === 200 && w.data.item.status === 'pending' && w.data.item.declineReason === '' && w.data.item.id === tryId && w.data.item.title === 'Second try', w.data);
+    w = await call('ovAdmin', 'DELETE', `/api/admin/themes/${tryId}`);
+    check('or withdraws it while it is still waiting', w.status === 200, w.data);
+    check('taking its flyer with it', await gone(tryFlyer), null);
+    w = await call('natOv', 'POST', `/api/national/themes/${rivalId}/decision`, { decision: 'whatever' });
+    check('an unknown decision is refused', w.status === 400, w.data);
+    w = await call('natOv', 'DELETE', `/api/national/themes/${rivalId}`);
+    check('National can remove a live theme', w.status === 200, w.data);
     life._setNowForTests(null);
 
     // ---- last: the throttle ----

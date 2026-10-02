@@ -24,6 +24,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <!-- Shared with /admin.html deliberately: both pages render the same markup
      from js/admin.js, so they must not keep private copies of its styles. -->
 <link rel="stylesheet" href="/css/admin.css">
+<link rel="stylesheet" href="/css/church-life.css">
 </head>
 <body>
 
@@ -85,6 +86,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <button data-panel="executives"><span class="nav-icon">🎓</span> Executives &amp; Verification</button>
           <button data-panel="staff"><span class="nav-icon">🔑</span> Leadership Accounts</button>
           <button data-panel="joinRequests"><span class="nav-icon">📥</span> Join Requests</button>
+          <button data-panel="alumni"><span class="nav-icon">🎓</span> Alumni Wall</button>
         </div>
       </div>
 
@@ -107,6 +109,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <button data-panel="departments"><span class="nav-icon">🚪</span> Departments</button>
           <button data-panel="notifications"><span class="nav-icon">🔔</span> Push Notifications</button>
           <button data-panel="forms"><span class="nav-icon">🧩</span> Dynamic Form Builder</button>
+          <button data-panel="theme"><span class="nav-icon">🕊️</span> Monthly Theme</button>
         </div>
       </div>
 
@@ -137,6 +140,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <div class="admin-panel" id="panel-executives"></div>
       <div class="admin-panel" id="panel-staff"></div>
       <div class="admin-panel" id="panel-joinRequests"></div>
+      <div class="admin-panel" id="panel-alumni"></div>
+      <div class="admin-panel" id="panel-theme"></div>
       <div class="admin-panel" id="panel-bibleStudies"></div>
       <div class="admin-panel" id="panel-groups"></div>
       <div class="admin-panel" id="panel-prayerRequests"></div>
@@ -178,6 +183,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </div>
 
 <script src="/js/main.js"></script>
+<script src="/js/church-life-ui.js"></script>
 <script src="/js/admin.js"></script>
 </body>
 </html>

@@ -2416,7 +2416,8 @@ registerChatRoutes(app, communityRouteDeps);
 // of routes/church-life.js). Registered after the oversight chokepoint above,
 // so National's writes here are the national ones and only those.
 registerChurchLifeRoutes(app, {
-  repo, rolesLib, gridfs, actorName, notifyAdminByEmail, escapeHtmlForEmail: escapeHtmlForEmail, compressIfImage
+  repo, rolesLib, gridfs, actorName, notifyAdminByEmail, escapeHtmlForEmail: escapeHtmlForEmail, compressIfImage,
+  isChapterAdminOrAbove
 });
 const { logMilestone } = registerMemberServiceRoutes(app, communityRouteDeps);
 

@@ -345,6 +345,13 @@ async function loadPanel(name) {
     prayerRequests: renderPrayerRequests,
     testimonies: renderTestimonies,
     contactMessages: renderContactMessages,
+    // Alumni requests for this chapter, and the church's monthly theme (this
+    // chapter proposes; National approves). Screens shared with the National
+    // portal: js/church-life-ui.js.
+    alumni: () => renderChapterPanel('panel-alumni', (el) =>
+      ChurchLifeUI.alumniPanel(el, { base: '/api/admin/alumni', national: false, reopen: () => loadPanel('alumni') })),
+    theme: () => renderChapterPanel('panel-theme', (el) =>
+      ChurchLifeUI.themeProposalPanel(el, { reopen: () => loadPanel('theme') })),
     chapterSettings: renderChapterSettings,
     settings: renderSettings
   };
@@ -353,6 +360,15 @@ async function loadPanel(name) {
   if (name !== 'overview') closeOverviewStream();
   CURRENT_PANEL = name;
   if (handlers[name]) handlers[name]();
+}
+
+// A panel that loads from the server, and says in words when it cannot,
+// instead of sitting on "Loading..." for good.
+async function renderChapterPanel(id, draw) {
+  const el = document.getElementById(id);
+  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  try { await draw(el); }
+  catch (e) { el.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load this.')}</p>`; }
 }
 
 // ---------- overview ----------
@@ -2926,6 +2942,7 @@ function initCommandPalette() {
     { title: 'Overview Dashboard', group: 'Dashboard', panel: 'overview', icon: '📊', keywords: 'home summary' },
     { title: 'Chapter Site Settings (Branding & Banner)', group: 'Settings', panel: 'chapterSettings', icon: '🏢', keywords: 'settings banner branding' },
     { title: 'Members Roster & Profiles', group: 'People & Leadership', panel: 'members', icon: '👥', keywords: 'directory people' },
+    { title: 'Alumni Wall (approve requests)', group: 'People & Leadership', panel: 'alumni', icon: '🎓', keywords: 'alumni graduates wall approve' },
     { title: 'Executive Applications & Verification', group: 'People & Leadership', panel: 'executives', icon: '🎓', keywords: 'executives roster approvals' },
     { title: 'Leadership Accounts & Roles', group: 'People & Leadership', panel: 'staff', icon: '🔑', keywords: 'staff roles portal accounts' },
     { title: 'Join Requests (New Visitors)', group: 'People & Leadership', panel: 'joinRequests', icon: '📥', keywords: 'new converts visitors' },
@@ -2938,6 +2955,7 @@ function initCommandPalette() {
     { title: 'Departments & Ministries', group: 'Operations & Gatherings', panel: 'departments', icon: '🚪', keywords: 'departments ministries' },
     { title: 'Push Notifications Broadcast', group: 'Operations & Gatherings', panel: 'notifications', icon: '🔔', keywords: 'notifications broadcast' },
     { title: 'Dynamic Form Builder', group: 'Operations & Gatherings', panel: 'forms', icon: '🧩', keywords: 'forms builder registrations' },
+    { title: 'Monthly Theme (send for approval)', group: 'Operations & Gatherings', panel: 'theme', icon: '🕊️', keywords: 'theme month prayer flyers' },
     { title: 'Welfare Requests & Support Cases', group: 'Care & Community', panel: 'welfare', icon: '❤️', keywords: 'welfare care' },
     { title: 'Community Chat Moderation', group: 'Care & Community', panel: 'chatModeration', icon: '💬', keywords: 'chat moderation community' },
     { title: 'Contact Form Inquiries', group: 'Care & Community', panel: 'contactMessages', icon: '✉️', keywords: 'contact messages' },
