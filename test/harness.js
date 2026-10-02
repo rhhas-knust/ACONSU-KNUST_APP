@@ -165,6 +165,9 @@ const fakeModels = {
     history: [], staffId: ''
   }),
   // No chapterId, deliberately: one set of founders for the whole church.
+  AlumniEntry: makeModel({ about: '', currentWork: '', classOf: '', chapterId: '', imageFileId: '', status: 'pending', via: 'app', contact: '', declineReason: '', approvedAt: null, approvedBy: '', lastSpotlightWeek: '', prevSpotlightWeek: '' }),
+  AlumniSpotlight: makeModel({ weekKey: '', entryId: '', pinned: false }),
+  MonthlyTheme: makeModel({ scripture: '', blurb: '', flyerFileIds: [] }),
   ChurchFounder: makeModel({ role: '', about: '', imageFileId: '', inMemoriam: false, order: 0 }),
   Form: makeModel({ chapterId: '', description: '', category: 'custom', linkedEventId: '', fields: [], isOpen: true, closesAt: '', createdBy: '' }),
   FormSubmission: makeModel({ chapterId: '', memberId: '', submitterName: '', submitterEmail: '', answers: {} }),

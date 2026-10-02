@@ -5,7 +5,7 @@
 //
 //   npm test              — the full suite
 //   SMOKE_SLOW=1 npm test — also waits out the 60s scheduled-send tick
-const { fakeModels, fakeDb } = require('./harness.js');
+const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
 (async () => {
   process.env.MONGODB_URI = 'mongodb://stub/aconsu_test';
@@ -13,6 +13,7 @@ const { fakeModels, fakeDb } = require('./harness.js');
   process.env.ADMIN_USERNAME = 'admin';
   process.env.ADMIN_PASSWORD = 'admin123';
   process.env.SESSION_SECRET = 'test';
+  process.env.ALUMNI_REQUEST_LIMIT_MAX = '40'; // one device sends far more than five requests across this suite
   process.env.LOGIN_RATE_LIMIT_MAX = '200'; // this suite signs far more accounts in/out per run than any real IP would in 15 minutes
   delete process.env.SHEPHERD_USERNAME;
 
@@ -4535,6 +4536,243 @@ const { fakeModels, fakeDb } = require('./harness.js');
       r6.data.staff.role === 'nationalCoordinator', r6.data.staff);
     r6 = await call('breakGlass', 'POST', '/api/admin/departments', { chapterId, name: 'Break glass dept' });
     check('yet is deliberately still allowed to reach into a chapter', r6.status === 200, r6.data);
+  }
+
+
+  console.log('\n== Alumni wall, weekly spotlight and monthly theme ==');
+  {
+    const sharp = require('sharp');
+    const life = require('../lib/churchLife');
+    const portrait = await sharp({ create: { width: 64, height: 64, channels: 3, background: { r: 51, g: 102, b: 153 } } }).jpeg().toBuffer();
+    const SITE = 'https://rhhas-knust.github.io';
+    const form = (fields, { photo = true, file = portrait, mime = 'image/jpeg' } = {}) => {
+      const fd = new FormData();
+      Object.entries(fields).forEach(([k, v]) => fd.append(k, v));
+      if (photo) fd.append('photo', new Blob([file], { type: mime }), 'me.jpg');
+      return fd;
+    };
+    const valid = { name: 'Efua Mensah', about: 'Read Pharmacy at KNUST and never missed a Sunday service.', currentWork: 'Pharmacist at Korle Bu', classOf: '2019', consent: 'true', chapterId, via: 'site', contact: 'efua@example.com' };
+    const ask = (fields, opts, headers) => call('anon', 'POST', '/api/public/alumni-requests', form(fields, opts), true, headers);
+    const gone = async (id) => !(await fakeGridfs.findFile(id));
+
+    // ---- asking to be listed ----
+    let w = await ask({ ...valid, consent: 'false' });
+    check('a request without the consent box ticked is refused', w.status === 400 && /happy for this to be shown/.test(w.data.error), w.data);
+    w = await ask(valid, { photo: false });
+    check('a request without a photo is refused', w.status === 400 && /photo/.test(w.data.error), w.data);
+    w = await ask({ ...valid, about: 'Hi' });
+    check('and one with no real description', w.status === 400, w.data);
+    w = await ask({ ...valid, about: 'Visit my page at https://example.com for details please' });
+    check('and one carrying a web link', w.status === 400 && /links/.test(w.data.error), w.data);
+    w = await ask(valid, { file: Buffer.from('this is not a picture at all'), mime: 'image/jpeg' });
+    check('a file that is not a picture is refused, whatever it claims to be', w.status === 400 && /photo/.test(w.data.error), w.data);
+    w = await ask({ ...valid, chapterId: 'no-such-chapter' });
+    check('a chapter that does not exist is refused', w.status === 400, w.data);
+    check('nothing was stored by any of those', (await fakeModels.AlumniEntry.find({})).length === 0, null);
+
+    w = await ask({ ...valid, company: 'Spam Inc' });
+    check('a bot that fills the hidden field is thanked and ignored', w.status === 200 && w.data.success === true, w.data);
+    check('and nothing is stored for it', (await fakeModels.AlumniEntry.find({})).length === 0, null);
+
+    w = await ask(valid, undefined, { Origin: SITE });
+    check('a real request from the chapter website goes through', w.status === 200 && w.data.success === true, w.data);
+    let rows = await fakeModels.AlumniEntry.find({});
+    check('it waits for review, nothing more', rows.length === 1 && rows[0].status === 'pending' && rows[0].via === 'site', rows);
+    check('with the photo re-encoded and stored', rows[0].imageFileId && !(await gone(rows[0].imageFileId)), rows[0]);
+    const efuaId = rows[0].id;
+
+    w = await ask(valid);
+    check('asking twice while waiting is told so, not queued twice', w.status === 409, w.data);
+
+    // CORS: only the chapter website may read the reply in a browser.
+    const pre = await fetch(BASE + '/api/public/alumni-requests', { method: 'OPTIONS', headers: { Origin: SITE, 'Access-Control-Request-Method': 'POST' } });
+    check('the browser\'s preflight from the website is answered', pre.status === 204 && pre.headers.get('access-control-allow-origin') === SITE, pre.status);
+    const good = await fetch(BASE + '/api/public/alumni-requests', { method: 'POST', headers: { Origin: SITE }, body: form({ ...valid, consent: 'no' }) });
+    check('the website is allowed to read the reply', good.headers.get('access-control-allow-origin') === SITE, null);
+    const evil = await fetch(BASE + '/api/public/alumni-requests', { method: 'POST', headers: { Origin: 'https://evil.example' }, body: form({ ...valid, consent: 'no' }) });
+    check('another website is not', evil.headers.get('access-control-allow-origin') === null, evil.headers.get('access-control-allow-origin'));
+
+    // ---- nobody sees it before National does ----
+    w = await call('anon', 'GET', '/api/public/alumni');
+    check('a waiting request is not on the public wall', w.status === 200 && w.data.count === 0, w.data);
+    w = await call('anon', 'GET', `/api/public/site-feed?chapter=${chapterId}`);
+    check('nor in the website feed', w.status === 200 && w.data.alumni.length === 0 && w.data.spotlight === null, w.data);
+    w = await call('anon', 'GET', '/api/national/alumni');
+    check('the queue is closed to the public', w.status === 401, w.data);
+    w = await call('ovAdmin', 'GET', '/api/national/alumni');
+    check('and to a chapter\'s own admin, because approval is National\'s', w.status === 401, w.data);
+    w = await call('natOv', 'GET', '/api/national/alumni');
+    check('National sees it waiting, with the contact detail for checking',
+      w.status === 200 && w.data.counts.pending === 1 && w.data.items[0].contact === 'efua@example.com', w.data);
+
+    // ---- approval ----
+    w = await call('ovAdmin', 'POST', `/api/national/alumni/${efuaId}/decision`, { decision: 'approve' });
+    check('a chapter admin cannot approve', w.status === 401, w.data);
+    w = await call('natOv', 'POST', `/api/national/alumni/${efuaId}/decision`, { decision: 'approve' });
+    check('National approves', w.status === 200 && w.data.item.status === 'approved' && w.data.item.approvedBy, w.data);
+    w = await call('anon', 'GET', '/api/public/alumni');
+    check('and she appears on the public wall', w.data.count === 1 && w.data.items[0].name === 'Efua Mensah', w.data);
+    const shown = JSON.stringify(w.data);
+    check('without the contact detail, status or how she applied',
+      !/efua@example\.com/.test(shown) && !/"contact"|"status"|"via"|declineReason|approvedBy/.test(shown), shown);
+    const chapterName = (await call('anon', 'GET', '/api/chapters')).data.find(c => c.id === chapterId).name;
+    check('with her chapter named', chapterName && w.data.items[0].chapterName === chapterName, w.data.items[0]);
+    w = await call('anon', 'GET', `/api/public/alumni?chapter=${chapterId}`);
+    check('a chapter\'s own site can ask for its own', w.data.count === 1, w.data);
+    w = await call('anon', 'GET', '/api/public/alumni?chapter=oversight-test');
+    check('and a different chapter\'s site gets none of hers', w.data.count === 0, w.data);
+
+    const memberView = await call('member', 'GET', '/api/alumni');
+    check('she is in the members\' Alumni Connect automatically',
+      memberView.status === 200 && memberView.data.items.some(a => a.name === 'Efua Mensah' && a.source === 'wall' && a.profession === 'Pharmacist at Korle Bu'), memberView.data);
+    w = await call('member', 'GET', '/api/alumni?industry=Technology');
+    check('but a filter she cannot satisfy leaves her out', !w.data.items.some(a => a.name === 'Efua Mensah'), w.data);
+    w = await call('member', 'GET', '/api/alumni?q=pharmacist');
+    check('and a search finds her by what she does', w.data.items.some(a => a.name === 'Efua Mensah'), w.data);
+    w = await call('anon', 'GET', '/api/alumni');
+    check('the members\' directory is still closed to the public', w.status === 401, w.data);
+
+    // ---- declining, unlisting, correcting, adding ----
+    w = await ask({ ...valid, name: 'Nobody Known', contact: '' });
+    const nobody = (await fakeModels.AlumniEntry.find({ name: 'Nobody Known' }))[0];
+    w = await call('natOv', 'POST', `/api/national/alumni/${nobody.id}/decision`, { decision: 'decline', reason: 'We could not place you' });
+    check('National declines a stranger', w.status === 200 && w.data.item.status === 'declined' && w.data.item.declineReason === 'We could not place you', w.data);
+    check('and their photo is not kept', await gone(nobody.imageFileId) && w.data.item.imageFileId === '', w.data);
+    w = await call('natOv', 'POST', `/api/national/alumni/${nobody.id}/decision`, { decision: 'approve' });
+    check('a declined request cannot simply be approved later', w.status === 400, w.data);
+    w = await call('natOv', 'POST', `/api/national/alumni/${nobody.id}/decision`, { decision: 'nonsense' });
+    check('an unknown decision is refused', w.status === 400, w.data);
+
+    w = await call('natOv', 'POST', '/api/national/alumni', form({ name: 'Kojo Asante', about: 'Civil engineer, now building roads in the Ashanti Region.', currentWork: 'Site engineer', chapterId }), true);
+    check('National can add an alumnus directly, already approved', w.status === 200 && w.data.item.status === 'approved' && w.data.item.via === 'national', w.data);
+    const kojoId = w.data.item.id;
+    const oldPhoto = w.data.item.imageFileId;
+    w = await call('natOv', 'PUT', `/api/national/alumni/${kojoId}`, form({ name: 'Kojo Asante-Boateng', about: 'Civil engineer, now building roads in the Ashanti Region.', currentWork: 'Senior site engineer' }), true);
+    check('a spelling can be corrected', w.status === 200 && w.data.item.name === 'Kojo Asante-Boateng' && w.data.item.currentWork === 'Senior site engineer', w.data);
+    check('and a new photo replaces the old one in storage', w.data.item.imageFileId !== oldPhoto && await gone(oldPhoto), w.data);
+    w = await call('ovAdmin', 'PUT', `/api/national/alumni/${kojoId}`, form({ name: 'Hacked', about: 'A long enough sentence here.' }), true);
+    check('a chapter admin cannot edit the wall', w.status === 401, w.data);
+
+    // ---- the weekly spotlight ----
+    // Three on the wall now would be simplest; there are two approved (Efua, Kojo).
+    // Approve a third so a rotation of three is visible.
+    w = await ask({ ...valid, name: 'Yaw Boadu', currentWork: 'Teacher' });
+    const yaw = (await fakeModels.AlumniEntry.find({ name: 'Yaw Boadu' }))[0];
+    await call('natOv', 'POST', `/api/national/alumni/${yaw.id}/decision`, { decision: 'approve' });
+    const spotlightName = async () => (await call('anon', 'GET', '/api/public/alumni/spotlight')).data;
+    const monday = (weeks) => new Date(Date.UTC(2026, 9, 5 + 7 * weeks, 9, 30)); // Monday of ISO week 41, 2026
+    life._setNowForTests(() => monday(0));
+    let sp = await spotlightName();
+    check('week 41 celebrates whoever has waited longest (approved first)', sp.weekKey === '2026-W41' && sp.alumnus && sp.alumnus.name === 'Efua Mensah', sp);
+    const again = await spotlightName();
+    check('asking again the same week gives the same person', again.alumnus.id === sp.alumnus.id, again);
+    life._setNowForTests(() => new Date(Date.UTC(2026, 9, 11, 23, 59)));
+    check('right up to Sunday night', (await spotlightName()).alumnus.id === sp.alumnus.id, null);
+    // Week 42 goes to Kojo. Ama is approved during that week, AFTER Yaw, who is
+    // still waiting for a first turn.
+    life._setNowForTests(() => monday(1));
+    const w42 = (await spotlightName()).alumnus.name;
+    w = await ask({ ...valid, name: 'Ama Latecomer', currentWork: 'Nurse' });
+    const ama = (await fakeModels.AlumniEntry.find({ name: 'Ama Latecomer' }))[0];
+    await call('natOv', 'POST', `/api/national/alumni/${ama.id}/decision`, { decision: 'approve' });
+    life._setNowForTests(() => monday(2));
+    const w43 = (await spotlightName()).alumnus.name;
+    life._setNowForTests(() => monday(3));
+    const w44 = (await spotlightName()).alumnus.name;
+    life._setNowForTests(() => monday(4));
+    const w45 = (await spotlightName()).alumnus.name;
+    check('the next week goes to the next person waiting, Kojo', w42 === 'Kojo Asante-Boateng', w42);
+    check('a newly approved alumnus does not jump ahead of someone still waiting for a first turn', w43 === 'Yaw Boadu', w43);
+    check('but has theirs the week after', w44 === 'Ama Latecomer', w44);
+    check('and only then does anyone get a second turn, the longest-waiting first', w45 === 'Efua Mensah', w45);
+    check('the website feed carries the same celebrated person as the app',
+      (await call('anon', 'GET', '/api/public/site-feed')).data.spotlight.name === w45, null);
+
+    // Pinning.
+    life._setNowForTests(() => monday(6));
+    const before6 = (await spotlightName()).alumnus;
+    w = await call('ovAdmin', 'POST', '/api/national/alumni/spotlight/pin', { entryId: ama.id });
+    check('a chapter admin cannot choose the spotlight', w.status === 401, w.data);
+    const target = before6.id === ama.id ? yaw.id : ama.id;
+    w = await call('natOv', 'POST', '/api/national/alumni/spotlight/pin', { entryId: target });
+    check('National can pin this week\'s alumnus', w.status === 200, w.data);
+    sp = await spotlightName();
+    check('and the app and website then celebrate them', sp.alumnus.id === target && sp.pinned === true, sp);
+    w = await call('natOv', 'POST', '/api/national/alumni/spotlight/pin', { entryId: nobody.id });
+    check('a declined request cannot be celebrated', w.status === 400, w.data);
+    w = await call('natOv', 'DELETE', '/api/national/alumni/spotlight/pin');
+    check('the week can be handed back to the rotation', w.status === 200, w.data);
+    sp = await spotlightName();
+    check('which chooses again', sp.alumnus && sp.pinned === false, sp);
+
+    // Taking the celebrated person down.
+    const celebrated = sp.alumnus.id;
+    w = await call('natOv', 'POST', `/api/national/alumni/${celebrated}/decision`, { decision: 'unlist' });
+    check('National unlists the person being celebrated', w.status === 200 && w.data.item.status === 'unlisted', w.data);
+    sp = await spotlightName();
+    check('the week chooses someone else rather than show a gap', sp.alumnus && sp.alumnus.id !== celebrated, sp);
+    w = await call('anon', 'GET', '/api/public/alumni');
+    check('and the unlisted person is off the public wall', !w.data.items.some(a => a.id === celebrated), w.data);
+    w = await call('natOv', 'POST', `/api/national/alumni/${celebrated}/decision`, { decision: 'approve' });
+    check('but can be put back', w.status === 200 && w.data.item.status === 'approved', w.data);
+
+    // Nobody on the wall at all.
+    w = await call('natOv', 'DELETE', `/api/national/alumni/${efuaId}`);
+    check('National can remove someone entirely', w.status === 200, w.data);
+    w = await call('anon', 'GET', '/api/public/alumni');
+    check('and they are gone from the wall', !w.data.items.some(a => a.id === efuaId), w.data);
+
+    // ---- the monthly theme ----
+    const thisMonth = '2026-10', nextMonth = '2026-11';
+    life._setNowForTests(() => new Date(Date.UTC(2026, 9, 20, 10)));
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('with no theme set there is nothing to show, not a stale one', w.status === 200 && w.data.theme === null && w.data.month === thisMonth, w.data);
+    w = await call('natOv', 'GET', '/api/national/themes');
+    check('National is told the month has no theme yet', w.status === 200 && w.data.hasCurrent === false && w.data.month === thisMonth && w.data.nextMonth === nextMonth, w.data);
+    const flyer = (n) => new Blob([portrait], { type: 'image/jpeg' });
+    const themeForm = (fields, flyers) => { const fd = new FormData(); Object.entries(fields).forEach(([k, v]) => fd.append(k, v)); (flyers || []).forEach((f, i) => fd.append('flyers', f, `flyer${i}.jpg`)); return fd; };
+    w = await call('ovAdmin', 'PUT', `/api/national/themes/${thisMonth}`, themeForm({ title: 'Nope' }), true);
+    check('a chapter admin cannot set the church\'s theme', w.status === 401, w.data);
+    w = await call('natOv', 'PUT', '/api/national/themes/2026-13', themeForm({ title: 'Bad month' }), true);
+    check('a month that is not a month is refused', w.status === 400, w.data);
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`, themeForm({ title: '' }), true);
+    check('a theme needs a title', w.status === 400, w.data);
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`,
+      themeForm({ title: 'Walking in Newness', scripture: 'Romans 6:4', blurb: 'A month of renewal.' }, [flyer(), flyer()]), true);
+    check('National sets the month\'s theme with its prayer flyers', w.status === 200 && w.data.item.flyerFileIds.length === 2, w.data);
+    const twoFlyers = w.data.item.flyerFileIds;
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('the app shows it to anyone', w.data.theme && w.data.theme.title === 'Walking in Newness' && w.data.theme.flyerFileIds.length === 2, w.data);
+    w = await call('anon', 'GET', '/api/public/site-feed');
+    check('and the website feed carries it too', w.data.theme && w.data.theme.scripture === 'Romans 6:4', w.data);
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`,
+      themeForm({ title: 'Walking in Newness', keepFlyers: JSON.stringify([twoFlyers[0], 'not-one-of-ours']) }), true);
+    check('editing keeps the flyers still on the form', w.status === 200 && w.data.item.flyerFileIds.length === 1 && w.data.item.flyerFileIds[0] === twoFlyers[0], w.data);
+    check('drops the others from storage', await gone(twoFlyers[1]) && !(await gone(twoFlyers[0])), null);
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`,
+      themeForm({ title: 'Walking in Newness', keepFlyers: JSON.stringify([twoFlyers[0]]) }, [new Blob(['%PDF-1.4'], { type: 'application/pdf' })]), true);
+    check('and only pictures are accepted as flyers', w.data.item.flyerFileIds.length === 1, w.data);
+
+    // Next month's can be written ahead, and waits for its month.
+    w = await call('natOv', 'PUT', `/api/national/themes/${nextMonth}`, themeForm({ title: 'The Year of Open Doors' }), true);
+    check('next month\'s theme can be prepared in advance', w.status === 200, w.data);
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('and is not shown early', w.data.theme.title === 'Walking in Newness', w.data);
+    life._setNowForTests(() => new Date(Date.UTC(2026, 10, 1, 0, 5)));
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('until its month begins', w.data.theme.title === 'The Year of Open Doors' && w.data.month === nextMonth, w.data);
+    w = await call('natOv', 'DELETE', `/api/national/themes/${thisMonth}`);
+    check('a theme can be removed', w.status === 200, w.data);
+    check('with its flyers', await gone(twoFlyers[0]), null);
+    life._setNowForTests(null);
+
+    // ---- last: the throttle ----
+    let throttled = 0;
+    for (let i = 0; i < 60 && !throttled; i++) {
+      const t = await ask({ ...valid, name: `Flood ${i}`, consent: 'false' });
+      if (t.status === 429) throttled = i + 1;
+    }
+    check('a device that floods the form is slowed down', throttled > 0 && throttled <= 45, throttled);
   }
 
   // The send loop only ticks once a minute, so this one is opt-in: run it with
