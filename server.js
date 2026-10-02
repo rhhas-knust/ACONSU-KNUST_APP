@@ -23,6 +23,7 @@ const { compressIfImage } = require('./lib/imageProcess');
 const { renderTableReport } = require('./lib/pdf');
 const { registerGroupRoutes } = require('./routes/groups');
 const { registerChatRoutes } = require('./routes/chat');
+const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
@@ -1443,6 +1444,25 @@ app.get('/api/alumni', requireMember, async (req, res) => {
         phone: p.showPhone ? (m.phone || '') : ''
       });
     }
+    // Alumni National has approved from the website or the app's request form.
+    // They have no member account and no industry or mentoring answers, so a
+    // search narrows them by what they wrote, and the industry and mentoring
+    // filters (which they cannot satisfy) leave them out rather than guess.
+    if (!industry && !mentoring) {
+      const wall = await repo.getAll('alumniEntries', { status: 'approved' });
+      const chapterNames = new Map((await repo.getAll('chapters', {})).map(c => [c.id, c.name]));
+      for (const e of wall) {
+        const hay = [e.name, e.currentWork, e.about].join(' ').toLowerCase();
+        if (q && hay.indexOf(q) < 0) continue;
+        rows.push({
+          id: e.id, source: 'wall', name: e.name, profileImageFileId: e.imageFileId || '',
+          chapterName: chapterNames.get(e.chapterId) || '', profession: e.currentWork || '',
+          organisation: '', industry: '', programme: '', graduationYear: e.classOf || '',
+          city: '', country: '', bio: e.about || '', openToMentoring: false,
+          linkedin: '', email: '', phone: ''
+        });
+      }
+    }
     rows.sort((a, b) => String(a.name).localeCompare(String(b.name)));
     res.json({ industries: ALUMNI_INDUSTRIES, count: rows.length, items: rows });
   } catch (e) {
@@ -2392,6 +2412,12 @@ const communityRouteDeps = {
 };
 registerGroupRoutes(app, communityRouteDeps);
 registerChatRoutes(app, communityRouteDeps);
+// The Alumni wall, the weekly spotlight and the monthly theme (see the header
+// of routes/church-life.js). Registered after the oversight chokepoint above,
+// so National's writes here are the national ones and only those.
+registerChurchLifeRoutes(app, {
+  repo, rolesLib, gridfs, actorName, notifyAdminByEmail, escapeHtmlForEmail: escapeHtmlForEmail, compressIfImage
+});
 const { logMilestone } = registerMemberServiceRoutes(app, communityRouteDeps);
 
 // Who runs a department is the executive holding it — the roster card

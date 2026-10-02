@@ -1,17 +1,42 @@
 // Chapter-wide community discussion routes.
 function registerChatRoutes(app, deps) {
   const { repo, models, rolesLib, requireMember, requireChapterAdmin, isChapterAdminOrAbove,
-    resolveViewerChapterId, actorName } = deps;
+    resolveViewerChapterId, actorName, chapterConfidential } = deps;
   const requireChatModerator = (req, res, next) => isChapterAdminOrAbove(req)
     ? next() : res.status(401).json({ error: 'Not authenticated' });
+  // Reading a discussion is for its members, and for the people who moderate
+  // it. The moderation panel in the admin dashboard calls these two reads, and
+  // they used to be members-only, so every admin login was refused and the
+  // panel never got past "Loading...". A moderator is held to the same rule as
+  // any other chapter record: their own chapter's, and not at all for National
+  // once there is more than one chapter (individual records stay inside the
+  // chapter they belong to).
+  const requireMemberOrModerator = (req, res, next) => {
+    if (req.session && req.session.memberId) return next();
+    if (!isChapterAdminOrAbove(req)) return res.status(401).json({ error: 'Not authenticated' });
+    return chapterConfidential('Community discussions')(req, res, next);
+  };
+  // The chapter a request is about. A member always has one. A moderator
+  // names one (the dashboard sends it), and with exactly one active chapter
+  // there is nothing to name - the same single-chapter rule the rest of the
+  // app uses. Otherwise empty, and empty must never widen into "every chapter".
+  const chapterInView = async (req) => {
+    const named = await resolveViewerChapterId(req);
+    if (named) return named;
+    if (req.session && req.session.memberId) return '';
+    return rolesLib.getSoleActiveChapterId() || '';
+  };
   const belongsToViewerChapter = async (req, item) => {
-    const chapterId = await resolveViewerChapterId(req);
+    const chapterId = await chapterInView(req);
     return !!(item && chapterId && item.chapterId === chapterId);
   };
 
-  app.get('/api/chat/topics', requireMember, async (req, res) => {
+  app.get('/api/chat/topics', requireMemberOrModerator, async (req, res) => {
     try {
-      const chapterId = await resolveViewerChapterId(req);
+      const chapterId = await chapterInView(req);
+      // A moderator with no chapter in view must not fall through to the
+      // "every chapter" filter below, which exists for members who always have one.
+      if (!chapterId && !(req.session && req.session.memberId)) return res.json([]);
       const topics = await repo.getAll('chatTopics', chapterId ? { chapterId } : {});
       const withMeta = await Promise.all(topics.map(async (t) => {
         const msgs = await repo.getAll('chatMessages', { topicId: t.id, chapterId: t.chapterId, hidden: false });
@@ -34,7 +59,7 @@ function registerChatRoutes(app, deps) {
     } catch (e) { res.status(500).json({ error: 'Could not start this discussion' }); }
   });
 
-  app.get('/api/chat/topics/:id/messages', requireMember, async (req, res) => {
+  app.get('/api/chat/topics/:id/messages', requireMemberOrModerator, async (req, res) => {
     try {
       const topic = await repo.getById('chatTopics', req.params.id);
       if (!await belongsToViewerChapter(req, topic)) return res.status(404).json({ error: 'Discussion not found' });

@@ -21,6 +21,7 @@
     <nav>
       <a class="nav-link" href="#visit">Visit</a>
       <a class="nav-link" href="#about">About</a>
+      <a class="nav-link" href="#alumni">Alumni</a>
       <a class="nav-link" href="#contact">Contact</a>
       <a class="btn btn-primary btn-sm" data-app-link hidden>Members</a>
     </nav>
@@ -54,6 +55,19 @@
   </section>
 
   <!-- When and where. Hidden entirely until there is something to say. -->
+  <!-- The church's theme for the month, with its prayer flyers. Written in the
+       app by National and copied here (data/feed.json). Hidden entirely until
+       there is one, so an unset month leaves no gap. -->
+  <section class="theme" data-section="theme" hidden>
+    <div class="wrap">
+      <p class="eyebrow" id="themeMonth"></p>
+      <h2 id="themeTitle"></h2>
+      <p class="theme-scripture" id="themeScripture"></p>
+      <p class="theme-blurb" id="themeBlurb"></p>
+      <div class="theme-flyers" id="themeFlyers"></div>
+    </div>
+  </section>
+
   <section id="visit" class="alt" data-section="visit" hidden>
     <div class="wrap">
       <div class="section-head">
@@ -151,6 +165,59 @@
            exactly as they happened.</p>
       </div>
       <div class="grid" id="reports"></div>
+    </div>
+  </section>
+
+  <!-- Alumni: the one celebrated this week, everyone who has been approved,
+       and a way to ask to be added. The names come from the app via the
+       scheduled copy (data/feed.json); a request goes to the app only when
+       somebody presses Send. Hidden until there is something to show. -->
+  <section id="alumni" class="alt" data-section="alumni" hidden>
+    <div class="wrap">
+      <div class="section-head">
+        <p class="eyebrow">Once ACONSU, Always ACONSU</p>
+        <h2>Alumni we are proud of</h2>
+        <p id="alumniIntro">The family does not end at graduation. These are some of the people who sat
+           where you sit, and what they are doing now.</p>
+      </div>
+      <article class="spotlight" id="spotlight" hidden></article>
+      <div class="alumni-grid" id="alumniGrid"></div>
+      <p class="alumni-more" id="alumniMore" hidden><button type="button" class="btn btn-ghost btn-sm" id="alumniMoreBtn"></button></p>
+
+      <div class="ask" id="alumniAsk" hidden>
+        <h3>Are you ACONSU alumni?</h3>
+        <p class="ask-intro">Send us a photo, your name and a few lines about you. National looks at every request,
+           and once it is approved you appear here and in the app.</p>
+        <form id="alumniForm" novalidate>
+          <div class="field"><label for="alName">Your name</label>
+            <input type="text" id="alName" maxlength="80" autocomplete="name" required></div>
+          <div class="field"><label for="alPhoto">A photo of you</label>
+            <input type="file" id="alPhoto" accept="image/*" required>
+            <p class="hint">A clear picture of your face. Straight from your phone is fine; we make it small for you.</p>
+            <img class="ask-preview" id="alPreview" alt="" hidden></div>
+          <div class="field"><label for="alAbout">A few words about you</label>
+            <textarea id="alAbout" maxlength="400" rows="4" placeholder="Where you served, what ACONSU meant to you, who you are now." required></textarea>
+            <p class="hint ask-count"><span id="alCount">0</span> / 400</p></div>
+          <div class="field-row">
+            <div class="field"><label for="alWork">What you do now (optional)</label>
+              <input type="text" id="alWork" maxlength="120" placeholder="Pharmacist at Korle Bu"></div>
+            <div class="field"><label for="alClass">Year you finished (optional)</label>
+              <input type="number" id="alClass" min="1950" max="2100" placeholder="2019" inputmode="numeric"></div>
+          </div>
+          <div class="field"><label for="alContact">An email or phone number (optional)</label>
+            <input type="text" id="alContact" maxlength="120" autocomplete="email">
+            <p class="hint">So National can check it is really you. It is never shown to anyone.</p></div>
+          <div class="trap" aria-hidden="true"><label>Company <input type="text" id="alCompany" tabindex="-1" autocomplete="off"></label></div>
+          <label class="consent"><input type="checkbox" id="alConsent" required>
+            <span>I am happy for my photo, name and these words to be shown publicly on this website and in the ACONSU app.</span></label>
+          <button type="submit" class="btn btn-primary" id="alSubmit">Send my request</button>
+          <p class="ask-msg" id="alMsg" role="status" aria-live="polite"></p>
+        </form>
+        <div class="ask-done" id="alDone" hidden>
+          <h3>Thank you!</h3>
+          <p id="alDoneText"></p>
+        </div>
+      </div>
     </div>
   </section>
 

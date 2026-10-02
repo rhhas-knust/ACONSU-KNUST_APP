@@ -1,7 +1,7 @@
 // ACONSU service worker — enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v15';
+const CACHE_NAME = 'aconsu-v16';
 
 const APP_SHELL = [
   '/index.html',
@@ -57,7 +57,10 @@ const APP_SHELL = [
 // as though the previous user were still signed in.
 const NEVER_CACHE_API = [
   '/api/auth/me',
-  '/api/portal/me'
+  '/api/portal/me',
+  // Carries the private contact an alumnus left so National could check them.
+  // It must not sit in a browser's cache after the page is closed.
+  '/api/national/alumni'
 ];
 
 // A meeting's signalling stream never ends, so there is no response to cache —

@@ -12,6 +12,14 @@ on:
     # republishing the landing page.
     paths: ['site/**', '.github/workflows/pages.yml']
   workflow_dispatch:      # ...and a button, for when you want one anyway
+  # The alumni wall, the weekly spotlight and the monthly theme are written in
+  # the app, not in this folder, so the site has to be republished on a clock
+  # for them to appear: nobody pushes a commit when National approves an
+  # alumnus. Every three hours is the longest anyone waits; the spotlight turns
+  # over on Monday, so the first run after midnight (UTC, which is Ghana time)
+  # brings the new week's alumnus in. Costs nothing on a public repository.
+  schedule:
+    - cron: '17 */3 * * *'
 
 # Pages needs pages/id-token; contents:write is for the shrink step committing
 # a resized photo back. Nothing else in this repo needs any of it, so they are
@@ -31,7 +39,9 @@ jobs:
   deploy:
     name: Publish site/ to GitHub Pages
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The app sleeps on free hosting and takes up to a minute to wake; the sync
+    # step below waits for it, so this is more generous than a plain publish.
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
@@ -60,13 +70,26 @@ jobs:
       # the publish now fails instead, and the last good version stays up.
       - name: Check the site parses before publishing it
         run: |
-          for f in site/*.js; do
+          for f in site/*.js site/tools/*.js; do
             node --check "$f" || {
               echo "::error file=$f::$f does not parse — refusing to publish. The last published version stays up."
               exit 1
             }
           done
           echo "site/*.js all parse"
+
+      # Bring in this chapter's alumni, this week's celebrated alumnus and this
+      # month's theme from the app, as plain files. The page never asks the app
+      # itself (it sleeps, and a visitor must not wait for it); this is where
+      # the waiting happens, where it costs nobody anything.
+      #
+      # If the app cannot be reached this step changes nothing and still
+      # succeeds: the last good copy stays published. Set a repository variable
+      # called APP_URL to point it somewhere else.
+      - name: Fetch the alumni and monthly theme from the app
+        env:
+          APP_URL: ${{ vars.APP_URL || 'https://aconsu-knust-app.onrender.com' }}
+        run: node site/tools/sync-feed.js
 
       # Shrink BEFORE the upload, in the same run, so the small file is the one
       # that gets published. Doing it in a separate workflow would publish the
@@ -75,23 +98,33 @@ jobs:
       - name: Shrink oversized images
         run: node site/tools/shrink-images.js
 
-      - name: Commit the shrunk images
+      # Staged rather than diffed: the alumni photos are NEW files, which a
+      # plain `git diff` does not see, so the first version of this step would
+      # have said "nothing changed" and published photos that were never saved.
+      - name: Commit what changed
         run: |
-          if git diff --quiet -- site/images; then
-            echo "nothing was shrunk"
+          git add site/images site/data
+          if git diff --cached --quiet; then
+            echo "nothing changed"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add site/images
-          git commit -m "Shrink oversized landing-page images
+          git commit -m "Refresh alumni and theme from the app, and shrink oversized images
 
-          Done automatically so nobody has to remember to resize before
-          uploading. Only ever makes files smaller; anything already small
-          enough is left exactly as it was."
-          # Somebody may have pushed while this ran.
-          git pull --rebase --autostash origin main
-          git push origin HEAD:main
+          Done automatically. The alumni and monthly theme are copied in from the
+          app (site/tools/sync-feed.js); images are only ever made smaller, and
+          anything already small enough is left exactly as it was."
+          # Somebody may have pushed while this ran. Saving the files back is a
+          # convenience (it is what keeps the last good copy if the app is asleep
+          # next time); it must never be the reason the site is not published, so a
+          # refused push - a protected branch, say - is a warning, not a failure.
+          if git pull --rebase --autostash origin main && git push origin HEAD:main; then
+            echo "saved to main"
+          else
+            git rebase --abort 2>/dev/null || true
+            echo "::warning::Could not save the refreshed alumni and pictures back to the repository (is main protected against pushes?). They are published this time, but the repository still holds the older copy."
+          fi
 
       # The site is plain files: no build, nothing to go wrong between the
       # folder and the web.

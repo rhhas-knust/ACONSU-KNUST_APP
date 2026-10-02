@@ -618,6 +618,16 @@ A single composer that reaches every chapter at once — for anything that isn't
 
 Channels: `app` posts to the notification feed and fires push alerts; `sms` texts every member with a phone number on file. Blank `chapterId` ensures the notification appears in every chapter's feed.
 
+### Alumni wall, weekly spotlight and monthly theme (Alumni and Monthly Theme tabs)
+
+Church-wide, like the founders: no chapter filter on reads. Code lives in `routes/church-life.js`; the pure rules (ISO week, month key, who is celebrated next) in `lib/churchLife.js`.
+
+- **Alumni ask to be listed** from the website or the app (`POST /api/public/alumni-requests`, no account needed): a photo, a name, a few lines, optionally what they do now / class / a private contact, and a consent box. A hidden field catches bots, 5 requests an hour per device, at most 200 waiting, links and non-images refused, and the photo is re-encoded so its location data is dropped. The browser-facing CORS allow-list is `SITE_ORIGINS` (default `https://rhhas-knust.github.io`).
+- **National approves** (`/api/national/alumni`, `requireNational`, so a chapter admin gets `401`): approve, edit, decline (the photo is deleted), unlist, remove, or add someone directly. Approved people show on the public wall, in the app's members-only Alumni Connect, and, after the next refresh, on the chapter website. The private contact never leaves the server (`publicAlumnus()` is a whitelist).
+- **One alumnus is celebrated each ISO week**, chosen the first time anyone asks and then fixed. Whoever has waited longest goes next, so nobody has a second turn before everyone has had a first. National can pin someone (`/api/national/alumni/spotlight/pin`) or hand the week back.
+- **Monthly theme** (`/api/national/themes/:month`, `YYYY-MM`): title, scripture, a few lines and up to six prayer flyers, written ahead of time if wanted. `GET /api/public/theme` returns the current month's only; a month with none returns nothing rather than last month's.
+- **The website** is static and never asks the app while someone is looking. `GET /api/public/site-feed?chapter=<id>` is read by a scheduled GitHub Actions job (`site/tools/sync-feed.js`, every three hours) that saves it into the site as plain files. See `site/README.md`.
+
 ### Schemas
 
 Two dedicated schemas support this phase:

@@ -1468,7 +1468,13 @@ async function renderWelfareAdmin() {
 async function renderChatModeration() {
   const el = document.getElementById('panel-chatModeration');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
-  const topics = await fetchJSON('/api/chat/topics');
+  let topics;
+  try { topics = await fetchJSON('/api/chat/topics'); }
+  catch (e) {
+    // Said in words, like the welfare panel does, rather than left on "Loading..."
+    el.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load discussions.')}</p>`;
+    return;
+  }
   el.innerHTML = `
     <h2 style="margin-bottom:8px;">Community Chat Moderation</h2>
     <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Lock a discussion, hide a message (never destroyed, just stops showing), or restrict a member from posting further from the Members tab.</p>
