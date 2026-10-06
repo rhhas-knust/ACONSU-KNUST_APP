@@ -3913,24 +3913,17 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
         /::error file=\$f::[\s\S]{0,200}exit 1/.test(wf), null);
     }
 
-    // ---- a photo behind the heading ----
-    check('a chapter can put a photo behind the heading', 'heroImage' in CHAPTER, Object.keys(CHAPTER));
-    check('and say whether it needs light words or dark ones', 'heroImageTone' in CHAPTER, Object.keys(CHAPTER));
-    check('blank keeps the gradient rather than an empty frame',
-      /if \(has\(C\.heroImage\)\)/.test(js), null);
-    // The heading has to stay readable whatever was photographed. A chapter
-    // should not have to test their own photo to discover it is not.
-    check('the photo never goes on bare - a wash sits over it',
-      /\.hero\[data-hero-tone\]::before \{/.test(css)
-      && /\.hero\[data-hero-tone="dark"\]::before/.test(css), null);
-    check('and the words flip to match the wash, not the picture',
-      /\.hero\[data-hero-tone="dark"\] h1 \{ color: #fff; \}/.test(css), null);
-    // The wash is inset:0 over the whole hero, so without this it would cover
-    // the heading it exists to make readable.
-    check('the heading sits above the wash rather than under it',
-      /\.hero\[data-hero-tone\] \.wrap \{ position: relative; z-index: 1; \}/.test(css), null);
-    check('an unrecognised tone falls back to the safe one rather than no wash',
-      /C\.heroImageTone === 'light' \? 'light' : 'dark'/.test(js), null);
+    // ---- a photo beside the heading ----
+    check('a chapter can put a photo beside the heading', 'heroImage' in CHAPTER, Object.keys(CHAPTER));
+    check('and describe it for people who cannot see it', 'heroImageAlt' in CHAPTER, Object.keys(CHAPTER));
+    check('blank leaves the opening as text rather than an empty frame',
+      /if \(!has\(C\.heroImage\)\) \{ box\.remove\(\); hero\.classList\.add\('no-photo'\)/.test(js), null);
+    // The words never sit on the picture, so they can never be unreadable on it,
+    // and there is no wash or gradient to maintain.
+    check('the photo is a picture next to the words, not a background behind them',
+      /id="heroImg"/.test(html) && !/data-hero-tone|--hero-photo/.test(css + js), null);
+    check('and it is described to a screen reader from the chapter file',
+      /img\.alt = has\(C\.heroImageAlt\) \? C\.heroImageAlt : ''/.test(js), null);
 
     // ---- who leads the chapter ----
     check('a chapter can list its coordinators', 'coordinators' in CHAPTER, Object.keys(CHAPTER));
@@ -3965,7 +3958,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // The tap target on a phone should be the card, not a line of text in it.
     check('the whole card is the link',
       /'<a class="card report-card' \+ \(has\(r\.photo\) \? ' has-photo' : ''\)/.test(js)
-      && /' href="' \+ esc\(r\.file\) \+ '" target="_blank" rel="noopener">'/.test(js), null);
+      && /' href="' \+ esc\(r\.file\) \+ '" target="_blank" rel="noopener noreferrer">'/.test(js), null);
     // Same treatment the activities get: a picture across the top when there is
     // one, and no grey band promising a photograph that was never added.
     check('a report can carry a picture, usually lifted out of the report itself',
@@ -3974,7 +3967,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       /\.report-card:not\(\.has-photo\) \.report-row/.test(css)
       && /has\(r\.photo\)\s*\?\s*'<img class="card-photo"/.test(js), null);
     check('and opens in its own tab, without handing over the page',
-      /report-card[\s\S]{0,120}target="_blank" rel="noopener"/.test(js), null);
+      /report-card[\s\S]{0,120}target="_blank" rel="noopener noreferrer"/.test(js), null);
 
     // ---- the wider church, and the men who began it ----
     // The chapter is a fraction of the church. The men who founded the church
@@ -4027,7 +4020,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // in a browser the first time the real photographs went in.
     check('a standing portrait is framed rather than cropped to a circle',
       /\.founder-face \{[\s\S]{0,200}aspect-ratio: 3 \/ 4;/.test(css)
-      && /\.founder-face \{[\s\S]{0,200}border-radius: 12px;/.test(css), null);
+      && /\.founder-face \{[\s\S]{0,200}border-radius: 6px;/.test(css), null);
     // It shares the circle rule with the chapter's faces, and both are (0,1,0),
     // so the only thing making the square corners win is coming later in the
     // file. Move this block up and every founder is a circle again.
@@ -4105,8 +4098,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // The welcome names the chapter. Bound rather than typed into the HTML, so
     // the next chapter to copy this folder gets its own name here without
     // touching anything but chapter.js - the rule the whole folder rests on.
-    check('the welcome names the chapter',
-      /Welcome to <span data-bind="name">/.test(html), null);
+    check('the page names the chapter from chapter.js, not from typed-in text',
+      /<span data-bind="name">/.test(html) && !/>ACONSU KNUST</.test(html.replace(/<title>[\s\S]*?<\/title>/, '')), null);
 
     // The same maker's line the app carries, read from the app rather than
     // retyped, so the two cannot drift apart.
@@ -4119,13 +4112,13 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       // In the footer, under the chapter's own name, not competing with it.
       check('quietly, at the foot of the page',
         html.indexOf('app-watermark') > html.indexOf('<footer')
-        && /\.app-watermark \{[\s\S]{0,160}font-size: 0\.72rem;/.test(css), null);
+        && /\.app-watermark \{[\s\S]{0,160}font-size: 0\.85rem;/.test(css), null);
     }
 
     check('it follows the reader\'s light or dark setting',
       /@media \(prefers-color-scheme: dark\)/.test(css), null);
     check('and reads on a phone without sideways scrolling',
-      /@media \(max-width: 720px\)/.test(css), null);
+      /@media \(max-width: 760px\)/.test(css) && /@media \(max-width: 640px\)/.test(css), null);
 
     // GitHub Pages serves this under /<repo>/, not at a domain root. One
     // leading slash anywhere and the stylesheet, the script or the logo 404s
@@ -5232,7 +5225,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('a field name with a dot in it is refused too', w.status === 400, w.data);
     const opForm = new FormData(); opForm.append('email[$ne]', 'x'); opForm.append('name', 'x'); opForm.append('password', 'longenough1');
     w = await call('anon', 'POST', '/api/auth/register', opForm, true);
-    check('and so is an operator hidden in a multipart upload field', w.status === 400, w.data);
+    check('and so is an operator hidden in a multipart upload field, for that reason and not another',
+      w.status === 400 && /could not be understood/.test(JSON.stringify(w.data)), w.data);
 
     // ---- push ----
     const sub = (endpoint) => call('anon', 'POST', '/api/push/subscribe', { subscription: { endpoint, keys: { p256dh: 'a', auth: 'b' } } });
@@ -5280,6 +5274,11 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
     // ---- the service worker keeps public things offline and nothing else ----
     const swSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8');
+    check('the offline cache only keeps API answers that are on the list',
+      /&& CACHEABLE_API\.some\(\(p\) => url\.pathname\.startsWith\(p\)\)/.test(swSrc), null);
+    check('and what is stored for a file records what it is, not what the uploader said it was',
+      /contentType: fileTypes\.storedType\(buffer, metadata && metadata\.contentType\)/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'gridfs.js'), 'utf8'))
+      && require('../lib/fileTypes').storedType(Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'), 'text/html') === 'image/png', null);
     const cacheable = (swSrc.match(/const CACHEABLE_API = \[([\s\S]*?)\];/) || [, ''])[1];
     check('the offline cache holds public content', ['/api/events', '/api/bible', '/api/public/'].every(p => cacheable.includes(`'${p}`)), cacheable);
     check('and never anything behind a sign-in',

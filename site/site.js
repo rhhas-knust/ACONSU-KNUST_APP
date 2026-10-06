@@ -42,18 +42,25 @@
   if (has(C.vision)) show(document.querySelector('[data-card="vision"]'));
   if (has(C.values)) show(document.querySelector('[data-card="values"]'));
 
-  // ---- a photo behind the heading ----------------------------------------
-  // The heading has to stay readable whatever the photograph is, so the image
-  // never goes on bare - it carries a wash over it, and the text colours flip
-  // to match. A chapter should not have to test their own photo to find that
-  // out.
-  if (has(C.heroImage)) {
+  // ---- a photo beside the heading ---------------------------------------
+  // A real picture next to the words rather than behind them, so the heading
+  // never depends on what was photographed. With no photo the opening is just
+  // text, and nothing is left where a picture would have been.
+  (function () {
     var hero = document.querySelector('.hero');
-    if (hero) {
-      hero.style.setProperty('--hero-photo', 'url("' + String(C.heroImage).replace(/"/g, '%22') + '")');
-      hero.setAttribute('data-hero-tone', C.heroImageTone === 'light' ? 'light' : 'dark');
-    }
-  }
+    var box = document.getElementById('heroPhoto');
+    var img = document.getElementById('heroImg');
+    if (!hero || !box || !img) return;
+    if (!has(C.heroImage)) { box.remove(); hero.classList.add('no-photo'); return; }
+    img.alt = has(C.heroImageAlt) ? C.heroImageAlt : '';
+    // A grey block pulses until the picture arrives, so the page does not jump.
+    box.hidden = false;
+    var done = function () { box.classList.remove('is-loading'); };
+    img.addEventListener('load', done);
+    img.addEventListener('error', function () { box.remove(); hero.classList.add('no-photo'); });
+    img.src = C.heroImage;
+    if (img.complete && img.naturalWidth) done();
+  })();
 
   // ---- freshers ---------------------------------------------------------
   // Two kinds of WhatsApp link, and they behave differently:
@@ -82,7 +89,7 @@
     var fSec = document.querySelector('[data-section="freshers"]');
     var fBtn = document.getElementById('freshersLink');
     fBtn.href = freshersHref;
-    fBtn.textContent = has(F.buttonLabel) ? F.buttonLabel : 'Join us on WhatsApp';
+    fBtn.textContent = has(F.buttonLabel) ? F.buttonLabel : 'Join on WhatsApp';
     var fh = document.querySelector('[data-bind="freshersHeading"]');
     var fb = document.querySelector('[data-bind="freshersBlurb"]');
     if (has(F.heading)) fh.textContent = F.heading; else fh.remove();
@@ -94,17 +101,15 @@
   var services = (C.serviceTimes || []).filter(function (s) { return s && has(s.what); });
   if (services.length) {
     document.getElementById('services').innerHTML = services.map(function (s) {
-      return '<div class="card">'
-        + '<h3>' + esc(s.what) + '</h3>'
-        + (has(s.when) ? '<p class="when">' + esc(s.when) + '</p>' : '')
-        + (has(s.where) ? '<p class="where">' + esc(s.where) + '</p>' : '')
-        + '</div>';
+      return '<li><span class="what">' + esc(s.what) + '</span>'
+        + '<span class="when">' + esc(s.when || '') + '</span>'
+        + '<span class="where">' + esc(s.where || '') + '</span></li>';
     }).join('');
     show(document.querySelector('[data-section="visit"]'));
     if (has(C.address)) show(document.getElementById('addressLine'));
     if (has(C.mapUrl)) {
       document.querySelectorAll('[data-map-link]').forEach(function (a) {
-        a.href = C.mapUrl; a.target = '_blank'; a.rel = 'noopener'; a.hidden = false;
+        a.href = C.mapUrl; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.hidden = false;
       });
     }
   }
@@ -170,7 +175,7 @@
     document.getElementById('executives').innerHTML = executives.map(function (p) {
       return '<div class="exec-card">'
         + faceHtml(p, 'exec-face')
-        + '<p class="exec-name">' + esc(p.name || '\u2014') + '</p>'
+        + '<p class="exec-name">' + esc(p.name || '') + '</p>'
         + (has(p.position) ? '<p class="exec-role">' + esc(p.position) + '</p>' : '')
         + '</div>';
     }).join('');
@@ -250,14 +255,14 @@
       // phone. It opens in a new tab rather than navigating away, because a
       // reader who opens the report has not finished with the page.
       return '<a class="card report-card' + (has(r.photo) ? ' has-photo' : '') + '"'
-        + ' href="' + esc(r.file) + '" target="_blank" rel="noopener">'
+        + ' href="' + esc(r.file) + '" target="_blank" rel="noopener noreferrer">'
         + (has(r.photo)
             ? '<img class="card-photo" src="' + esc(r.photo) + '" alt="" loading="lazy">'
             : '')
         + '<span class="report-row">'
         + '<span class="report-badge" aria-hidden="true">PDF</span>'
         + '<span class="report-body">'
-        + '<h3>' + esc(r.title) + '</h3>'
+        + '<h3>' + esc(r.title) + '<span class="sr-only"> (PDF, opens in a new tab)</span></h3>'
         + (has(r.date) ? '<span class="report-date">' + esc(r.date) + '</span>' : '')
         + (has(r.blurb) ? '<span class="report-blurb">' + esc(r.blurb) + '</span>' : '')
         + '</span></span></a>';
@@ -298,7 +303,7 @@
   }
   var socialsEl = document.getElementById('socials');
   var links = Object.keys(ICONS).filter(function (k) { return has(K[k]); }).map(function (k) {
-    return '<a href="' + esc(socialHref(k, K[k])) + '" target="_blank" rel="noopener" aria-label="' + k + '">'
+    return '<a href="' + esc(socialHref(k, K[k])) + '" target="_blank" rel="noopener noreferrer" aria-label="' + k.charAt(0).toUpperCase() + k.slice(1) + ' (opens in a new tab)">'
       + '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' + ICONS[k] + '</svg></a>';
   });
   if (links.length) socialsEl.innerHTML = links.join('');
@@ -329,7 +334,8 @@
 
   function renderTheme(t) {
     if (!t || !has(t.title)) return;
-    document.getElementById('themeMonth').textContent = (monthLabel(t.month) + ' · Our theme').replace(/^ · /, '');
+    var monthText = monthLabel(t.month);
+    document.getElementById('themeMonth').textContent = monthText ? 'Theme for ' + monthText : 'Theme for this month';
     document.getElementById('themeTitle').textContent = t.title;
     [['themeScripture', t.scripture], ['themeBlurb', t.blurb]].forEach(function (pair) {
       var el = document.getElementById(pair[0]);
@@ -354,11 +360,13 @@
     var people = (feed.alumni || []).filter(function (a) { return a && has(a.name); });
     var spot = feed.spotlight && has(feed.spotlight.name) ? feed.spotlight : null;
     var canAsk = has(requestUrl);
+    var skel = document.getElementById('alumniSkeleton');
+    if (skel) skel.remove();
 
     if (spot) {
       document.getElementById('spotlight').innerHTML =
         '<div class="spot-photo">' + faceHtml(spot, 'spot-face') + '</div>'
-        + '<div class="spot-body"><p class="eyebrow">Celebrating this week</p>'
+        + '<div class="spot-body"><p class="meta">Alumnus of the week</p>'
         + '<h3>' + esc(spot.name) + '</h3>'
         + (has(spot.currentWork) ? '<p class="spot-work">' + esc(spot.currentWork) + '</p>' : '')
         + '<p>' + esc(spot.about) + '</p>'
@@ -384,7 +392,7 @@
       if (people.length > FIRST) {
         var more = document.getElementById('alumniMore');
         var btn = document.getElementById('alumniMoreBtn');
-        btn.textContent = 'Show everyone (' + people.length + ')';
+        btn.textContent = 'Show all ' + people.length;
         btn.addEventListener('click', function () {
           grid.innerHTML = people.map(card).join('');
           more.remove();
@@ -392,13 +400,14 @@
         show(more);
       }
     } else {
-      document.getElementById('alumniGrid').remove();
+      var emptyGrid = document.getElementById('alumniGrid');
+      if (emptyGrid) emptyGrid.remove();
     }
 
     // With nobody to show yet, the heading's promise would be an empty room.
     if (!spot && !people.length) {
       document.getElementById('alumniIntro').textContent =
-        'Did you pass through ACONSU? We would love to have you on our wall.';
+        'Were you a member of ACONSU? You can ask to be listed below.';
     }
     if (canAsk) show(document.getElementById('alumniAsk'));
     // The section stands on its own once there is anyone to show, or a way to be added.
@@ -446,20 +455,31 @@
     });
     about.addEventListener('input', function () { document.getElementById('alCount').textContent = about.value.length; });
 
-    function say(text, bad) { msg.textContent = text; msg.className = 'ask-msg' + (bad ? ' is-error' : ''); }
+    var fields = form.querySelectorAll('input, textarea');
+    function clearInvalid() { Array.prototype.forEach.call(fields, function (f) { f.removeAttribute('aria-invalid'); }); }
+    // The message is announced by the live region, and focus moves to the field
+    // it is about, so a keyboard or screen reader user lands where the fix is.
+    function say(text, bad, field) {
+      clearInvalid();
+      msg.textContent = text;
+      msg.className = 'ask-msg' + (bad ? ' is-error' : '');
+      if (field) { field.setAttribute('aria-invalid', 'true'); field.focus(); }
+    }
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       say('');
-      if (!document.getElementById('alName').value.trim()) return say('Please tell us your name.', true);
-      if (!photoInput.files[0]) return say('Please add a photo of you.', true);
-      if (about.value.trim().length < 15) return say('Please add a few words about you.', true);
-      if (!document.getElementById('alConsent').checked) return say('Please tick the box to say you are happy for this to be shown publicly.', true);
+      var nameField = document.getElementById('alName');
+      var consentField = document.getElementById('alConsent');
+      if (!nameField.value.trim()) return say('Enter your name.', true, nameField);
+      if (!photoInput.files[0]) return say('Add a photo of you.', true, photoInput);
+      if (about.value.trim().length < 15) return say('Write at least a sentence about you (15 characters or more).', true, about);
+      if (!consentField.checked) return say('Tick the box to agree that your details are shown publicly.', true, consentField);
 
-      btn.disabled = true; btn.textContent = 'Sending…';
+      btn.disabled = true; btn.textContent = 'Sending...';
       // The app sleeps when nobody has used it for a while and takes up to a
       // minute to wake. Say so, rather than leave a button that looks dead.
-      var waking = setTimeout(function () { say('The app is waking up — this can take up to a minute. Please keep this page open.'); }, 6000);
+      var waking = setTimeout(function () { say('The app is starting up. This can take up to a minute, so please keep this page open.'); }, 6000);
       var ctl = window.AbortController ? new AbortController() : null;
       var giveUp = setTimeout(function () { if (ctl) ctl.abort(); }, 100000);
 
@@ -479,7 +499,7 @@
       }).then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (data) {
           if (!res.ok) throw new Error(data.error || 'Something went wrong. Please try again.');
-          document.getElementById('alDoneText').textContent = data.message || 'Your request has gone to the admins for review.';
+          document.getElementById('alDoneText').textContent = data.message || 'Your request has been sent to the admins for review.';
           form.hidden = true;
           show(document.getElementById('alDone'));
         });
@@ -488,15 +508,21 @@
         // Error we made from the app's own reply carries its own words.
         var unreachable = err && (err.name === 'TypeError' || err.name === 'AbortError');
         say(unreachable
-          ? 'We could not reach the app just now. Please try again in a minute.'
+          ? 'The app could not be reached. Try again in a minute.'
           : err.message, true);
       }).then(function () {
         clearTimeout(waking); clearTimeout(giveUp);
-        btn.disabled = false; btn.textContent = 'Send my request';
+        btn.disabled = false; btn.textContent = 'Send request';
       });
     });
   }
   initAskForm();
+  if (has(requestUrl)) {
+    // The form will be here whatever the feed says, so the section is too; the
+    // grey blocks hold the place of the wall until the feed has been read.
+    show(document.getElementById('alumniSkeleton'));
+    show(document.querySelector('[data-section="alumni"]'));
+  }
 
   // A link to a section that is not on the page is a promise the page does not
   // keep: "Plan a Visit" scrolling nowhere because no service times were filled
