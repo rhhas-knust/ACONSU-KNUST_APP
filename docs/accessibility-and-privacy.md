@@ -20,6 +20,11 @@ How it is checked:
 - **Targets**: buttons and links are at least 44px tall.
 - **Motion**: nothing moves on scroll, nothing floats, and `prefers-reduced-motion` removes what is left.
 
+`npm run ux` (`test/ux.js`) drives the website and the app in a real browser: keyboard order and the skip link, a visible focus ring on everything
+that can be reached, 40px targets, no sideways scroll down to 320px, the alumni form's error and success paths by keyboard alone, reduced motion,
+dark mode. It also writes the screenshots shown in `docs/design-system/index.html`, the living style guide (tokens, components, motion and
+live-measured colour contrast), which is drawn with the website's own stylesheet.
+
 Not covered by the automated checks and still to be done by a person: a screen reader pass (TalkBack on Android is the
 one most students will have), and a read-through of the admin panels with a keyboard only.
 

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACONSU design system</title>
+<link rel="icon" href="../../site/favicon.ico" sizes="48x48">
+<!-- The real stylesheet of the website, so this page cannot drift from what ships. -->
+<link rel="stylesheet" href="../../site/styles.css">
+<link rel="stylesheet" href="ds.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="top"><div class="wrap">
+  <span class="brand"><img src="../../site/images/logo.jpg" alt="" width="40" height="40"><span>ACONSU design system</span></span>
+  <nav aria-label="Sections">
+    <a href="#colour">Colour</a><a href="#type">Type</a><a href="#controls">Controls</a><a href="#feedback">Feedback</a><a href="#motion">Motion</a><a href="#screens">Screens</a>
+  </nav>
+</div></header>
+
+<main id="main" class="wrap ds">
+  <h1>ACONSU design system</h1>
+  <p class="lede">Tokens, components and key screens for the website and the app. Everything on this page is drawn with the website's own stylesheet; colour ratios are measured live in your browser, in your current light or dark setting.</p>
+
+  <section id="colour">
+    <h2>Colour</h2>
+    <p class="section-note">Every text colour is shown on the background it is used on, with its measured contrast. AA needs 4.5:1 for text.</p>
+    <div class="pairs" id="pairs"></div>
+    <h3>Status colours</h3>
+    <div class="status-row" id="statusRow"></div>
+    <p class="section-note">Colour never carries meaning alone: each status also has a word.</p>
+  </section>
+
+  <section id="type" class="alt">
+    <h2>Type</h2>
+    <p class="section-note">Source Serif 4 for headings, Source Sans 3 for everything else. Both are served from the site, so no request goes to Google.</p>
+    <div class="specimen">
+      <p class="meta">Display, 3rem, semibold</p><h1 style="margin:0 0 20px">ACONSU!! THE APOSTLES!!!</h1>
+      <p class="meta">H2, 2rem</p><h2 style="margin:0 0 20px">Services and meetings</h2>
+      <p class="meta">H3, 1.15rem</p><h3 style="margin:0 0 20px">Sunday Service</h3>
+      <p class="meta">Body, 1.0625rem, line height 1.6</p>
+      <p>We hold services on Sundays and Thursdays, pray together on Tuesdays and study the Bible during the week. Everyone is welcome.</p>
+      <p class="meta">Small and muted, used for hints and dates</p>
+      <p class="hint-sample">Only so an admin can check it is you. It is never shown to anyone.</p>
+    </div>
+  </section>
+
+  <section id="controls">
+    <h2>Controls</h2>
+    <h3>Buttons</h3>
+    <p class="section-note">44px tall, 6px radius, never a pill. Press scales to 0.97 in 120ms. Hover only changes colour, and only where a mouse exists.</p>
+    <div class="demo-row">
+      <button class="btn btn-primary">Primary</button>
+      <button class="btn btn-ghost">Outline</button>
+      <span class="on-band"><button class="btn btn-light">Light on colour</button></span>
+      <button class="btn btn-primary" disabled>Disabled</button>
+      <button class="btn btn-primary btn-sm">Small</button>
+      <button class="btn btn-primary force-focus">Focus ring</button>
+    </div>
+
+    <h3>Fields</h3>
+    <p class="section-note">The label is always above the field, never inside it. An error uses words, a heavier border and a red that passes contrast, and focus moves to the field.</p>
+    <div class="demo-grid ask">
+      <div class="field"><label for="d1">Your name</label><input type="text" id="d1" value="Efua Mensah"><p class="hint">As it should appear on the wall.</p></div>
+      <div class="field"><label for="d2">A few words about you</label><textarea id="d2" rows="3" aria-invalid="true" aria-describedby="d2e"></textarea><p class="ask-msg is-error" id="d2e">Write at least a sentence about you (15 characters or more).</p></div>
+      <label class="consent ask"><input type="checkbox" checked><span>I agree that my photo, name and these words are shown publicly on this website and in the ACONSU app.</span></label>
+    </div>
+  </section>
+
+  <section id="feedback" class="alt">
+    <h2>Feedback</h2>
+    <div class="demo-row" id="badges"></div>
+    <div class="ask">
+      <p class="ask-msg is-error" role="presentation">Error message: says what is wrong and how to fix it.</p>
+      <p class="ask-msg is-ok" role="presentation">Success message: says what happened.</p>
+    </div>
+    <h3>Loading</h3>
+    <p class="section-note">A grey block where content is still arriving, so the page does not jump. It pulses opacity only, and stays still for people who asked for less motion.</p>
+    <div class="alumni-grid"><div class="skeleton skel-card"></div><div class="skeleton skel-card"></div><div class="skeleton skel-card"></div></div>
+  </section>
+
+  <section id="motion">
+    <h2>Motion</h2>
+    <p class="section-note">Opacity and transform only. 150ms for state changes, up to 360ms for things arriving, always ease-out, played once. Nothing moves on a loop. With reduced motion on, arrivals become a 150ms fade.</p>
+    <div class="demo-row"><button class="btn btn-ghost" id="replay">Replay arrival</button></div>
+    <div class="demo-grid" id="motionDemo">
+      <div class="card"><h3>Arrives first</h3><p>No delay.</p></div>
+      <div class="card"><h3>Then this</h3><p>45ms later.</p></div>
+      <div class="card"><h3>Then this</h3><p>90ms later.</p></div>
+    </div>
+  </section>
+
+  <section id="screens" class="alt">
+    <h2>Key screens</h2>
+    <p class="section-note">Captured from the running website and app by <code>node test/ux.js</code>, so they are the product and not a drawing of it.</p>
+    <div class="screens" id="screenList"></div>
+  </section>
+</main>
+<script src="ds.js"></script>
+</body>
+</html>

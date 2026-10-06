@@ -11,7 +11,8 @@
     "cap:sync": "npx cap sync",
     "cap:open:android": "npx cap open android",
     "cap:open:ios": "npx cap open ios",
-    "test": "node test/smoke.js"
+    "test": "node test/smoke.js",
+    "ux": "node test/ux.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

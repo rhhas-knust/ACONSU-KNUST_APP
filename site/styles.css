@@ -422,3 +422,6 @@ footer a { color: #E9DDF3; }
   .skeleton, .is-loading { animation: none; }
   .btn, .socials a, .report-card { transition-duration: 1ms; }
 }
+
+/* Skeleton blocks sit on a tinted band as often as on the page, so they must show on both. */
+.alt .skeleton { background: var(--border); }
