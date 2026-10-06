@@ -48,9 +48,9 @@ body.oversight-only .admin-panel :is(input, select, textarea):disabled { opacity
 .kpi-card .kpi-label { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-faint); font-weight: 700; }
 .kpi-card .kpi-value { margin: 8px 0 6px; font-size: 1.7rem; color: var(--brand); font-weight: 800; line-height: 1.1; }
 .kpi-card .kpi-trend { font-size: 0.8rem; font-weight: 700; }
-.kpi-card .kpi-trend.up { color: #2e7d4f; }
-.kpi-card .kpi-trend.down { color: var(--flame-red); }
-.kpi-card .kpi-trend.flat { color: #7b6a89; }
+.kpi-card .kpi-trend.up { color: var(--ok-ink); }
+.kpi-card .kpi-trend.down { color: var(--bad-ink); }
+.kpi-card .kpi-trend.flat { color: var(--ink-faint); }
 .overview-stream { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .overview-stream ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .overview-stream li { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }

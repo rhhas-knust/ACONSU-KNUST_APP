@@ -169,7 +169,7 @@ img { max-width: 100%; display: block; }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; transform: none; }
 .btn-primary { background: var(--action); color: var(--action-ink); }
 .btn-outline { background: transparent; border-color: var(--brand); color: var(--brand); }
-.btn-flame { background: var(--flame-gold); color:var(--ink); }
+.btn-flame { background: var(--flame-gold); color: #241530; }
 .btn-sm { min-height: 40px; padding: 8px 14px; font-size: 0.95rem; }
 .btn-block { width: 100%; justify-content: center; }
 @media (hover: hover) and (pointer: fine) {

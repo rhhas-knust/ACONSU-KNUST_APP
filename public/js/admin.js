@@ -1700,7 +1700,7 @@ async function renderExecutives() {
     <div class="portal-card" style="margin-bottom:22px;">
       <h3>Executive Applications (${applications.length})</h3>
       <p class="hint">Review these the same way you review members. Approving verifies the member and activates their executive identity.</p>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable"><table>
+      <div class="table-wrap" tabindex="0"><table>
         <thead><tr><th>Name</th><th>Contact</th><th>Role</th><th>Department</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${applications.map(a => `
           <tr>

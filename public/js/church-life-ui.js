@@ -129,7 +129,7 @@
         }).join('') : '<p class="muted">Nobody is waiting. New requests appear here' + (cfg.national ? ', and you get an email when one arrives.' : '.') + '</p>')
       + '</div>'
 
-      + '<h3>On the wall (' + wall.length + ')</h3><div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable" style="margin-bottom:26px;"><table class="portal-table"><thead><tr><th></th><th>Name</th><th>Chapter</th><th></th></tr></thead><tbody>'
+      + '<h3>On the wall (' + wall.length + ')</h3><div class="table-wrap" tabindex="0" style="margin-bottom:26px;"><table class="portal-table"><thead><tr><th></th><th>Name</th><th>Chapter</th><th></th></tr></thead><tbody>'
       + (wall.length ? wall.map(function (e) {
           var isNow = cfg.national && e.id === data.spotlight.entryId;
           return '<tr><td style="width:64px;">' + thumb(e) + '</td>'

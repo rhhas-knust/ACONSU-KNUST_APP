@@ -71,7 +71,7 @@ async function renderCoordinatorDashboard(el) {
       <div class="portal-card">
         <h3>Finance</h3>
         <p class="hint">${finance.entryCount} entries across ${finance.budgetCount} budget${finance.budgetCount === 1 ? '' : 's'}.</p>
-        <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable">
+        <div class="table-wrap" tabindex="0">
           <table class="portal-table" style="min-width:0;">
             <tbody>
               <tr><td>Total income</td><td class="num">${money(finance.totalIncome)}</td></tr>
@@ -83,7 +83,7 @@ async function renderCoordinatorDashboard(el) {
         </div>
         ${budget ? `
           <h4 style="margin:18px 0 8px;">${escapeHtml(budget.name)} ${pill(budget.status)}</h4>
-          <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable">
+          <div class="table-wrap" tabindex="0">
             <table class="portal-table" style="min-width:0;">
               <thead><tr><th>Line</th><th class="num">Planned</th><th class="num">Actual</th><th>Progress</th></tr></thead>
               <tbody>
@@ -103,7 +103,7 @@ async function renderCoordinatorDashboard(el) {
 
       <div class="portal-card">
         <h3>Shepherding</h3>
-        <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable">
+        <div class="table-wrap" tabindex="0">
           <table class="portal-table" style="min-width:0;">
             <tbody>
               <tr><td>Services recorded</td><td class="num">${shepherding.servicesRecorded}</td></tr>
@@ -115,7 +115,7 @@ async function renderCoordinatorDashboard(el) {
         </div>
 
         <h3 style="margin-top:22px;">Publicity</h3>
-        <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable">
+        <div class="table-wrap" tabindex="0">
           <table class="portal-table" style="min-width:0;">
             <tbody>
               <tr><td>Announcements sent</td><td class="num">${publicity.notificationsSent}</td></tr>
@@ -185,7 +185,7 @@ async function renderOffices(el) {
 
     <div class="portal-card">
       <h3>Coordinators</h3>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable">
+      <div class="table-wrap" tabindex="0">
         <table class="portal-table" style="min-width:0;">
           <tbody>
             ${(byRole.coordinator || []).map(s => `
@@ -434,7 +434,7 @@ async function renderLeadershipAccounts(el) {
       </div>
     ` : ''}
 
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable">
+    <div class="table-wrap" tabindex="0">
       <table class="portal-table">
         <thead><tr><th>Name</th><th>Role</th><th>Status</th><th>Term</th><th>Last sign-in</th><th></th></tr></thead>
         <tbody>
@@ -539,7 +539,7 @@ async function renderApprovals(el) {
         <p class="sub">Finance entries waiting for a second pair of eyes before they're final.</p>
       </div>
     </div>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable">
+    <div class="table-wrap" tabindex="0">
       <table class="portal-table">
         <thead><tr><th>Date</th><th>Type</th><th>Category</th><th class="num">Amount</th><th>Recorded By</th><th></th></tr></thead>
         <tbody>

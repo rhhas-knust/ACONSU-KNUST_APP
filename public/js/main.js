@@ -1094,8 +1094,6 @@ function skeletonHtml() {
   function mark(root) {
     (root.querySelectorAll ? root.querySelectorAll('.table-wrap:not([tabindex])') : []).forEach((el) => {
       el.setAttribute('tabindex', '0');
-      el.setAttribute('role', 'region');
-      if (!el.hasAttribute('aria-label')) el.setAttribute('aria-label', 'Table, scrolls sideways');
     });
   }
   function start() {
