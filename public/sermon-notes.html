@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,16 +26,18 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <style>
   .note-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:14px; }
   .note-card h4 { margin:0 0 4px; }
-  .note-card .meta { font-size:0.8rem; color:#8a7595; margin-bottom:10px; }
+  .note-card .meta { font-size:0.8rem; color:var(--ink-faint); margin-bottom:10px; }
   .note-card .body-text { white-space:pre-wrap; font-size:0.92rem; line-height:1.55; color:var(--purple-ink); }
   .note-card .row-actions { margin-top:12px; display:flex; gap:8px; }
   .note-card .row-actions button { border:none; background:var(--lilac-mid); color:var(--brand-strong); padding:6px 12px; border-radius:7px; font-size:0.78rem; font-weight:700; cursor:pointer; }
-  .note-card .row-actions button.danger { background:#FBDFDA; color:#A93226; }
+  .note-card .row-actions button.danger { background:var(--bad-bg); color:var(--bad-ink); }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section style="padding-top:48px;">
   <div class="container" style="max-width:720px;">
@@ -45,6 +49,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div id="notesList"><p class="empty-state">Loading...</p></div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

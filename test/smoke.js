@@ -6,6 +6,16 @@
 //   npm test              — the full suite
 //   SMOKE_SLOW=1 npm test — also waits out the 60s scheduled-send tick
 const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
+// Registration now needs the box ticked. Every account the suite makes ticks it,
+// the way the form does, unless a test is deliberately leaving it out.
+{
+  const realFetch = global.fetch;
+  global.fetch = (url, opts) => {
+    if (/\/api\/auth\/register$/.test(String(url)) && opts && opts.body instanceof FormData
+        && !opts.body.has('consent') && !global.__noAutoConsent) opts.body.append('consent', 'true');
+    return realFetch(url, opts);
+  };
+}
 
 (async () => {
   process.env.MONGODB_URI = 'mongodb://stub/aconsu_test';
@@ -5311,6 +5321,108 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('scheduler recorded an outcome', /posted to the app/.test(fired.result || ''), fired.result);
   const afterCount = (await fakeModels.Notification.find({})).length;
   check('it reached the in-app feed', afterCount === beforeCount + 1, { beforeCount, afterCount });
+  }
+
+  console.log('\n== Policies, consent, and a plain page: what a visitor and a regulator can check ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const root = path.join(__dirname, '..');
+    const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+    const files = (dir, ext) => fs.readdirSync(path.join(root, dir)).filter(f => f.endsWith(ext)).map(f => path.join(dir, f));
+
+    // ---- registration is an agreement, and it is recorded ----
+    global.__noAutoConsent = true;
+    const noBox = new FormData();
+    noBox.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    noBox.append('name', 'No Box'); noBox.append('email', 'nobox@test.com'); noBox.append('password', 'secret123'); noBox.append('chapterId', chapterId);
+    let w = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: noBox })).json();
+    check('an account cannot be made without agreeing to the terms and the policy', /agree/i.test(w.error || ''), w);
+    check('and nothing is created when they have not', (await fakeModels.Member.find({ email: 'nobox@test.com' })).length === 0, null);
+    global.__noAutoConsent = false;
+    const withBox = new FormData();
+    withBox.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    withBox.append('name', 'With Box'); withBox.append('email', 'withbox@test.com'); withBox.append('password', 'secret123'); withBox.append('chapterId', chapterId); withBox.append('consent', 'true');
+    w = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: withBox })).json();
+    const boxed = (await fakeModels.Member.find({ email: 'withbox@test.com' }))[0];
+    check('with it ticked the account is made', w.success === true && !!boxed, w);
+    check('and when they agreed, and to which wording, is kept', !!boxed && !!boxed.consentedAt && boxed.consentVersion === '2026-10-06', boxed && { at: boxed.consentedAt, v: boxed.consentVersion });
+    const reg = read('public/register.html');
+    check('the form asks for it with a box that must be ticked, linked to both documents',
+      /<input type="checkbox" id="agree" required>/.test(reg) && /href="\/terms\.html"/.test(reg) && /href="\/privacy\.html"/.test(reg), null);
+    check('the form no longer says six characters when the server wants eight', /minlength="8"/.test(reg) && !/At least 6 characters/.test(reg), null);
+
+    // ---- notices where a form collects something personal ----
+    for (const [f, label] of [['contact.html', 'the contact form'], ['prayer.html', 'the prayer and testimony forms'], ['welfare.html', 'the welfare form'], ['events.html', 'event registration']]) {
+      check(label + ' says what the details are used for, beside the button', /class="form-notice"/.test(read('public/' + f)), null);
+    }
+
+    // ---- the policies exist, in the app and on the website, and are linked ----
+    for (const f of ['privacy', 'terms', 'cookies', 'refunds']) {
+      const html = read('public/' + f + '.html');
+      check('the app has a ' + f + ' page with something in it', html.length > 2500 && /<h1>/.test(html), html.length);
+    }
+    const appFooter = read('public/js/main.js');
+    check('the app footer links to all four on every page', ['privacy', 'terms', 'cookies', 'refunds'].every(f => appFooter.includes('/' + f + '.html')), null);
+    const priv = read('public/privacy.html');
+    check('the privacy policy names the Data Protection Act and where to complain',
+      /Act 843/.test(priv) && /Data\s+Protection Commission of Ghana/.test(priv), null);
+    check('and says plainly that the videos are not loaded until pressed', /Nothing is loaded from them until you\s+press the button/.test(priv), null);
+    check('and covers under-18s and storage outside Ghana', /under 18/.test(priv) && /outside Ghana/.test(priv), null);
+    check('the cookies page says there is no banner because nothing needs consent', /no cookie banner/.test(read('public/cookies.html')), null);
+    check('the refund page says the app takes no payments, and gives a window and a route',
+      /does not take payments/.test(read('public/refunds.html')) && /within 14 days/.test(read('public/refunds.html')) && /contact\.html/.test(read('public/refunds.html')), null);
+    for (const f of ['privacy', 'terms', 'cookies']) {
+      const html = read('site/' + f + '.html');
+      check('the website has a ' + f + ' page', html.length > 2000 && /<h1>/.test(html), html.length);
+    }
+    const siteIndex = read('site/index.html');
+    check('and the website footer links to them', ['privacy.html', 'terms.html', 'cookies.html'].every(l => siteIndex.includes('href="' + l + '"')), null);
+    check('the website says it sets no cookies and stores nothing', /sets <strong>no cookies<\/strong>/.test(read('site/cookies.html')), null);
+    check('the alumni form agreement links to the explanation of how it is used', /href="privacy\.html#alumni"/.test(siteIndex), null);
+    check('the service worker keeps the new pages for offline reading',
+      ['/terms.html', '/cookies.html', '/refunds.html'].every(p => read('public/sw.js').includes("'" + p + "'")), null);
+
+    // ---- nothing is fetched from another company ----
+    const allFront = [...files('public', '.html'), ...files('public/css', '.css'), ...files('public/js', '.js'), 'site/index.html', 'site/styles.css', 'site/site.js', 'site/privacy.html'];
+    const outside = [];
+    for (const f of allFront) {
+      const src = read(f);
+      (src.match(/https?:\/\/(?:fonts\.googleapis|fonts\.gstatic|cdnjs|cdn\.jsdelivr|unpkg|www\.google-analytics|www\.googletagmanager)[^\s"')]*/g) || []).forEach(u => outside.push(f + ' ' + u));
+    }
+    check('no page loads a font, script or tracker from another company', outside.length === 0, outside.slice(0, 5));
+    check('the fonts are files served by the app and the site',
+      fs.existsSync(path.join(root, 'public/fonts/source-sans-3-latin-400-normal.woff2')) && fs.existsSync(path.join(root, 'site/fonts/source-serif-4-latin-700-normal.woff2')), null);
+
+    // ---- a page that does not look made by a template ----
+    const userFacing = [...files('public', '.html'), ...files('public/js', '.js'), 'site/index.html', 'site/site.js', 'site/chapter.js', 'site/privacy.html', 'site/terms.html', 'site/cookies.html'];
+    const dashes = userFacing.filter(f => read(f).includes('—'));
+    check('no em dash anywhere in the pages or their scripts', dashes.length === 0, dashes);
+    const css = [...files('public/css', '.css'), 'site/styles.css'].map(f => [f, read(f)]);
+    check('no stylesheet draws a gradient', css.every(([, c]) => !/-gradient\(/.test(c.replace(/\/\*[\s\S]*?\*\//g, ''))), css.filter(([, c]) => /-gradient\(/.test(c.replace(/\/\*[\s\S]*?\*\//g, ''))).map(([f]) => f));
+    check('and none turns a button into a pill', css.every(([, c]) => !/\.btn[^{]*\{[^}]*999px/.test(c)), null);
+    const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+    const withEmoji = userFacing.filter(f => emoji.test(read(f)));
+    check('no emoji stands in for an icon', withEmoji.length === 0, withEmoji);
+    check('no page carries a decorative label above its heading', !userFacing.some(f => /class="eyebrow/.test(read(f))), null);
+    check('nothing fades or floats in as it scrolls into view',
+      !/IntersectionObserver/.test(read('public/js/main.js')) && !/IntersectionObserver/.test(read('site/site.js')), null);
+    check('and what moves respects a request for less motion',
+      /prefers-reduced-motion: reduce/.test(read('public/css/style.css')) && /prefers-reduced-motion: reduce/.test(read('site/styles.css')), null);
+    check('a button gives way slightly when pressed and only a pointer hovers',
+      /\.btn:active \{ transform: scale\(0\.97\); \}/.test(read('public/css/style.css')) && /\(hover: hover\) and \(pointer: fine\)/.test(read('public/css/style.css')), null);
+    check('every colour that means something has a name: ok, warning, error, information',
+      ['--ok-ink', '--warn-ink', '--bad-ink', '--info-ink'].every(t => read('public/css/style.css').includes(t)) && ['--ok', '--warn', '--bad', '--info'].every(t => read('site/styles.css').includes(t + ':')), null);
+    check('loading is shown as a grey block, not as the word Loading',
+      /\.skeleton \{/.test(read('public/css/style.css')) && /\.skeleton \{/.test(read('site/styles.css')), null);
+
+    // ---- favicon ----
+    for (const f of ['favicon.ico', 'favicon-16.png', 'favicon-32.png']) {
+      check('the app has ' + f, fs.existsSync(path.join(root, 'public', f)), null);
+      check('and the website has ' + f, fs.existsSync(path.join(root, 'site', f)), null);
+    }
+    check('the website has an apple touch icon', fs.existsSync(path.join(root, 'site/apple-touch-icon.png')), null);
+    check('every app page declares the icon set', files('public', '.html').filter(f => !/offline|404/.test(f)).every(f => /rel="icon"/.test(read(f))), null);
   }
 
   console.log(`\n${failures ? `${failures} FAILURES` : 'all checks passed'}`);

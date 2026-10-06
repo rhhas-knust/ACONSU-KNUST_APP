@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -52,7 +54,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section style="padding-top:32px; padding-bottom:64px;">
   <div class="container" style="max-width:560px;">
@@ -68,13 +72,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div id="volunteerAssignments"></div>
 
     <div class="badges-section">
-      <h3>Badges</h3>
+      <h2>Badges</h2>
       <div class="badges-grid" id="badgesGrid">
         <div class="skeleton skeleton-card" style="height:80px;"></div>
       </div>
     </div>
 
-    <h3 style="margin-bottom:14px;">Account Settings</h3>
+    <h2 style="margin-bottom:14px;">Account Settings</h2>
     <div class="profile-tabs">
       <button data-tab="details" class="active">My Details</button>
       <button data-tab="password">Change Password</button>
@@ -100,14 +104,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <div class="field">
         <label>Birthday (month &amp; day only, no year is ever stored)</label>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <select id="birthdayMonth">
+          <select id="birthdayMonth" aria-label="Birthday month">
             <option value="">Month</option>
             <option value="1">January</option><option value="2">February</option><option value="3">March</option>
             <option value="4">April</option><option value="5">May</option><option value="6">June</option>
             <option value="7">July</option><option value="8">August</option><option value="9">September</option>
             <option value="10">October</option><option value="11">November</option><option value="12">December</option>
           </select>
-          <select id="birthdayDay">
+          <select id="birthdayDay" aria-label="Birthday day">
             <option value="">Day</option>
           </select>
         </div>
@@ -134,7 +138,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
 
     <div class="form-card" style="margin-top:24px;">
-      <h3 style="margin-bottom:6px;">Alerts</h3>
+      <h2 style="margin-bottom:6px;">Alerts</h2>
       <p style="font-size:0.87rem; color:var(--ink-soft); margin-bottom:16px;" id="alertsStatus">Checking…</p>
       <button type="button" class="btn btn-outline btn-sm" id="alertsToggleBtn">Enable Alerts</button>
     </div>
@@ -145,6 +149,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -237,7 +243,7 @@ async function renderMemberStanding() {
   // works through; this just says where the person reading it stands today.
   el.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 10px;">Where You Stand</h3>
+      <h2 style="margin:0 0 10px;">Where You Stand</h2>
       <div style="display:flex; align-items:center; gap:11px; margin-bottom:10px;">
         <span style="width:11px; height:11px; border-radius:50%; background:var(--flame-gold); flex:none;
           box-shadow:0 0 0 4px rgba(232,151,30,0.18);"></span>
@@ -254,7 +260,7 @@ async function renderMemberStanding() {
     </div>
 
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 10px;">${(d.departments || []).length > 1 ? 'Where You Serve' : 'Your Department'}</h3>
+      <h2 style="margin:0 0 10px;">${(d.departments || []).length > 1 ? 'Where You Serve' : 'Your Department'}</h2>
       ${(d.departments || []).length ? `
         ${d.departments.map(dep => `
           <div style="padding:14px 0; border-bottom:1px solid var(--line);">
@@ -329,7 +335,7 @@ async function renderMyEvents() {
 
   el.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 10px;">You Are Signed Up For</h3>
+      <h2 style="margin:0 0 10px;">You Are Signed Up For</h2>
       ${upcoming.length ? upcoming.map(row).join('') : '<p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">Nothing coming up that you have registered for.</p>'}
       ${past.length ? `
         <details style="margin-top:12px;">
@@ -483,7 +489,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   const yes = (v) => v ? 'checked' : '';
   wrap.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 6px;">Your Alumni Connect listing</h3>
+      <h2 style="margin:0 0 6px;">Your Alumni Connect listing</h2>
       <p style="margin:0 0 16px; color:var(--ink-soft); font-size:0.88rem; line-height:1.55;">
         Members across every ACONSU chapter can look you up by what you do. Nothing
         below is shown to anyone until you tick <strong>List me</strong>, and you can

@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,13 +26,15 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section style="padding-top:64px; padding-bottom:64px;">
   <div class="container">
     <form class="form-card" id="loginForm">
       <img src="/images/logo.jpg" alt="ACONSU" style="width:56px; height:56px; border-radius:50%; margin:0 auto 14px; display:block;">
-      <h2 style="text-align:center;">Welcome Back</h2>
+      <h1 style="text-align:center; font-size:1.8rem;">Welcome back</h1>
       <p style="text-align:center; color:var(--ink-soft); margin-bottom:24px;">Log in to your ACONSU account.</p>
       <div class="field">
         <label for="email">Email Address</label>
@@ -49,6 +53,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

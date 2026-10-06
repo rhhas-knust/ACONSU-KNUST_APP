@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -23,12 +25,12 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .group-tabs { display:flex; gap:8px; border-bottom:1px solid var(--line); margin:20px 0; overflow-x:auto; }
-  .group-tabs button { border:none; background:none; padding:10px 6px; font-weight:700; font-size:0.88rem; color:#8a7595; cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; }
+  .group-tabs button { border:none; background:none; padding:10px 6px; font-weight:700; font-size:0.88rem; color:var(--ink-faint); cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; }
   .group-tabs button.active { color:var(--brand); border-color:var(--brand); }
   .post-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
   .post-card.announcement { border-color:var(--flame-gold); background:#FFF8EC; }
   .post-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
-  .post-card .when { font-size:0.75rem; color:#8a7595; }
+  .post-card .when { font-size:0.75rem; color:var(--ink-faint); }
   .member-chip { display:inline-flex; align-items:center; gap:8px; background:var(--lilac-light); border-radius:6px; padding:4px 12px 4px 4px; font-size:0.82rem; margin:0 6px 6px 0; }
   .member-chip img, .member-chip .fallback { width:26px; height:26px; border-radius:50%; object-fit:cover; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--brand); font-size:0.75rem; }
   .meeting-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
@@ -36,7 +38,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section class="hero" data-art="gather" data-hero-page="group" style="padding-bottom:32px;">
   <div class="hero-content" id="groupHero">
@@ -49,6 +53,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div id="groupBody"><p class="empty-state">Loading...</p></div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

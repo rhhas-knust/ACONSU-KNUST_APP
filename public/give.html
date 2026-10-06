@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -23,7 +25,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .pay-details { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:24px; }
-  .pay-details dt { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; color:#8a7595; margin-top:12px; }
+  .pay-details dt { font-size:0.75rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-faint); margin-top:12px; }
   .pay-details dt:first-child { margin-top:0; }
   .pay-details dd { margin:2px 0 0; font-weight:700; font-size:1.05rem; color:var(--brand); }
   .give-history-row { display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:0.88rem; }
@@ -31,7 +33,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section class="hero" data-art="harvest" data-hero-page="give" style="padding-bottom:36px;">
   <div class="hero-content">
@@ -57,6 +61,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <select id="method"><option value="momo">Mobile Money</option><option value="bank">Bank Transfer</option><option value="cash">Cash</option><option value="other">Other</option></select>
       </div>
       <div class="field"><label for="reference">Transaction reference (optional)</label><input type="text" id="reference" placeholder="MoMo transaction ID, if you have it"></div>
+      <p class="form-notice">Sent a wrong amount? Read <a href="/refunds.html">Giving and refunds</a>.</p>
       <button type="submit" class="btn btn-flame btn-block" id="giveSubmitBtn">Submit</button>
       <div class="form-msg" id="giveMsg"></div>
     </form>
@@ -67,6 +72,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div id="giveHistory"><p class="empty-state">Loading...</p></div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

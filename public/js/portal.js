@@ -1,6 +1,6 @@
 /* ============================================================
    Shared behaviour for the leadership portals.
-   Each portal page supplies its own panels; everything else —
+   Each portal page supplies its own panels; everything else,
    signing in, the shell, the side nav, modals, formatting. Is
    handled here so the four portals stay consistent.
    Requires main.js (fetchJSON, escapeHtml, showToast) first.
@@ -83,7 +83,7 @@ function statCard(label, value, opts) {
   const o = opts || {};
   return `
     <div class="stat-card ${o.tone || ''}">
-      <div class="eyebrow">${escapeHtml(label)}</div>
+      <div class="stat-label">${escapeHtml(label)}</div>
       <div class="value">${o.raw ? value : escapeHtml(String(value))}</div>
       ${o.foot ? `<div class="foot">${escapeHtml(o.foot)}</div>` : ''}
     </div>
@@ -161,7 +161,7 @@ function renderPortalChrome() {
 
   const main = document.getElementById('portalMain');
   main.innerHTML = PORTAL.panels.map(p => `<div class="portal-panel" id="panel-${p.key}"></div>`).join('')
-    + '<div style="text-align:center; padding:24px 12px 8px; font-size:0.75rem; color:#a993b3;">Powered by HasTech Solutions</div>';
+    + '<div style="text-align:center; padding:24px 12px 8px; font-size:0.75rem; color:var(--ink-faint);">Powered by HasTech Solutions</div>';
 
   // A coordinator (or anyone else read-only) should be told why the buttons
   // they expect are missing, rather than left wondering.

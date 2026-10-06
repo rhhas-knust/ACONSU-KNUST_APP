@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -26,10 +28,10 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body>
 
-<div class="login-wrap" id="loginWrap">
+<div role="main" class="login-wrap" id="loginWrap">
   <form class="form-card" id="loginForm">
     <img src="/images/logo.jpg" alt="ACONSU" style="width:64px; height:64px; border-radius:50%; margin:0 auto 16px; display:block;">
-    <h2 style="text-align:center;">Admin Login</h2>
+    <h1 style="text-align:center;">Admin Login</h1>
     <div class="field">
       <label for="username">Username</label>
       <input type="text" id="username" required>
@@ -44,14 +46,15 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </div>
 
 <div class="admin-shell" id="adminShell">
-  <div class="admin-topbar">
+  <header class="admin-topbar">
+    <h1 class="sr-only">Admin dashboard</h1>
     <div class="admin-topbar-left">
-      <button type="button" class="mobile-nav-toggle" id="mobileNavBtn"></button>
+      <button type="button" class="mobile-nav-toggle" id="mobileNavBtn" aria-label="Open the menu"></button>
       <strong id="adminBrandName">ACONSU Admin</strong>
       <span class="chapter-badge" id="adminChapterBadge">Loading Chapter...</span>
     </div>
     <div class="admin-topbar-right">
-      <button type="button" class="mobile-actions-toggle" id="mobileQuickActionsBtn"></button>
+      <button type="button" class="mobile-actions-toggle" id="mobileQuickActionsBtn" aria-label="Quick actions"></button>
       <button type="button" class="cmd-trigger" id="cmdPaletteBtn" title="Universal Command Palette">
         <span>Search &amp; Jump</span>
         <kbd>Ctrl+K</kbd>
@@ -59,7 +62,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <button type="button" class="theme-toggle theme-toggle-onbrand" id="themeToggle" aria-label="Switch between light and dark"></button>
       <button class="btn btn-outline btn-sm" id="logoutBtn" style="color:#fff; border-color:rgba(255,255,255,0.4);">Log Out</button>
     </div>
-  </div>
+  </header>
 
   <div class="admin-layout">
     <div class="admin-side" id="adminNav">
@@ -133,7 +136,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
     <div class="admin-side-backdrop" id="adminSideBackdrop"></div>
 
-    <div class="admin-main" id="adminMain">
+    <div role="main" class="admin-main" id="adminMain">
       <div class="admin-panel active" id="panel-overview"></div>
       <div class="admin-panel" id="panel-members"></div>
       <div class="admin-panel" id="panel-executives"></div>

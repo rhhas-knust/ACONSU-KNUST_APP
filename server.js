@@ -22,6 +22,7 @@ const mailer = require('./lib/mailer');
 const { compressIfImage } = require('./lib/imageProcess');
 const { rejectOperatorKeys, publicBaseUrl, safeEqual, csvSafe, isPushEndpoint } = require('./lib/requestGuard');
 const fileTypes = require('./lib/fileTypes');
+const securityHeaders = require('./lib/securityHeaders');
 const { renderTableReport } = require('./lib/pdf');
 const { registerGroupRoutes } = require('./routes/groups');
 const { registerChatRoutes } = require('./routes/chat');
@@ -75,8 +76,10 @@ if (isProd) {
 }
 
 app.use(helmet({
-  contentSecurityPolicy: false // keep simple for now; the app has no user-supplied scripts
+  contentSecurityPolicy: { useDefaults: false, directives: securityHeaders.cspDirectives(isProd) },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
+app.use(securityHeaders.permissionsPolicy);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // {"email": {"$ne": null}} and ?category[$ne]=x are not values, they are
@@ -865,6 +868,10 @@ async function scheduleOnboardingTasks(member) {
   }, 'onb');
 }
 
+// The wording of the Terms of use and the Privacy policy a person agreed to when
+// they registered. Change it when either page changes in a way that matters.
+const POLICY_VERSION = '2026-10-06';
+
 // ---------- member auth routes ----------
 // Registration is multipart now - a profile photo is compulsory for member
 // registration (section 6), same upload pipeline as the profile-photo update
@@ -883,6 +890,13 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
   }
   if (!req.file) {
     return res.status(400).json({ error: 'A profile photo is required to register' });
+  }
+  // Agreeing to the Terms and the privacy policy is a step the person takes, not
+  // something assumed from the account existing. It is also recorded: when, and
+  // which wording they agreed to, so a later change to the policy can be shown
+  // to people who agreed to an earlier one.
+  if (String(req.body.consent || '') !== 'true') {
+    return res.status(400).json({ error: 'Please tick the box to agree to the Terms of use and the Privacy policy.' });
   }
   const month = birthdayMonth ? Number(birthdayMonth) : null;
   const day = birthdayDay ? Number(birthdayDay) : null;
@@ -921,7 +935,8 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
       profileImageFileId,
       membershipStage: 'visitor',
       qrToken: crypto.randomBytes(16).toString('hex'),
-      birthdayMonth: month, birthdayDay: day
+      birthdayMonth: month, birthdayDay: day,
+      consentedAt: new Date(), consentVersion: POLICY_VERSION
     }, 'mem');
     scheduleOnboardingTasks(member).catch(() => {});
     req.session.memberId = member.id;

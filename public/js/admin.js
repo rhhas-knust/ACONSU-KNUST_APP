@@ -588,7 +588,7 @@ async function renderResourcePanel(resource, fields, singular) {
         ${pageItems.map(item => `
           <tr>
             ${resource === 'departments' ? `<td>
-              <div style="width:74px; height:44px; border-radius:8px; overflow:hidden; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:#8a7595;">
+              <div style="width:74px; height:44px; border-radius:8px; overflow:hidden; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:var(--ink-faint);">
                 ${item.headerImageFileId ? `<img src="/api/files/${item.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">` : 'none'}
               </div>
             </td>` : ''}
@@ -737,8 +737,8 @@ async function renderStaffAccounts() {
       <h2 style="margin:0;">Leadership Accounts (${users.length})</h2>
       <button class="btn btn-primary btn-sm" id="addStaffBtn">+ Add Account</button>
     </div>
-    <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">
-      Each account opens one portal. Give the leader their username and password, then send them the portal link below —
+    <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">
+      Each account opens one portal. Give the leader their username and password, then send them the portal link below,
       they sign in there, not here.
     </p>
 
@@ -748,7 +748,7 @@ async function renderStaffAccounts() {
           <h4 style="margin:0 0 4px;">${r.label}</h4>
           <small class="hint" style="margin:0 0 8px;">${r.blurb}</small>
           <a href="${r.href}" target="_blank" rel="noopener" style="font-size:0.8rem; font-weight:700; color:var(--purple-deep);">${r.href}</a>
-          <div style="margin-top:6px; font-size:0.78rem; color:#8a7595;">${users.filter(u => u.role === r.value).length} account(s)</div>
+          <div style="margin-top:6px; font-size:0.78rem; color:var(--ink-faint);">${users.filter(u => u.role === r.value).length} account(s)</div>
         </div>
       `).join('')}
     </div>
@@ -932,7 +932,7 @@ async function openDepartmentImageModal(dept) {
     <div style="aspect-ratio:16/6; border-radius:12px; overflow:hidden; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; margin-bottom:18px;">
       ${dept.headerImageFileId
         ? `<img src="/api/files/${dept.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">`
-        : '<span style="color:#8a7595; font-weight:700;">No header image yet</span>'}
+        : '<span style="color:var(--ink-faint); font-weight:700;">No header image yet</span>'}
     </div>
 
     <form id="deptImageForm">
@@ -1174,7 +1174,7 @@ async function renderNotifications() {
     <h2 style="margin-bottom:20px;">Notifications</h2>
     <div class="upload-form">
       <h3 style="margin-bottom:14px;">Send an Announcement</h3>
-      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:14px;">This posts to everyone's in-app notification feed and sends a real push alert to anyone who has enabled push notifications.</p>
+      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:14px;">This posts to everyone's in-app notification feed and sends a real push alert to anyone who has enabled push notifications.</p>
       <form id="notifForm">
         <div class="field"><label>Title</label><input type="text" id="notifTitle" required placeholder="e.g. Service moved to 9AM"></div>
         <div class="field"><label>Message</label><textarea id="notifBody" required placeholder="Short, clear message..."></textarea></div>
@@ -1331,7 +1331,7 @@ async function renderGroupsAdmin() {
       <h2 style="margin:0;">Groups (${groups.length})</h2>
       <button class="btn btn-primary btn-sm" id="newGroupBtn">+ New Group</button>
     </div>
-    <p style="font-size:0.85rem; color:#8a7595; margin:8px 0 18px;">The group's own leader can update meeting details and resources from the group's page. This is for creating groups and reassigning leadership.</p>
+    <p style="font-size:0.85rem; color:var(--ink-faint); margin:8px 0 18px;">The group's own leader can update meeting details and resources from the group's page. This is for creating groups and reassigning leadership.</p>
     <table>
       <thead><tr><th>Name</th><th>Type</th><th>Leader</th><th>Members</th><th>Actions</th></tr></thead>
       <tbody>
@@ -1424,7 +1424,7 @@ async function renderWelfareAdmin() {
     const items = await fetchJSON('/api/welfare/requests');
     el.innerHTML = `
       <h2 style="margin-bottom:8px;">Welfare Requests (${items.length})</h2>
-      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Sensitive. Visible only to Welfare Officers and Chapter Admin/Coordinator.</p>
+      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">Sensitive. Visible only to Welfare Officers and Chapter Admin/Coordinator.</p>
       <table>
         <thead><tr><th>Member</th><th>Category</th><th>Description</th><th>Status</th><th>Referred By</th><th>Actions</th></tr></thead>
         <tbody>
@@ -1455,7 +1455,7 @@ async function renderWelfareAdmin() {
       const item = items.find(w => w.id === btn.dataset.addNote);
       showModal(`
         <h3>Case Notes: ${escapeHtml(item.memberName || 'Unknown')}</h3>
-        <p style="font-size:0.85rem; color:#8a7595; margin-bottom:12px;">${escapeHtml(item.description)}</p>
+        <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:12px;">${escapeHtml(item.description)}</p>
         <form id="noteForm">
           <div class="field"><label>Internal Notes (never shown to the member)</label><textarea id="wNotes">${escapeHtml(item.notes || '')}</textarea></div>
           <div style="display:flex; gap:10px;">
@@ -1493,7 +1493,7 @@ async function renderChatModeration() {
   }
   el.innerHTML = `
     <h2 style="margin-bottom:8px;">Community Chat Moderation</h2>
-    <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Lock a discussion, hide a message (never destroyed, just stops showing), or restrict a member from posting further from the Members tab.</p>
+    <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">Lock a discussion, hide a message (never destroyed, just stops showing), or restrict a member from posting further from the Members tab.</p>
     <table>
       <thead><tr><th>Discussion</th><th>Started By</th><th>Messages</th><th>Actions</th></tr></thead>
       <tbody>
@@ -1527,7 +1527,7 @@ async function renderChatModeration() {
           <div style="border:1px solid var(--line); border-radius:8px; padding:10px 12px;">
             <strong>${escapeHtml(m.authorName || 'Unknown')}</strong>
             <p style="margin:4px 0;">${escapeHtml(m.body)}</p>
-            ${m.reportCount ? `<span class="status-pill" style="background:#FBDFDA; color:#A93226;">${m.reportCount} report(s)</span>` : ''}
+            ${m.reportCount ? `<span class="status-pill" style="background:var(--bad-bg); color:var(--bad-ink);">${m.reportCount} report(s)</span>` : ''}
             <button data-hide-msg="${m.id}" style="margin-top:6px;">Hide This Message</button>
           </div>
         `).join('') || '<p class="empty-state">No messages yet.</p>'}
@@ -1559,7 +1559,7 @@ async function renderMembers() {
 
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Members (${members.length})</h2>
-    <p style="font-size:0.85rem; color:#8a7595; margin:-12px 0 18px;">Membership status (visitor → active) is moved forward by Shepherding, not from here.</p>
+    <p style="font-size:0.85rem; color:var(--ink-faint); margin:-12px 0 18px;">Membership status (visitor → active) is moved forward by Shepherding, not from here.</p>
     <table>
       <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Level</th><th>Status</th><th>Birthday</th><th>Joined</th><th>Actions</th></tr></thead>
       <tbody>
@@ -1606,7 +1606,7 @@ async function renderMembers() {
 function openMemberEditForm(member) {
   showModal(`
     <h3>Edit Member</h3>
-    <p style="font-size:0.85rem; color:#8a7595; margin-bottom:14px;">Email and password can only be changed by the member themselves, from their own account.</p>
+    <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:14px;">Email and password can only be changed by the member themselves, from their own account.</p>
     <form id="memberEditForm">
       <div class="field"><label>Full Name</label><input type="text" id="editMemberName" value="${escapeHtml(member.name || '')}" required></div>
       <div class="field"><label>Phone</label><input type="tel" id="editMemberPhone" value="${escapeHtml(member.phone || '')}"></div>
@@ -1700,7 +1700,7 @@ async function renderExecutives() {
     <div class="portal-card" style="margin-bottom:22px;">
       <h3>Executive Applications (${applications.length})</h3>
       <p class="hint">Review these the same way you review members. Approving verifies the member and activates their executive identity.</p>
-      <div class="table-wrap"><table>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Table, scrollable"><table>
         <thead><tr><th>Name</th><th>Contact</th><th>Role</th><th>Department</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${applications.map(a => `
           <tr>
@@ -1991,7 +1991,7 @@ async function openRegistrationsModal(eventId, title) {
     const regs = await fetchJSON(`/api/admin/events/${eventId}/registrations`);
     document.getElementById('modalContent').innerHTML = `
       <h3>Registrations: ${escapeHtml(title)}</h3>
-      <p style="color:#8a7595; font-size:0.85rem; margin-bottom:14px;">${regs.length} ${regs.length === 1 ? 'person' : 'people'} registered</p>
+      <p style="color:var(--ink-faint); font-size:0.85rem; margin-bottom:14px;">${regs.length} ${regs.length === 1 ? 'person' : 'people'} registered</p>
       <table>
         <thead><tr><th>Name</th><th>Email</th><th>Phone</th></tr></thead>
         <tbody>
@@ -2027,7 +2027,7 @@ async function renderMediaLibrary() {
     <h2 style="margin-bottom:20px;">Media Library</h2>
     <div class="upload-form">
       <h3 style="margin-bottom:6px;">Upload a File</h3>
-      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:16px;">
+      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:16px;">
         Say where the image is going and the app puts it there for you. No second step, and no guessing later about
         which picture is doing what.
       </p>
@@ -2406,7 +2406,7 @@ async function renderFormsAdmin() {
       <div class="panel-head">
         <div>
           <h2 style="margin:0 0 4px;">Dynamic Form Builder</h2>
-          <p style="color:#7a6288; font-size:0.88rem; margin:0;">Create reusable forms for registrations, executive info, department workflows, and welfare follow-up.</p>
+          <p style="color:var(--ink-faint); font-size:0.88rem; margin:0;">Create reusable forms for registrations, executive info, department workflows, and welfare follow-up.</p>
         </div>
         <button class="btn btn-primary btn-sm" id="newFormBtn">+ New Form</button>
       </div>
@@ -2475,14 +2475,14 @@ async function renderReportsPanel() {
     <div class="panel-head">
       <div>
         <h2 style="margin:0 0 4px;">Reports &amp; PDF Export</h2>
-        <p style="color:#7a6288; font-size:0.88rem; margin:0;">Quick access to the existing membership, attendance, and finance exports. Some links require coordinator or office-level permissions.</p>
+        <p style="color:var(--ink-faint); font-size:0.88rem; margin:0;">Quick access to the existing membership, attendance, and finance exports. Some links require coordinator or office-level permissions.</p>
       </div>
     </div>
     <div class="media-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px,1fr));">
       ${cards.map(card => `
         <div class="media-card" style="padding:18px;">
           <h4 style="margin:0 0 8px;">${escapeHtml(card.title)}</h4>
-          <p style="font-size:0.84rem; color:#7a6288; margin:0 0 14px;">${escapeHtml(card.desc)}</p>
+          <p style="font-size:0.84rem; color:var(--ink-faint); margin:0 0 14px;">${escapeHtml(card.desc)}</p>
           <a class="btn btn-outline btn-sm" href="${card.href}" ${card.href.endsWith('.html') ? '' : 'target="_blank" rel="noopener"'}>${escapeHtml(card.cta)}</a>
         </div>
       `).join('')}
@@ -2565,7 +2565,7 @@ async function renderChapterSettings() {
       <div class="panel-head">
         <div>
           <h2 style="margin:0 0 4px;">Chapter Site Settings</h2>
-          <p style="color:#7a6288; font-size:0.88rem; margin:0;">
+          <p style="color:var(--ink-faint); font-size:0.88rem; margin:0;">
             Manage your chapter's site branding, scripture theme, service times, contacts, and home banner.
           </p>
         </div>
@@ -2752,7 +2752,7 @@ async function renderChapterSettings() {
       ${smsSetup ? `
       <form class="form-card" id="chapterSmsForm" style="max-width:780px; margin:22px 0 0;">
         <h3 style="margin:0 0 4px;">SMS Setup</h3>
-        <p style="color:#7a6288; font-size:0.88rem; margin:0 0 16px;">
+        <p style="color:var(--ink-faint); font-size:0.88rem; margin:0 0 16px;">
           Your chapter's own mNotify account. The credit is yours and the sender name is yours,
           so no other chapter can send on it or spend it. Get an API key at
           <a href="https://mnotify.com" target="_blank" rel="noopener">mnotify.com</a> and register your sender ID there first.
@@ -2998,7 +2998,7 @@ function initCommandPalette() {
         ${groupHeader}
         <div class="cmd-item ${idx === 0 ? 'selected' : ''}" data-index="${idx}">
           <span>${cmd.icon} &nbsp;${escapeHtml(cmd.title)}</span>
-          <span style="font-size:0.75rem; color:#9b86a8;">${cmd.action ? 'Run' : 'Jump'} &rsaquo;</span>
+          <span style="font-size:0.75rem; color:var(--ink-faint);">${cmd.action ? 'Run' : 'Jump'} &rsaquo;</span>
         </div>
       `;
     }).join('');

@@ -234,16 +234,14 @@ function socialLinksHtml(s) {
     cfg.spotify && { href: cfg.spotify, icon: ICON_SPOTIFY, label: 'Spotify', cls: 'social-spotify' }
   ].filter(Boolean);
 
-  // If no custom social links are on file yet, provide standard union handles
-  const list = links.length ? links : [
-    { href: 'https://wa.me/', icon: ICON_WHATSAPP, label: 'WhatsApp', cls: 'social-whatsapp' },
-    { href: 'https://youtube.com', icon: ICON_YOUTUBE, label: 'YouTube', cls: 'social-youtube' },
-    { href: 'https://instagram.com', icon: ICON_INSTAGRAM, label: 'Instagram', cls: 'social-instagram' },
-    { href: 'https://facebook.com', icon: ICON_FACEBOOK, label: 'Facebook', cls: 'social-facebook' }
-  ];
+  // Only the accounts a chapter has actually set. There used to be a row of
+  // generic YouTube, Instagram and Facebook home-page links here when nothing was
+  // set; those pointed nowhere that belonged to the union, so a chapter with no
+  // accounts now shows no row at all.
+  const list = links;
 
   return list.map(l => `
-    <a href="${escapeHtml(l.href)}" target="_blank" rel="noopener" aria-label="${l.label}" title="${l.label}" class="social-icon-link ${l.cls}">
+    <a href="${escapeHtml(l.href)}" target="_blank" rel="noopener noreferrer" aria-label="${l.label} (opens in a new tab)" title="${l.label}" class="social-icon-link ${l.cls}">
       ${svgIcon(l.icon)}
     </a>
   `).join('');
@@ -394,6 +392,7 @@ function renderBottomNav(activePath, customPages, member) {
   // linked to, shared, and reached with the back button like anything else.
   const nav = document.createElement('nav');
   nav.id = 'bottomNav';
+  nav.setAttribute('aria-label', 'App tabs');
   nav.className = 'bottom-nav';
   nav.innerHTML = `
     ${BOTTOM_TABS.map(t => `
@@ -478,9 +477,9 @@ function renderHeader(activePath, customPages, member) {
     ? `<a href="/profile.html" class="btn btn-outline btn-sm nav-btn-account">${escapeHtml(member.name.split(' ')[0])}</a>`
     : `<a href="/login.html" class="btn btn-outline btn-sm nav-btn-account">Log In</a>`;
   el.innerHTML = `
-    <nav class="nav">
+    <nav class="nav" aria-label="Main">
       <a href="/index.html" class="nav-brand">
-        <img src="/images/logo.jpg" alt="ACONSU logo">
+        <img src="/images/logo.jpg" alt="" width="40" height="40">
         <span>ACONSU</span>
       </a>
       <ul class="nav-links" id="navLinks">${links}</ul>
@@ -764,7 +763,7 @@ function renderSideNav(activePath, customPages, member) {
     <a href="/index.html" class="side-nav-brand">
       <img src="/images/logo.jpg" alt=""><span>ACONSU</span>
     </a>
-    <nav class="side-nav-scroll">
+    <nav class="side-nav-scroll" aria-label="App sections">
       ${groups.map(g => `
         ${g.title ? `<p class="side-nav-title">${escapeHtml(g.title)}</p>` : ''}
         ${g.links.map(item).join('')}
@@ -787,37 +786,42 @@ function renderFooter(settings) {
     <div class="container">
       <div class="footer-grid">
         <div>
-          <h4>ACONSU</h4>
-          <p style="color:#C9B3D8; font-size:0.9rem;">${escapeHtml(s.fullName || "The Apostles' Continuation Students Union")}</p>
+          <p class="footer-title">ACONSU</p>
+          <p style="color:#E2D3EE; font-size:0.95rem;">${escapeHtml(s.fullName || "The Apostles' Continuation Students Union")}</p>
           <div class="social-row">${socialLinksHtml(s)}</div>
         </div>
         <div>
-          <h4>Explore</h4>
+          <p class="footer-title">Explore</p>
           <a href="/departments.html">Departments</a>
           <a href="/events.html">Events</a>
           <a href="/media.html">Sermons &amp; Media</a>
           <a href="/prayer.html">Prayer Wall</a>
         </div>
         <div>
-          <h4>Get Involved</h4>
+          <p class="footer-title">Get Involved</p>
           <a href="/departments.html">Join a Department</a>
           <a href="/alumni.html">Alumni Connect</a>
           <a href="/prayer.html">Submit a Prayer Request</a>
           <a href="/contact.html">Contact Us</a>
-          <a href="/privacy.html">Privacy Policy</a>
         </div>
         <div>
-          <h4>Reach Us</h4>
-          <a href="#">${escapeHtml(s.address || 'Campus Fellowship Auditorium')}</a>
+          <p class="footer-title">Legal</p>
+          <a href="/privacy.html">Privacy policy</a>
+          <a href="/terms.html">Terms of use</a>
+          <a href="/cookies.html">Cookies and storage</a>
+          <a href="/refunds.html">Giving and refunds</a>
+        </div>
+        <div>
+          <p class="footer-title">Reach Us</p>
+          <span style="display:block; padding:6px 0; color:#E2D3EE; font-size:0.95rem;">${escapeHtml(s.address || 'Campus Fellowship Auditorium')}</span>
           ${s.email ? `<a href="mailto:${s.email}">${escapeHtml(s.email)}</a>` : ''}
           ${s.phone ? `<a href="tel:${s.phone}">${escapeHtml(s.phone)}</a>` : ''}
         </div>
       </div>
       <div class="footer-bottom">
         <span>&copy; ${new Date().getFullYear()} ACONSU. All Rights Reserved.</span>
-        <span>Built with love, for the union.</span>
       </div>
-      <div style="text-align:center; padding-top:10px; font-size:0.72rem; color:#9b86a9;">Powered by HasTech Solutions</div>
+      <div style="text-align:center; padding-top:10px; font-size:0.85rem; color:#CDB9DA;">Powered by HasTech Solutions</div>
     </div>
   `;
 }
@@ -1027,7 +1031,7 @@ function showInstallBanner() {
       </div>
     </div>
     <div style="display:flex; gap:8px; flex-shrink:0;">
-      <button id="installBtn" style="background:#fff; color:#3A1B54; border:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Install</button>
+      <button id="installBtn" style="background:#fff; color:var(--brand-strong); border:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Install</button>
       <button id="dismissInstallBtn" style="background:none; color:#fff; border:none; font-size:1.2rem; cursor:pointer; opacity:0.8;">&times;</button>
     </div>
   `;
@@ -1076,6 +1080,26 @@ function showToast(message, type) {
 // ---------- scroll-reveal for cards/sections ----------
 // Content is simply there when the page is; nothing is hidden until it scrolls into view.
 function initScrollReveal() { /* intentionally empty */ }
+
+// A table wider than the screen scrolls sideways. A keyboard user can only
+// scroll it if it can take focus, so every scrolling table wrapper gets that, and
+// a name a screen reader can announce. Done once for tables that exist and again
+// for any a script draws later.
+(function () {
+  function mark(root) {
+    (root.querySelectorAll ? root.querySelectorAll('.table-wrap:not([tabindex])') : []).forEach((el) => {
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('role', 'region');
+      if (!el.hasAttribute('aria-label')) el.setAttribute('aria-label', 'Table, scrolls sideways');
+    });
+  }
+  function start() {
+    mark(document);
+    new MutationObserver((list) => { list.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1) mark(n); })); })
+      .observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
 
 // ---------- floating decorative images ----------
 // Floating decorative pictures were removed; kept so older callers do not break.
@@ -1144,7 +1168,7 @@ async function pickVerseCardStyle() {
     backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.58); z-index:9999; display:flex; align-items:flex-end; justify-content:center; padding:0;';
     backdrop.innerHTML = `
       <div role="dialog" aria-label="Choose a background" style="background:#fff; width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px)); font-family:var(--font-body);">
-        <h3 style="margin:0 0 4px; font-family:'Fraunces',serif; font-size:1.15rem; color:#3A1B54;">Choose a background</h3>
+        <h3 style="margin:0 0 4px; font-family:'Fraunces',serif; font-size:1.15rem; color:var(--brand-strong);">Choose a background</h3>
         <p style="margin:0 0 16px; font-size:0.85rem; color:#6b5878;">Your choice is remembered for next time.</p>
         <div id="verseStyleGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;"></div>
         <button type="button" id="verseStyleCancel" class="btn btn-outline btn-sm" style="width:100%; margin-top:16px;">Cancel</button>
@@ -1161,7 +1185,7 @@ async function pickVerseCardStyle() {
       const chip = document.createElement('span');
       chip.style.cssText = `display:block; height:74px; border-radius:9px; background:${style.swatch || '#5B2C82'};`;
       const name = document.createElement('span');
-      name.style.cssText = 'display:block; font-size:0.72rem; font-weight:700; color:#3A1B54; padding:6px 2px 4px; text-align:center;';
+      name.style.cssText = 'display:block; font-size:0.72rem; font-weight:700; color:var(--brand-strong); padding:6px 2px 4px; text-align:center;';
       name.textContent = style.label;
       btn.append(chip, name);
       btn.addEventListener('click', () => {

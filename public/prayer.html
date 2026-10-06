@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -28,15 +30,17 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .prayer-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
   .pray-btn { border:2px solid var(--purple-deep); background:var(--surface); color:var(--brand); border-radius:6px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
   .pray-btn.done { background:var(--purple-deep); color:#fff; }
-  .pray-count { font-size:0.78rem; color:#8a7595; }
-  .answered-badge { display:inline-block; background:#D9F0DE; color:var(--ok-ink); font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:6px; margin-bottom:8px; }
+  .pray-count { font-size:0.78rem; color:var(--ink-faint); }
+  .answered-badge { display:inline-block; background:var(--ok-bg); color:var(--ok-ink); font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:6px; margin-bottom:8px; }
   .testimony-box { background:var(--lilac-light); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:0.85rem; font-style:italic; color:var(--ink-soft); }
   .mine-actions { margin-top:10px; }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section class="hero" data-art="flame" data-hero-page="prayer" style="padding-bottom:48px;">
   <div class="hero-content">
@@ -68,6 +72,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <option value="anonymous">The Prayer Wall, anonymously</option>
         </select>
       </div>
+      <p class="form-notice">Only the prayer team sees a private or anonymous request. A request marked public is shown on the prayer wall. <a href="/privacy.html">Privacy policy</a>.</p>
       <button type="submit" class="btn btn-flame btn-block" id="prayerSubmitBtn">Submit Prayer Request</button>
       <div class="form-msg" id="prayerMsg"></div>
     </form>
@@ -100,11 +105,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <label for="tTestimony">Your Testimony</label>
         <textarea id="tTestimony" required></textarea>
       </div>
+      <p class="form-notice">Your testimony is shown after review. Choose whether your name appears. <a href="/privacy.html">Privacy policy</a>.</p>
       <button type="submit" class="btn btn-primary btn-block" id="testimonySubmitBtn">Share Testimony</button>
       <div class="form-msg" id="testimonyMsg"></div>
     </form>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

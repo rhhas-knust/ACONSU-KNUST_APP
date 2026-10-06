@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Giving and refunds | ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .policy { max-width: 760px; margin: 0 auto; }
+  .policy h2 { margin: 34px 0 12px; font-size: 1.25rem; color: var(--brand); }
+  .policy h3 { margin: 22px 0 8px; font-size: 1rem; color: var(--brand-strong); }
+  .policy p, .policy li { color: var(--ink-soft); line-height: 1.7; }
+  .policy ul { margin: 10px 0 10px 20px; }
+  .policy li { margin-bottom: 7px; }
+  .policy .note {
+    background: var(--lilac-light);
+    border: 1px solid var(--line);
+    padding: 14px 18px; border-radius: var(--radius); margin: 18px 0;
+  }
+  .policy table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
+  .policy th, .policy td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .policy th { color: var(--brand); font-weight: 700; }
+</style>
+</head>
+<body class="has-side-rail">
+
+<a class="skip-link" href="#main">Skip to content</a>
+<header id="site-header"></header>
+<main id="main" tabindex="-1">
+
+<section class="hero hero-compact">
+  <div class="hero-content">
+    <h1>Giving and refunds</h1>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container policy">
+    <p><strong>Last updated:</strong> 6 October 2026</p>
+
+    <p>
+      This page explains how giving works in the ACONSU app and what happens if a gift is sent in
+      error. It is not legal advice, and your chapter's finance office has the final say on each
+      case.
+    </p>
+
+    <h2>How giving works</h2>
+    <ul>
+      <li>The app <strong>does not take payments</strong>. It shows the chapter's Mobile Money or bank details, and you send the money from your own MoMo or banking app.</li>
+      <li>You can then log the gift in the app. The Finance office checks your entry against the chapter's account before it is confirmed.</li>
+      <li>Because the money moves between you and your own provider, any fee they charge is theirs, and ACONSU never sees your PIN or card details.</li>
+    </ul>
+
+    <h2>Gifts are voluntary</h2>
+    <p>
+      Tithes, offerings, harvest and welfare gifts are freely given. Once a gift has been received
+      and used for the purpose you gave it, it cannot be refunded.
+    </p>
+
+    <h2>When we will refund</h2>
+    <p>Tell us within 14 days of sending if:</p>
+    <ul>
+      <li>you sent the wrong amount (for example an extra zero);</li>
+      <li>the same gift was sent twice;</li>
+      <li>you sent it to the wrong chapter or the wrong number because of something on our pages.</li>
+    </ul>
+    <p>
+      The Finance office will check it against the books. If the money has not yet been used, it
+      will be returned to you by the same route it came from (the same MoMo number or bank
+      account). We will tell you the outcome. If we cannot return it, we will tell you why.
+    </p>
+
+    <h2>How to ask</h2>
+    <p>
+      Use the <a href="/contact.html">contact page</a> and give the date, amount, the number or
+      account you sent from, and your transaction reference if you have it. Never send a PIN or
+      password.
+    </p>
+
+    <h2>Disputes with your provider</h2>
+    <p>
+      If money left your account without your permission, contact your mobile money provider or bank
+      first. They hold the transaction and can reverse or investigate it. We will help by
+      confirming what we received.
+    </p>
+
+    <h2>Events and other charges</h2>
+    <p>
+      The app does not currently charge for events. If a chapter ever collects a fee, it will say
+      so on the event, and this page will say how that is refunded.
+    </p>
+
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async () => {
+  await initLayout('/refunds.html');
+})();
+</script>
+</body>
+</html>

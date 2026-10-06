@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,7 +26,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section class="hero" data-art="calm" data-hero-page="contact" style="padding-bottom:48px;">
   <div class="hero-content">
@@ -36,7 +40,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section style="padding-top:0;">
   <div class="container" style="max-width:580px;">
     <div class="card" style="padding:24px; border-radius:18px; margin-bottom:24px;">
-      <h3 style="margin:0 0 6px; font-size:1.1rem; color:var(--brand);">Direct Chapter Contacts</h3>
+      <h2 style="margin:0 0 6px; font-size:1.1rem; color:var(--brand);">Direct Chapter Contacts</h2>
       <p style="color:var(--ink-soft); font-size:0.88rem; margin:0 0 16px;" id="contactDetailsBlurb">Reach the leadership team through the official chapter channels below.</p>
       <div id="contactDetails" style="display:grid; gap:10px;">
         <p style="margin:0; color:var(--ink-soft);">Official chapter contact details will appear here once they are configured.</p>
@@ -56,17 +60,20 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <label for="message">Message</label>
         <textarea id="message" required></textarea>
       </div>
+      <p class="form-notice">We use your name and message only to reply to you. <a href="/privacy.html">Privacy policy</a>.</p>
       <button type="submit" class="btn btn-primary btn-block" id="contactSubmitBtn">Send Message</button>
       <div class="form-msg" id="contactMsg"></div>
     </form>
 
     <div class="card" style="text-align:center; padding:24px; border-radius:18px;">
-      <h3 style="margin:0 0 6px; font-size:1.1rem; color:var(--brand);">Connect With Us Online</h3>
+      <h2 style="margin:0 0 6px; font-size:1.1rem; color:var(--brand);">Connect With Us Online</h2>
       <p style="color:var(--ink-soft); font-size:0.88rem; margin:0 0 16px;">Reach out, watch sermons, or join our community discussions on our official platforms.</p>
       <div id="contactSocialRow" class="social-row" style="justify-content:center; gap:14px;"></div>
     </div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

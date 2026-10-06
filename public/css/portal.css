@@ -25,7 +25,7 @@ body { background: var(--lilac-light); font-family: var(--font-body); }
   border: 1px solid var(--line);
 }
 .portal-login-card img.mark { width: 62px; height: 62px; border-radius: 50%; display: block; margin: 0 auto 18px; }
-.portal-login-card h2 { text-align: center; margin-bottom: 4px; }
+.portal-login-card h1, .portal-login-card h2 { text-align: center; margin-bottom: 4px; font-size: 1.6rem; }
 .portal-login-card .sub { text-align: center; color: var(--ink-soft); font-size: 0.95rem; margin-bottom: 24px; }
 
 /* ---------- shell ---------- */
@@ -96,7 +96,7 @@ body { background: var(--lilac-light); font-family: var(--font-body); }
   background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
   padding: 18px 20px; position: relative; overflow: hidden;
 }
-.stat-card .eyebrow { color: var(--ink-faint); margin-bottom: 6px; }
+.stat-card .stat-label { color: var(--ink-faint); font-size: 0.9rem; font-weight: 600; margin-bottom: 6px; }
 .stat-card .value { font-family: var(--font-display); font-size: 1.65rem; font-weight: 700; color: var(--brand); line-height: 1.15; }
 .stat-card .foot { font-size: 0.78rem; color: var(--ink-faint); margin-top: 6px; }
 .stat-card.good .value { color: var(--ok-ink); }

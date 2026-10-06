@@ -13,7 +13,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -97,7 +99,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     flex-wrap: wrap;
   }
   .live-pill {
-    background: var(--surface); color: #A12B20; font-weight: 700; font-size: 0.72rem;
+    background: var(--surface); color:var(--bad-ink); font-weight: 700; font-size: 0.72rem;
     padding: 3px 9px; border-radius:6px; letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 6px;
   }
   .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #A12B20; }
@@ -122,7 +124,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <span class="splash-mark"><img src="/icons/logo-splash.png" alt=""></span>
 </div>
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <div class="container" style="padding-top:20px;">
   <div id="homeHeaderBanner" class="home-header-banner" style="display:none;"></div>
@@ -144,7 +148,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <a href="/departments.html" class="btn btn-outline">Chapters</a>
       <a href="/content.html?kind=live_service" class="btn btn-outline">Live services</a>
     </div>
-    <div id="heroSocialIcons" style="margin-top:2.5em;"></div>
+    <div id="heroSocialIcons"></div>
     <div id="countdownWrap"></div>
   </div>
 </section>
@@ -167,14 +171,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
       <div class="dash-card dash-quick">
         <div class="dash-head">
-          <h3>Quick Access</h3>
+          <h2>Quick Access</h2>
         </div>
         <div class="tile-grid" id="dashboardTiles"></div>
       </div>
 
       <div class="dash-card dash-events">
         <div class="dash-head">
-          <h3>Upcoming Events</h3>
+          <h2>Upcoming Events</h2>
           <a href="/events.html">View all</a>
         </div>
         <div class="dash-list" id="eventPreview"></div>
@@ -262,6 +266,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   </div>
 </section>
 
+</main>
+
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js?v=7"></script>
@@ -294,14 +300,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   const heroSocialEl = document.getElementById('heroSocialIcons');
   if (heroSocialEl && settings) {
     const socialHtml = socialLinksHtml(settings);
-    heroSocialEl.innerHTML = `
-      <div style="margin-bottom:20px;">
-        <p style="font-family:var(--font-body); color:rgba(255,255,255,0.85); font-size:0.85rem; font-weight:600; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.05em;">Connect With Us</p>
-        <div class="social-row" style="justify-content:center; gap:18px;">
-          ${socialHtml}
-        </div>
-      </div>
-    `;
+    heroSocialEl.innerHTML = socialHtml ? `<div class="social-row" style="justify-content:center;">${socialHtml}</div>` : '';
+    heroSocialEl.querySelectorAll('.social-icon-link').forEach(a => a.classList.add('on-light'));
   }
 
   // 1. Live stream broadcast alert

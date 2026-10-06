@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -22,7 +24,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .discover-search { width:100%; padding:14px 18px; border-radius:6px; border:1.5px solid var(--line); font-family:var(--font-body); font-size:0.95rem; background:var(--surface); margin-bottom:22px; }
+  .discover-search { width:100%; max-width:100%; box-sizing:border-box; padding:14px 18px; border-radius:6px; border:1.5px solid var(--line); font-family:var(--font-body); font-size:0.95rem; background:var(--surface); margin-bottom:22px; }
   .discover-search:focus { outline:none; border-color:var(--brand); }
   .discover-status { margin:-10px 0 18px; color:var(--ink-soft); font-size:0.9rem; }
   .discover-tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:28px; }
@@ -39,7 +41,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section style="padding-top:32px;">
   <div class="container" style="max-width:640px;">
@@ -52,13 +56,15 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div id="browseSection">
       <div class="discover-tiles" id="discoverTiles"></div>
 
-      <h3 style="margin-bottom:14px;">Latest Sermons</h3>
+      <h2 style="margin-bottom:14px; font-size:1.2rem;">Latest sermons</h2>
       <div id="sermonPreview" style="margin-bottom:8px;">
         <div class="skeleton skeleton-card" style="height:90px; margin-bottom:10px;"></div>
       </div>
     </div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -186,7 +192,7 @@ function renderSearchResults(query, results) {
     <div class="discover-summary">${results.length} result${results.length === 1 ? '' : 's'} for “${escapeHtml(query)}”.</div>
     ${Object.entries(grouped).map(([label, items]) => `
       <section class="discover-group">
-        <h3>${escapeHtml(label)}${items.length > 1 ? ` <span style="color:#8b7a99; font-size:0.85rem; font-weight:600;">(${items.length})</span>` : ''}</h3>
+        <h2 style="font-size:1.2rem;">${escapeHtml(label)}${items.length > 1 ? ` <span style="color:var(--ink-faint); font-size:0.85rem; font-weight:600;">(${items.length})</span>` : ''}</h2>
         ${items.map(r => `
           <a href="${r.href}" class="discover-result">
             <div class="dr-type">${escapeHtml(r.typeLabel || r.type || 'Result')}</div>

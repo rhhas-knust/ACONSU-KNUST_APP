@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -40,16 +42,21 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .membership-card .num-value { font-family: var(--font-display); font-size:1.05rem; }
   .membership-card .qr-box { background:var(--surface); padding:8px; border-radius:12px; }
   .membership-card .qr-box img { display:block; width:96px; height:96px; }
-  .card-hint { text-align:center; color:#8a7595; font-size:0.85rem; margin-top:18px; }
+  .card-hint { text-align:center; color:var(--ink-faint); font-size:0.85rem; margin-top:18px; }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
+<h1 class="sr-only">Membership card</h1>
 
 <div class="card-wrap" id="cardWrap">
   <p class="empty-state">Loading your card...</p>
 </div>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

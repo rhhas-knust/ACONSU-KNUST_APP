@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cookies and storage | ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .policy { max-width: 760px; margin: 0 auto; }
+  .policy h2 { margin: 34px 0 12px; font-size: 1.25rem; color: var(--brand); }
+  .policy h3 { margin: 22px 0 8px; font-size: 1rem; color: var(--brand-strong); }
+  .policy p, .policy li { color: var(--ink-soft); line-height: 1.7; }
+  .policy ul { margin: 10px 0 10px 20px; }
+  .policy li { margin-bottom: 7px; }
+  .policy .note {
+    background: var(--lilac-light);
+    border: 1px solid var(--line);
+    padding: 14px 18px; border-radius: var(--radius); margin: 18px 0;
+  }
+  .policy table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
+  .policy th, .policy td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .policy th { color: var(--brand); font-weight: 700; }
+</style>
+</head>
+<body class="has-side-rail">
+
+<a class="skip-link" href="#main">Skip to content</a>
+<header id="site-header"></header>
+<main id="main" tabindex="-1">
+
+<section class="hero hero-compact">
+  <div class="hero-content">
+    <h1>Cookies and storage</h1>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container policy">
+    <p><strong>Last updated:</strong> 6 October 2026</p>
+
+    <p>
+      We use only what the service needs in order to work. We use <strong>no advertising, no
+      analytics and no tracking</strong>, so there is no cookie banner and nothing for you to
+      accept or refuse. If we ever add something that is not strictly necessary, we will ask for
+      your permission first and update this page.
+    </p>
+
+    <table>
+      <thead><tr><th>What</th><th>Where</th><th>Why</th><th>How long</th></tr></thead>
+      <tbody>
+        <tr><td>Session cookie</td><td>Cookie, set only after you sign in</td><td>Keeps you signed in. The service cannot work without it.</td><td>Up to 8 hours, then you sign in again</td></tr>
+        <tr><td>Light or dark choice</td><td>This browser's local storage</td><td>Remembers the look you chose</td><td>Until you clear site data</td></tr>
+        <tr><td>Selected chapter</td><td>This browser's local storage</td><td>Shows the chapter you picked</td><td>Until you clear site data</td></tr>
+        <tr><td>Install and offline copy</td><td>Browser cache (service worker)</td><td>Lets the app open offline. Only public pages and public lists are kept, never anything behind a sign-in.</td><td>Until a new version replaces it or you clear site data</td></tr>
+        <tr><td>Notification subscription</td><td>Your browser's push service</td><td>Only if you turn notifications on. Turn them off in your profile.</td><td>Until you turn them off</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Videos and other companies</h2>
+    <p>
+      A YouTube or Facebook video is not loaded until you press its button, so those companies set
+      no cookies and learn nothing about you before then. Once you press it, their policies apply
+      to that video. Fonts, scripts and pictures come from this app itself.
+    </p>
+
+    <h2>Your control</h2>
+    <p>
+      You can clear cookies and site data in your browser settings at any time. Signing out ends
+      the session cookie straight away.
+    </p>
+
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async () => {
+  await initLayout('/cookies.html');
+})();
+</script>
+</body>
+</html>
