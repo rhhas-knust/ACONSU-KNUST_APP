@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Create Account — ACONSU</title>
+<title>Create Account | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -56,7 +56,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <div class="field">
         <label for="profileImage">Profile Photo</label>
         <input type="file" id="profileImage" accept="image/*" required>
-        <small class="hint" style="color:var(--ink-faint);">Required — used on your digital membership card once you're accepted as a member.</small>
+        <small class="hint" style="color:var(--ink-faint);">Required. Used on your digital membership card once you're accepted as a member.</small>
         <img id="photoPreview" alt="" style="display:none; width:88px; height:88px; border-radius:50%; object-fit:cover; margin-top:10px;">
       </div>
 
@@ -107,7 +107,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <small class="hint" style="color:var(--ink-faint);">Shepherding will confirm your details and welcome you back. Once they do, you can add yourself to Alumni Connect if you would like other members to find you.</small>
       </div>
       <div class="field">
-        <label>Birthday (optional — month &amp; day only, no year, ever)</label>
+        <label>Birthday (optional, month &amp; day only, no year, ever)</label>
         <div class="field-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
           <select id="birthdayMonth">
             <option value="">Month</option>
@@ -120,9 +120,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
             <option value="">Day</option>
           </select>
         </div>
-        <small class="hint" style="color:var(--ink-faint);">We'll celebrate you on the day — your birth year is never collected or stored.</small>
+        <small class="hint" style="color:var(--ink-faint);">We'll celebrate you on the day. Your birth year is never collected or stored.</small>
       </div>
-      <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong> — the Shepherding team will follow up and accept you as an official member.</p>
+      <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong>. The Shepherding team will follow up and accept you as an official member.</p>
       <button type="submit" class="btn btn-primary btn-block" id="registerBtn">Create Account</button>
       <div class="form-msg" id="registerMsg"></div>
       <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:var(--ink-soft);">
@@ -162,10 +162,10 @@ document.querySelectorAll('input[name="memberKind"]').forEach(function (r) {
     const chapters = await fetchJSON('/api/chapters');
     chapterSelect.innerHTML = chapters.length
       ? `<option value="">Select your chapter…</option>` + chapters.map(c =>
-          `<option value="${c.id}">${escapeHtml(c.name)}${c.institution ? ' — ' + escapeHtml(c.institution) : ''}</option>`
+          `<option value="${c.id}">${escapeHtml(c.name)}${c.institution ? ': ' + escapeHtml(c.institution) : ''}</option>`
         ).join('')
       : `<option value="">No chapters available yet</option>`;
-    // Only one chapter exists in most deployments — pick it automatically so
+    // Only one chapter exists in most deployments - pick it automatically so
     // registration stays a single step until a second chapter is added.
     if (chapters.length === 1) chapterSelect.value = chapters[0].id;
     else if (getSelectedChapterId()) chapterSelect.value = getSelectedChapterId();
@@ -214,7 +214,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     // multipart boundary itself), so this call intentionally passes none.
     await fetchJSON('/api/auth/register', { method: 'POST', body: formData });
     setSelectedChapterId(document.getElementById('chapterId').value);
-    showToast('Account created — welcome to ACONSU!', 'success');
+    showToast('Account created, welcome to ACONSU!', 'success');
     window.location.href = '/profile.html';
   } catch (err) {
     msg.textContent = err.message || 'Could not create account.';

@@ -1,5 +1,5 @@
 /* ============================================================
-   Finance Office — budgets, ledger and reporting.
+   Finance Office. Budgets, ledger and reporting.
    Money is only ever summed from the ledger, never stored as a
    total, so what this screen shows is always the books.
    ============================================================ */
@@ -60,7 +60,7 @@ async function renderFinanceOverview(el) {
         summary.monthly.slice(-12).map(m => ({ label: monthLabel(m.month), value: m.income, value2: m.expense })),
         {
           format: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : Math.round(v)),
-          emptyMessage: 'No entries recorded yet — add one from the Ledger.',
+          emptyMessage: 'No entries recorded yet. Add one from the Ledger.',
           legend: [
             { label: 'Income', color: 'var(--purple-deep)' },
             { label: 'Expenses', color: 'var(--flame-gold)' }
@@ -106,7 +106,7 @@ async function renderFinanceOverview(el) {
     ${activeBudget ? `
       <div class="portal-card">
         <h3>${escapeHtml(activeBudget.name)} ${pill(activeBudget.status)}</h3>
-        <p class="hint">${shortDate(activeBudget.startDate)} — ${shortDate(activeBudget.endDate)}</p>
+        <p class="hint">${shortDate(activeBudget.startDate)}: ${shortDate(activeBudget.endDate)}</p>
         <div class="stat-grid" style="margin-bottom:0;">
           ${statCard('Planned Income', money(activeBudget.plannedIncome), { foot: `${money(activeBudget.actualIncome)} received so far` })}
           ${statCard('Planned Spending', money(activeBudget.plannedExpense), { foot: `${money(activeBudget.actualExpense)} spent so far` })}
@@ -184,7 +184,7 @@ function budgetCard(b) {
       <div class="panel-head" style="margin-bottom:14px;">
         <div>
           <h3 style="margin:0;">${escapeHtml(b.name)} ${pill(b.status)}</h3>
-          <p class="sub">${shortDate(b.startDate)} — ${shortDate(b.endDate)}${b.notes ? ` · ${escapeHtml(b.notes)}` : ''}</p>
+          <p class="sub">${shortDate(b.startDate)}: ${shortDate(b.endDate)}${b.notes ? ` · ${escapeHtml(b.notes)}` : ''}</p>
         </div>
         ${PORTAL.canEdit ? `
           <div class="row-actions">
@@ -243,9 +243,9 @@ function openBudgetForm(budget) {
       </div>
       <div class="field"><label>Status</label>
         <select id="bStatus">
-          <option value="draft" ${budget?.status === 'draft' ? 'selected' : ''}>Draft — still being planned</option>
-          <option value="active" ${budget?.status === 'active' ? 'selected' : ''}>Active — currently in use</option>
-          <option value="closed" ${budget?.status === 'closed' ? 'selected' : ''}>Closed — period finished</option>
+          <option value="draft" ${budget?.status === 'draft' ? 'selected' : ''}>Draft. Still being planned</option>
+          <option value="active" ${budget?.status === 'active' ? 'selected' : ''}>Active. Currently in use</option>
+          <option value="closed" ${budget?.status === 'closed' ? 'selected' : ''}>Closed. Period finished</option>
         </select>
       </div>
       <div class="field"><label>Notes</label><input type="text" id="bNotes" value="${escapeHtml(budget?.notes || '')}" placeholder="Optional"></div>
@@ -386,9 +386,9 @@ async function renderLedger(el) {
                 ${e.entryType === 'income' ? '+' : '−'}${money(e.amount).replace('GH₵ ', 'GH₵ ')}
               </td>
               <td>${escapeHtml(e.method || 'cash')}${e.reference ? `<br><small class="muted">${escapeHtml(e.reference)}</small>` : ''}</td>
-              <td>${escapeHtml(e.description || '—')}${e.payee ? `<br><small class="muted">${escapeHtml(e.payee)}</small>` : ''}
+              <td>${escapeHtml(e.description || '-')}${e.payee ? `<br><small class="muted">${escapeHtml(e.payee)}</small>` : ''}
                   ${e.approvalStatus && e.approvalStatus !== 'recorded' ? `<br>${pill(e.approvalStatus)}` : ''}</td>
-              <td class="tiny muted">${escapeHtml(budgetName(e.budgetId) || '—')}</td>
+              <td class="tiny muted">${escapeHtml(budgetName(e.budgetId) || '-')}</td>
               ${PORTAL.canEdit ? `
                 <td class="row-actions">
                   <button data-edit-entry="${e.id}">Edit</button>
@@ -471,11 +471,11 @@ function openEntryForm(entry, budgets) {
             ${budgets.map(b => `<option value="${b.id}" ${entry?.budgetId === b.id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}
           </select>
         </div>
-        <div class="field"><label>Budget Line</label><select id="eBudgetLine"><option value="">—</option></select></div>
+        <div class="field"><label>Budget Line</label><select id="eBudgetLine"><option value="">-</option></select></div>
       </div>
       <div class="field"><label>Approval</label>
         <select id="eApproval">
-          <option value="recorded" ${(entry?.approvalStatus || 'recorded') === 'recorded' ? 'selected' : ''}>Recorded — no approval needed</option>
+          <option value="recorded" ${(entry?.approvalStatus || 'recorded') === 'recorded' ? 'selected' : ''}>Recorded. No approval needed</option>
           <option value="pending" ${entry?.approvalStatus === 'pending' ? 'selected' : ''}>Awaiting approval</option>
           <option value="approved" ${entry?.approvalStatus === 'approved' ? 'selected' : ''}>Approved</option>
           <option value="rejected" ${entry?.approvalStatus === 'rejected' ? 'selected' : ''}>Rejected</option>
@@ -507,14 +507,14 @@ function openEntryForm(entry, budgets) {
   }
 
   // Only lines belonging to the chosen budget, and only lines of the same
-  // type — booking an expense against a planned income line makes no sense.
+  // type - booking an expense against a planned income line makes no sense.
   function renderBudgetLines() {
     const budgetId = document.getElementById('eBudget').value;
     const type = document.getElementById('eType').value;
     const select = document.getElementById('eBudgetLine');
     const budget = budgets.find(b => b.id === budgetId);
     const lines = budget ? budget.lines.filter(l => l.lineType === type) : [];
-    select.innerHTML = `<option value="">${budget ? 'Not tied to a line' : '— choose a budget first —'}</option>` +
+    select.innerHTML = `<option value="">${budget ? 'Not tied to a line' : 'Choose a budget first'}</option>` +
       lines.map(l => `<option value="${l.lineId}" ${entry?.budgetLineId === l.lineId ? 'selected' : ''}>${escapeHtml(l.category)} (${money(l.plannedAmount)})</option>`).join('');
     select.disabled = !budget;
   }
@@ -583,20 +583,20 @@ async function renderReports(el) {
     </div>
 
     <div class="portal-card">
-      <h3>Statement — ${escapeHtml(rangeLabel)}</h3>
+      <h3>Statement: ${escapeHtml(rangeLabel)}</h3>
       <p class="hint">${summary.entryCount} entries in this period.</p>
       <div class="table-wrap">
         <table class="portal-table" style="min-width:0;">
           <tbody>
             ${INCOME_CATEGORIES.map(c => `
-              <tr><td>Income — ${escapeHtml(c.label)}</td><td class="num">${money(summary.byIncomeCategory[c.value] || 0)}</td></tr>
+              <tr><td>Income: ${escapeHtml(c.label)}</td><td class="num">${money(summary.byIncomeCategory[c.value] || 0)}</td></tr>
             `).join('')}
             <tr style="background:var(--lilac-light);">
               <td><strong>Total Income</strong></td><td class="num"><strong>${money(summary.totalIncome)}</strong></td>
             </tr>
             ${Object.entries(summary.byExpenseCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => `
-              <tr><td>Expense — ${escapeHtml(cat)}</td><td class="num">${money(amt)}</td></tr>
-            `).join('') || '<tr><td class="muted">No expenses in this period</td><td class="num">—</td></tr>'}
+              <tr><td>Expense: ${escapeHtml(cat)}</td><td class="num">${money(amt)}</td></tr>
+            `).join('') || '<tr><td class="muted">No expenses in this period</td><td class="num">-</td></tr>'}
             <tr style="background:var(--lilac-light);">
               <td><strong>Total Expenditure</strong></td><td class="num"><strong>${money(summary.totalExpense)}</strong></td>
             </tr>
@@ -635,7 +635,7 @@ async function renderReports(el) {
 // ---------- giving claims (section 32) ----------
 // A member logs what they sent via MoMo/bank on /give.html; this is where
 // that claim becomes (or doesn't become) a real ledger entry. Nothing here
-// is a payment gateway — see the note on GivingIntent in lib/models.js.
+// is a payment gateway - see the note on GivingIntent in lib/models.js.
 async function renderGivingQueue(el) {
   const [items, batches] = await Promise.all([
     fetchJSON('/api/finance/giving-queue'),
@@ -662,7 +662,7 @@ async function renderGivingQueue(el) {
               <td>${incomeLabel(g.purpose)}</td>
               <td class="num">${money(g.amount)}</td>
               <td>${escapeHtml(g.method)}</td>
-              <td class="tiny muted">${escapeHtml(g.reference || '—')}</td>
+              <td class="tiny muted">${escapeHtml(g.reference || '-')}</td>
               <td class="row-actions">
                 <button data-confirm="${g.id}" data-who="${escapeHtml(g.memberName || '')}"
                   data-amount="${escapeHtml(String(g.amount))}"
@@ -742,7 +742,7 @@ async function renderGivingQueue(el) {
           })
         });
         closeModal();
-        showToast('Confirmed — the member has been told.', 'success');
+        showToast('Confirmed, the member has been told.', 'success');
         openPanel('giving');
       } catch (err) { showToast(err.message || 'Could not confirm this.', 'error'); }
     });

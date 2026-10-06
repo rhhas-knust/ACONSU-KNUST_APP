@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bible Study — ACONSU</title>
+<title>Bible Study | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -73,7 +73,7 @@ function scriptureLinkHref(ref) {
 function renderList() {
   const el = document.getElementById('studyList');
   if (!STUDIES.length) {
-    el.innerHTML = '<p class="empty-state">No Bible studies posted yet — check back soon.</p>';
+    el.innerHTML = '<p class="empty-state">No Bible studies posted yet. Check back soon.</p>';
     return;
   }
   el.innerHTML = STUDIES.map(s => `

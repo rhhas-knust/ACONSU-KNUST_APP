@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Give — ACONSU</title>
+<title>Give | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -48,7 +48,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
     <form class="form-card" id="giveForm" style="display:none;">
       <h3 style="margin-bottom:6px;">Log Your Gift</h3>
-      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">After sending via MoMo/bank using the details above, tell us here — Finance confirms it against the books.</p>
+      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">After sending via MoMo/bank using the details above, tell us here: Finance confirms it against the books.</p>
       <div class="field"><label for="amount">Amount (GH₵)</label><input type="number" id="amount" min="0.01" step="0.01" required></div>
       <div class="field"><label for="purpose">Purpose</label>
         <select id="purpose">
@@ -78,7 +78,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <script>
 // The raw keys are not English, and a badge reading "confirmed" is not an
 // acknowledgement. Somebody who gave wants to know it arrived, who says so and
-// when — so the row says that in words.
+// when - so the row says that in words.
 const PURPOSE_LABELS = {
   tithe: 'Tithe', offertory: 'Offertory', harvest: 'Harvest',
   momo: 'General giving', other: 'Other'
@@ -96,7 +96,7 @@ function giveStatusLine(g) {
     return `<span class="tiny" style="color:var(--ok-ink, #2E7D4F); font-weight:700;">Received${on}${who}</span>`;
   }
   if (g.status === 'rejected') {
-    return `<span class="tiny" style="color:var(--bad-ink, #A93226); font-weight:700;">Not confirmed${g.reviewNotes ? ' — ' + escapeHtml(g.reviewNotes) : ''}</span>`;
+    return `<span class="tiny" style="color:var(--bad-ink, #A93226); font-weight:700;">Not confirmed${g.reviewNotes ? ': ' + escapeHtml(g.reviewNotes) : ''}</span>`;
   }
   return '<span class="tiny muted">Waiting to be confirmed against the account</span>';
 }
@@ -108,7 +108,7 @@ async function loadHistory() {
     wrap.innerHTML = items.map(g => `
       <div class="give-history-row">
         <span>
-          ${escapeHtml(PURPOSE_LABELS[g.purpose] || g.purpose)} — GH₵ ${Number(g.amount).toFixed(2)}
+          ${escapeHtml(PURPOSE_LABELS[g.purpose] || g.purpose)}: GH₵ ${Number(g.amount).toFixed(2)}
           <br>${giveStatusLine(g)}
         </span>
       </div>
@@ -129,7 +129,7 @@ async function loadHistory() {
   try {
     const info = await fetchJSON('/api/giving/chapter-info');
     if (!info.configured) {
-      document.getElementById('payInfo').innerHTML = '<p class="empty-state">Your chapter hasn\'t set up giving details yet — check back soon.</p>';
+      document.getElementById('payInfo').innerHTML = '<p class="empty-state">Your chapter hasn\'t set up giving details yet. Check back soon.</p>';
     } else {
       const p = info.payment;
       const welfarePurposes = info.welfarePurposes || [];
@@ -150,15 +150,15 @@ async function loadHistory() {
               : ''}
             ${!toWelfare && p.provider ? `<dt>Giving Channel</dt><dd>${escapeHtml(p.provider)}</dd>` : ''}
             ${momoNumber
-              ? `<dt>${toWelfare ? 'Welfare Mobile Money' : 'Mobile Money'}</dt><dd>${escapeHtml(momoNumber)}${momoName ? ' — ' + escapeHtml(momoName) : ''}</dd>`
+              ? `<dt>${toWelfare ? 'Welfare Mobile Money' : 'Mobile Money'}</dt><dd>${escapeHtml(momoNumber)}${momoName ? ': ' + escapeHtml(momoName) : ''}</dd>`
               : `<p class="empty-state" style="margin:8px 0;">${toWelfare
-                  ? 'Welfare has not published its account yet — ask the Welfare team before sending your tithe.'
+                  ? 'Welfare has not published its account yet. Ask the Welfare team before sending your tithe.'
                   : 'No mobile money number on file yet.'}</p>`}
             ${!toWelfare && p.bankName ? `<dt>Bank</dt><dd>${escapeHtml(p.bankName)}</dd>` : ''}
             ${!toWelfare && p.bankAccountNumber ? `<dt>Account</dt><dd>${escapeHtml(p.bankAccountName || '')} ${escapeHtml(p.bankAccountNumber)}</dd>` : ''}
             ${!toWelfare && p.donationDestination ? `<dt>General Giving</dt><dd>${escapeHtml(p.donationDestination)}</dd>` : ''}
             ${!toWelfare && p.welfareDestination ? `<dt>Welfare Giving</dt><dd>${escapeHtml(p.welfareDestination)}</dd>` : ''}
-            <p style="font-size:0.8rem; color:var(--ink-faint); margin-top:14px;">Sent via your own MoMo/bank app — this page doesn't process payments directly.</p>
+            <p style="font-size:0.8rem; color:var(--ink-faint); margin-top:14px;">Sent via your own MoMo/bank app. This page doesn't process payments directly.</p>
           </div>
         `;
       }
@@ -189,7 +189,7 @@ document.getElementById('giveForm').addEventListener('submit', async (e) => {
     });
     msg.textContent = 'Thank you! Finance will confirm this against the books.';
     msg.className = 'form-msg success';
-    showToast('Giving recorded — thank you!', 'success');
+    showToast('Giving recorded, thank you!', 'success');
     document.getElementById('giveForm').reset();
     loadHistory();
   } catch (err) {

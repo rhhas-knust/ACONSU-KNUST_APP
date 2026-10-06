@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ACONSU — The Apostles' Continuation Students Union</title>
+<title>ACONSU: The Apostles' Continuation Students Union</title>
 <meta name="description" content="ACONSU: a campus fellowship carrying the fire of the Holy Spirit and continuing the pattern of the apostles.">
 <script>
 /* Set the theme before the first paint. A page that renders light and then
@@ -26,7 +26,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
      The system draws its own splash first: a purple screen (manifest
      background_color) with the app icon. This picks that exact screen up and
      carries it, so the handoff is invisible and the logo appears to sit still
-     and then spring — one motion rather than two screens.
+     and then spring. One motion rather than two screens.
 
      It lives here, above the stylesheet link, so the purple is painted on the
      first frame. It also removes itself in CSS rather than in script, so a
@@ -39,7 +39,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   }
   /* The emblem's ring text is purple, so on a purple ground it would all but
      disappear. A soft glow behind it lifts the dark strokes without giving the
-     mark an edge to sit on — light behind the flame rather than a tile under
+     mark an edge to sit on. Light behind the flame rather than a tile under
      it. Drawn here rather than baked into the file so it scales with the art. */
   #appSplash .splash-mark {
     width: 280px; height: 280px; border-radius: 50%;
@@ -90,7 +90,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </style>
 <script>
   // Runs while the head is still parsing, so the decision is made before the
-  // overlay is ever painted — no flash of a splash we meant to skip.
+  // overlay is ever painted - no flash of a splash we meant to skip.
   try {
     if (sessionStorage.getItem('aconsu.splashShown')) document.documentElement.dataset.splash = 'skip';
     else sessionStorage.setItem('aconsu.splashShown', '1');
@@ -131,7 +131,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <!-- logo-splash.png is the emblem with its white backing removed, so the mark
      sits on the screen rather than on a white tile stuck to it. The white
-     inside the artwork — the book's pages, the dove — is untouched. -->
+     inside the artwork, the book's pages, the dove, is untouched. -->
 <div id="appSplash" aria-hidden="true">
   <span class="splash-mark"><img src="/icons/logo-splash.png" alt=""></span>
 </div>
@@ -154,7 +154,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <div class="hero-content">
     <p class="eyebrow">Welcome to ACONSU</p>
     <h1>Carrying the fire.<br>Continuing the pattern.</h1>
-    <p class="lede">A campus family devoted to the Word, to fellowship, to prayer — continuing steadfastly in the pattern the apostles left us. Come as you are.</p>
+    <p class="lede">A campus family devoted to the Word, to fellowship, to prayer. Continuing steadfastly in the pattern the apostles left us. Come as you are.</p>
     <div class="hero-actions">
       <a href="/events.html" class="btn btn-primary">See What's Coming Up</a>
       <a href="/departments.html" class="btn btn-outline">Explore Departments</a>
@@ -165,8 +165,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   </div>
 </section>
 
-<!-- The three things worth seeing first, on one row. Kept in this DOM order —
-     verse, quick access, events — so a phone still reads the way it always has;
+<!-- The three things worth seeing first, on one row. Kept in this DOM order -
+     verse, quick access, events. So a phone still reads the way it always has;
      the rail-width layout reorders them with `order` so what is happening next
      leads, which is what the space is for. -->
 <section class="home-dash">
@@ -178,7 +178,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <p class="eyebrow" style="color:rgba(255,255,255,0.75); margin:0;">Verse of the Day</p>
           <button type="button" class="btn btn-sm" id="shareVerseBtn" style="background:rgba(255,255,255,0.2); color:#fff; border:none; padding:5px 12px; font-size:0.78rem; border-radius:999px; cursor:pointer;">📤 Share Verse</button>
         </div>
-        <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship, in the breaking of bread, and in prayers." — Acts 2:42</p>
+        <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship, in the breaking of bread, and in prayers." (Acts 2:42)</p>
       </div>
 
       <div class="dash-card dash-quick">
@@ -281,7 +281,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <div class="container" style="text-align:center;">
     <p class="eyebrow">We're Here for You</p>
     <h2>Need Prayer?</h2>
-    <p style="max-width:520px; margin:0 auto 28px; color:var(--ink-soft);">Whatever you're carrying — an exam, a decision, a burden — bring it to the family. We would love to stand with you in prayer.</p>
+    <p style="max-width:520px; margin:0 auto 28px; color:var(--ink-soft);">Whatever you're carrying, an exam, a decision, a burden, bring it to the family. We would love to stand with you in prayer.</p>
     <a href="/prayer.html" class="btn btn-flame">Submit a Prayer Request</a>
   </div>
 </section>
@@ -435,7 +435,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     // Share as text
     menu.querySelector('.share-menu-btn:nth-child(1)').addEventListener('click', () => {
       shareContent({
-        title: 'Verse of the Day — ACONSU',
+        title: 'Verse of the Day | ACONSU',
         text: `${verseText}\n\nRead more on the ACONSU App`,
         url: window.location.origin + '/bible.html'
       });
@@ -566,7 +566,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <span class="badge">${e.time}</span>
         </div>
       </div>`;
-    }).join('') || '<p class="empty-state">No upcoming events yet — check back soon.</p>';
+    }).join('') || '<p class="empty-state">No upcoming events yet. Check back soon.</p>';
 
     // Event Flyers Strip
     const flyerEvents = upcoming.filter(e => e.flyerFileId);

@@ -1,18 +1,18 @@
 let CURRENT_SETTINGS = {};
-// Who's actually driving this dashboard — the legacy env admin (national-
+// Who's actually driving this dashboard - the legacy env admin (national-
 // equivalent, sees only public-app/national panels once a second chapter
 // exists) or a chapter-scoped Chapter Admin/Coordinator account (runs their
 // own chapter's full operations). Set by checkAuth() before the shell ever
 // renders.
 let ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
 const ADMIN_NAV_STATE_KEY = 'aconsu_admin_nav_state';
-// How many active chapters exist — the only thing national scope needs to
+// How many active chapters exist - the only thing national scope needs to
 // know here now that this dashboard no longer offers a way to step into a
 // specific chapter's operations (that's each chapter's own admin's job; see
 // GOVERNANCE_TIER_REVIEW.md). Chapter oversight lives on the National Portal
-// instead (readiness rollup, national events) — see loadAdminChapterCount().
+// instead (readiness rollup, national events) - see loadAdminChapterCount().
 let ADMIN_CHAPTERS = [];
-// The live push connection behind the operational dashboard (Phase 2) — see
+// The live push connection behind the operational dashboard (Phase 2) - see
 // closeOverviewStream() and GET /api/admin/overview/stream in server.js.
 let OVERVIEW_STREAM = null;
 
@@ -31,7 +31,7 @@ document.getElementById('modalBackdrop').addEventListener('click', (e) => {
 
 // ---------- auth ----------
 // Two accounts can open this dashboard: the original env-based admin login
-// (kept working unchanged — see /api/admin/login), and, going forward, a
+// (kept working unchanged - see /api/admin/login), and, going forward, a
 // Chapter Admin or Chapter Coordinator account created under Leadership
 // Accounts (signed in the same way every other portal does). Both are
 // checked here so nothing about the legacy login has to change.
@@ -66,7 +66,7 @@ async function checkAuth() {
 
 // "National by default, chapter operations belong to chapters"
 // (GOVERNANCE_TIER_REVIEW.md). True once there's more than one active
-// chapter — deliberately inert with a single chapter (ADMIN_CHAPTERS.length
+// chapter - deliberately inert with a single chapter (ADMIN_CHAPTERS.length
 // !== 1), the same "single chapter, zero friction" rule the server applies,
 // so nothing changes for ACONSU's current single-chapter deployment.
 function isTrueNationalScope() {
@@ -111,7 +111,7 @@ function lockForOversight(root, { note = false } = {}) {
   if (note && !root.querySelector(':scope > .oversight-note')) {
     const p = document.createElement('p');
     p.className = 'oversight-note';
-    p.textContent = '👁 View only. National oversees chapters — changes here are made by the chapter’s own admin.';
+    p.textContent = '👁 View only. National oversees chapters. Changes here are made by the chapter’s own admin.';
     root.prepend(p);
   }
 }
@@ -140,7 +140,7 @@ function initOversightMode() {
   watch(document.getElementById('modalContent'), () => oversightLocks(CURRENT_PANEL));
 }
 
-// Phase D — the national actor's admin nav is a wall of 22 chapter-operations
+// Phase D - the national actor's admin nav is a wall of 22 chapter-operations
 // panels that were never national's to begin with (see Finding 1). Panels
 // tagged data-scope="chapter" in admin.html are hidden at true national
 // scope; a group collapses entirely once every one of its panels is hidden.
@@ -162,7 +162,7 @@ function applyNavScopeVisibility() {
   return pruned;
 }
 
-// Just enough to know whether a second chapter exists — this dashboard no
+// Just enough to know whether a second chapter exists - this dashboard no
 // longer offers a way to step into one (chapter operations are that
 // chapter's own admin's job), so there's nothing else to fetch here.
 async function loadAdminChapterCount() {
@@ -179,7 +179,7 @@ async function showAdminShell() {
   initMobileAdminUi();
   initCommandPalette();
   // Awaited so ADMIN_CHAPTERS is populated before the nav is pruned and the
-  // first panel loads — otherwise both would briefly judge scope off an
+  // first panel loads - otherwise both would briefly judge scope off an
   // empty chapter list and mis-render on the very first paint.
   await loadAdminChapterCount();
   applyNavScopeVisibility();
@@ -191,7 +191,7 @@ async function showAdminShell() {
   const brand = document.getElementById('adminBrandName');
   if (ADMIN_SCOPE.isNational) {
     if (badge) badge.textContent = isOversightOnly() ? '🌐 National · View only'
-      : (isTrueNationalScope() ? '🌐 National — Public App & Events' : '🌐 National Admin');
+      : (isTrueNationalScope() ? '🌐 National, Public App & Events' : '🌐 National Admin');
     if (brand) brand.textContent = 'ACONSU Admin';
     const natBtn = document.getElementById('navNationalBtn');
     const globBtn = document.getElementById('navGlobalSettingsBtn');
@@ -202,11 +202,11 @@ async function showAdminShell() {
       .then(cs => {
         const name = cs.name || ADMIN_SCOPE.chapterId;
         if (badge) badge.textContent = `📍 ${name}`;
-        if (brand) brand.textContent = `ACONSU — ${name}`;
+        if (brand) brand.textContent = `ACONSU: ${name}`;
       })
       .catch(() => {
         if (badge) badge.textContent = `📍 ${ADMIN_SCOPE.chapterId}`;
-        if (brand) brand.textContent = `ACONSU — ${ADMIN_SCOPE.chapterId}`;
+        if (brand) brand.textContent = `ACONSU: ${ADMIN_SCOPE.chapterId}`;
       });
   }
 
@@ -391,10 +391,10 @@ function overviewActivityTime(value) {
 
 // Pure render: builds the panel from one overview payload. Called for the
 // first paint (from fetchJSON below) and again for every live push the SSE
-// connection delivers, so a push looks exactly like a fresh load — no
+// connection delivers, so a push looks exactly like a fresh load - no
 // separate "delta" shape to keep in sync with the server.
 // Panels are referred to by their internal key ('prayerRequests',
-// 'chatModeration'), which is fine in code and wrong on a button — the
+// 'chatModeration'), which is fine in code and wrong on a button - the
 // dashboard was offering "Open prayerRequests" to a Chapter Admin. The nav
 // already holds the human name for every panel, so it is read from there
 // rather than kept in a second list that would drift from it. Falls back to
@@ -437,7 +437,7 @@ function renderOverviewData(el, data) {
       <ul>
         ${data.activity.map((item) => `
           <li>
-            <strong>${escapeHtml(item.label || 'Activity')}</strong> — ${escapeHtml(item.title || '')}<br>
+            <strong>${escapeHtml(item.label || 'Activity')}</strong>: ${escapeHtml(item.title || '')}<br>
             <small>${escapeHtml(item.detail || '')}</small><br>
             <small class="hint">${escapeHtml(overviewActivityTime(item.at))}</small><br>
             ${item.panel ? `<button type="button" class="btn btn-outline btn-sm" data-activity-panel="${escapeHtml(item.panel)}">Open ${escapeHtml(panelLabel(item.panel))}</button>` : ''}
@@ -496,7 +496,7 @@ async function renderOverview() {
   const el = document.getElementById('panel-overview');
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   closeOverviewStream();
-  // The operational dashboard is a chapter's dashboard — there is no
+  // The operational dashboard is a chapter's dashboard - there is no
   // meaningful cross-chapter version of "this week's attendance", and running
   // one is each chapter's own admin's job now, not national's. Point at the
   // National Portal's aggregate/readiness view instead of a raw error.
@@ -563,7 +563,7 @@ const PAGE_FIELDS = [
     { value: 'text', label: 'Plain Info Page' }
   ], required: true },
   { key: 'description', label: 'Short Description (shown under the title)', type: 'text' },
-  { key: 'content', label: 'Page Content (only used for "Plain Info Page" — separate paragraphs with a blank line)', type: 'textarea' },
+  { key: 'content', label: 'Page Content (only used for "Plain Info Page", separate paragraphs with a blank line)', type: 'textarea' },
   { key: 'showInNav', label: 'Show this page in the main menu', type: 'checkbox' }
 ];
 
@@ -593,7 +593,7 @@ async function renderResourcePanel(resource, fields, singular) {
               </div>
             </td>` : ''}
             ${fields.slice(0, 3).map((f, idx) => `<td>${idx === 0 && resource === 'events' && item.isNational ? '<span class="badge" style="margin-right:6px;">National</span>' : ''}${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
-            ${resource === 'events' ? `<td>${item.registrationEnabled ? `<button data-view-regs="${item.id}" data-title="${escapeHtml(item.title)}">View (${item.capacity > 0 ? `cap ${item.capacity}` : 'unlimited'})</button>` : '—'}</td>` : ''}
+            ${resource === 'events' ? `<td>${item.registrationEnabled ? `<button data-view-regs="${item.id}" data-title="${escapeHtml(item.title)}">View (${item.capacity > 0 ? `cap ${item.capacity}` : 'unlimited'})</button>` : '-'}</td>` : ''}
             <td class="row-actions">
               ${resource === 'events' && item.isNational ? `<span class="tiny muted">Managed from the National Portal</span>` : `
                 ${resource === 'departments' ? `<button data-header-image="${item.id}">Header Image</button>` : ''}
@@ -709,9 +709,9 @@ function openResourceForm(resource, fields, singular, item) {
 // One portal account per leader, so access follows the person holding the office
 // rather than a password everybody knows.
 const PORTAL_ROLES = [
-  { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter — dashboard, chapters, announcements.', href: '/national.html' },
-  { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority — oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
-  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration — chapter-scoped dashboard.', href: '/chapter.html' },
+  { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter. Dashboard, chapters, announcements.', href: '/national.html' },
+  { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority. Oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
+  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Day-to-day chapter administration. Chapter-scoped dashboard.', href: '/chapter.html' },
   // Executive is deliberately absent: an executive is a member the Chapter
   // Coordinator promotes, either by approving their application or from the
   // Coordinator's own Leadership Accounts panel, which asks which member.
@@ -720,7 +720,7 @@ const PORTAL_ROLES = [
   { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' },
   { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' }
 ];
-// Only a National Coordinator may hand out these two — see /api/admin/staff.
+// Only a National Coordinator may hand out these two - see /api/admin/staff.
 const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];
 // Every chapter office is held by a member of that chapter, so the server asks
 // which one. A National Coordinator belongs to the union rather than to any
@@ -758,7 +758,7 @@ async function renderStaffAccounts() {
       <tbody>
         ${users.map(u => `
           <tr>
-            <td>${escapeHtml(u.name || '—')}</td>
+            <td>${escapeHtml(u.name || '-')}</td>
             <td>${escapeHtml(u.username)}</td>
             <td>${escapeHtml((PORTAL_ROLES.find(r => r.value === u.role) || {}).label || u.role)}</td>
             <td><span class="status-pill ${u.active ? 'done' : ''}">${u.active ? 'active' : 'disabled'}</span></td>
@@ -768,7 +768,7 @@ async function renderStaffAccounts() {
               <button class="danger" data-delete-staff="${u.id}">Delete</button>
             </td>
           </tr>
-        `).join('') || '<tr><td colspan="6">No leadership accounts yet — add one to give a leader their portal.</td></tr>'}
+        `).join('') || '<tr><td colspan="6">No leadership accounts yet. Add one to give a leader their portal.</td></tr>'}
       </tbody>
     </table>
   `;
@@ -790,7 +790,7 @@ async function renderStaffAccounts() {
 async function openStaffForm(user) {
   const isEdit = !!user;
   // A chapter-scoped admin can't hand out Chapter Coordinator (only National
-  // can — see NATIONAL_ONLY_STAFF_ROLES) and never needs a chapter picker,
+  // can - see NATIONAL_ONLY_STAFF_ROLES) and never needs a chapter picker,
   // since the server always scopes their accounts to their own chapter.
   const roleOptions = PORTAL_ROLES.filter(r => ADMIN_SCOPE.isNational || !NATIONAL_ONLY_STAFF_ROLES.includes(r.value));
   let chapters = [];
@@ -807,11 +807,11 @@ async function openStaffForm(user) {
         ${isEdit
           ? `<input type="text" value="${escapeHtml(user.username)}" disabled>`
           : '<input type="text" id="stUsername" placeholder="e.g. finance.ama" required>'}
-        ${isEdit ? '<small class="hint">Usernames cannot be changed — delete and recreate the account if it must change.</small>' : ''}
+        ${isEdit ? '<small class="hint">Usernames cannot be changed. Delete and recreate the account if it must change.</small>' : ''}
       </div>
       <div class="field"><label>Which portal does this account open?</label>
         <select id="stRole" ${isEdit ? '' : 'required'}>
-          ${roleOptions.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label} — ${r.blurb}</option>`).join('')}
+          ${roleOptions.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label}, ${r.blurb}</option>`).join('')}
         </select>
       </div>
       ${isEdit ? '' : `
@@ -830,7 +830,7 @@ async function openStaffForm(user) {
       ` : ''}
       <div class="field"><label>${isEdit ? 'New Password (leave blank to keep the current one)' : 'Password'}</label>
         <input type="text" id="stPassword" ${isEdit ? '' : 'required'} placeholder="At least 8 characters">
-        <small class="hint">Shown in plain text so you can copy it to the leader — it is stored hashed and can never be read back.</small>
+        <small class="hint">Shown in plain text so you can copy it to the leader. It is stored hashed and can never be read back.</small>
       </div>
       ${isEdit ? `
         <div class="field checkbox-field">
@@ -846,7 +846,7 @@ async function openStaffForm(user) {
   `);
   document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
 
-  // The roster follows whichever chapter the account is being created in —
+  // The roster follows whichever chapter the account is being created in -
   // otherwise a national actor would be offered one chapter's members while
   // creating an account in another, and the server would rightly refuse it.
   const roleSelect = document.getElementById('stRole');
@@ -918,15 +918,15 @@ async function openStaffForm(user) {
 // dedicated screen: see what is there now, replace it, or pick something already
 // in the library.
 async function openDepartmentImageModal(dept) {
-  showModal(`<h3>Header Image — ${escapeHtml(dept.name)}</h3><p class="empty-state">Loading library...</p>`);
+  showModal(`<h3>Header Image, ${escapeHtml(dept.name)}</h3><p class="empty-state">Loading library...</p>`);
   const files = await fetchJSON('/api/files?category=photo').catch(() => []);
   const images = files.filter(f => (f.contentType || '').startsWith('image/'));
 
   document.getElementById('modalContent').innerHTML = `
-    <h3>Header Image — ${escapeHtml(dept.name)}</h3>
+    <h3>Header Image: ${escapeHtml(dept.name)}</h3>
     <p class="hint" style="margin-bottom:16px;">
       This photo appears as the banner across the top of the ${escapeHtml(dept.name)} page, and on its card in the departments list.
-      Landscape photos work best — anything wider than it is tall.
+      Landscape photos work best. Anything wider than it is tall.
     </p>
 
     <div style="aspect-ratio:16/6; border-radius:12px; overflow:hidden; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; margin-bottom:18px;">
@@ -1065,7 +1065,7 @@ async function renderPrayerRequests() {
           <tr>
             <td>${escapeHtml(r.name)} ${r.isPrivate ? '<span class="badge">Private</span>' : ''}</td>
             <td>${escapeHtml(r.request)}</td>
-            <td>${escapeHtml(r.email || '—')}</td>
+            <td>${escapeHtml(r.email || '-')}</td>
             <td>${new Date(r.createdAt).toLocaleDateString()}</td>
             <td><span class="status-pill ${r.status === 'prayed' ? 'done' : ''}">${r.status}</span></td>
             <td class="row-actions">
@@ -1178,7 +1178,7 @@ async function renderNotifications() {
       <form id="notifForm">
         <div class="field"><label>Title</label><input type="text" id="notifTitle" required placeholder="e.g. Service moved to 9AM"></div>
         <div class="field"><label>Message</label><textarea id="notifBody" required placeholder="Short, clear message..."></textarea></div>
-        <div class="field"><label>Link (optional — where tapping the notification should go)</label>
+        <div class="field"><label>Link (optional, where tapping the notification should go)</label>
           <select id="notifUrl">
             <option value="/index.html">Home</option>
             <option value="/events.html">Events</option>
@@ -1256,7 +1256,7 @@ async function renderBibleStudies() {
           <div class="field"><label>Topic</label><input type="text" id="stTopic" required></div>
           <div class="field"><label>Date</label><input type="date" id="stDate"></div>
         </div>
-        <div class="field"><label>Scripture Reference</label><input type="text" id="stScripture" placeholder="e.g. John 3:1-21 — links straight into the Bible reader"></div>
+        <div class="field"><label>Scripture Reference</label><input type="text" id="stScripture" placeholder="e.g. John 3:1-21. Links straight into the Bible reader"></div>
         <div class="field"><label>Study Material</label><textarea id="stMaterial" placeholder="The main teaching content"></textarea></div>
         <div class="field"><label>Questions (one per line)</label><textarea id="stQuestions"></textarea></div>
         <div class="field"><label>Notes</label><textarea id="stNotes"></textarea></div>
@@ -1271,8 +1271,8 @@ async function renderBibleStudies() {
         ${studies.map(s => `
           <tr>
             <td>${escapeHtml(s.topic)}</td>
-            <td>${escapeHtml(s.date || '—')}</td>
-            <td>${escapeHtml(s.scriptureReference || '—')}</td>
+            <td>${escapeHtml(s.date || '-')}</td>
+            <td>${escapeHtml(s.scriptureReference || '-')}</td>
             <td class="row-actions"><button class="danger" data-delete-study="${s.id}">Delete</button></td>
           </tr>
         `).join('') || '<tr><td colspan="4">No Bible studies posted yet.</td></tr>'}
@@ -1331,7 +1331,7 @@ async function renderGroupsAdmin() {
       <h2 style="margin:0;">Groups (${groups.length})</h2>
       <button class="btn btn-primary btn-sm" id="newGroupBtn">+ New Group</button>
     </div>
-    <p style="font-size:0.85rem; color:#8a7595; margin:8px 0 18px;">The group's own leader can update meeting details and resources from the group's page — this is for creating groups and reassigning leadership.</p>
+    <p style="font-size:0.85rem; color:#8a7595; margin:8px 0 18px;">The group's own leader can update meeting details and resources from the group's page. This is for creating groups and reassigning leadership.</p>
     <table>
       <thead><tr><th>Name</th><th>Type</th><th>Leader</th><th>Members</th><th>Actions</th></tr></thead>
       <tbody>
@@ -1339,7 +1339,7 @@ async function renderGroupsAdmin() {
           <tr>
             <td>${escapeHtml(g.name)}</td>
             <td>${GROUP_TYPE_LABELS[g.type] || g.type}</td>
-            <td>${escapeHtml(g.leaderName || '—')}</td>
+            <td>${escapeHtml(g.leaderName || '-')}</td>
             <td>${g.memberCount}</td>
             <td class="row-actions">
               <button data-edit-group="${g.id}">Edit</button>
@@ -1424,7 +1424,7 @@ async function renderWelfareAdmin() {
     const items = await fetchJSON('/api/welfare/requests');
     el.innerHTML = `
       <h2 style="margin-bottom:8px;">Welfare Requests (${items.length})</h2>
-      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Sensitive — visible only to Welfare Officers and Chapter Admin/Coordinator.</p>
+      <p style="font-size:0.85rem; color:#8a7595; margin-bottom:18px;">Sensitive. Visible only to Welfare Officers and Chapter Admin/Coordinator.</p>
       <table>
         <thead><tr><th>Member</th><th>Category</th><th>Description</th><th>Status</th><th>Referred By</th><th>Actions</th></tr></thead>
         <tbody>
@@ -1438,7 +1438,7 @@ async function renderWelfareAdmin() {
                   ${Object.entries(WELFARE_STATUS_LABELS).map(([v, l]) => `<option value="${v}" ${w.status === v ? 'selected' : ''}>${l}</option>`).join('')}
                 </select>
               </td>
-              <td>${escapeHtml(w.referredBy || '—')}</td>
+              <td>${escapeHtml(w.referredBy || '-')}</td>
               <td class="row-actions"><button data-add-note="${w.id}">Case Notes</button></td>
             </tr>
           `).join('') || '<tr><td colspan="6">No welfare requests right now.</td></tr>'}
@@ -1454,7 +1454,7 @@ async function renderWelfareAdmin() {
     el.querySelectorAll('[data-add-note]').forEach(btn => btn.addEventListener('click', () => {
       const item = items.find(w => w.id === btn.dataset.addNote);
       showModal(`
-        <h3>Case Notes — ${escapeHtml(item.memberName || 'Unknown')}</h3>
+        <h3>Case Notes: ${escapeHtml(item.memberName || 'Unknown')}</h3>
         <p style="font-size:0.85rem; color:#8a7595; margin-bottom:12px;">${escapeHtml(item.description)}</p>
         <form id="noteForm">
           <div class="field"><label>Internal Notes (never shown to the member)</label><textarea id="wNotes">${escapeHtml(item.notes || '')}</textarea></div>
@@ -1476,7 +1476,7 @@ async function renderWelfareAdmin() {
       });
     }));
   } catch (e) {
-    el.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load welfare requests — you may not have access to this office.')}</p>`;
+    el.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load welfare requests, you may not have access to this office.')}</p>`;
   }
 }
 
@@ -1554,7 +1554,7 @@ async function renderMembers() {
   el.innerHTML = '<p class="empty-state">Loading...</p>';
   const members = await fetchJSON('/api/admin/members');
   const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const bday = (m) => m.birthdayMonth && m.birthdayDay ? `${monthNames[m.birthdayMonth]} ${m.birthdayDay}` : '—';
+  const bday = (m) => m.birthdayMonth && m.birthdayDay ? `${monthNames[m.birthdayMonth]} ${m.birthdayDay}` : '-';
   const pageItems = paginate(members, membersPage, MEMBERS_PER_PAGE);
 
   el.innerHTML = `
@@ -1567,8 +1567,8 @@ async function renderMembers() {
           <tr>
             <td>${escapeHtml(m.name)}</td>
             <td>${escapeHtml(m.email)}</td>
-            <td>${escapeHtml(m.phone || '—')}</td>
-            <td>${escapeHtml(m.level || '—')}</td>
+            <td>${escapeHtml(m.phone || '-')}</td>
+            <td>${escapeHtml(m.level || '-')}</td>
             <td><span class="status-pill ${m.membershipStage === 'active' ? 'done' : ''}">${escapeHtml(m.membershipStage || 'visitor')}</span></td>
             <td>${bday(m)}</td>
             <td>${new Date(m.createdAt).toLocaleDateString()}</td>
@@ -1669,7 +1669,7 @@ async function renderExecutives() {
 
   // The position decides what its holder can do, so it is chosen from the real
   // list rather than typed. A portfolio position runs a department; an officer
-  // answers for the whole chapter and must not be given one — the picker
+  // answers for the whole chapter and must not be given one - the picker
   // follows that rule so the server never has to refuse the form.
   const positionOptions = (selected) => positionList.map(p =>
     `<option value="${escapeHtml(p.key)}" data-requires-department="${p.requiresDepartment}" ${p.key === selected ? 'selected' : ''}>${escapeHtml(p.label)}</option>`
@@ -1704,15 +1704,15 @@ async function renderExecutives() {
         <thead><tr><th>Name</th><th>Contact</th><th>Role</th><th>Department</th><th>Scope</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${applications.map(a => `
           <tr>
-            <td>${escapeHtml(a.name || '—')}</td>
-            <td>${escapeHtml(a.email || '—')}</td>
-            <td>${escapeHtml(a.role || '—')}</td>
-            <td>${escapeHtml(a.department || '—')}</td>
-            <td>${escapeHtml(a.scope || '—')}</td>
+            <td>${escapeHtml(a.name || '-')}</td>
+            <td>${escapeHtml(a.email || '-')}</td>
+            <td>${escapeHtml(a.role || '-')}</td>
+            <td>${escapeHtml(a.department || '-')}</td>
+            <td>${escapeHtml(a.scope || '-')}</td>
             <td><span class="status-pill ${a.executiveStatus === 'verified' ? 'done' : ''}">${escapeHtml(a.executiveStatus || 'pending')}</span></td>
             <td class="row-actions">${a.executiveStatus === 'pending' ? `
               <button data-verify-exec="${a.memberId}" data-exec-name="${escapeHtml(a.name || '')}">Verify</button>
-              <button class="danger" data-reject-exec="${a.memberId}">Reject</button>` : '—'}</td>
+              <button class="danger" data-reject-exec="${a.memberId}">Reject</button>` : '-'}</td>
           </tr>`).join('') || '<tr><td colspan="7">No executive applications yet.</td></tr>'}
         </tbody>
       </table></div>
@@ -1752,7 +1752,7 @@ async function renderExecutives() {
 
   // Approving an executive is one action that promotes the member, issues
   // their portal login for this academic year and creates their public
-  // roster card — so it asks for the sign-in details rather than leaving
+  // roster card - so it asks for the sign-in details rather than leaving
   // someone "verified" with no way in.
   function approveExecutiveForm(memberIdToApprove, name) {
     showModal(`
@@ -1804,7 +1804,7 @@ async function renderExecutives() {
           })
         });
         closeModal();
-        showToast('Executive approved — login issued and roster card created.', 'success');
+        showToast('Executive approved, login issued and roster card created.', 'success');
         renderExecutives();
       } catch (err) {
         setFormMsg('approveExecMsg', err.message || 'Could not approve this executive.', 'error');
@@ -1824,7 +1824,7 @@ async function renderExecutives() {
         return renderExecutives();
       }
       // Approving promotes the member, issues their portal login for this
-      // academic year and creates their public roster card in one action —
+      // academic year and creates their public roster card in one action -
       // so it needs the sign-in details up front.
       approveExecutiveForm(btn.dataset.verifyExec, btn.dataset.execName || '');
     });
@@ -1838,7 +1838,7 @@ async function renderExecutives() {
       const exec = execs.find(x => x.id === btn.dataset.positionExec);
       if (!exec) return;
       showModal(`
-        <h3>Change position — ${escapeHtml(exec.name || '')}</h3>
+        <h3>Change position: ${escapeHtml(exec.name || '')}</h3>
         <p class="hint">The office they are leaving is kept on file, so their history stays intact.</p>
         <form id="execPositionForm">
           <div class="field"><label>Position</label>
@@ -1950,7 +1950,7 @@ function openExecEditForm(exec) {
       <div class="field"><label>Full Name</label><input type="text" id="editExecName" value="${escapeHtml(exec.name || '')}" required></div>
       <div class="field"><label>Position</label>
         <p style="margin:0; font-weight:600;">${escapeHtml(exec.role || 'Not set')}</p>
-        <small class="hint">Use the <strong>Position</strong> button on their card to change this — it decides what their portal opens.</small>
+        <small class="hint">Use the <strong>Position</strong> button on their card to change this. It decides what their portal opens.</small>
       </div>
       <div class="field"><label>Bio / Credentials</label><textarea id="editExecBio">${escapeHtml(exec.bio || '')}</textarea></div>
       <div class="field"><label>Display Order</label><input type="number" id="editExecOrder" value="${exec.order || 0}"></div>
@@ -1986,16 +1986,16 @@ function openExecEditForm(exec) {
 
 
 async function openRegistrationsModal(eventId, title) {
-  showModal(`<h3>Registrations — ${escapeHtml(title)}</h3><p class="empty-state">Loading...</p>`);
+  showModal(`<h3>Registrations, ${escapeHtml(title)}</h3><p class="empty-state">Loading...</p>`);
   try {
     const regs = await fetchJSON(`/api/admin/events/${eventId}/registrations`);
     document.getElementById('modalContent').innerHTML = `
-      <h3>Registrations — ${escapeHtml(title)}</h3>
+      <h3>Registrations: ${escapeHtml(title)}</h3>
       <p style="color:#8a7595; font-size:0.85rem; margin-bottom:14px;">${regs.length} ${regs.length === 1 ? 'person' : 'people'} registered</p>
       <table>
         <thead><tr><th>Name</th><th>Email</th><th>Phone</th></tr></thead>
         <tbody>
-          ${regs.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.phone || '—')}</td></tr>`).join('') || '<tr><td colspan="3">No registrations yet.</td></tr>'}
+          ${regs.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.phone || '-')}</td></tr>`).join('') || '<tr><td colspan="3">No registrations yet.</td></tr>'}
         </tbody>
       </table>
       <button type="button" class="btn btn-outline" id="cancelModalBtn" style="margin-top:16px;">Close</button>
@@ -2028,7 +2028,7 @@ async function renderMediaLibrary() {
     <div class="upload-form">
       <h3 style="margin-bottom:6px;">Upload a File</h3>
       <p style="font-size:0.85rem; color:#8a7595; margin-bottom:16px;">
-        Say where the image is going and the app puts it there for you — no second step, and no guessing later about
+        Say where the image is going and the app puts it there for you. No second step, and no guessing later about
         which picture is doing what.
       </p>
       <form id="uploadForm">
@@ -2047,8 +2047,8 @@ async function renderMediaLibrary() {
         <div class="field" id="toneFieldWrap" style="display:none;">
           <label>Is the artwork light or dark?</label>
           <select id="uploadTone">
-            <option value="light">Light artwork — keep the dark heading</option>
-            <option value="dark">Dark artwork — use white text over it</option>
+            <option value="light">Light artwork. Keep the dark heading</option>
+            <option value="dark">Dark artwork. Use white text over it</option>
           </select>
           <small class="hint">The heading sits on top of the picture, so this is what keeps it readable.</small>
         </div>
@@ -2065,7 +2065,7 @@ async function renderMediaLibrary() {
           </div>
           <div class="field">
             <label>Title</label>
-            <input type="text" id="uploadTitle" placeholder="e.g. Sunday Service — July 12">
+            <input type="text" id="uploadTitle" placeholder="e.g. Sunday Service: July 12">
           </div>
         </div>
         <div class="field">
@@ -2094,7 +2094,7 @@ async function renderMediaLibrary() {
   });
 
   // The whole point of the picker: as soon as a placement is chosen, say in plain
-  // words where the image will show up — and, when it needs one, ask which
+  // words where the image will show up - and, when it needs one, ask which
   // department or page it belongs to.
   function refreshPlacementUI() {
     const value = document.getElementById('uploadPlacement').value;
@@ -2121,7 +2121,7 @@ async function renderMediaLibrary() {
       document.getElementById('targetLabel').textContent = TARGET_LABELS[spec.needsTarget] || 'Which one?';
       targetSelect.innerHTML = list.length
         ? list.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.hasHeader || t.fileId ? ' (replaces what is there now)' : ''}</option>`).join('')
-        : `<option value="">— nothing to choose yet —</option>`;
+        : `<option value="">Nothing to choose yet</option>`;
       wrap.style.display = 'block';
     } else {
       wrap.style.display = 'none';
@@ -2144,7 +2144,7 @@ async function renderMediaLibrary() {
       const cleanName = escapeHtml((targetName || 'selected').replace(' (replaces what is there now)', ''));
       messages['page-hero'] = `This becomes the artwork behind the heading at the top of the <strong>${cleanName}</strong> page,`
         + ` replacing its built-in background${chosen && chosen.sceneDescription ? ` (${escapeHtml(chosen.sceneDescription)})` : ''}.`
-        + ' Wide landscape images work best — the heading sits on top of it.';
+        + ' Wide landscape images work best. The heading sits on top of it.';
     }
     explain.innerHTML = `<strong>Where this goes:</strong> ${messages[value] || spec.description}`;
 
@@ -2190,7 +2190,7 @@ async function renderMediaLibrary() {
       const res = await fetch('/api/admin/uploads', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upload failed');
-      msg.textContent = data.message ? `Uploaded — ${data.message}` : 'Uploaded!';
+      msg.textContent = data.message ? `Uploaded: ${data.message}` : 'Uploaded!';
       msg.className = 'form-msg success';
       showToast('Image uploaded and placed.', 'success');
       renderMediaLibrary();
@@ -2377,7 +2377,7 @@ async function openFormBuilder(form) {
 async function viewFormSubmissions(formId) {
   const { form, submissions } = await fetchJSON(`/api/admin/forms/${formId}/submissions`);
   showModal(`
-    <h3>${escapeHtml(form.title)} — Submissions (${submissions.length})</h3>
+    <h3>${escapeHtml(form.title)}: Submissions (${submissions.length})</h3>
     <div style="overflow:auto; max-height:60vh;">
       <table>
         <thead><tr><th>Submitted By</th><th>When</th>${form.fields.map(field => `<th>${escapeHtml(field.label)}</th>`).join('')}</tr></thead>
@@ -2386,7 +2386,7 @@ async function viewFormSubmissions(formId) {
             <tr>
               <td>${escapeHtml(item.submitterName || 'Anonymous')}${item.submitterEmail ? `<br><small class="hint">${escapeHtml(item.submitterEmail)}</small>` : ''}</td>
               <td>${new Date(item.createdAt).toLocaleString()}</td>
-              ${form.fields.map(field => `<td>${escapeHtml(String(item.answers?.[field.id] ?? '—'))}</td>`).join('')}
+              ${form.fields.map(field => `<td>${escapeHtml(String(item.answers?.[field.id] ?? '-'))}</td>`).join('')}
             </tr>
           `).join('') || `<tr><td colspan="${form.fields.length + 2}">No submissions yet.</td></tr>`}
         </tbody>
@@ -2459,7 +2459,7 @@ async function renderReportsPanel() {
   // Pastoral records and the chapter's books are confidential offices: the
   // server gates these four behind canView('shepherding'|'finance'), which a
   // Chapter Coordinator passes and a delegated Chapter Admin does not. That is
-  // deliberate, so the answer is not to widen it — it is to stop offering a
+  // deliberate, so the answer is not to widen it - it is to stop offering a
   // download that would answer 401. The two portal links stay for everyone;
   // those portals do their own gating at their own front door.
   const seesConfidential = ADMIN_SCOPE.isNational || ADMIN_SCOPE.role === 'coordinator';
@@ -2597,7 +2597,7 @@ async function renderChapterSettings() {
           <div class="field">
             <label>Full Name</label>
             <input type="text" id="csFullName" value="${escapeHtml(data.fullName || '')}">
-            <small class="hint">e.g. Apostles' Continuation Students Union — KNUST</small>
+            <small class="hint">e.g. Apostles' Continuation Students Union: KNUST</small>
           </div>
         </div>
 
@@ -2624,7 +2624,7 @@ async function renderChapterSettings() {
 
         <div class="field">
           <label>Verse of the Week / Scripture Theme</label>
-          <textarea id="csVerse" rows="2" placeholder="e.g. Acts 2:42 — And they continued steadfastly...">${escapeHtml(data.verseOfTheWeek || '')}</textarea>
+          <textarea id="csVerse" rows="2" placeholder="e.g. Acts 2:42: And they continued steadfastly...">${escapeHtml(data.verseOfTheWeek || '')}</textarea>
           <small class="hint">Powers the homepage daily scripture banner and the downloadable PNG card generator.</small>
         </div>
 
@@ -2769,7 +2769,7 @@ async function renderChapterSettings() {
         </div>
         <div class="field">
           <label for="smsApiKey">API Key</label>
-          <input type="password" id="smsApiKey" autocomplete="off" placeholder="${smsSetup.hasApiKey ? `Saved (${escapeHtml(smsSetup.apiKeyHint)}) — leave blank to keep it` : 'Paste your mNotify API key'}">
+          <input type="password" id="smsApiKey" autocomplete="off" placeholder="${smsSetup.hasApiKey ? `Saved (${escapeHtml(smsSetup.apiKeyHint)}). Leave blank to keep it` : 'Paste your mNotify API key'}">
           <small class="hint">Stored on the server and never shown again. Leave blank to keep the saved one.</small>
         </div>
         <div style="display:flex; gap:10px; margin-top:18px;">

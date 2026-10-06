@@ -247,7 +247,7 @@ function registerChurchLifeRoutes(app, deps) {
       }, 'alum');
       res.json(thanks(fields.name));
       notifyAdminByEmail(
-        'New Alumni request — ACONSU',
+        'New Alumni request | ACONSU',
         `<p><strong>${escapeHtmlForEmail(entry.name)}</strong> (${escapeHtmlForEmail(chapter.name || chapter.id)}) asked to join the Alumni wall.</p>`
         + `<p>${escapeHtmlForEmail(entry.about)}</p><p>Open the National portal, Alumni, to approve or decline.</p>`
       );
@@ -577,7 +577,7 @@ function registerChurchLifeRoutes(app, deps) {
       res.json({ success: true, item });
       const names = await chapterNames();
       notifyAdminByEmail(
-        'Monthly theme waiting for approval — ACONSU',
+        'Monthly theme waiting for approval | ACONSU',
         `<p><strong>${escapeHtmlForEmail(names.get(chapterId) || chapterId)}</strong> proposed a theme for ${escapeHtmlForEmail(month)}: `
         + `<strong>${escapeHtmlForEmail(item.title)}</strong>.</p><p>Open the National portal, Monthly Theme, to approve or decline.</p>`
       );

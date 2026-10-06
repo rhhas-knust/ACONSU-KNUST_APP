@@ -1,7 +1,7 @@
 /* ============================================================
    Shared behaviour for the leadership portals.
    Each portal page supplies its own panels; everything else —
-   signing in, the shell, the side nav, modals, formatting — is
+   signing in, the shell, the side nav, modals, formatting. Is
    handled here so the four portals stay consistent.
    Requires main.js (fetchJSON, escapeHtml, showToast) first.
    ============================================================ */
@@ -14,7 +14,7 @@ const PORTAL = {
   isAdmin: false,
   canEdit: false,
   active: '',
-  chapter: null // {id, name} — which chapter this account belongs to, if any (see renderPortalChrome)
+  chapter: null // {id, name}. Which chapter this account belongs to, if any (see renderPortalChrome)
 };
 
 // ---------- formatting ----------
@@ -25,16 +25,16 @@ function money(n) {
 }
 
 function shortDate(value) {
-  if (!value) return '—';
+  if (!value) return '-';
   const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
   if (isNaN(d.getTime())) return escapeHtml(String(value));
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function dateTimeLabel(value) {
-  if (!value) return '—';
+  if (!value) return '-';
   const d = new Date(value);
-  if (isNaN(d.getTime())) return '—';
+  if (isNaN(d.getTime())) return '-';
   return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
@@ -42,7 +42,7 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// The Sunday just gone (or today, if today is Sunday) — the date the
+// The Sunday just gone (or today, if today is Sunday) - the date the
 // shepherding team almost always wants when they open the register.
 function lastSundayISO() {
   const d = new Date();
@@ -141,12 +141,12 @@ function renderPortalChrome() {
   const whoLabel = user ? `${user.name} · ${user.role}` : (PORTAL.isAdmin ? 'Signed in as Admin' : '');
   document.getElementById('portalWho').textContent = whoLabel;
   document.getElementById('portalRoleLabel').textContent = PORTAL.label;
-  // Which chapter this portal belongs to, front and center in the header —
+  // Which chapter this portal belongs to, front and center in the header -
   // this account's chapter is the identity of the whole portal, not a detail
   // buried in a badge. Pages with no chapter concept of their own (national)
   // simply have no #portalBrandName element, so this is a no-op there.
   const brand = document.getElementById('portalBrandName');
-  if (brand) brand.textContent = PORTAL.chapter ? `ACONSU — ${PORTAL.chapter.name}` : 'ACONSU';
+  if (brand) brand.textContent = PORTAL.chapter ? `ACONSU: ${PORTAL.chapter.name}` : 'ACONSU';
 
   const nav = document.getElementById('portalNav');
   nav.innerHTML = PORTAL.panels.map(p => `
@@ -195,7 +195,7 @@ async function showPortalOrLogin() {
   document.getElementById('portalLoginWrap').style.display = allowed ? 'none' : 'flex';
   document.getElementById('portalShell').style.display = allowed ? 'block' : 'none';
   if (allowed) {
-    // A portal can narrow its own panels once it knows who is signed in — the
+    // A portal can narrow its own panels once it knows who is signed in - the
     // executive portal uses this to show only the panels the holder's position
     // is actually granted. It runs here, after the session is confirmed,
     // because until then there is nobody to decide about.

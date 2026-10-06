@@ -9,7 +9,7 @@ async function fetchJSON(url, options) {
     const chapterId = getSelectedChapterId();
     if (chapterId) opts.headers = { ...(opts.headers || {}), 'X-Chapter-Id': chapterId };
   }
-  // An upload that is slow is not a sleeping server — it is a big photo on a
+  // An upload that is slow is not a sleeping server - it is a big photo on a
   // mobile connection, which is the normal case at registration. Telling those
   // two apart decides which message is honest.
   const done = beginRequest(opts.body instanceof FormData);
@@ -26,7 +26,7 @@ async function fetchJSON(url, options) {
 // ---------- slow first request (free-tier cold start) ----------
 // The server sleeps when nobody has used it for a while, and the request that
 // wakes it can take the better part of a minute. To a member that is a dead
-// screen, and a dead screen reads as a broken app — so say what is happening
+// screen, and a dead screen reads as a broken app - so say what is happening
 // rather than leaving them to guess. Only shown when a request is genuinely
 // slow, so a warm server never shows it at all.
 const SLOW_REQUEST_MS = 4000;
@@ -54,8 +54,8 @@ function beginRequest(isUpload) {
 function showSlowBanner(isUpload) {
   if (document.getElementById('wakingBanner')) return;
   const message = isUpload
-    ? 'Still uploading — a photo can take a while on mobile data.'
-    : 'Waking the server up — this can take a moment the first time today.';
+    ? 'Still uploading. A photo can take a while on mobile data.'
+    : 'Waking the server up. This can take a moment the first time today.';
   const el = document.createElement('div');
   el.id = 'wakingBanner';
   el.setAttribute('role', 'status');
@@ -97,7 +97,7 @@ async function clearCachedAccountData() {
 // which chapter it's showing. With a single active chapter (true for most
 // deployments most of the time) this resolves itself silently on first
 // visit. The moment a second chapter exists, a visitor is asked once and
-// it's remembered on that device from then on — a signed-in member's own
+// it's remembered on that device from then on - a signed-in member's own
 // account overrides it automatically once they log in (see initLayout).
 const CHAPTER_STORAGE_KEY = 'aconsu_chapter_id';
 
@@ -118,7 +118,7 @@ function showChapterPicker(chapters) {
     backdrop.innerHTML = `
       <div style="background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:'Manrope',sans-serif;">
         <h3 style="margin:0 0 6px; font-family:'Fraunces',serif; color:var(--purple-deep,#3A1B54);">Choose your ACONSU chapter</h3>
-        <p style="color:#5a4468; font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters — pick yours to continue. You can change this later from your profile.</p>
+        <p style="color:#5a4468; font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters. Pick yours to continue. You can change this later from your profile.</p>
         <div id="chapterPickList" style="display:flex; flex-direction:column; gap:10px;"></div>
       </div>
     `;
@@ -141,7 +141,7 @@ function showChapterPicker(chapters) {
 }
 
 // Resolves (and, if needed, asks) which chapter this browser is looking at.
-// Safe to call on every page load — instant once a chapter is already
+// Safe to call on every page load - instant once a chapter is already
 // chosen. Called from initLayout, so ordinary pages never need this directly.
 async function ensureChapterSelected() {
   if (getSelectedChapterId()) return getSelectedChapterId();
@@ -154,7 +154,7 @@ async function ensureChapterSelected() {
     if (Array.isArray(chapters) && chapters.length > 1) {
       return await showChapterPicker(chapters);
     }
-  } catch (e) { /* chapters not reachable yet — pages fall back to unscoped content */ }
+  } catch (e) { /* chapters not reachable yet - pages fall back to unscoped content */ }
   return '';
 }
 
@@ -168,7 +168,7 @@ function escapeHtml(str) {
 // Initials for somebody with no photograph yet.
 //
 // Nearly every name on these pages carries a title, and taking the first
-// letter of the name as written gives "Apostle E. K. Owusu" the initials AE —
+// letter of the name as written gives "Apostle E. K. Owusu" the initials AE -
 // the A belongs to the office, not the man. Titles are skipped, unless the
 // title is all that was written, in which case it is kept rather than leaving
 // an empty circle.
@@ -215,7 +215,7 @@ const ICON_TELEGRAM = '<path d="M21.5 2 2 9.5l7 3 2.5 7.5 3-4 6 4.5z"/>';
 const ICON_SPOTIFY = '<circle cx="12" cy="12" r="10"/><path d="M7.5 9c2.5-1.5 6 0 7.5 2m0-5.5c3.5-2 8 0 11 3M9 13.5c1.5-.5 4 0 5 1.5" fill="none"/>';
 
 // Renders the platform icons for whatever links a settings/contact object
-// has set — used by the site footer, contact page, and social connect strips.
+// has set - used by the site footer, contact page, and social connect strips.
 function socialLinksHtml(s) {
   const cfg = s || {};
   const links = [
@@ -291,7 +291,7 @@ async function subscribeToPush() {
   return true;
 }
 
-// Quietly re-register a device that has already granted permission — no prompt,
+// Quietly re-register a device that has already granted permission - no prompt,
 // no button, nothing shown. This keeps the server's subscription list accurate
 // (browsers rotate endpoints) without ever asking a member twice.
 async function resubscribePushIfAlreadyAllowed() {
@@ -313,7 +313,7 @@ async function resubscribePushIfAlreadyAllowed() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subscription: sub })
     });
-  } catch (e) { /* alerts are optional — never let this surface to the member */ }
+  } catch (e) { /* alerts are optional - never let this surface to the member */ }
 }
 
 async function unsubscribeFromPush() {
@@ -374,7 +374,7 @@ function dailyCheckin() {
   if (localStorage.getItem('aconsu_last_checkin') === todayKey) return; // already pinged today
   fetchJSON('/api/member/checkin', { method: 'POST' })
     .then(() => localStorage.setItem('aconsu_last_checkin', todayKey))
-    .catch(() => {}); // non-critical — silently skip if it fails
+    .catch(() => {}); // non-critical - silently skip if it fails
 }
 
 const BOTTOM_TABS = [
@@ -432,7 +432,7 @@ async function renderVerseOfDay(settings) {
   const daily = await fetchJSON('/api/daily-verse').then(r => r && r.item).catch(() => null);
   if (daily && daily.reference) {
     verseEl.textContent = daily.text
-      ? `"${daily.text}" — ${daily.reference}`
+      ? `"${daily.text}": ${daily.reference}`
       : daily.reference;
     // Kept apart as well as joined: sharing this verse as an image needs the
     // two halves, and guessing them back out of one string is guesswork.
@@ -569,7 +569,7 @@ function wireThemeToggle() {
 }
 
 // ---------- in-app notifications ----------
-// The bell stays a real link to /notifications.html — it works with no script,
+// The bell stays a real link to /notifications.html - it works with no script,
 // it can be opened in a new tab, and it is still where the full history lives.
 // The click is only intercepted to show the last few in place, because reading
 // one notice should not cost you the page you were on.
@@ -622,7 +622,7 @@ async function toggleNotificationPanel(bell) {
   document.body.appendChild(panel);
   document.addEventListener('keydown', notifEscHandler);
 
-  // Anything outside closes it — including the bell, which toggles.
+  // Anything outside closes it - including the bell, which toggles.
   setTimeout(() => {
     document.addEventListener('click', function away(e) {
       if (panel.contains(e.target) || bell.contains(e.target)) return;
@@ -654,7 +654,7 @@ async function toggleNotificationPanel(bell) {
     `).join('');
   }
 
-  // Marked seen on opening, not on visiting the full page — opening the panel
+  // Marked seen on opening, not on visiting the full page - opening the panel
   // IS having seen them, and the badge should agree with what you just read.
   markNotificationsSeen();
   bell.querySelector('.notif-count')?.remove();
@@ -830,7 +830,7 @@ async function initLayout(activePath) {
     member = authRes.member;
     if (member) {
       dailyCheckin();
-      // A signed-in member's own chapter is authoritative — keeps this
+      // A signed-in member's own chapter is authoritative - keeps this
       // browser in step even if it last browsed anonymously as another
       // chapter (a shared/public computer, a link from a friend, etc.).
       if (member.chapterId && member.chapterId !== getSelectedChapterId()) {
@@ -873,7 +873,7 @@ function applyHeroArtwork(settings) {
   layer.className = 'hero-art';
 
   // Nothing is shown until the picture has actually decoded. A slow file leaves
-  // the scene where it is, and a missing one leaves it there for good — better
+  // the scene where it is, and a missing one leaves it there for good - better
   // than a blank rectangle, and much better than dark text on a dark image
   // because the tone was flipped before the veil under it existed.
   const probe = new Image();
@@ -902,7 +902,7 @@ function startCountdown(targetDate, targetTime, elId) {
     const now = new Date();
     let diff = target - now;
     if (diff <= 0) {
-      el.innerHTML = '<div class="countdown-caption">We are live now — see you inside!</div>';
+      el.innerHTML = '<div class="countdown-caption">We are live now. See you inside!</div>';
       clearInterval(timer);
       return;
     }
@@ -948,7 +948,7 @@ window.addEventListener('appinstalled', () => {
   if (banner) banner.remove();
 });
 
-// Safari never fires `beforeinstallprompt` — there is no programmatic install on
+// Safari never fires `beforeinstallprompt` - there is no programmatic install on
 // iOS at all. Since we are not shipping through the App Store, Add to Home Screen
 // is the *only* way an iPhone member can get the app, and Apple surfaces it
 // nowhere obvious. Without this, every iOS visitor stays on a browser tab

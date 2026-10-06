@@ -259,7 +259,7 @@ img { max-width: 100%; display: block; }
 /* ---------- hero art ----------
    Every page's header used to be the same flat lilac wash, which read as a
    blank wall rather than as a page. Each page now wears a scene suited to what
-   it is for, and each scene is drawn in CSS — layered gradients and a motif —
+   it is for, and each scene is drawn in CSS. Layered gradients and a motif —
    so a page on mobile data costs nothing extra to look like something.
 
    A chapter can upload its own artwork for any page on top of this (see
@@ -271,7 +271,7 @@ img { max-width: 100%; display: block; }
   content: ''; position: absolute; inset: 0; pointer-events: none;
 }
 
-/* Sunrise — home. Gold breaking along the bottom, purple weight at the top. */
+/* Sunrise - home. Gold breaking along the bottom, purple weight at the top. */
 .hero[data-art="dawn"] {
   --hero-wash-a: #E4D0F2; --hero-wash-b: #F7F0FC;
   background:
@@ -286,7 +286,7 @@ img { max-width: 100%; display: block; }
     transparent 46deg, rgba(255,255,255,0.26) 62deg, transparent 80deg);
 }
 
-/* Roots — about. Bands of deepening purple, like strata. */
+/* Roots - about. Bands of deepening purple, like strata. */
 .hero[data-art="roots"] {
   --hero-wash-a: #E3D2F1; --hero-wash-b: #F6EFFC;
   background:
@@ -299,7 +299,7 @@ img { max-width: 100%; display: block; }
     rgba(255,255,255,0.34) 0 2px, transparent 2px 58px);
 }
 
-/* Scripture — the Bible pages. Ruled light, like a page under the words. */
+/* Scripture - the Bible pages. Ruled light, like a page under the words. */
 .hero[data-art="word"] {
   --hero-wash-a: #DFCBEF; --hero-wash-b: #F5EDFB;
   background:
@@ -314,7 +314,7 @@ img { max-width: 100%; display: block; }
   -webkit-mask-image: radial-gradient(70% 70% at 50% 50%, #000 30%, transparent 78%);
 }
 
-/* Gathering — people: events, departments, groups, alumni, chat. */
+/* Gathering - people: events, departments, groups, alumni, chat. */
 .hero[data-art="gather"] {
   --hero-wash-a: #E7D7F4; --hero-wash-b: #F6EFFC;
   background:
@@ -329,7 +329,7 @@ img { max-width: 100%; display: block; }
   -webkit-mask-image: radial-gradient(76% 70% at 50% 46%, #000 20%, transparent 76%);
 }
 
-/* Flame — prayer and welfare. An ember low and centred. */
+/* Flame - prayer and welfare. An ember low and centred. */
 .hero[data-art="flame"] {
   --hero-wash-a: #E8D6F0; --hero-wash-b: #F7EFFB;
   background:
@@ -344,7 +344,7 @@ img { max-width: 100%; display: block; }
     transparent 64deg, rgba(255,255,255,0.22) 84deg);
 }
 
-/* Harvest — giving. Gold-led, with sheaf strokes. */
+/* Harvest - giving. Gold-led, with sheaf strokes. */
 .hero[data-art="harvest"] {
   --hero-wash-a: #F2E0C6; --hero-wash-b: #FBF4E9;
   background:
@@ -359,7 +359,7 @@ img { max-width: 100%; display: block; }
   -webkit-mask-image: linear-gradient(180deg, transparent 38%, #000 100%);
 }
 
-/* Voice — sermons, media, rooms. Bands spreading like sound. */
+/* Voice - sermons, media, rooms. Bands spreading like sound. */
 .hero[data-art="voice"] {
   --hero-wash-a: #E2D2F3; --hero-wash-b: #F5EEFC;
   background:
@@ -372,7 +372,7 @@ img { max-width: 100%; display: block; }
     rgba(255,255,255,0.40) 0 1.5px, transparent 1.5px 26px);
 }
 
-/* Calm — reading and utility pages. Present, but quiet. */
+/* Calm - reading and utility pages. Present, but quiet. */
 .hero[data-art="calm"] {
   --hero-wash-a: #E9DCF6; --hero-wash-b: #F6EFFC;
   background:
@@ -405,7 +405,7 @@ img { max-width: 100%; display: block; }
 }
 .hero-art.is-loaded { opacity: 1; }
 /* Artwork is artwork; the words on top still have to be readable over it.
-   Which way the veil goes is the chapter's call when they upload — a light
+   Which way the veil goes is the chapter's call when they upload. A light
    picture keeps the dark heading, a dark one gets light text instead. */
 .hero-art::after {
   content: ''; position: absolute; inset: 0;
@@ -479,7 +479,7 @@ section { padding: 72px 24px; }
 .dept-card { display: flex; flex-direction: column; gap: 10px; }
 .dept-meta { display: flex; gap: 10px; font-size: 0.82rem; color: var(--brand); font-weight: 700; }
 
-/* Department header photos — the thumbnail on a card, and the full banner on
+/* Department header photos - the thumbnail on a card, and the full banner on
    the department's own page. Both fall back to the flame gradient when no
    photo has been set yet, so a department never looks broken. */
 .dept-thumb {
@@ -714,7 +714,7 @@ section { padding: 72px 24px; }
 
 /* ---------- the wider church, and its founding fathers ---------- */
 /* The church's own mark, not a chapter's. A logo is drawn with its own space
-   around it and is often not rectangular, so it is fitted whole — `cover`,
+   around it and is often not rectangular, so it is fitted whole: `cover`,
    right for a photograph, would cut the edge off a wordmark and crop a round
    seal square. */
 .church-mark { text-align: center; max-width: 62ch; margin: 0 auto 34px; }
@@ -727,7 +727,7 @@ section { padding: 72px 24px; }
    site's founders use them: standing portraits are tall, so four of them in
    one column is an enormous scroll on a phone, and at the generic width four
    men break three-then-one on a laptop. Defined after .grid, which is what
-   makes it win — both are one class deep. */
+   makes it win. Both are one class deep. */
 .founder-grid {
   align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -986,7 +986,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* ---------- the home dashboard row ----------
    Three cards that used to be three full-width sections stacked down the page.
-   Same content, same ids, same renderers — only where they sit changed. */
+   Same content, same ids, same renderers. Only where they sit changed. */
 .home-dash { padding: 18px 0 8px; }
 .dash-grid { display: grid; gap: 16px; }
 .dash-card {
@@ -999,7 +999,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .dash-head a { font-size: 0.8rem; font-weight: 700; color: var(--brand); }
 .dash-head a:hover { text-decoration: underline; }
 
-/* The verse keeps its own colour — it is the one card that is a thing to read
+/* The verse keeps its own colour - it is the one card that is a thing to read
    rather than a list to scan. */
 .dash-card.dash-verse {
   background: linear-gradient(135deg, var(--purple-deep), var(--purple-rich) 60%, var(--flame-red));
@@ -1043,7 +1043,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
    Three tiers, not two. On a phone: top bar plus bottom tabs. On a tablet: the
    top bar carries the links, as it always has. From 1024px there is room for a
    rail, so the links move into it and the top bar keeps only who you are and
-   what is waiting for you — the shape a person expects of an app on a laptop
+   what is waiting for you. The shape a person expects of an app on a laptop
    rather than of a website. */
 .side-nav { display: none; }
 
@@ -1102,7 +1102,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
      with a blank strip down the left. Tie the gap to the thing that fills it. */
   body.has-side-rail { padding-left: 248px; }
   /* With a rail carrying the navigation, the hero no longer has to introduce
-     the app — so it stops taking the whole screen before the dashboard. */
+     the app. So it stops taking the whole screen before the dashboard. */
   .hero { min-height: 340px; padding: 52px 24px 44px; }
   #site-header {
     position: sticky; top: 0; z-index: 100;

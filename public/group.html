@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Group — ACONSU</title>
+<title>Group | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -88,7 +88,7 @@ function renderAbout(body) {
   body.innerHTML = `
     <div class="portal-card" style="background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px;">
       <p><strong>Leader:</strong> ${escapeHtml(GROUP.leaderName || 'Not yet assigned')}</p>
-      ${GROUP.meetingDay ? `<p><strong>Meets:</strong> ${escapeHtml(GROUP.meetingDay)} ${escapeHtml(GROUP.meetingTime || '')} ${GROUP.meetingLocation ? '— ' + escapeHtml(GROUP.meetingLocation) : ''}</p>` : ''}
+      ${GROUP.meetingDay ? `<p><strong>Meets:</strong> ${escapeHtml(GROUP.meetingDay)} ${escapeHtml(GROUP.meetingTime || '')} ${GROUP.meetingLocation ? 'at ' + escapeHtml(GROUP.meetingLocation) : ''}</p>` : ''}
       <div style="margin-top:14px;">${joinBtn}</div>
     </div>
     ${GROUP.resources.length ? `
@@ -194,7 +194,7 @@ async function renderPosts(body) {
             <div class="who">${escapeHtml(p.authorName || 'Someone')}</div>
             <div class="when">${dateTimeLabelSafe(p.createdAt)}</div>
           </div>
-        `).join('') || '<p class="empty-state">No posts yet — say hello!</p>'}
+        `).join('') || '<p class="empty-state">No posts yet. Say hello!</p>'}
       </div>
     `;
     const form = document.getElementById('postForm');
@@ -227,7 +227,7 @@ async function renderMeetings(body) {
       ` : ''}
       ${meetings.map(m => `
         <div class="meeting-card">
-          <strong>${shortDateSafe(m.date)}</strong>${m.topic ? ` — ${escapeHtml(m.topic)}` : ''}
+          <strong>${shortDateSafe(m.date)}</strong>${m.topic ? `: ${escapeHtml(m.topic)}` : ''}
           <div class="tiny muted">${escapeHtml(m.location || '')} · ${m.attendeeMemberIds.length} attended</div>
           ${m.notes ? `<p style="margin-top:6px; font-size:0.88rem;">${escapeHtml(m.notes)}</p>` : ''}
         </div>

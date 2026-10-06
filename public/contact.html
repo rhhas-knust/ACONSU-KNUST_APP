@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Contact — ACONSU</title>
+<title>Contact | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -116,9 +116,9 @@ document.getElementById('contactForm').addEventListener('submit', async (e) => {
         message: document.getElementById('message').value
       })
     });
-    msg.textContent = "Message sent — we'll get back to you soon.";
+    msg.textContent = "Message sent. We'll get back to you soon.";
     msg.className = 'form-msg success';
-    showToast("Message sent — we'll get back to you soon.", 'success');
+    showToast("Message sent, we'll get back to you soon.", 'success');
     document.getElementById('contactForm').reset();
   } catch (err) {
     msg.textContent = err.message || 'Something went wrong. Please try again.';

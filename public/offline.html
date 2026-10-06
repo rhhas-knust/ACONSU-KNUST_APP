@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>You're Offline — ACONSU</title>
+<title>You're Offline | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -135,11 +135,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     location.reload();
   });
 
-  // When the device comes back, say so and reload on its own — someone who
+  // When the device comes back, say so and reload on its own - someone who
   // walked back into signal shouldn't have to work out that they should tap
   // anything.
   window.addEventListener('online', function () {
-    statusEl.textContent = 'Back online — reloading…';
+    statusEl.textContent = 'Back online. Reloading…';
     statusEl.className = 'status back';
     setTimeout(function () { location.reload(); }, 700);
   });

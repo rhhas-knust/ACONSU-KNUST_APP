@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Profile — ACONSU</title>
+<title>My Profile | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -98,7 +98,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <input type="text" id="level">
       </div>
       <div class="field">
-        <label>Birthday (month &amp; day only — no year is ever stored)</label>
+        <label>Birthday (month &amp; day only, no year is ever stored)</label>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
           <select id="birthdayMonth">
             <option value="">Month</option>
@@ -179,7 +179,7 @@ async function loadVolunteerAssignments() {
         <h4 style="margin:0 0 10px;">You've been asked to serve</h4>
         ${pending.map(a => `
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
-            <span style="font-size:0.9rem;"><strong>${roleLabels[a.role] || a.role}</strong> — ${escapeHtml(a.event.title)} (${a.event.date})</span>
+            <span style="font-size:0.9rem;"><strong>${roleLabels[a.role] || a.role}</strong>: ${escapeHtml(a.event.title)} (${a.event.date})</span>
             <span style="display:flex; gap:6px; flex-shrink:0;">
               <button type="button" class="btn btn-primary btn-sm" data-vol-respond="${a.id}" data-status="confirmed">Confirm</button>
               <button type="button" class="btn btn-outline btn-sm" data-vol-respond="${a.id}" data-status="declined">Decline</button>
@@ -192,10 +192,10 @@ async function loadVolunteerAssignments() {
       await fetchJSON(`/api/member/volunteer-assignments/${btn.dataset.volRespond}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: btn.dataset.status })
       });
-      showToast(btn.dataset.status === 'confirmed' ? 'Confirmed — thank you!' : 'Marked as declined.', 'success');
+      showToast(btn.dataset.status === 'confirmed' ? 'Confirmed, thank you!' : 'Marked as declined.', 'success');
       loadVolunteerAssignments();
     }));
-  } catch (e) { /* non-critical — profile page still works without this */ }
+  } catch (e) { /* non-critical - profile page still works without this */ }
 }
 
 function renderProfileTopRow() {
@@ -300,7 +300,7 @@ async function renderMemberStanding() {
 }
 
 // What this member has signed up for. Registering worked; seeing what you had
-// signed up for did not — "My Events" went to the same events page everyone
+// signed up for did not - "My Events" went to the same events page everyone
 // else sees.
 async function renderMyEvents() {
   const el = document.getElementById('myEvents');
@@ -470,7 +470,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
 // An alumnus's own entry in Alumni Connect. It appears only for members
 // Shepherding has marked as alumni, and nothing here is published until they
-// tick "List me" — writing the entry and publishing it are separate acts.
+// tick "List me" - writing the entry and publishing it are separate acts.
 (async () => {
   const wrap = document.getElementById('alumniListing');
   if (!wrap) return;
@@ -579,7 +579,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 })();
 
 // Alerts live here, in the member's own settings, rather than as a banner on
-// the notifications page — one place to turn them on, and it stays out of the
+// the notifications page - one place to turn them on, and it stays out of the
 // way of people who have already decided.
 (async function initAlertsToggle() {
   const status = document.getElementById('alertsStatus');
@@ -588,7 +588,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   async function refresh() {
     const subscribed = await isPushSubscribed();
     status.textContent = subscribed
-      ? "Alerts are on — you'll hear about events and announcements even when the app is closed."
+      ? "Alerts are on. You'll hear about events and announcements even when the app is closed."
       : 'Alerts are off. Turn them on to hear about events and announcements when the app is closed.';
     btn.textContent = subscribed ? 'Turn Alerts Off' : 'Enable Alerts';
     btn.onclick = async () => {

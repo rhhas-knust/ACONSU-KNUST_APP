@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Read the Bible — ACONSU</title>
+<title>Read the Bible | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -105,7 +105,7 @@ let CURRENT_VERSION_LABEL = '';
 let selectedVerse = null;
 let firstRender = true;
 
-// How someone likes to read is theirs, and it should survive the next visit —
+// How someone likes to read is theirs, and it should survive the next visit -
 // including the chapter they were on, so the app opens where they left off.
 const PREF = {
   read(key, fallback) {
@@ -281,7 +281,7 @@ async function loadPassage() {
   PREF.write('chapter', chapter);
   PREF.write('translation', translation);
 
-  // A version the app is not licensed to reproduce never goes to the server —
+  // A version the app is not licensed to reproduce never goes to the server -
   // it is offered as a link to the publisher's own reader instead.
   const external = EXTERNAL_VERSIONS.find(v => v.code === translation);
   if (external) return renderExternalVersion(external, `${book} ${chapter}`);
@@ -371,7 +371,7 @@ function applyFlow(flow) {
 }
 
 // The preferences live on the reader element, which is replaced on every
-// chapter load — so they are re-applied rather than set once.
+// chapter load - so they are re-applied rather than set once.
 function syncReaderPrefs() {
   const reader = document.getElementById('reader');
   if (!reader) return;
@@ -406,7 +406,7 @@ function selectedVerseParts() {
 async function copySelectedVerse() {
   const parts = selectedVerseParts();
   if (!parts) return;
-  const line = `"${parts.text}" — ${parts.reference}`;
+  const line = `"${parts.text}" (${parts.reference})`;
   try {
     await navigator.clipboard.writeText(line);
     showToast('Verse copied.', 'success');
@@ -421,7 +421,7 @@ function shareSelectedVerse() {
   if (!parts) return;
   shareContent({
     title: parts.reference,
-    text: `"${parts.text}" — ${parts.reference}`,
+    text: `"${parts.text}" (${parts.reference})`,
     url: `${location.origin}/bible.html?book=${encodeURIComponent(document.getElementById('bookSelect').value)}&chapter=${document.getElementById('chapterSelect').value}`
   });
   clearSelection();

@@ -110,7 +110,7 @@ function parseVideoEmbed(url) {
     } catch (e) { /* fall back to the provided kind */ }
   }
   pageConfig = getContentConfig(type);
-  document.title = pageConfig[0] + ' — ACONSU';
+  document.title = pageConfig[0] + ' | ACONSU';
   document.getElementById('contentTitle').textContent = pageConfig[0];
   document.getElementById('contentLede').textContent = pageConfig[1];
   document.getElementById('contentEyebrow').textContent = pageConfig[2];

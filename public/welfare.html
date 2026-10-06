@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Welfare — ACONSU</title>
+<title>Welfare | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -37,7 +37,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <div class="hero-content">
     <p class="eyebrow">We Care</p>
     <h1>Welfare</h1>
-    <p class="lede">Going through something? Let us know how we can help — this is kept confidential.</p>
+    <p class="lede">Going through something? Let us know how we can help. This is kept confidential.</p>
   </div>
 </section>
 
@@ -56,7 +56,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       </div>
       <div class="field">
         <label for="description">Tell us more</label>
-        <textarea id="description" required placeholder="Share as much as you're comfortable with — only the Welfare team sees this."></textarea>
+        <textarea id="description" required placeholder="Share as much as you're comfortable with. Only the Welfare team sees this."></textarea>
       </div>
       <div class="field">
         <label for="amountRequested">Amount, if financial (optional)</label>
@@ -175,7 +175,7 @@ document.getElementById('welfareForm').addEventListener('submit', async (e) => {
         amountRequested: document.getElementById('amountRequested').value
       })
     });
-    msg.textContent = 'Your request has been received — the Welfare team will follow up.';
+    msg.textContent = 'Your request has been received. The Welfare team will follow up.';
     msg.className = 'form-msg success';
     showToast('Welfare request submitted.', 'success');
     document.getElementById('welfareForm').reset();

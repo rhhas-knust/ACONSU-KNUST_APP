@@ -1,5 +1,5 @@
 /* ============================================================
-   Welfare Portal — member requests and Shepherding's referrals
+   Welfare Portal. Member requests and Shepherding's referrals
    (section 33). Sensitive by design: only this role and Chapter
    Admin/Coordinator can ever open this data.
    ============================================================ */
@@ -15,7 +15,7 @@ async function renderWelfareOverview(el) {
     <div class="panel-head">
       <div>
         <h2>Welfare Overview</h2>
-        <p class="sub">Confidential — visible only to Welfare and Chapter leadership.</p>
+        <p class="sub">Confidential. Visible only to Welfare and Chapter leadership.</p>
       </div>
     </div>
     <div class="stat-grid">
@@ -58,7 +58,7 @@ async function renderWelfareQueue(el) {
   el.querySelectorAll('[data-manage]').forEach(btn => btn.addEventListener('click', () => {
     const item = items.find(w => w.id === btn.dataset.manage);
     showModal(`
-      <h3>${escapeHtml(item.memberName || 'Unknown')} — ${WELFARE_CATEGORY_LABELS[item.category] || item.category}</h3>
+      <h3>${escapeHtml(item.memberName || 'Unknown')}: ${WELFARE_CATEGORY_LABELS[item.category] || item.category}</h3>
       <p class="hint">${escapeHtml(item.description)}</p>
       ${item.amountRequested ? `<p class="tiny muted">Amount requested: ${money(item.amountRequested)}</p>` : ''}
       <form id="manageForm">
@@ -243,7 +243,7 @@ async function renderWelfarePurse(el) {
           })
         });
         closeModal();
-        showToast('Confirmed — the member has been told.', 'success');
+        showToast('Confirmed, the member has been told.', 'success');
         openPanel('purse');
       } catch (err) { showToast(err.message || 'Could not confirm that.', 'error'); }
     });

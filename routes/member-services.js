@@ -19,7 +19,7 @@ function registerMemberServiceRoutes(app, deps) {
   };
   const logMilestone = async ({ chapterId, memberId, memberName, type, note, loggedBy }) => {
     const milestone = await repo.create('milestones', { chapterId, memberId, memberName, type: MILESTONE_TYPES.includes(type) ? type : 'other', note: note || '', loggedBy: loggedBy || '' }, 'mstone');
-    createNotification(`Congratulations, ${memberName}!`, `${memberName} ${MILESTONE_LABELS[milestone.type]}${note ? ' — ' + note : ''}`, '/index.html', 'system', chapterId).catch(() => {});
+    createNotification(`Congratulations, ${memberName}!`, `${memberName} ${MILESTONE_LABELS[milestone.type]}${note ? ', ' + note : ''}`, '/index.html', 'system', chapterId).catch(() => {});
     return milestone;
   };
 
@@ -118,7 +118,7 @@ function registerMemberServiceRoutes(app, deps) {
   });
 
   app.post('/api/welfare/requests', requireMember, async (req, res) => {
-    try { const member = await repo.getById('members', req.session.memberId); if (!member) return res.status(404).json({ error: 'Account not found' }); const { category, description, amountRequested } = req.body; if (!description) return res.status(400).json({ error: 'Please describe your request' }); const request = await repo.create('welfareRequests', { chapterId: member.chapterId, memberId: member.id, memberName: member.name, category: WELFARE_CATEGORIES.includes(category) ? category : 'other', description, amountRequested: Number(amountRequested) || 0, status: 'submitted' }, 'welf'); res.json({ success: true, item: request }); notifyAdminByEmail('New Welfare Request — ACONSU', '<p>A new welfare request has been submitted. Log in to the Welfare portal to review it.</p>'); } catch (e) { res.status(500).json({ error: 'Could not submit your request' }); }
+    try { const member = await repo.getById('members', req.session.memberId); if (!member) return res.status(404).json({ error: 'Account not found' }); const { category, description, amountRequested } = req.body; if (!description) return res.status(400).json({ error: 'Please describe your request' }); const request = await repo.create('welfareRequests', { chapterId: member.chapterId, memberId: member.id, memberName: member.name, category: WELFARE_CATEGORIES.includes(category) ? category : 'other', description, amountRequested: Number(amountRequested) || 0, status: 'submitted' }, 'welf'); res.json({ success: true, item: request }); notifyAdminByEmail('New Welfare Request | ACONSU', '<p>A new welfare request has been submitted. Log in to the Welfare portal to review it.</p>'); } catch (e) { res.status(500).json({ error: 'Could not submit your request' }); }
   });
   app.get('/api/welfare/requests/mine', requireMember, async (req, res) => { try { const items = await repo.getAll('welfareRequests', { memberId: req.session.memberId }); res.json(items.map(({ notes, ...safe }) => safe).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))); } catch (e) { res.status(500).json({ error: 'Could not load your requests' }); } });
   app.post('/api/shepherd/welfare-referrals', requireShepherd, async (req, res) => {
@@ -152,10 +152,10 @@ function registerMemberServiceRoutes(app, deps) {
       // booked to the month it was noticed in.
       const today = new Date().toISOString().slice(0, 10);
       const receivedOn = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.receivedOn || '')) ? req.body.receivedOn : today;
-      if (receivedOn > today) return res.status(400).json({ error: 'Money cannot have arrived in the future — check the date.' });
+      if (receivedOn > today) return res.status(400).json({ error: 'Money cannot have arrived in the future, check the date.' });
       const reference = String(req.body.reference || '').trim() || intent.reference || '';
 
-      const entry = await repo.create('financeEntries', { chapterId: intent.chapterId, entryType: 'income', category: intent.purpose, amount: intent.amount, date: receivedOn, description: `Giving confirmed — ${intent.memberName}`, method: intent.method, reference, payee: intent.memberName, approvalStatus: 'approved', approvedBy: actorName(req), recordedBy: actorName(req) }, 'fin');
+      const entry = await repo.create('financeEntries', { chapterId: intent.chapterId, entryType: 'income', category: intent.purpose, amount: intent.amount, date: receivedOn, description: `Giving confirmed, ${intent.memberName}`, method: intent.method, reference, payee: intent.memberName, approvalStatus: 'approved', approvedBy: actorName(req), recordedBy: actorName(req) }, 'fin');
       const updated = await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'confirmed', matchedFinanceEntryId: entry.id, reference, receivedOn, confirmedAt: new Date(), reviewedBy: actorName(req) }, filter);
 
       // They gave and then heard nothing. The tithe path tells them; there is
@@ -211,13 +211,13 @@ function registerMemberServiceRoutes(app, deps) {
       // the same lock. Without this, tithe reaches the treasury books by being
       // ticked in a list rather than confirmed on its own.
       if (intents.some((i) => givingGoesToWelfare(i.purpose))) {
-        return res.status(400).json({ error: 'Tithe goes to the welfare account — leave it out of a treasury batch. Welfare confirms it into their own book.' });
+        return res.status(400).json({ error: 'Tithe goes to the welfare account, leave it out of a treasury batch. Welfare confirms it into their own book.' });
       }
       // A batch is reconciled as of a date too. Defaulting to today keeps it
       // one click when that is when the statement was read.
       const today = new Date().toISOString().slice(0, 10);
       const receivedOn = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.receivedOn || '')) ? req.body.receivedOn : today;
-      if (receivedOn > today) return res.status(400).json({ error: 'Money cannot have arrived in the future — check the date.' });
+      if (receivedOn > today) return res.status(400).json({ error: 'Money cannot have arrived in the future, check the date.' });
 
       const entries = [];
       for (const intent of intents) {
@@ -227,7 +227,7 @@ function registerMemberServiceRoutes(app, deps) {
           category: intent.purpose,
           amount: intent.amount,
           date: receivedOn,
-          description: `Batch reconciled giving — ${intent.memberName}`,
+          description: `Batch reconciled giving: ${intent.memberName}`,
           method: intent.method,
           reference: intent.reference,
           payee: intent.memberName,

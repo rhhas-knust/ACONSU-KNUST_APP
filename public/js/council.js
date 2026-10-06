@@ -5,7 +5,7 @@
    National Coordinator, every Chapter Coordinator, every
    Chapter President, and the Patrons.
 
-   A seat here grants exactly two things — reading the council
+   A seat here grants exactly two things. Reading the council
    and speaking in it. It grants nothing about another chapter,
    so a Chapter President on this page still cannot see another
    chapter's members, money or welfare cases. There is simply
@@ -37,7 +37,7 @@ async function renderCouncilMeeting(el) {
     <div class="panel-head">
       <div>
         <h2>The Council Meeting</h2>
-        <p class="sub">Where the union meets. ${d.isChair ? 'You set this link — everyone on the council sees it.' : 'Set by the National Coordinator.'}</p>
+        <p class="sub">Where the union meets. ${d.isChair ? 'You set this link. Everyone on the council sees it.' : 'Set by the National Coordinator.'}</p>
       </div>
     </div>
     ${m.notice ? `
@@ -58,7 +58,7 @@ async function renderCouncilMeeting(el) {
       <form id="meetingForm">
         <div class="field"><label>Meeting link</label>
           <input type="url" id="mUrl" value="${escapeHtml(m.url || '')}" placeholder="https://zoom.us/j/...">
-          <small class="hint">A full https:// link — Zoom, Meet, whatever the council uses.</small>
+          <small class="hint">A full https:// link: Zoom, Meet, whatever the council uses.</small>
         </div>
         <div class="field-row">
           <div class="field"><label>What it is called</label>
@@ -213,9 +213,9 @@ async function renderCouncilRoster(el) {
           <thead><tr><th>Name</th><th>Seat</th><th>Chapter</th></tr></thead>
           <tbody>${roster.map(r => `
             <tr>
-              <td>${escapeHtml(r.name || '—')}</td>
+              <td>${escapeHtml(r.name || '-')}</td>
               <td>${escapeHtml(r.seat)}</td>
-              <td>${escapeHtml(r.chapterName || '—')}</td>
+              <td>${escapeHtml(r.chapterName || '-')}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">No seats filled yet.</p>'}
     </div>

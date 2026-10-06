@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ACONSU Rooms — ACONSU</title>
+<title>ACONSU Rooms | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -216,7 +216,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       // missing camera falls back to audio rather than ending here.
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
-        showToast('Joining with audio only — no camera available.', 'error');
+        showToast('Joining with audio only, no camera available.', 'error');
       } catch (err2) {
         statusEl.textContent = '';
         callEl.hidden = true;
@@ -300,7 +300,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     this.classList.toggle('off', on);
   });
   // Closing the tab should free the seat immediately, not when the connection
-  // eventually times out — in a four-seat room a ghost is a real cost.
+  // eventually times out - in a four-seat room a ghost is a real cost.
   window.addEventListener('pagehide', function () { if (source) source.close(); });
 
   function card(r) {

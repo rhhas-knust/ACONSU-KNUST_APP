@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sermons & Media — ACONSU</title>
+<title>Sermons & Media | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -80,7 +80,7 @@ const searchQuery = mediaParams.get('q') || '';
         <p style="color:var(--ink-soft); margin-bottom:12px;">${escapeHtml(s.description || '')}</p>
         ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:var(--ink-faint);">Link coming soon</span>'}
       </div>
-    `).join('') || '<p class="empty-state">No sermons uploaded yet — check back soon.</p>';
+    `).join('') || '<p class="empty-state">No sermons uploaded yet. Check back soon.</p>';
     if (selectedSermonId) {
       const selectedCard = wrap.querySelector(`[data-sermon-id="${CSS.escape(selectedSermonId)}"]`);
       if (selectedCard) selectedCard.scrollIntoView({ behavior: 'smooth', block: 'start' });

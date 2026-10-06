@@ -1,8 +1,8 @@
 /* ============================================================
-   National Coordinator — oversight across every ACONSU chapter.
+   National Coordinator. Oversight across every ACONSU chapter.
    Creates/edits/activates chapters, assigns Chapter Coordinators,
    and gives a national, aggregated view (never individually
-   identifying data — see section 38 of the platform spec).
+   identifying data. See section 38 of the platform spec).
    ============================================================ */
 
 // ---------- dashboard ----------
@@ -13,7 +13,7 @@ async function renderNationalDashboard(el) {
     <div class="panel-head">
       <div>
         <h2>ACONSU, Nationally</h2>
-        <p class="sub">Every chapter, on one screen. Updated live — last read ${dateTimeLabel(data.generatedAt)}.</p>
+        <p class="sub">Every chapter, on one screen. Updated live. Last read ${dateTimeLabel(data.generatedAt)}.</p>
       </div>
     </div>
 
@@ -29,7 +29,7 @@ async function renderNationalDashboard(el) {
 
     <div class="portal-card">
       <h3>Chapter Comparison</h3>
-      <p class="hint">Aggregated figures only — no individual member data appears here.</p>
+      <p class="hint">Aggregated figures only. No individual member data appears here.</p>
       <div class="table-wrap">
         <table class="portal-table">
           <thead><tr><th>Chapter</th><th>Status</th><th class="num">Members</th><th class="num">Visitors</th><th class="num">Execs</th><th class="num">Upcoming Events</th><th class="num">Last Service</th><th class="num">Balance</th></tr></thead>
@@ -42,10 +42,10 @@ async function renderNationalDashboard(el) {
                 <td class="num">${c.visitorCount}</td>
                 <td class="num">${c.executiveCount}</td>
                 <td class="num">${c.upcomingEvents}</td>
-                <td class="num">${c.lastServiceAttendance === null ? '—' : c.lastServiceAttendance}</td>
+                <td class="num">${c.lastServiceAttendance === null ? '-' : c.lastServiceAttendance}</td>
                 <td class="num">${money(c.balance)}</td>
               </tr>
-            `).join('') || emptyRow(8, 'No chapters yet — create the first one from the Chapters tab.')}
+            `).join('') || emptyRow(8, 'No chapters yet. Create the first one from the Chapters tab.')}
           </tbody>
         </table>
       </div>
@@ -53,7 +53,7 @@ async function renderNationalDashboard(el) {
 
     <div class="portal-card">
       <h3>Chapter Readiness</h3>
-      <p class="hint">Is this chapter standing on its own — not what it's doing. Welfare cases and the finance ledger stay inside the chapter either way.</p>
+      <p class="hint">Is this chapter standing on its own. Not what it's doing. Welfare cases and the finance ledger stay inside the chapter either way.</p>
       <div class="table-wrap">
         <table class="portal-table">
           <thead><tr><th>Chapter</th><th>Coordinator</th><th>Admin</th><th>Offices Staffed</th><th>Settings</th><th>Last Activity</th></tr></thead>
@@ -68,7 +68,7 @@ async function renderNationalDashboard(el) {
                 <td>${readinessPill(c.readiness.settingsComplete, 'Complete', 'Incomplete')}</td>
                 <td class="tiny muted">${c.readiness.lastActivityAt ? dateTimeLabel(c.readiness.lastActivityAt) : 'No activity yet'}</td>
               </tr>
-            `).join('') || emptyRow(6, 'No chapters yet — create the first one from the Chapters tab.')}
+            `).join('') || emptyRow(6, 'No chapters yet. Create the first one from the Chapters tab.')}
           </tbody>
         </table>
       </div>
@@ -95,7 +95,7 @@ function chapterForm(chapter) {
       <div class="field"><label>Chapter Name</label>
         <input type="text" id="cName" value="${escapeHtml(chapter?.name || '')}" placeholder="e.g. ACONSU-Legon" required></div>
       <div class="field"><label>Full Name (optional)</label>
-        <input type="text" id="cFullName" value="${escapeHtml(chapter?.fullName || '')}" placeholder="The Apostles' Continuation Students Union — Legon"></div>
+        <input type="text" id="cFullName" value="${escapeHtml(chapter?.fullName || '')}" placeholder="The Apostles' Continuation Students Union: Legon"></div>
       <div class="field-row">
         <div class="field"><label>Institution</label><input type="text" id="cInstitution" value="${escapeHtml(chapter?.institution || '')}" placeholder="e.g. University of Ghana"></div>
         <div class="field"><label>Location</label><input type="text" id="cLocation" value="${escapeHtml(chapter?.location || '')}" placeholder="e.g. Legon, Accra"></div>
@@ -146,7 +146,7 @@ function chapterForm(chapter) {
 function assignCoordinatorForm(chapter, staffInChapter) {
   const existing = staffInChapter.filter(s => s.role !== 'coordinator');
   showModal(`
-    <h3>Assign Chapter Coordinator — ${escapeHtml(chapter.name)}</h3>
+    <h3>Assign Chapter Coordinator: ${escapeHtml(chapter.name)}</h3>
     <p class="hint">The current coordinator (if any) steps down to Chapter Admin rather than losing their account.</p>
     <form id="assignForm">
       <div class="choice-grid" style="margin-bottom:16px;">
@@ -222,7 +222,7 @@ async function renderChapters(el) {
           ${chapters.map(c => `
             <tr>
               <td><strong>${escapeHtml(c.name)}</strong><br><small class="muted">${escapeHtml(c.id)}</small></td>
-              <td>${escapeHtml(c.institution || '—')}</td>
+              <td>${escapeHtml(c.institution || '-')}</td>
               <td>${escapeHtml(c.coordinatorName || 'Not assigned')}</td>
               <td>${pill(c.status, c.status === 'active' ? 'green' : 'grey')}</td>
               <td>
@@ -251,7 +251,7 @@ async function renderChapters(el) {
     let chapterStaff = [];
     try {
       chapterStaff = await fetchJSON(`/api/admin/staff?chapterId=${encodeURIComponent(chapter.id)}`);
-    } catch (e) { /* fall through with an empty list — "new account" still works */ }
+    } catch (e) { /* fall through with an empty list - "new account" still works */ }
     assignCoordinatorForm(chapter, chapterStaff.filter(s => s.chapterId === chapter.id));
   }));
   el.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
@@ -274,7 +274,7 @@ async function renderNationalAnnouncements(el) {
     <div class="panel-head">
       <div>
         <h2>National Announcement</h2>
-        <p class="sub">Reaches every chapter at once — for anything that isn't chapter-specific. Each Chapter Coordinator has their own chapter-wide announcement tool for local news.</p>
+        <p class="sub">Reaches every chapter at once. For anything that isn't chapter-specific. Each Chapter Coordinator has their own chapter-wide announcement tool for local news.</p>
       </div>
     </div>
     <div class="portal-card" style="max-width:560px;">
@@ -310,7 +310,7 @@ async function renderNationalAnnouncements(el) {
 
 async function renderNationalReports(el) {
   const rows = await fetchJSON('/api/national/reports/overview');
-  el.innerHTML = `<div class="panel-head"><div><h2>National Reports</h2><p class="sub">Chapter-level comparison only — sensitive personal records stay in the local chapter.</p></div></div>
+  el.innerHTML = `<div class="panel-head"><div><h2>National Reports</h2><p class="sub">Chapter-level comparison only. Sensitive personal records stay in the local chapter.</p></div></div>
   <div class="portal-card"><div class="table-wrap"><table class="portal-table"><thead><tr><th>Chapter</th><th>Status</th><th class="num">Active members</th><th class="num">Visitors</th><th class="num">Events</th><th class="num">Services</th><th class="num">Open welfare</th></tr></thead><tbody>${rows.map(r=>`<tr><td><strong>${escapeHtml(r.chapterName)}</strong></td><td>${pill(r.status,r.status==='active'?'green':'grey')}</td><td class="num">${r.activeMembers}</td><td class="num">${r.visitors}</td><td class="num">${r.events}</td><td class="num">${r.servicesRecorded}</td><td class="num">${r.openWelfareRequests}</td></tr>`).join('')||emptyRow(7,'No chapters yet.')}</tbody></table></div></div>`;
 }
 
@@ -390,8 +390,8 @@ async function renderNationalExecutives(el) {
         <tbody>
           ${national.map(e => `
             <tr>
-              <td><strong>${escapeHtml(e.name || '—')}</strong>${e.bio ? `<br><small class="muted">${escapeHtml(e.bio.slice(0, 80))}${e.bio.length > 80 ? '…' : ''}</small>` : ''}</td>
-              <td>${escapeHtml(e.role || '—')}</td>
+              <td><strong>${escapeHtml(e.name || '-')}</strong>${e.bio ? `<br><small class="muted">${escapeHtml(e.bio.slice(0, 80))}${e.bio.length > 80 ? '…' : ''}</small>` : ''}</td>
+              <td>${escapeHtml(e.role || '-')}</td>
               <td class="num">${Number(e.order || 0)}</td>
               <td>
                 <div class="row-actions">
@@ -400,7 +400,7 @@ async function renderNationalExecutives(el) {
                 </div>
               </td>
             </tr>
-          `).join('') || emptyRow(4, 'No national executives yet — add the union\'s national officers here.')}
+          `).join('') || emptyRow(4, 'No national executives yet. Add the union\'s national officers here.')}
         </tbody>
       </table>
     </div>
@@ -423,8 +423,8 @@ async function renderNationalExecutives(el) {
 }
 
 // ---------- national events ----------
-// Events open to everyone — the public, prospective members, anyone who
-// hasn't logged in — rather than one chapter's own members. Stored with an
+// Events open to everyone - the public, prospective members, anyone who
+// hasn't logged in - rather than one chapter's own members. Stored with an
 // empty chapterId and isNational: true, the same convention as national
 // executives; a chapter's own events (registration drives, cell meetings,
 // local services) stay each chapter's own admin's to run.
@@ -432,7 +432,7 @@ function nationalEventForm(event) {
   const isEdit = !!event;
   showModal(`
     <h3>${isEdit ? 'Edit National Event' : 'New National Event'}</h3>
-    <p class="hint">Open to the public — visitors and non-members can see and register for this without signing in. A chapter's own events are managed inside that chapter.</p>
+    <p class="hint">Open to the public. Visitors and non-members can see and register for this without signing in. A chapter's own events are managed inside that chapter.</p>
     <form id="nationalEventForm">
       <div class="field"><label>Event Title</label>
         <input type="text" id="neTitle" value="${escapeHtml(event?.title || '')}" required></div>
@@ -496,7 +496,7 @@ async function renderNationalEvents(el) {
     <div class="panel-head">
       <div>
         <h2>National Events</h2>
-        <p class="sub">Open to the public — visitors and non-members can register without signing in. Each chapter runs its own events separately.</p>
+        <p class="sub">Open to the public. Visitors and non-members can register without signing in. Each chapter runs its own events separately.</p>
       </div>
       <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newNationalEventBtn">+ New Event</button></div>
     </div>
@@ -506,9 +506,9 @@ async function renderNationalEvents(el) {
         <tbody>
           ${national.map(e => `
             <tr>
-              <td><strong>${escapeHtml(e.title || '—')}</strong></td>
+              <td><strong>${escapeHtml(e.title || '-')}</strong></td>
               <td>${shortDate(e.date)} ${escapeHtml(e.time || '')}</td>
-              <td>${escapeHtml(e.location || '—')}</td>
+              <td>${escapeHtml(e.location || '-')}</td>
               <td>${e.registrationEnabled ? pill(e.capacity > 0 ? `cap ${e.capacity}` : 'unlimited', 'green') : pill('off', 'grey')}</td>
               <td>
                 <div class="row-actions">
@@ -517,7 +517,7 @@ async function renderNationalEvents(el) {
                 </div>
               </td>
             </tr>
-          `).join('') || emptyRow(5, 'No national events yet — add one open to the whole public here.')}
+          `).join('') || emptyRow(5, 'No national events yet. Add one open to the whole public here.')}
         </tbody>
       </table>
     </div>
@@ -554,7 +554,7 @@ async function renderFeatures(el) {
 
 // ---------- the wider church, and the men who began it ----------
 // Edited here and nowhere else, on purpose. A chapter's coordinator cannot
-// touch these — not because they belong to another chapter, but because they
+// touch these - not because they belong to another chapter, but because they
 // belong to all of them. Every chapter's About page reads the same list, so
 // there is one account of who founded the church rather than one per chapter,
 // drifting apart with every typo.
@@ -575,11 +575,11 @@ function founderForm(man) {
           <input type="number" id="fdOrder" value="${Number(man?.order || 0)}"></div>
         <div class="field"><label>Photograph (optional)</label>
           <input type="file" id="fdImage" accept="image/*">
-          <small class="muted">Upload it straight off the phone — it is resized on the way in. Someone with no photograph yet shows his initials instead.</small></div>
+          <small class="muted">Upload it straight off the phone. It is resized on the way in. Someone with no photograph yet shows his initials instead.</small></div>
       </div>
       <div class="field checkbox-field">
         <input type="checkbox" id="fdMemoriam" ${man?.inMemoriam ? 'checked' : ''}>
-        <label for="fdMemoriam" style="margin:0;">He has gone — show “In loving memory” on his card</label>
+        <label for="fdMemoriam" style="margin:0;">He has gone. Show “In loving memory” on his card</label>
       </div>
       <div style="display:flex; gap:10px; margin-top:22px;">
         <button type="submit" class="btn btn-primary">Save</button>
@@ -623,7 +623,7 @@ async function renderChurch(el) {
     <div class="panel-head">
       <div>
         <h2>The Wider Church</h2>
-        <p class="sub">The Apostles' Continuation Church itself — its logo and the men who began it. Every chapter is a fraction of it, so every chapter's About page shows exactly what is set here.</p>
+        <p class="sub">The Apostles' Continuation Church itself. Its logo and the men who began it. Every chapter is a fraction of it, so every chapter's About page shows exactly what is set here.</p>
       </div>
       <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newFounderBtn">+ Add a Founder</button></div>
     </div>
@@ -649,8 +649,8 @@ async function renderChurch(el) {
         <tbody>
           ${founders.length ? founders.map(f => `
             <tr>
-              <td><strong>${escapeHtml(f.name || '—')}</strong>${f.inMemoriam ? ' <span class="tiny muted">(in loving memory)</span>' : ''}${f.about ? `<br><small class="muted">${escapeHtml(f.about.slice(0, 80))}${f.about.length > 80 ? '…' : ''}</small>` : ''}</td>
-              <td>${escapeHtml(f.role || '—')}</td>
+              <td><strong>${escapeHtml(f.name || '-')}</strong>${f.inMemoriam ? ' <span class="tiny muted">(in loving memory)</span>' : ''}${f.about ? `<br><small class="muted">${escapeHtml(f.about.slice(0, 80))}${f.about.length > 80 ? '…' : ''}</small>` : ''}</td>
+              <td>${escapeHtml(f.role || '-')}</td>
               <td class="num">${Number(f.order || 0)}</td>
               <td>
                 <div class="row-actions">
@@ -853,9 +853,9 @@ async function renderTheme(el) {
   draw();
 }
 
-// This portal is always national scope, never chapter-scoped — so a chapter
+// This portal is always national scope, never chapter-scoped - so a chapter
 // chosen elsewhere in the same browser (the admin dashboard's own scope
-// selector, or the public site's chapter picker — both share fetchJSON's
+// selector, or the public site's chapter picker - both share fetchJSON's
 // X-Chapter-Id store in main.js) must not silently leak into requests made
 // here. Without this, National Executives, Reports and the rest of this
 // portal could end up scoped to whatever chapter admin.html was last

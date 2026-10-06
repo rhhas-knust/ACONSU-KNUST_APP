@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sermon Notes — ACONSU</title>
+<title>Sermon Notes | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -40,7 +40,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div class="section-head">
       <p class="eyebrow">Keep What You Hear</p>
       <h1>My Sermon Notes</h1>
-      <p class="lede">Private to you — save what stood out and come back to it anytime.</p>
+      <p class="lede">Private to you. Save what stood out and come back to it anytime.</p>
     </div>
     <button class="btn btn-primary" id="newNoteBtn" style="margin-bottom:24px;">+ New Sermon Note</button>
     <div id="notesList"><p class="empty-state">Loading...</p></div>
@@ -117,7 +117,7 @@ async function loadNotes() {
   try {
     NOTES = await fetchJSON('/api/member/sermon-notes');
     if (!NOTES.length) {
-      list.innerHTML = '<p class="empty-state">No sermon notes yet — add your first one above.</p>';
+      list.innerHTML = '<p class="empty-state">No sermon notes yet. Add your first one above.</p>';
       return;
     }
     list.innerHTML = NOTES.map(n => `

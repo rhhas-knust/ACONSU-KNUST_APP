@@ -1,8 +1,8 @@
 /* ============================================================
-   Chapter Coordinator — the highest local authority in one
+   Chapter Coordinator. The highest local authority in one
    ACONSU chapter (section 4). Mostly a read-only view across
-   every office in the chapter — each office still owns its own
-   work — plus the powers that genuinely belong at this level:
+   every office in the chapter. Each office still owns its own
+   work. Plus the powers that genuinely belong at this level:
    approving sensitive operations and chapter-wide announcements.
    ============================================================ */
 
@@ -15,12 +15,12 @@ const OFFICE_LINKS = [
 ];
 
 // The roles a Chapter Coordinator may appoint. Deliberately excludes
-// nationalCoordinator and coordinator — those stay with National, and the
+// nationalCoordinator and coordinator - those stay with National, and the
 // server enforces it regardless of what this list says (NATIONAL_ONLY_ROLES
 // in server.js). Every account created here is stamped with this
 // coordinator's own chapter by the server, never by the browser.
 const APPOINTABLE_ROLES = [
-  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Runs the chapter day to day — members, events, content, reports' },
+  { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Runs the chapter day to day. Members, events, content, reports' },
   { value: 'finance', label: 'Finance Officer', blurb: 'Budgets, ledger, giving reconciliation' },
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance registers, member care, contact inbox' },
   { value: 'publicity', label: 'Publicity Officer', blurb: 'Announcements, SMS, testimonies' },
@@ -40,7 +40,7 @@ async function renderCoordinatorDashboard(el) {
     <div class="panel-head">
       <div>
         <h2>${data.chapter ? escapeHtml(data.chapter.name) : 'Your Chapter'}, at a Glance</h2>
-        <p class="sub">Every office in your chapter, on one screen. Updated live — last read ${dateTimeLabel(data.generatedAt)}.</p>
+        <p class="sub">Every office in your chapter, on one screen. Updated live. Last read ${dateTimeLabel(data.generatedAt)}.</p>
       </div>
     </div>
 
@@ -98,7 +98,7 @@ async function renderCoordinatorDashboard(el) {
               </tbody>
             </table>
           </div>
-        ` : '<p class="tiny muted" style="margin-top:14px;">No active budget — finance can create one in their portal.</p>'}
+        ` : '<p class="tiny muted" style="margin-top:14px;">No active budget. Finance can create one in their portal.</p>'}
       </div>
 
       <div class="portal-card">
@@ -107,7 +107,7 @@ async function renderCoordinatorDashboard(el) {
           <table class="portal-table" style="min-width:0;">
             <tbody>
               <tr><td>Services recorded</td><td class="num">${shepherding.servicesRecorded}</td></tr>
-              <tr><td>Last service turnout</td><td class="num">${shepherding.lastService ? shepherding.lastService.marks.filter(m => m.status === 'present').length + (shepherding.lastService.visitorCount || 0) : '—'}</td></tr>
+              <tr><td>Last service turnout</td><td class="num">${shepherding.lastService ? shepherding.lastService.marks.filter(m => m.status === 'present').length + (shepherding.lastService.visitorCount || 0) : '-'}</td></tr>
               <tr><td>People needing follow-up</td><td class="num">${shepherding.followUpNeeded}</td></tr>
               <tr><td>Unanswered messages</td><td class="num">${engagement.unreadMessages}</td></tr>
             </tbody>
@@ -280,14 +280,14 @@ function staffForm(existing, preselect) {
     blurb.textContent = found ? found.blurb : '';
     const isExecutive = roleSelect.value === 'executive';
     // Every chapter office is held by a member of the chapter, not by a
-    // free-floating username — the server has always required that, but this
+    // free-floating username - the server has always required that, but this
     // form only asked for it when appointing an executive, so appointing a
     // Finance or Shepherding officer was refused with nothing on screen to
     // explain what was missing.
     if (positionWrap) positionWrap.hidden = !isExecutive;
     if (memberHint) {
       memberHint.innerHTML = isExecutive
-        ? `An executive is an elected member of this chapter, so the office is attached to their member record. You can appoint someone at any point in the year — their term runs to <strong>${escapeHtml(academicYearEndLabel())}</strong>, when the whole executive body hands over together.`
+        ? `An executive is an elected member of this chapter, so the office is attached to their member record. You can appoint someone at any point in the year. Their term runs to <strong>${escapeHtml(academicYearEndLabel())}</strong>, when the whole executive body hands over together.`
         : 'Every chapter leader is a member of the chapter first, so the account is attached to their member record.';
     }
     syncDepartment();
@@ -372,7 +372,7 @@ function academicYearEndLabel() {
 // Only the executive office carries a term; every other account runs until
 // it's disabled, so their cell stays quiet rather than saying "no term".
 function termCell(staff) {
-  if (!staff.termEndsAt) return '<span class="tiny muted">—</span>';
+  if (!staff.termEndsAt) return '<span class="tiny muted">-</span>';
   const ended = new Date(staff.termEndsAt) <= new Date();
   return `${pill(ended ? 'ended' : 'current', ended ? 'red' : 'green')}<br><small class="tiny muted">${escapeHtml(staff.termYear || '')}${staff.termYear ? ' · ' : ''}to ${shortDate(String(staff.termEndsAt).slice(0, 10))}</small>`;
 }
@@ -393,7 +393,7 @@ async function renderLeadershipAccounts(el) {
     <div class="panel-head">
       <div>
         <h2>Leadership Accounts</h2>
-        <p class="sub">Appoint the people who run your chapter. These accounts belong to your chapter and are yours to manage — National is not involved.</p>
+        <p class="sub">Appoint the people who run your chapter. These accounts belong to your chapter and are yours to manage: National is not involved.</p>
       </div>
       <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newStaffBtn">+ Appoint Leader</button></div>
     </div>
@@ -403,7 +403,7 @@ async function renderLeadershipAccounts(el) {
         <h3>Waiting for an account (${waiting.length})</h3>
         <p class="hint">
           Shepherding has marked ${waiting.length === 1 ? 'this member' : 'these members'} an Executive.
-          That is a label on their record — it gives them no portal on its own.
+          That is a label on their record. It gives them no portal on its own.
           Give them a position and an account here and their office opens.
         </p>
         <div class="table-wrap" style="margin-top:12px;">
@@ -413,8 +413,8 @@ async function renderLeadershipAccounts(el) {
               ${waiting.map(w => `
                 <tr>
                   <td><strong>${escapeHtml(w.name || 'Unnamed member')}</strong>${w.email ? `<br><small class="muted">${escapeHtml(w.email)}</small>` : ''}</td>
-                  <td class="tiny muted">${w.markedAt ? shortDate(String(w.markedAt).slice(0, 10)) : '—'}</td>
-                  <td class="tiny muted">${escapeHtml(w.shepherdName || '—')}</td>
+                  <td class="tiny muted">${w.markedAt ? shortDate(String(w.markedAt).slice(0, 10)) : '-'}</td>
+                  <td class="tiny muted">${escapeHtml(w.shepherdName || '-')}</td>
                   <td><div class="row-actions"><button data-appoint-member="${escapeHtml(w.id)}">Appoint</button></div></td>
                 </tr>
               `).join('')}
@@ -458,7 +458,7 @@ async function renderLeadershipAccounts(el) {
                 </div>
               </td>
             </tr>
-          `).join('') || emptyRow(6, 'No chapter accounts yet — appoint your Chapter Admin first.')}
+          `).join('') || emptyRow(6, 'No chapter accounts yet. Appoint your Chapter Admin first.')}
         </tbody>
       </table>
     </div>
@@ -487,7 +487,7 @@ async function renderLeadershipAccounts(el) {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ endTerm: true })
       });
-      showToast('Term ended — they have been signed out', 'success');
+      showToast('Term ended, they have been signed out', 'success');
       openPanel('accounts');
     } catch (err) { showToast(err.message || 'Could not end this term.', 'error'); }
   }));
@@ -523,7 +523,7 @@ async function renderLeadershipAccounts(el) {
 }
 
 // ---------- approvals ----------
-// "Approve sensitive chapter operations" (section 4) — today that means
+// "Approve sensitive chapter operations" (section 4) - today that means
 // finance entries flagged pending. Approving here uses the same endpoint
 // Finance itself uses; the Coordinator is simply also allowed to call it.
 async function renderApprovals(el) {
@@ -549,7 +549,7 @@ async function renderApprovals(el) {
               <td>${pill(e.entryType)}</td>
               <td>${escapeHtml(e.category)}</td>
               <td class="num">${money(e.amount)}</td>
-              <td>${escapeHtml(e.recordedBy || '—')}</td>
+              <td>${escapeHtml(e.recordedBy || '-')}</td>
               <td>
                 <div class="row-actions">
                   <button data-approve="${e.id}">Approve</button>

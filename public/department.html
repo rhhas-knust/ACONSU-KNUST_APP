@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chapter — ACONSU</title>
+<title>Chapter | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -57,7 +57,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       ]);
       const departments = (allDepartments || []).filter(d => d.chapterId === chapterId);
       const executives = (allExecs || []).filter(e => e.chapterId === chapterId);
-      document.title = `${chapter.name} — ACONSU`;
+      document.title = `${chapter.name} | ACONSU`;
 
       if (chapter.headerImageFileId) {
         document.getElementById('deptBanner').innerHTML = `
@@ -121,7 +121,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       `;
     } else if (deptId) {
       const dept = await fetchJSON(`/api/departments/${deptId}`);
-      document.title = `${dept.name} — ACONSU`;
+      document.title = `${dept.name} | ACONSU`;
       if (dept.headerImageFileId) {
         document.getElementById('deptBanner').innerHTML = `
           <div class="dept-banner">

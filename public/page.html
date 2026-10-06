@@ -65,7 +65,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
   try {
     const page = await fetchJSON(`/api/pages/${encodeURIComponent(slug)}`);
-    document.title = `${page.title} — ACONSU`;
+    document.title = `${page.title} | ACONSU`;
     document.getElementById('pageEyebrow').textContent =
       page.type === 'gallery' ? 'Photo Gallery' : page.type === 'bookshelf' ? 'E-Library' : 'Page';
     document.getElementById('pageTitle').textContent = page.title;
@@ -90,7 +90,7 @@ async function renderGallery(slug, bodyEl) {
   try {
     const files = await fetchJSON(`/api/files?category=photo&pageSlug=${encodeURIComponent(slug)}`);
     if (!files.length) {
-      bodyEl.innerHTML = '<p class="empty-state">No photos uploaded yet — check back soon.</p>';
+      bodyEl.innerHTML = '<p class="empty-state">No photos uploaded yet. Check back soon.</p>';
       return;
     }
     bodyEl.innerHTML = `<div class="gallery-grid">${files.map(f => `
@@ -119,7 +119,7 @@ async function renderBookshelf(slug, bodyEl) {
   try {
     const files = await fetchJSON(`/api/files?category=book&pageSlug=${encodeURIComponent(slug)}`);
     if (!files.length) {
-      bodyEl.innerHTML = '<p class="empty-state">No resources uploaded yet — check back soon.</p>';
+      bodyEl.innerHTML = '<p class="empty-state">No resources uploaded yet. Check back soon.</p>';
       return;
     }
     bodyEl.innerHTML = `<div class="grid">${files.map(f => `

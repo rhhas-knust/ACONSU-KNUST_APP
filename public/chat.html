@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Community — ACONSU</title>
+<title>Community | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -83,7 +83,7 @@ async function loadTopics() {
         </div>
         <span class="badge">${t.messageCount} repl${t.messageCount === 1 ? 'y' : 'ies'}</span>
       </div>
-    `).join('') || '<p class="empty-state">No discussions yet — start the first one!</p>';
+    `).join('') || '<p class="empty-state">No discussions yet. Start the first one!</p>';
     list.querySelectorAll('[data-open]').forEach(card => card.addEventListener('click', () => openTopic(card.dataset.open, topics.find(t => t.id === card.dataset.open).title)));
   } catch (e) {
     list.innerHTML = '<p class="empty-state">Log in to see community discussions.</p>';
@@ -110,11 +110,11 @@ async function loadMessages() {
         <div class="when">${fmtWhen(m.createdAt)}</div>
         <div class="actions"><button data-report="${m.id}">Report</button></div>
       </div>
-    `).join('') || '<p class="empty-state">No replies yet — be the first.</p>';
+    `).join('') || '<p class="empty-state">No replies yet. Be the first.</p>';
     list.querySelectorAll('[data-report]').forEach(btn => btn.addEventListener('click', async () => {
       if (!confirm('Report this message to the moderators?')) return;
       await fetchJSON(`/api/chat/messages/${btn.dataset.report}/report`, { method: 'POST' });
-      showToast('Reported — thank you for flagging this.', 'success');
+      showToast('Reported, thank you for flagging this.', 'success');
     }));
   } catch (e) {
     list.innerHTML = '<p class="empty-state">Could not load messages.</p>';

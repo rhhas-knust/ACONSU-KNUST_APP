@@ -1,4 +1,4 @@
-// ACONSU service worker — enables offline access and installability.
+// ACONSU service worker - enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
 const CACHE_NAME = 'aconsu-v16';
@@ -74,7 +74,7 @@ const NEVER_CACHE_API = [
   '/api/national/alumni'
 ];
 
-// A meeting's signalling stream never ends, so there is no response to cache —
+// A meeting's signalling stream never ends, so there is no response to cache -
 // trying would hold a clone of an infinite body open for as long as the call
 // lasts. These are passed straight to the network, untouched.
 const PASS_THROUGH = [
@@ -84,7 +84,7 @@ const PASS_THROUGH = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => {
-      // Non-fatal — if a shell asset is missing at install time, the SW still activates
+      // Non-fatal - if a shell asset is missing at install time, the SW still activates
       // and pages will just be fetched from network as usual.
     })
   );
@@ -136,7 +136,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Admin and the leadership portals are never cached — they must always
+  // Admin and the leadership portals are never cached - they must always
   // reflect live session/auth state, never a stale signed-in-looking shell.
   const LIVE_ONLY = [
     '/admin.html',
@@ -193,7 +193,7 @@ self.addEventListener('fetch', (event) => {
 // A signed-out device must not keep one person's records where the next person
 // to open the app offline would be shown them. The page posts this the moment a
 // logout succeeds; we drop every cached /api/ response and leave the static
-// shell alone, so the app still opens offline — just with nobody's data in it.
+// shell alone, so the app still opens offline - just with nobody's data in it.
 self.addEventListener('message', (event) => {
   if (!event.data || event.data.type !== 'CLEAR_API_CACHE') return;
   event.waitUntil(
