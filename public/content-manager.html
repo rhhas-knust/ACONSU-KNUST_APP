@@ -18,7 +18,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/portal.css">
 <style>
   .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0; }
-  .filter-btn { padding:6px 14px; border-radius:999px; border:1px solid var(--line); background:var(--surface); font-size:0.85rem; font-weight:600; cursor:pointer; color:var(--purple-ink); transition:all 0.15s ease; }
+  .filter-btn { padding:6px 14px; border-radius:6px; border:1px solid var(--line); background:var(--surface); font-size:0.85rem; font-weight:600; cursor:pointer; color:var(--purple-ink); transition:all 0.15s ease; }
   .filter-btn.active, .filter-btn:hover { background:var(--purple-deep); color:#fff; border-color:var(--brand); }
   .preview-box { display:flex; align-items:center; gap:12px; margin-top:8px; padding:10px; background:#f9f6fc; border-radius:8px; border:1px dashed var(--line); }
   .preview-box img { width:60px; height:60px; object-fit:cover; border-radius:6px; }
@@ -37,7 +37,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
   <div class="panel-head">
     <div>
-      <p class="eyebrow">Publicity &amp; Media Platform</p>
       <h1>Content Manager</h1>
       <p class="sub">Publish and manage livestreams, seminars, e-books, weekly highlights, founder profiles, and church history.</p>
     </div>
@@ -129,7 +128,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <label for="resourceFile">Resource File / E-Book PDF</label>
           <input type="file" id="resourceFile" accept=".pdf,.doc,.docx,.epub">
           <div id="resourcePreviewBox" class="preview-box" style="display:none;">
-            <span style="font-size:1.4rem;">📄</span>
+            <span style="font-size:1.4rem;"></span>
             <div>
               <span id="resourceFileName" style="font-weight:600; font-size:0.85rem;">Attached document</span>
               <br><small class="muted">Upload a new file above to replace.</small>
@@ -168,7 +167,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <section class="portal-card" style="margin-top:28px;">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
       <h2>Content Library (<span id="totalCount">0</span>)</h2>
-      <input type="text" id="filterSearch" placeholder="Search by title or category..." style="max-width:260px; padding:6px 12px; font-size:0.85rem; border-radius:999px; border:1px solid var(--line);">
+      <input type="text" id="filterSearch" placeholder="Search by title or category..." style="max-width:260px; padding:6px 12px; font-size:0.85rem; border-radius:6px; border:1px solid var(--line);">
     </div>
 
     <!-- Filter Buttons -->
@@ -266,7 +265,7 @@ function renderTable() {
       <td>
         ${i.imageFileId 
           ? `<img src="/api/files/${i.imageFileId}" alt="" style="width:44px; height:44px; object-fit:cover; border-radius:6px;">`
-          : `<div style="width:44px; height:44px; background:#eee; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:1.1rem;">📄</div>`
+          : `<div style="width:44px; height:44px; background:#eee; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:1.1rem;"></div>`
         }
       </td>
       <td>
@@ -280,7 +279,7 @@ function renderTable() {
       </td>
       <td>
         <span class="pill ${i.published ? 'pill-green' : 'pill-grey'}">${i.published ? 'Published' : 'Draft'}</span>
-        ${i.featured ? '<span class="pill pill-gold" style="margin-left:4px;">★ Featured</span>' : ''}
+        ${i.featured ? '<span class="pill pill-gold" style="margin-left:4px;">Featured</span>' : ''}
       </td>
       <td class="row-actions">
         <button type="button" class="btn btn-outline btn-sm" onclick="editItem('${i.id}')">Edit</button>

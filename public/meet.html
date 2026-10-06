@@ -24,9 +24,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   [hidden] { display: none !important; }
   .room-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:9px; }
   .room-card h3 { margin:0; font-size:1rem; }
-  .room-meta { font-size:0.82rem; color:#5a4468; }
-  .seats { display:inline-flex; align-items:center; gap:6px; font-size:0.76rem; font-weight:800; padding:3px 11px; border-radius:999px; background:var(--lilac-light); color:var(--brand-strong); }
-  .seats.full { background:#FBDFDA; color:var(--flame-red); }
+  .room-meta { font-size:0.82rem; color:var(--ink-soft); }
+  .seats { display:inline-flex; align-items:center; gap:6px; font-size:0.76rem; font-weight:800; padding:3px 11px; border-radius:6px; background:var(--lilac-light); color:var(--brand-strong); }
+  .seats.full { background:#FBDFDA; color:var(--bad-ink); }
 
   /* the call itself */
   .call { position:fixed; inset:0; background:#150C1E; z-index:500; display:flex; flex-direction:column; }
@@ -35,17 +35,17 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .tiles.many { grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; }
   .tile { position:relative; background:#241530; border-radius:12px; overflow:hidden; min-height:0; display:flex; align-items:center; justify-content:center; }
   .tile video { width:100%; height:100%; object-fit:cover; background:#241530; }
-  .tile .nm { position:absolute; left:9px; bottom:8px; background:rgba(0,0,0,0.5); color:#fff; font-size:0.76rem; font-weight:700; padding:3px 10px; border-radius:999px; }
-  .tile .state { position:absolute; right:9px; top:8px; background:rgba(0,0,0,0.5); color:#EFE6F6; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:999px; }
+  .tile .nm { position:absolute; left:9px; bottom:8px; background:rgba(0,0,0,0.5); color:#fff; font-size:0.76rem; font-weight:700; padding:3px 10px; border-radius:6px; }
+  .tile .state { position:absolute; right:9px; top:8px; background:rgba(0,0,0,0.5); color:#EFE6F6; font-size:0.7rem; font-weight:700; padding:3px 9px; border-radius:6px; }
   .tile .initial { width:74px; height:74px; border-radius:50%; background:var(--purple-deep); color:#fff; display:flex; align-items:center; justify-content:center; font-size:1.8rem; font-weight:800; font-family:var(--font-display); }
   .bar { display:flex; align-items:center; justify-content:center; gap:10px; padding:14px; padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px)); background:rgba(0,0,0,0.35); flex-wrap:wrap; }
-  .bar button { border:1px solid rgba(239,230,246,0.28); background:rgba(239,230,246,0.10); color:#FBF8FD; border-radius:999px; padding:11px 20px; font-weight:700; font-size:0.86rem; font-family:inherit; cursor:pointer; }
+  .bar button { border:1px solid rgba(239,230,246,0.28); background:rgba(239,230,246,0.10); color:#FBF8FD; border-radius:6px; padding:11px 20px; font-weight:700; font-size:0.86rem; font-family:inherit; cursor:pointer; }
   .bar button.off { background:#A93226; border-color:#A93226; }
   .bar button.leave { background:#A93226; border-color:#A93226; }
   .call-head { padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top, 0px)); color:#EFE6F6; display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:0.85rem; }
   .call-head strong { font-family:var(--font-display); font-size:1rem; }
   .warn { background:rgba(232,151,30,0.14); border-left:3px solid var(--flame-gold); padding:14px 16px; border-radius:0 10px 10px 0; margin-bottom:20px; }
-  .warn p { margin:0; font-size:0.87rem; color:#5a4468; line-height:1.6; }
+  .warn p { margin:0; font-size:0.87rem; color:var(--ink-soft); line-height:1.6; }
 </style>
 </head>
 <body class="has-side-rail">
@@ -53,9 +53,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="voice" data-hero-page="meet" style="padding-bottom:40px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">Meet Inside ACONSU</p>
     <h1>ACONSU Rooms</h1>
     <p class="lede">Small meetings, in the app. Nothing to install, and no link to a service outside the union.</p>
   </div>

@@ -36,11 +36,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="gather" data-hero-page="chat" style="padding-bottom:36px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">Talk It Out</p>
     <h1>Community</h1>
-    <p class="lede">Ask questions, share opinions, discuss respectfully.</p>
   </div>
 </section>
 
@@ -78,7 +75,7 @@ async function loadTopics() {
     list.innerHTML = topics.map(t => `
       <div class="topic-card" data-open="${t.id}">
         <div>
-          <strong>${escapeHtml(t.title)}${t.locked ? ' 🔒' : ''}</strong>
+          <strong>${escapeHtml(t.title)}${t.locked ? ' (locked)' : ''}</strong>
           <div class="tiny muted">Started by ${escapeHtml(t.createdByName || 'Someone')} · ${fmtWhen(t.lastActivity)}</div>
         </div>
         <span class="badge">${t.messageCount} repl${t.messageCount === 1 ? 'y' : 'ies'}</span>

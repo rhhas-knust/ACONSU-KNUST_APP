@@ -126,7 +126,7 @@ function wireQuickCheckIn(people) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, date: registerState.date, serviceType: registerState.serviceType })
       });
-      showFeedback(res.alreadyMarked ? `${res.member.name} was already marked present.` : `✅ ${res.member.name} marked present.`, 'success');
+      showFeedback(res.alreadyMarked ? `${res.member.name} was already marked present.` : `${res.member.name} marked present.`, 'success');
       showToast(`${res.member.name} checked in`, 'success');
     } catch (err) {
       showFeedback(err.message || `Could not check in ${label}.`, 'error');
@@ -159,7 +159,7 @@ function wireQuickCheckIn(people) {
 
   if (!('BarcodeDetector' in window)) {
     startBtn.disabled = true;
-    startBtn.textContent = '📷 Scanning not supported on this browser. Use search below';
+    startBtn.textContent = 'Scanning not supported on this browser. Use search below';
     return;
   }
 
@@ -240,7 +240,7 @@ async function renderAttendance(el) {
         <h3>Quick Check-In (section 13)</h3>
         <p class="hint">Scan a member's QR code, or search by name if scanning isn't available. Either instantly marks them present for the service selected above.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
-          <button type="button" class="btn btn-primary btn-sm" id="startScanBtn">📷 Scan QR Code</button>
+          <button type="button" class="btn btn-primary btn-sm" id="startScanBtn">Scan QR Code</button>
         </div>
         <div id="scanArea" style="display:none; margin-bottom:14px;">
           <video id="scanVideo" style="width:100%; max-width:360px; border-radius:12px; background:#000;" playsinline muted></video>
@@ -281,8 +281,8 @@ async function renderAttendance(el) {
       <div class="panel-head" style="margin-bottom:14px;">
         <h3 style="margin:0;">Past Services (${services.length})</h3>
         <div class="panel-actions">
-          <a class="btn btn-outline btn-sm" href="/api/shepherd/attendance-summary.pdf" target="_blank" rel="noopener">📄 Attendance % Report (PDF)</a>
-          <a class="btn btn-outline btn-sm" href="/api/shepherd/members/report.pdf" target="_blank" rel="noopener">📄 Membership Report (PDF)</a>
+          <a class="btn btn-outline btn-sm" href="/api/shepherd/attendance-summary.pdf" target="_blank" rel="noopener">Attendance % Report (PDF)</a>
+          <a class="btn btn-outline btn-sm" href="/api/shepherd/members/report.pdf" target="_blank" rel="noopener">Membership Report (PDF)</a>
         </div>
       </div>
       <div class="table-wrap">

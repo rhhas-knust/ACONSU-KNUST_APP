@@ -27,9 +27,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="calm" data-hero-page="page" style="padding-bottom:48px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow" id="pageEyebrow">Page</p>
     <h1 id="pageTitle">Loading...</h1>
     <p class="lede" id="pageDescription"></p>
   </div>
@@ -66,7 +64,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   try {
     const page = await fetchJSON(`/api/pages/${encodeURIComponent(slug)}`);
     document.title = `${page.title} | ACONSU`;
-    document.getElementById('pageEyebrow').textContent =
+    (document.getElementById('pageEyebrow') || {}).textContent =
       page.type === 'gallery' ? 'Photo Gallery' : page.type === 'bookshelf' ? 'E-Library' : 'Page';
     document.getElementById('pageTitle').textContent = page.title;
     document.getElementById('pageDescription').textContent = page.description || '';

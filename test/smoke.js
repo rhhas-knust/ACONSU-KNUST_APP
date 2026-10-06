@@ -2911,9 +2911,10 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and that is more than a couple of pages', dressed >= 20, dressed);
 
     const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'style.css'), 'utf8');
-    const missingScene = [...new Set(catalogue.HERO_PAGES.map(p => p.scene))]
-      .filter(scene => !css.includes(`.hero[data-art="${scene}"]`));
-    check('and every scene a page asks for is actually drawn', !missingScene.length, missingScene);
+    // The built-in scenes were layers of gradients. They are gone: a page
+    // header is flat until a chapter uploads a picture of its own.
+    check('the built-in gradient scenes are no longer drawn',
+      !/\.hero\[data-art="[a-z]+"\]/.test(css) && !/hero-flame/.test(css), null);
 
     // Nothing is uploaded yet, so the pages are wearing their built-in scenes.
     r = await call('anon', 'GET', '/api/settings', null, false, { 'X-Chapter-Id': chapterId });
@@ -3215,7 +3216,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       '--bg', '--surface', '--surface-2', '--surface-3',
       '--ink', '--ink-soft', '--ink-faint', '--heading',
       '--brand', '--brand-strong', '--border', '--header-bg',
-      '--art-veil-top', '--art-veil-bottom',
+      '--art-veil',
       '--ok-bg', '--ok-ink', '--warn-bg', '--warn-ink',
       '--bad-bg', '--bad-ink', '--mute-bg', '--mute-ink', '--row-hover'
     ];

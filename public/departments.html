@@ -23,7 +23,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .pill-serving, .pill-waiting {
-    display:inline-block; padding:5px 12px; border-radius:999px;
+    display:inline-block; padding:5px 12px; border-radius:6px;
     font-size:0.74rem; font-weight:800; letter-spacing:0.02em;
   }
   .pill-serving { background:#E7F5EC; color:#1F6B44; }
@@ -35,9 +35,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="gather" data-hero-page="departments" style="padding-bottom:48px;" id="deptsHero">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow" id="deptsEyebrow">Where You Serve</p>
     <h1 id="deptsTitle">Departments</h1>
     <p class="lede" id="deptsLede">Find where you fit, and ask to serve there.</p>
   </div>
@@ -78,7 +76,7 @@ function departmentCard(d) {
       <a href="/department.html?id=${encodeURIComponent(d.id)}" class="dept-thumb" style="height:120px; display:block;">
         ${d.headerImageFileId
           ? `<img src="/api/files/${escapeHtml(d.headerImageFileId)}" alt="${escapeHtml(d.name)}">`
-          : `<span class="dept-thumb-fallback" style="display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#5B2C82,#E8971E); color:#fff; font-weight:800; font-size:1.75rem;">${escapeHtml((d.name || 'D').charAt(0))}</span>`}
+          : `<span class="dept-thumb-fallback" style="display:flex; align-items:center; justify-content:center; background:var(--surface-3); color:var(--brand); font-weight:800; font-size:1.75rem;">${escapeHtml((d.name || 'D').charAt(0))}</span>`}
       </a>
       <div style="padding:18px; display:flex; flex-direction:column; gap:10px; flex:1;">
         <h3 style="margin:0;"><a href="/department.html?id=${encodeURIComponent(d.id)}" style="color:inherit; text-decoration:none;">${escapeHtml(d.name)}</a></h3>
@@ -157,7 +155,7 @@ document.addEventListener('click', (e) => {
 async function renderChapterPicker() {
   // Nobody signed in: choosing a chapter is a real question here, so this is
   // the one case where the chapter list belongs.
-  document.getElementById('deptsEyebrow').textContent = 'Find Your Chapter';
+  (document.getElementById('deptsEyebrow') || {}).textContent = 'Find Your Chapter';
   document.getElementById('deptsTitle').textContent = 'Chapters';
   document.getElementById('deptsLede').textContent =
     'Each chapter has its own departments and leadership. Sign in to see your own chapter\'s departments and ask to serve.';
@@ -165,7 +163,7 @@ async function renderChapterPicker() {
   document.getElementById('deptGrid').innerHTML = chapters.map(chapter => `
     <a href="/department.html?chapterId=${encodeURIComponent(chapter.id)}" class="card dept-card">
       <div class="dept-thumb">
-        <span class="dept-thumb-fallback" style="display:flex; align-items:center; justify-content:center; background:linear-gradient(135deg,#5B2C82,#E8971E); color:#fff; font-weight:800; font-size:1.75rem;">${escapeHtml((chapter.name || 'A').charAt(0))}</span>
+        <span class="dept-thumb-fallback" style="display:flex; align-items:center; justify-content:center; background:var(--surface-3); color:var(--brand); font-weight:800; font-size:1.75rem;">${escapeHtml((chapter.name || 'A').charAt(0))}</span>
       </div>
       <h3>${escapeHtml(chapter.name)}</h3>
       <p style="color:var(--ink-soft); font-size:0.92rem;">${escapeHtml(chapter.fullName || chapter.institution || 'Chapter community')}</p>

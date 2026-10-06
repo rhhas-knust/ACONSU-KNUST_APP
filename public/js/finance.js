@@ -165,7 +165,7 @@ function budgetLineRow(line) {
       <td>${pill(line.lineType)}</td>
       <td class="num">${money(line.plannedAmount)}</td>
       <td class="num">${money(line.actual)}</td>
-      <td class="num" style="color:${line.variance < 0 ? 'var(--flame-red)' : '#2E7D4F'}; font-weight:700;">
+      <td class="num" style="color:${line.variance < 0 ? 'var(--bad-ink)' : 'var(--ok-ink)'}; font-weight:700;">
         ${money(line.variance)}
       </td>
       <td>
@@ -382,7 +382,7 @@ async function renderLedger(el) {
               <td>${shortDate(e.date)}</td>
               <td>${pill(e.entryType)}</td>
               <td>${escapeHtml(e.entryType === 'income' ? incomeLabel(e.category) : e.category)}</td>
-              <td class="num" style="font-weight:700; color:${e.entryType === 'income' ? '#2E7D4F' : 'var(--flame-red)'};">
+              <td class="num" style="font-weight:700; color:${e.entryType === 'income' ? 'var(--ok-ink)' : 'var(--bad-ink)'};">
                 ${e.entryType === 'income' ? '+' : '−'}${money(e.amount).replace('GH₵ ', 'GH₵ ')}
               </td>
               <td>${escapeHtml(e.method || 'cash')}${e.reference ? `<br><small class="muted">${escapeHtml(e.reference)}</small>` : ''}</td>
@@ -578,7 +578,7 @@ async function renderReports(el) {
         <div class="field"><label>To</label><input type="date" id="rTo" value="${reportRange.to}"></div>
         <button type="button" class="btn btn-primary btn-sm" id="runReportBtn">Run Report</button>
         <a class="btn btn-outline btn-sm" id="exportCsvBtn" href="/api/finance/export.csv${query ? `?${query}` : ''}">Download CSV</a>
-        <a class="btn btn-outline btn-sm" href="/api/finance/export.pdf${query ? `?${query}` : ''}" target="_blank" rel="noopener">📄 Download PDF</a>
+        <a class="btn btn-outline btn-sm" href="/api/finance/export.pdf${query ? `?${query}` : ''}" target="_blank" rel="noopener">Download PDF</a>
       </div>
     </div>
 

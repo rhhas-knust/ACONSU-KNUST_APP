@@ -64,7 +64,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <div class="dept-banner">
             <img src="/api/files/${chapter.headerImageFileId}" alt="${escapeHtml(chapter.name)}">
             <div class="dept-banner-overlay">
-              <p class="eyebrow" style="color:rgba(255,255,255,0.8);">Chapter</p>
               <h1>${escapeHtml(chapter.name)}</h1>
               <p>${escapeHtml(chapter.fullName || chapter.location || '')}</p>
             </div>
@@ -74,15 +73,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
       detailEl.innerHTML = `
         ${chapter.headerImageFileId ? '' : `
-          <p class="eyebrow">Chapter</p>
           <h1>${escapeHtml(chapter.name)}</h1>
           <p style="color:var(--ink-soft); font-size:1.05rem;">${escapeHtml(chapter.fullName || chapter.institution || '')}</p>`}
         <div class="card" style="margin:28px 0;">
           <h3 style="margin-bottom:16px;">Chapter Overview</h3>
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
-            <div><div class="eyebrow">Institution</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.institution || 'Not specified')}</p></div>
-            <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.location || 'Not specified')}</p></div>
-            <div><div class="eyebrow">Address</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.address || 'Not specified')}</p></div>
+            <div><div class="field-label">Institution</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.institution || 'Not specified')}</p></div>
+            <div><div class="field-label">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.location || 'Not specified')}</p></div>
+            <div><div class="field-label">Address</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.address || 'Not specified')}</p></div>
           </div>
         </div>
 
@@ -127,7 +125,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <div class="dept-banner">
             <img src="/api/files/${dept.headerImageFileId}" alt="${escapeHtml(dept.name)}">
             <div class="dept-banner-overlay">
-              <p class="eyebrow" style="color:rgba(255,255,255,0.8);">Department</p>
               <h1>${escapeHtml(dept.name)}</h1>
               <p>${escapeHtml(dept.tagline || '')}</p>
             </div>
@@ -136,16 +133,15 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       }
       detailEl.innerHTML = `
         ${dept.headerImageFileId ? '' : `
-          <p class="eyebrow">Department</p>
           <h1>${escapeHtml(dept.name)}</h1>
           <p style="color:var(--ink-soft); font-size:1.05rem;">${escapeHtml(dept.tagline || '')}</p>`}
         <div class="card" style="margin:28px 0;">
           <h3 style="margin-bottom:16px;">Meeting Information</h3>
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
-            <div><div class="eyebrow">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
-            <div><div class="eyebrow">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
-            <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
-            ${dept.leaderName ? `<div><div class="eyebrow">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leaderName)}</p>${dept.leaderRole ? `<p class="tiny muted" style="margin:2px 0 0;">${escapeHtml(dept.leaderRole)}</p>` : ''}</div>` : ''}
+            <div><div class="field-label">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
+            <div><div class="field-label">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
+            <div><div class="field-label">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
+            ${dept.leaderName ? `<div><div class="field-label">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leaderName)}</p>${dept.leaderRole ? `<p class="tiny muted" style="margin:2px 0 0;">${escapeHtml(dept.leaderRole)}</p>` : ''}</div>` : ''}
           </div>
         </div>
         <p style="color:var(--ink-soft);">${escapeHtml(dept.description)}</p>

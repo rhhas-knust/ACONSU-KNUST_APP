@@ -29,7 +29,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .post-card.announcement { border-color:var(--flame-gold); background:#FFF8EC; }
   .post-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
   .post-card .when { font-size:0.75rem; color:#8a7595; }
-  .member-chip { display:inline-flex; align-items:center; gap:8px; background:var(--lilac-light); border-radius:999px; padding:4px 12px 4px 4px; font-size:0.82rem; margin:0 6px 6px 0; }
+  .member-chip { display:inline-flex; align-items:center; gap:8px; background:var(--lilac-light); border-radius:6px; padding:4px 12px 4px 4px; font-size:0.82rem; margin:0 6px 6px 0; }
   .member-chip img, .member-chip .fallback { width:26px; height:26px; border-radius:50%; object-fit:cover; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--brand); font-size:0.75rem; }
   .meeting-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
 </style>
@@ -39,9 +39,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="gather" data-hero-page="group" style="padding-bottom:32px;">
-  <div class="hero-flame"></div>
   <div class="hero-content" id="groupHero">
-    <p class="eyebrow">Group</p>
     <h1>Loading...</h1>
   </div>
 </section>
@@ -63,7 +61,7 @@ const groupId = new URLSearchParams(location.search).get('id');
 async function reloadGroup() {
   GROUP = await fetchJSON(`/api/groups/${groupId}`);
   document.getElementById('groupHero').innerHTML = `
-    <p class="eyebrow">${escapeHtml(GROUP.type.replace('_', ' '))}</p>
+    <p class="meta">${escapeHtml(GROUP.type.replace('_', ' '))}</p>
     <h1>${escapeHtml(GROUP.name)}</h1>
     <p class="lede">${escapeHtml(GROUP.description || '')}</p>
   `;
@@ -189,7 +187,7 @@ async function renderPosts(body) {
       <div id="postsList">
         ${posts.map(p => `
           <div class="post-card ${p.isAnnouncement ? 'announcement' : ''}">
-            ${p.isAnnouncement ? '<span class="badge">📌 Announcement</span>' : ''}
+            ${p.isAnnouncement ? '<span class="badge">Announcement</span>' : ''}
             <p style="margin:6px 0;">${escapeHtml(p.body)}</p>
             <div class="who">${escapeHtml(p.authorName || 'Someone')}</div>
             <div class="when">${dateTimeLabelSafe(p.createdAt)}</div>
@@ -221,7 +219,7 @@ async function renderMeetings(body) {
     body.innerHTML = `
       ${GROUP.isLeader ? `
         <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-          <button class="btn btn-primary btn-sm" id="quickAttendanceBtn">⚡ 3-Tap Attendance</button>
+          <button class="btn btn-primary btn-sm" id="quickAttendanceBtn">3-Tap Attendance</button>
           <button class="btn btn-outline btn-sm" id="logMeetingBtn">+ Log a Meeting</button>
         </div>
       ` : ''}

@@ -111,7 +111,7 @@ function lockForOversight(root, { note = false } = {}) {
   if (note && !root.querySelector(':scope > .oversight-note')) {
     const p = document.createElement('p');
     p.className = 'oversight-note';
-    p.textContent = '👁 View only. National oversees chapters. Changes here are made by the chapter’s own admin.';
+    p.textContent = 'View only. National oversees chapters. Changes here are made by the chapter’s own admin.';
     root.prepend(p);
   }
 }
@@ -190,8 +190,8 @@ async function showAdminShell() {
   const badge = document.getElementById('adminChapterBadge');
   const brand = document.getElementById('adminBrandName');
   if (ADMIN_SCOPE.isNational) {
-    if (badge) badge.textContent = isOversightOnly() ? '🌐 National · View only'
-      : (isTrueNationalScope() ? '🌐 National, Public App & Events' : '🌐 National Admin');
+    if (badge) badge.textContent = isOversightOnly() ? 'National · View only'
+      : (isTrueNationalScope() ? 'National, Public App & Events' : 'National Admin');
     if (brand) brand.textContent = 'ACONSU Admin';
     const natBtn = document.getElementById('navNationalBtn');
     const globBtn = document.getElementById('navGlobalSettingsBtn');
@@ -201,11 +201,11 @@ async function showAdminShell() {
     fetchJSON('/api/admin/chapter-settings')
       .then(cs => {
         const name = cs.name || ADMIN_SCOPE.chapterId;
-        if (badge) badge.textContent = `📍 ${name}`;
+        if (badge) badge.textContent = `${name}`;
         if (brand) brand.textContent = `ACONSU: ${name}`;
       })
       .catch(() => {
-        if (badge) badge.textContent = `📍 ${ADMIN_SCOPE.chapterId}`;
+        if (badge) badge.textContent = `${ADMIN_SCOPE.chapterId}`;
         if (brand) brand.textContent = `ACONSU: ${ADMIN_SCOPE.chapterId}`;
       });
   }
@@ -2825,7 +2825,7 @@ async function renderChapterSettings() {
       const msg = document.getElementById('bannerUploadMsg');
       if (!file) {
         msg.textContent = 'Please choose an image file first.';
-        msg.style.color = 'var(--flame-red)';
+        msg.style.color = 'var(--bad-ink)';
         return;
       }
       const formData = new FormData();
@@ -2841,7 +2841,7 @@ async function renderChapterSettings() {
         renderChapterSettings();
       } catch (err) {
         msg.textContent = err.message || 'Upload failed.';
-        msg.style.color = 'var(--flame-red)';
+        msg.style.color = 'var(--bad-ink)';
       }
     });
 
@@ -2934,34 +2934,34 @@ function initCommandPalette() {
   if (!backdrop || !input || !list) return;
 
   const COMMANDS = [
-    { title: '+ New Member', group: 'Quick Actions', icon: '➕', keywords: 'register member sign up', action: () => window.open('/register.html', '_blank', 'noopener') },
-    { title: '+ Create Event', group: 'Quick Actions', icon: '➕', keywords: 'new event calendar', action: () => { openAdminPanel('events'); whenElementReady('#addBtn-events', (el) => el.click()); } },
-    { title: '+ Send Notification', group: 'Quick Actions', icon: '➕', keywords: 'announcement broadcast push', action: () => { openAdminPanel('notifications'); whenElementReady('#notifTitle', (el) => el.focus()); } },
-    { title: '+ Upload Banner', group: 'Quick Actions', icon: '➕', keywords: 'chapter banner hero image', action: () => { openAdminPanel('chapterSettings'); whenElementReady('#chapterBannerFile', (el) => el.focus()); } },
-    { title: '+ New Form', group: 'Quick Actions', icon: '➕', keywords: 'dynamic form builder', action: () => { openAdminPanel('forms'); whenElementReady('#newFormBtn', (el) => el.click()); } },
-    { title: 'Overview Dashboard', group: 'Dashboard', panel: 'overview', icon: '📊', keywords: 'home summary' },
-    { title: 'Chapter Site Settings (Branding & Banner)', group: 'Settings', panel: 'chapterSettings', icon: '🏢', keywords: 'settings banner branding' },
-    { title: 'Members Roster & Profiles', group: 'People & Leadership', panel: 'members', icon: '👥', keywords: 'directory people' },
-    { title: 'Alumni Wall (approve requests)', group: 'People & Leadership', panel: 'alumni', icon: '🎓', keywords: 'alumni graduates wall approve' },
-    { title: 'Executive Applications & Verification', group: 'People & Leadership', panel: 'executives', icon: '🎓', keywords: 'executives roster approvals' },
-    { title: 'Leadership Accounts & Roles', group: 'People & Leadership', panel: 'staff', icon: '🔑', keywords: 'staff roles portal accounts' },
-    { title: 'Join Requests (New Visitors)', group: 'People & Leadership', panel: 'joinRequests', icon: '📥', keywords: 'new converts visitors' },
-    { title: 'Bible Studies & Outlines', group: 'Ministry & Discipleship', panel: 'bibleStudies', icon: '📖', keywords: 'study scripture' },
-    { title: 'Small Groups & Fellowship Cells', group: 'Ministry & Discipleship', panel: 'groups', icon: '👨‍👩‍👦', keywords: 'cells groups' },
-    { title: 'Prayer Requests Wall', group: 'Ministry & Discipleship', panel: 'prayerRequests', icon: '🙏', keywords: 'prayer wall' },
-    { title: 'Testimonies Moderation', group: 'Ministry & Discipleship', panel: 'testimonies', icon: '✨', keywords: 'testimony review' },
-    { title: 'Sermons & Audio/Video Media', group: 'Ministry & Discipleship', panel: 'sermons', icon: '🎧', keywords: 'media sermons' },
-    { title: 'Events & Gathering Calendar', group: 'Operations & Gatherings', panel: 'events', icon: '🗓️', keywords: 'events calendar service schedules' },
-    { title: 'Departments & Ministries', group: 'Operations & Gatherings', panel: 'departments', icon: '🚪', keywords: 'departments ministries' },
-    { title: 'Push Notifications Broadcast', group: 'Operations & Gatherings', panel: 'notifications', icon: '🔔', keywords: 'notifications broadcast' },
-    { title: 'Dynamic Form Builder', group: 'Operations & Gatherings', panel: 'forms', icon: '🧩', keywords: 'forms builder registrations' },
-    { title: 'Monthly Theme (send for approval)', group: 'Operations & Gatherings', panel: 'theme', icon: '🕊️', keywords: 'theme month prayer flyers' },
-    { title: 'Welfare Requests & Support Cases', group: 'Care & Community', panel: 'welfare', icon: '❤️', keywords: 'welfare care' },
-    { title: 'Community Chat Moderation', group: 'Care & Community', panel: 'chatModeration', icon: '💬', keywords: 'chat moderation community' },
-    { title: 'Contact Form Inquiries', group: 'Care & Community', panel: 'contactMessages', icon: '✉️', keywords: 'contact messages' },
-    { title: 'Custom Pages Builder', group: 'System & Chapter Settings', panel: 'pages', icon: '📄', keywords: 'pages custom' },
-    { title: 'Media Library & Uploads', group: 'System & Chapter Settings', panel: 'media', icon: '📁', keywords: 'files uploads gridfs' },
-    { title: 'Reports & PDF Export', group: 'System & Chapter Settings', panel: 'reports', icon: '📑', keywords: 'reports pdf export' }
+    { title: '+ New Member', group: 'Quick Actions', icon: '', keywords: 'register member sign up', action: () => window.open('/register.html', '_blank', 'noopener') },
+    { title: '+ Create Event', group: 'Quick Actions', icon: '', keywords: 'new event calendar', action: () => { openAdminPanel('events'); whenElementReady('#addBtn-events', (el) => el.click()); } },
+    { title: '+ Send Notification', group: 'Quick Actions', icon: '', keywords: 'announcement broadcast push', action: () => { openAdminPanel('notifications'); whenElementReady('#notifTitle', (el) => el.focus()); } },
+    { title: '+ Upload Banner', group: 'Quick Actions', icon: '', keywords: 'chapter banner hero image', action: () => { openAdminPanel('chapterSettings'); whenElementReady('#chapterBannerFile', (el) => el.focus()); } },
+    { title: '+ New Form', group: 'Quick Actions', icon: '', keywords: 'dynamic form builder', action: () => { openAdminPanel('forms'); whenElementReady('#newFormBtn', (el) => el.click()); } },
+    { title: 'Overview Dashboard', group: 'Dashboard', panel: 'overview', icon: '', keywords: 'home summary' },
+    { title: 'Chapter Site Settings (Branding & Banner)', group: 'Settings', panel: 'chapterSettings', icon: '', keywords: 'settings banner branding' },
+    { title: 'Members Roster & Profiles', group: 'People & Leadership', panel: 'members', icon: '', keywords: 'directory people' },
+    { title: 'Alumni Wall (approve requests)', group: 'People & Leadership', panel: 'alumni', icon: '', keywords: 'alumni graduates wall approve' },
+    { title: 'Executive Applications & Verification', group: 'People & Leadership', panel: 'executives', icon: '', keywords: 'executives roster approvals' },
+    { title: 'Leadership Accounts & Roles', group: 'People & Leadership', panel: 'staff', icon: '', keywords: 'staff roles portal accounts' },
+    { title: 'Join Requests (New Visitors)', group: 'People & Leadership', panel: 'joinRequests', icon: '', keywords: 'new converts visitors' },
+    { title: 'Bible Studies & Outlines', group: 'Ministry & Discipleship', panel: 'bibleStudies', icon: '', keywords: 'study scripture' },
+    { title: 'Small Groups & Fellowship Cells', group: 'Ministry & Discipleship', panel: 'groups', icon: '', keywords: 'cells groups' },
+    { title: 'Prayer Requests Wall', group: 'Ministry & Discipleship', panel: 'prayerRequests', icon: '', keywords: 'prayer wall' },
+    { title: 'Testimonies Moderation', group: 'Ministry & Discipleship', panel: 'testimonies', icon: '', keywords: 'testimony review' },
+    { title: 'Sermons & Audio/Video Media', group: 'Ministry & Discipleship', panel: 'sermons', icon: '', keywords: 'media sermons' },
+    { title: 'Events & Gathering Calendar', group: 'Operations & Gatherings', panel: 'events', icon: '', keywords: 'events calendar service schedules' },
+    { title: 'Departments & Ministries', group: 'Operations & Gatherings', panel: 'departments', icon: '', keywords: 'departments ministries' },
+    { title: 'Push Notifications Broadcast', group: 'Operations & Gatherings', panel: 'notifications', icon: '', keywords: 'notifications broadcast' },
+    { title: 'Dynamic Form Builder', group: 'Operations & Gatherings', panel: 'forms', icon: '', keywords: 'forms builder registrations' },
+    { title: 'Monthly Theme (send for approval)', group: 'Operations & Gatherings', panel: 'theme', icon: '', keywords: 'theme month prayer flyers' },
+    { title: 'Welfare Requests & Support Cases', group: 'Care & Community', panel: 'welfare', icon: '', keywords: 'welfare care' },
+    { title: 'Community Chat Moderation', group: 'Care & Community', panel: 'chatModeration', icon: '', keywords: 'chat moderation community' },
+    { title: 'Contact Form Inquiries', group: 'Care & Community', panel: 'contactMessages', icon: '', keywords: 'contact messages' },
+    { title: 'Custom Pages Builder', group: 'System & Chapter Settings', panel: 'pages', icon: '', keywords: 'pages custom' },
+    { title: 'Media Library & Uploads', group: 'System & Chapter Settings', panel: 'media', icon: '', keywords: 'files uploads gridfs' },
+    { title: 'Reports & PDF Export', group: 'System & Chapter Settings', panel: 'reports', icon: '', keywords: 'reports pdf export' }
   // Every quick action makes something, and National makes nothing in a chapter.
   ].filter(c => !(isOversightOnly() && c.group === 'Quick Actions'));
 

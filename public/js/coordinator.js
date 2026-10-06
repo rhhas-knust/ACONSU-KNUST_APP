@@ -399,7 +399,7 @@ async function renderLeadershipAccounts(el) {
     </div>
 
     ${waiting.length ? `
-      <div class="portal-card" style="border-left:4px solid var(--flame-red, #A93226);">
+      <div class="portal-card" style="background:var(--bad-bg);">
         <h3>Waiting for an account (${waiting.length})</h3>
         <p class="hint">
           Shepherding has marked ${waiting.length === 1 ? 'this member' : 'these members'} an Executive.

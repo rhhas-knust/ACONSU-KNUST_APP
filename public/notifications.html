@@ -27,11 +27,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="calm" data-hero-page="notifications" style="padding-bottom:40px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">Stay in the Loop</p>
     <h1>Notifications</h1>
-    <p class="lede">Events, sermons, birthdays and announcements from ACONSU.</p>
   </div>
 </section>
 
@@ -60,7 +57,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     } else {
       wrap.innerHTML = `<div class="card" style="padding:8px 20px;">${items.map(n => `
         <a href="${n.url || '/index.html'}" class="notif-item" style="text-decoration:none; color:inherit;">
-          <div class="notif-icon">${n.source === 'system' ? '🔔' : '📣'}</div>
+          <div class="notif-icon" aria-hidden="true"></div>
           <div>
             <strong style="display:block;">${escapeHtml(n.title)}</strong>
             <span style="color:var(--ink-soft); font-size:0.9rem;">${escapeHtml(n.body)}</span>

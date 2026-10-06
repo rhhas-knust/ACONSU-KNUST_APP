@@ -23,8 +23,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .welfare-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 18px; margin-bottom:12px; }
-  .welfare-card .status-pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.72rem; font-weight:800; background:var(--lilac-mid); color:var(--brand-strong); text-transform:capitalize; }
-  .welfare-card .status-pill.fulfilled, .welfare-card .status-pill.approved { background:#D9F0DE; color:#2E7D4F; }
+  .welfare-card .status-pill { display:inline-block; padding:3px 10px; border-radius:6px; font-size:0.72rem; font-weight:800; background:var(--lilac-mid); color:var(--brand-strong); text-transform:capitalize; }
+  .welfare-card .status-pill.fulfilled, .welfare-card .status-pill.approved { background:#D9F0DE; color:var(--ok-ink); }
   .welfare-card .status-pill.declined { background:#FBDFDA; color:#A93226; }
 </style>
 </head>
@@ -33,9 +33,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="flame" data-hero-page="welfare" style="padding-bottom:40px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">We Care</p>
     <h1>Welfare</h1>
     <p class="lede">Going through something? Let us know how we can help. This is kept confidential.</p>
   </div>
@@ -67,13 +65,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
 
     <div class="section-head" style="margin-top:48px;">
-      <p class="eyebrow">Your Giving</p>
       <h2>What Welfare has received from you</h2>
     </div>
     <div id="myWelfareGiving"><p class="empty-state">Loading...</p></div>
 
     <div class="section-head" style="margin-top:48px;">
-      <p class="eyebrow">Your Requests</p>
       <h2>Status</h2>
     </div>
     <div id="myRequests"><p class="empty-state">Loading...</p></div>

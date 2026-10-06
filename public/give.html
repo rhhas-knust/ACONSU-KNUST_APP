@@ -34,11 +34,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="harvest" data-hero-page="give" style="padding-bottom:36px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">Sow &amp; Support</p>
     <h1>Give</h1>
-    <p class="lede">Support your chapter's tithes, offerings and welfare fund.</p>
   </div>
 </section>
 
@@ -65,7 +62,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
 
     <div class="section-head" style="margin-top:40px;">
-      <p class="eyebrow">Your Giving</p>
       <h2>History</h2>
     </div>
     <div id="giveHistory"><p class="empty-state">Loading...</p></div>
@@ -93,7 +89,7 @@ function giveStatusLine(g) {
   if (g.status === 'confirmed') {
     const who = g.reviewedBy ? ` by ${escapeHtml(g.reviewedBy)}` : '';
     const on = g.receivedOn ? ` on ${escapeHtml(niceDate(g.receivedOn))}` : '';
-    return `<span class="tiny" style="color:var(--ok-ink, #2E7D4F); font-weight:700;">Received${on}${who}</span>`;
+    return `<span class="tiny" style="color:var(--ok-ink, var(--ok-ink)); font-weight:700;">Received${on}${who}</span>`;
   }
   if (g.status === 'rejected') {
     return `<span class="tiny" style="color:var(--bad-ink, #A93226); font-weight:700;">Not confirmed${g.reviewNotes ? ': ' + escapeHtml(g.reviewNotes) : ''}</span>`;

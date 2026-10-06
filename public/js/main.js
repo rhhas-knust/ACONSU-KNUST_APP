@@ -116,9 +116,9 @@ function showChapterPicker(chapters) {
     const backdrop = document.createElement('div');
     backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px;';
     backdrop.innerHTML = `
-      <div style="background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:'Manrope',sans-serif;">
+      <div style="background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:var(--font-body);">
         <h3 style="margin:0 0 6px; font-family:'Fraunces',serif; color:var(--purple-deep,#3A1B54);">Choose your ACONSU chapter</h3>
-        <p style="color:#5a4468; font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters. Pick yours to continue. You can change this later from your profile.</p>
+        <p style="color:var(--ink-soft); font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters. Pick yours to continue. You can change this later from your profile.</p>
         <div id="chapterPickList" style="display:flex; flex-direction:column; gap:10px;"></div>
       </div>
     `;
@@ -358,7 +358,7 @@ function renderPaginationControls(containerId, totalItems, perPage, currentPage,
   el.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:center; gap:14px; margin-top:16px;">
       <button type="button" id="${containerId}-prev" class="btn btn-outline btn-sm" ${currentPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>&larr; Prev</button>
-      <span style="font-size:0.85rem; color:#5a4468; font-weight:700;">Page ${currentPage} of ${totalPages}</span>
+      <span style="font-size:0.85rem; color:var(--ink-soft); font-weight:700;">Page ${currentPage} of ${totalPages}</span>
       <button type="button" id="${containerId}-next" class="btn btn-outline btn-sm" ${currentPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>Next &rarr;</button>
     </div>
   `;
@@ -1027,7 +1027,7 @@ function showInstallBanner() {
       </div>
     </div>
     <div style="display:flex; gap:8px; flex-shrink:0;">
-      <button id="installBtn" style="background:#fff; color:#3A1B54; border:none; padding:8px 16px; border-radius:999px; font-weight:700; font-size:0.85rem; cursor:pointer;">Install</button>
+      <button id="installBtn" style="background:#fff; color:#3A1B54; border:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Install</button>
       <button id="dismissInstallBtn" style="background:none; color:#fff; border:none; font-size:1.2rem; cursor:pointer; opacity:0.8;">&times;</button>
     </div>
   `;
@@ -1061,9 +1061,9 @@ function ensureToastHost() {
 function showToast(message, type) {
   const host = ensureToastHost();
   const toast = document.createElement('div');
-  const bg = type === 'error' ? '#A93226' : type === 'success' ? '#2E7D4F' : '#3A1B54';
+  const bg = type === 'error' ? '#A93226' : type === 'success' ? 'var(--ok-ink)' : '#3A1B54';
   toast.textContent = message;
-  toast.style.cssText = `background:${bg}; color:#fff; padding:14px 18px; border-radius:10px; font-family:'Manrope',sans-serif; font-weight:600; font-size:0.9rem; box-shadow:0 12px 28px rgba(0,0,0,0.2); opacity:0; transform:translateY(12px); transition:opacity 0.25s ease, transform 0.25s ease;`;
+  toast.style.cssText = `background:${bg}; color:#fff; padding:14px 18px; border-radius:10px; font-family:var(--font-body); font-weight:600; font-size:0.9rem; box-shadow:0 12px 28px rgba(0,0,0,0.2); opacity:0; transform:translateY(12px); transition:opacity 0.25s ease, transform 0.25s ease;`;
   host.appendChild(toast);
   requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
   setTimeout(() => {
@@ -1074,44 +1074,12 @@ function showToast(message, type) {
 }
 
 // ---------- scroll-reveal for cards/sections ----------
-function initScrollReveal(selector) {
-  const els = document.querySelectorAll(selector || '.card, .form-card');
-  if (!('IntersectionObserver' in window) || !els.length) return;
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('reveal-in');
-        io.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.1 });
-  els.forEach(el => { el.classList.add('reveal-pre'); io.observe(el); });
-}
+// Content is simply there when the page is; nothing is hidden until it scrolls into view.
+function initScrollReveal() { /* intentionally empty */ }
 
 // ---------- floating decorative images ----------
-function renderFloatingImages(containerId, fileIds, positions) {
-  const container = document.getElementById(containerId);
-  if (!container || !fileIds || !fileIds.length) return;
-  const defaultPositions = [
-    { top: '8%', left: '4%', width: '140px', height: '100px', rotate: '-6deg', delay: '0s' },
-    { top: '12%', right: '5%', width: '120px', height: '160px', rotate: '5deg', delay: '0.15s' },
-    { bottom: '6%', left: '8%', width: '130px', height: '90px', rotate: '4deg', delay: '0.3s' },
-    { bottom: '10%', right: '6%', width: '110px', height: '140px', rotate: '-4deg', delay: '0.45s' }
-  ];
-  const pos = positions || defaultPositions;
-  fileIds.slice(0, pos.length).forEach((fileId, i) => {
-    const p = pos[i];
-    const div = document.createElement('div');
-    div.className = 'float-deco';
-    Object.assign(div.style, {
-      top: p.top || 'auto', left: p.left || 'auto', right: p.right || 'auto', bottom: p.bottom || 'auto',
-      width: p.width, height: p.height, transform: `rotate(${p.rotate})`, animationDelay: p.delay
-    });
-    div.innerHTML = `<img src="/api/files/${fileId}" alt="" loading="lazy">`;
-    container.appendChild(div);
-    setTimeout(() => div.classList.add('fade-in'), 50 + i * 120);
-  });
-}
+// Floating decorative pictures were removed; kept so older callers do not break.
+function renderFloatingImages() { /* intentionally empty */ }
 
 // ---------- mobile haptic feedback & share ----------
 function triggerHaptic(duration = 10) {
@@ -1175,7 +1143,7 @@ async function pickVerseCardStyle() {
     const backdrop = document.createElement('div');
     backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.58); z-index:9999; display:flex; align-items:flex-end; justify-content:center; padding:0;';
     backdrop.innerHTML = `
-      <div role="dialog" aria-label="Choose a background" style="background:#fff; width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px)); font-family:'Manrope',sans-serif;">
+      <div role="dialog" aria-label="Choose a background" style="background:#fff; width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px)); font-family:var(--font-body);">
         <h3 style="margin:0 0 4px; font-family:'Fraunces',serif; font-size:1.15rem; color:#3A1B54;">Choose a background</h3>
         <p style="margin:0 0 16px; font-size:0.85rem; color:#6b5878;">Your choice is remembered for next time.</p>
         <div id="verseStyleGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;"></div>
@@ -1248,10 +1216,10 @@ async function shareVerseCard({ text, reference, filename }) {
 
 // ---------- offline / online network connectivity banner ----------
 window.addEventListener('offline', () => {
-  showToast('📡 You are currently offline. Viewing cached content.', 'error');
+  showToast('You are currently offline. Viewing cached content.', 'error');
 });
 window.addEventListener('online', () => {
-  showToast('⚡ Back online! Connection restored.', 'success');
+  showToast('Back online! Connection restored.', 'success');
 });
 
 

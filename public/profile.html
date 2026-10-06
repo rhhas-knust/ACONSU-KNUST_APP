@@ -26,7 +26,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .profile-photo img { width:100%; height:100%; object-fit:cover; }
   .profile-photo .initial { font-family: var(--font-display); font-size: 1.8rem; color: var(--brand); }
   .profile-tabs { display:flex; gap:10px; justify-content:center; margin-bottom:24px; flex-wrap:wrap; }
-  .profile-tabs button { background:none; border:2px solid var(--line); border-radius:999px; padding:8px 18px; font-weight:700; font-size:0.85rem; cursor:pointer; color:var(--purple-ink); }
+  .profile-tabs button { background:none; border:2px solid var(--line); border-radius:6px; padding:8px 18px; font-weight:700; font-size:0.85rem; cursor:pointer; color:var(--purple-ink); }
   .profile-tabs button.active { border-color: var(--brand); background: var(--purple-deep); color: #fff; }
 
   /* ---------- redesigned profile header ---------- */
@@ -40,14 +40,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .quick-pills { display:flex; gap:10px; margin-bottom:22px; }
   .quick-pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 8px; text-align:center; text-decoration:none; color:var(--purple-ink); font-size:0.78rem; font-weight:700; }
   .quick-pill .qp-icon { font-size:1.3rem; display:block; margin-bottom:4px; }
-  .streak-card { background:linear-gradient(120deg, var(--flame-gold), var(--flame-red)); border-radius:16px; padding:20px; color:#fff; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .streak-card { background:var(--purple-rich); border-radius:var(--radius); padding:20px; color:#fff; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
   .streak-card .streak-num { font-family:var(--font-display); font-size:2rem; font-weight:700; }
   .badges-section h3 { margin-bottom:14px; }
   .badges-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr)); gap:14px; margin-bottom:28px; }
   .badge-item { text-align:center; }
   .badge-circle { width:56px; height:56px; border-radius:50%; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; font-size:1.6rem; margin:0 auto 6px; opacity:0.35; filter:grayscale(1); }
-  .badge-circle.earned { opacity:1; filter:none; background:linear-gradient(135deg, var(--flame-gold), var(--flame-red)); box-shadow:0 6px 16px rgba(232,151,30,0.35); }
-  .badge-label { font-size:0.68rem; font-weight:700; color:#5a4468; line-height:1.2; }
+  .badge-circle.earned { opacity:1; filter:none; background:var(--flame-gold); color:var(--purple-ink); }
+  .badge-label { font-size:0.68rem; font-weight:700; color:var(--ink-soft); line-height:1.2; }
 </style>
 </head>
 <body class="has-side-rail">
@@ -211,7 +211,7 @@ function renderProfileTopRow() {
         <div class="profile-avatar">
           ${m.profileImageFileId ? `<img src="/api/files/${m.profileImageFileId}" alt="${escapeHtml(m.name)}">` : `<span class="initial">${escapeHtml((m.name || '?').charAt(0))}</span>`}
         </div>
-        <label class="avatar-camera-btn" for="profileImage" title="Change photo">📷</label>
+        <label class="avatar-camera-btn" for="profileImage" title="Change photo"></label>
       </div>
     </div>
   `;
@@ -343,11 +343,11 @@ async function renderMyEvents() {
 function renderQuickPills() {
   document.getElementById('quickPills').innerHTML = `
     <div class="quick-pills">
-      <a href="/card.html" class="quick-pill"><span class="qp-icon">🪪</span>Membership Card</a>
-      <a href="/events.html" class="quick-pill"><span class="qp-icon">🎟️</span>My Events</a>
-      <a href="/prayer.html" class="quick-pill"><span class="qp-icon">🙏</span>Prayer Wall</a>
-      <a href="/sermon-notes.html" class="quick-pill"><span class="qp-icon">📝</span>Sermon Notes</a>
-      <a href="/departments.html" class="quick-pill"><span class="qp-icon">🤝</span>Departments</a>
+      <a href="/card.html" class="quick-pill">Membership Card</a>
+      <a href="/events.html" class="quick-pill">My Events</a>
+      <a href="/prayer.html" class="quick-pill">Prayer Wall</a>
+      <a href="/sermon-notes.html" class="quick-pill">Sermon Notes</a>
+      <a href="/departments.html" class="quick-pill">Departments</a>
     </div>
   `;
 }

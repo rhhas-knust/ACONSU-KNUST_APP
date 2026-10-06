@@ -26,11 +26,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .prayer-card p.request-text { margin:8px 0 12px; color:var(--purple-ink); line-height:1.5; }
   .prayer-card .row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
   .prayer-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
-  .pray-btn { border:2px solid var(--purple-deep); background:var(--surface); color:var(--brand); border-radius:999px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
+  .pray-btn { border:2px solid var(--purple-deep); background:var(--surface); color:var(--brand); border-radius:6px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
   .pray-btn.done { background:var(--purple-deep); color:#fff; }
   .pray-count { font-size:0.78rem; color:#8a7595; }
-  .answered-badge { display:inline-block; background:#D9F0DE; color:#2E7D4F; font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:999px; margin-bottom:8px; }
-  .testimony-box { background:var(--lilac-light); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:0.85rem; font-style:italic; color:#5a4468; }
+  .answered-badge { display:inline-block; background:#D9F0DE; color:var(--ok-ink); font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:6px; margin-bottom:8px; }
+  .testimony-box { background:var(--lilac-light); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:0.85rem; font-style:italic; color:var(--ink-soft); }
   .mine-actions { margin-top:10px; }
 </style>
 </head>
@@ -39,11 +39,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="flame" data-hero-page="prayer" style="padding-bottom:48px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">You're Not Alone</p>
     <h1>Prayer Wall</h1>
-    <p class="lede">Bring whatever you're carrying. We would love to stand in prayer with you.</p>
   </div>
 </section>
 
@@ -80,7 +77,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section class="alt-bg">
   <div class="container" style="max-width:700px;">
     <div class="section-head">
-      <p class="eyebrow">Standing Together</p>
       <h2>The Prayer Wall</h2>
       <p class="lede">Requests shared publicly by the community. Tap to let someone know you're praying for them.</p>
     </div>
@@ -93,7 +89,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section class="alt-bg">
   <div class="container" style="max-width:700px;">
     <div class="section-head">
-      <p class="eyebrow">Testimonies</p>
       <h2>Share What God Has Done</h2>
     </div>
     <form class="form-card" id="testimonyForm" style="margin-bottom:48px;">
@@ -127,13 +122,13 @@ async function loadPrayerWall() {
     }
     list.innerHTML = items.map((p) => `
       <div class="prayer-card" data-id="${p.id}">
-        ${p.answered ? '<span class="answered-badge">🙌 Answered</span>' : ''}
+        ${p.answered ? '<span class="answered-badge">Answered</span>' : ''}
         <p class="request-text">${escapeHtml(p.request)}</p>
         <div class="row">
           <span class="who">${escapeHtml(p.name || 'Anonymous')}</span>
           <div style="display:flex; align-items:center; gap:10px;">
             <span class="pray-count">${p.prayingCount} praying</span>
-            <button type="button" class="pray-btn" data-pray="${p.id}">🙏 I'm praying</button>
+            <button type="button" class="pray-btn" data-pray="${p.id}">I'm praying</button>
           </div>
         </div>
         ${p.testimony ? `<div class="testimony-box">"${escapeHtml(p.testimony)}"</div>` : ''}
@@ -150,7 +145,7 @@ async function loadPrayerWall() {
       try {
         await fetchJSON(`/api/prayer-requests/${btn.dataset.pray}/pray`, { method: 'POST' });
         btn.classList.add('done');
-        btn.textContent = '🙏 Praying';
+        btn.textContent = 'Praying';
         showToast('They\'ll be encouraged to know you\'re praying.', 'success');
       } catch (err) { showToast(err.message || 'Could not record this.', 'error'); }
     }));

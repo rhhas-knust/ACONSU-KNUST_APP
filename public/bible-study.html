@@ -29,7 +29,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .study-detail { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:26px; }
   .study-detail h4 { margin:18px 0 8px; color:var(--brand); }
   .study-detail ul { padding-left:20px; }
-  .scripture-link { display:inline-flex; align-items:center; gap:6px; background:var(--lilac-light); color:var(--brand); padding:6px 14px; border-radius:999px; font-weight:700; font-size:0.85rem; text-decoration:none; margin-bottom:10px; }
+  .scripture-link { display:inline-flex; align-items:center; gap:6px; background:var(--lilac-light); color:var(--brand); padding:6px 14px; border-radius:6px; font-weight:700; font-size:0.85rem; text-decoration:none; margin-bottom:10px; }
 </style>
 </head>
 <body class="has-side-rail">
@@ -37,11 +37,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="word" data-hero-page="bible-study" style="padding-bottom:40px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">Go Deeper</p>
     <h1>Bible Study</h1>
-    <p class="lede">Structured studies, each linked straight to the scripture it's built on.</p>
   </div>
 </section>
 
@@ -93,9 +90,9 @@ function showDetail(id) {
   document.getElementById('studyDetailView').style.display = 'block';
   document.getElementById('studyDetail').innerHTML = `
     <div class="study-detail">
-      <p class="eyebrow">${escapeHtml(s.date || '')}</p>
+      <p class="meta">${escapeHtml(s.date || '')}</p>
       <h2>${escapeHtml(s.topic)}</h2>
-      ${s.scriptureReference ? `<a class="scripture-link" href="${scriptureLinkHref(s.scriptureReference)}">📖 Read ${escapeHtml(s.scriptureReference)}</a>` : ''}
+      ${s.scriptureReference ? `<a class="scripture-link" href="${scriptureLinkHref(s.scriptureReference)}">Read ${escapeHtml(s.scriptureReference)}</a>` : ''}
       ${s.studyMaterial ? `<h4>Study Material</h4><p style="white-space:pre-wrap; line-height:1.6;">${escapeHtml(s.studyMaterial)}</p>` : ''}
       ${(s.questions || []).length ? `<h4>Questions for Reflection</h4><ul>${s.questions.map(q => `<li>${escapeHtml(q)}</li>`).join('')}</ul>` : ''}
       ${s.notes ? `<h4>Notes</h4><p style="white-space:pre-wrap; line-height:1.6;">${escapeHtml(s.notes)}</p>` : ''}

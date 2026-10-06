@@ -194,7 +194,7 @@ async function renderWelfarePurse(el) {
                 ${e.description ? `<br><small class="muted">${escapeHtml(e.description)}</small>` : ''}
               </td>
               <td class="tiny muted">${escapeHtml(e.memberName || e.payee || '\u2014')}</td>
-              <td><strong style="color:${e.entryType === 'income' ? '#2E7D4F' : 'var(--flame-red)'}">
+              <td><strong style="color:${e.entryType === 'income' ? 'var(--ok-ink)' : 'var(--bad-ink)'}">
                 ${e.entryType === 'income' ? '+' : '\u2212'}${cedis(e.amount)}</strong></td>
               <td>${e.receiptFileId
                 ? `<a href="/api/files/${escapeHtml(e.receiptFileId)}" target="_blank" rel="noopener">View</a>`

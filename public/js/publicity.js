@@ -338,7 +338,7 @@ async function renderPublicityEvents(el) {
             const statusTone = e.status === 'published' ? (upcoming ? 'green' : 'grey') : e.status === 'rejected' ? 'red' : 'amber';
             return `
               <tr>
-                <td><strong>${escapeHtml(e.title)}</strong>${e.recurring ? `<br><small class="muted">${escapeHtml(e.recurring)}</small>` : ''}${e.flyerFileId ? ' 🖼️' : ''}</td>
+                <td><strong>${escapeHtml(e.title)}</strong>${e.recurring ? `<br><small class="muted">${escapeHtml(e.recurring)}</small>` : ''}${e.flyerFileId ? ' ' : ''}</td>
                 <td>${shortDate(e.date)}<br><small class="muted">${escapeHtml(e.time || '')}</small></td>
                 <td>${escapeHtml(e.location || '-')}</td>
                 <td>${pill(e.status === 'published' ? (upcoming ? 'upcoming' : 'past') : e.status, statusTone)}</td>
@@ -470,7 +470,7 @@ async function renderEventQueue(el) {
         <tbody>
           ${approved.map(e => `
             <tr>
-              <td>${escapeHtml(e.title)}${e.flyerFileId ? ' 🖼️' : ' <small class="muted">(no flyer yet)</small>'}</td>
+              <td>${escapeHtml(e.title)}${e.flyerFileId ? ' ' : ' <small class="muted">(no flyer yet)</small>'}</td>
               <td class="row-actions"><button data-publish="${e.id}">Publish</button></td>
             </tr>
           `).join('')}

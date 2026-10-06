@@ -118,7 +118,7 @@ async function renderCouncilDiscussion(el) {
     </div>
     ${threads.length ? threads.map(t => `
       <div class="portal-card" ${t.pinned ? 'style="border-color: var(--flame-gold);"' : ''}>
-        ${t.pinned ? '<div class="tiny muted" style="margin-bottom:6px;">📌 Pinned</div>' : ''}
+        ${t.pinned ? '<div class="tiny muted" style="margin-bottom:6px;">Pinned</div>' : ''}
         <div>${authorLine(t)}</div>
         <p style="white-space:pre-wrap; margin:10px 0 12px;">${escapeHtml(t.body)}</p>
         <div class="row-actions" style="margin-bottom:10px;">

@@ -23,9 +23,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:22px; }
-  .filters input[type="search"] { flex:1; min-width:200px; padding:11px 15px; border:1px solid var(--line); border-radius:999px; font-family:inherit; font-size:0.9rem; }
-  .filters select { padding:11px 15px; border:1px solid var(--line); border-radius:999px; font-family:inherit; font-size:0.9rem; background:var(--surface); }
-  .chip-toggle { border:1px solid var(--line); background:var(--surface); color:var(--brand-strong); border-radius:999px; padding:10px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:inherit; }
+  .filters input[type="search"] { flex:1; min-width:200px; padding:11px 15px; border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:0.9rem; }
+  .filters select { padding:11px 15px; border:1px solid var(--line); border-radius:6px; font-family:inherit; font-size:0.9rem; background:var(--surface); }
+  .chip-toggle { border:1px solid var(--line); background:var(--surface); color:var(--brand-strong); border-radius:6px; padding:10px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; font-family:inherit; }
   .chip-toggle.on { background:var(--purple-deep); color:#fff; border-color:var(--brand); }
   .alum-grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fill, minmax(268px,1fr)); }
   .alum { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px; display:flex; flex-direction:column; gap:10px; }
@@ -34,17 +34,17 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .alum .pic img { width:100%; height:100%; object-fit:cover; }
   .alum h3 { margin:0; font-size:1rem; }
   .alum .job { color:var(--brand); font-weight:700; font-size:0.86rem; margin:2px 0 0; }
-  .alum .org { color:#5a4468; font-size:0.83rem; }
+  .alum .org { color:var(--ink-soft); font-size:0.83rem; }
   .alum .meta { display:flex; flex-wrap:wrap; gap:6px; }
-  .tagi { background:var(--lilac-light); color:var(--brand-strong); font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:999px; }
-  .tagi.mentor { background:#D9F0DE; color:#2E7D4F; }
-  .alum .bio { font-size:0.85rem; color:#5a4468; line-height:1.55; margin:0; }
+  .tagi { background:var(--lilac-light); color:var(--brand-strong); font-size:0.72rem; font-weight:700; padding:3px 10px; border-radius:6px; }
+  .tagi.mentor { background:#D9F0DE; color:var(--ok-ink); }
+  .alum .bio { font-size:0.85rem; color:var(--ink-soft); line-height:1.55; margin:0; }
   .alum .reach { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; padding-top:6px; }
-  .alum .reach a { font-size:0.8rem; font-weight:700; color:var(--brand); text-decoration:none; border:1px solid var(--line); padding:6px 13px; border-radius:999px; }
+  .alum .reach a { font-size:0.8rem; font-weight:700; color:var(--brand); text-decoration:none; border:1px solid var(--line); padding:6px 13px; border-radius:6px; }
   .alum .reach a:hover { border-color:var(--brand); }
   /* This week's celebrated alumnus. Public: it is the same card the website shows. */
   .spotlight { display:grid; grid-template-columns:200px 1fr; gap:26px; align-items:center; margin-bottom:30px; padding:24px; border-radius:20px; color:#fff;
-    background:linear-gradient(135deg, var(--purple-deep), var(--purple-rich)); box-shadow:0 18px 40px rgba(58,27,84,0.22); }
+    background:var(--purple-rich); }
   .spotlight .spot-photo { width:200px; aspect-ratio:1; border-radius:16px; overflow:hidden; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font:700 3rem var(--font-display); color:var(--brand); }
   .spotlight .spot-photo img { width:100%; height:100%; object-fit:cover; object-position:50% 20%; }
   .spotlight .eyebrow { color:var(--flame-gold); margin-bottom:6px; }
@@ -65,7 +65,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .ask-done { text-align:center; padding:28px 18px; }
   .ask-done h3 { margin-bottom:8px; }
   .locked { background:var(--lilac-light); border-left:3px solid var(--flame-gold); border-radius:0 10px 10px 0; padding:18px 20px; }
-  .locked p { margin:0; color:#5a4468; line-height:1.6; font-size:0.9rem; }
+  .locked p { margin:0; color:var(--ink-soft); line-height:1.6; font-size:0.9rem; }
 </style>
 </head>
 <body class="has-side-rail">
@@ -73,11 +73,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 
 <section class="hero" data-art="gather" data-hero-page="alumni" style="padding-bottom:44px;">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">Once ACONSU, Always ACONSU</p>
     <h1>Alumni Connect</h1>
-    <p class="lede">Members who have finished their studies and are willing to be found. What they do now, and where. From every chapter of the union.</p>
   </div>
 </section>
 
@@ -99,7 +96,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section class="alt-bg" id="request">
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">Are you ACONSU alumni?</p>
       <h2>Ask to be on the wall</h2>
       <p style="color:var(--ink-soft);">Finished your studies and still part of the family? Send us a photo, your name and a few lines about you and what you do now. An admin looks at every request, and once it is approved you appear here and on the website. You do not need an account.</p>
     </div>
@@ -256,7 +252,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     var el = document.getElementById('spotlight');
     var meta = [a.classOf ? 'Class of ' + a.classOf : '', a.chapterName].filter(Boolean).join(' · ');
     el.innerHTML = '<div class="spot-photo">' + (a.imageFileId ? img(a.imageFileId, a.name) : escapeHtml((a.name || '?').charAt(0))) + '</div>'
-      + '<div><p class="eyebrow">Celebrating this week</p>'
+      + '<div><p class="meta">Celebrating this week</p>'
       + '<h2>' + escapeHtml(a.name) + '</h2>'
       + (a.currentWork ? '<p class="job">' + escapeHtml(a.currentWork) + '</p>' : '')
       + '<p>' + escapeHtml(a.about) + '</p>'

@@ -69,7 +69,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </a>
   ` : `
     <div class="more-account-inner">
-      <span class="more-avatar">✦</span>
+      <span class="more-avatar"></span>
       <span class="more-account-text">
         <strong>You're browsing as a guest</strong>
         <small>Sign in to track your streak, save your details and get birthday wishes.</small>
@@ -133,7 +133,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
   document.getElementById('moreGroups').innerHTML = groups.map(g => `
     <div class="more-group">
-      <p class="eyebrow">${escapeHtml(g.title)}</p>
+      <p class="meta">${escapeHtml(g.title)}</p>
       <div class="more-tile-grid">
         ${g.links.map(l => `
           <a href="${l.href}" class="more-tile">
@@ -149,7 +149,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
   `).join('') + `
     <div class="more-group">
-      <p class="eyebrow">Your Account</p>
       <div class="more-tile-grid">
         ${member ? `
           <a href="/profile.html" class="more-tile">
