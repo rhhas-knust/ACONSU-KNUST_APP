@@ -14,7 +14,8 @@
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const life = require('../lib/churchLife');
-const { processPortrait, } = require('../lib/imageProcess');
+const { processPortrait } = require('../lib/imageProcess');
+const { rejectOperatorKeys } = require('../lib/requestGuard');
 
 const PHOTO_LIMIT_BYTES = 8 * 1024 * 1024;   // a phone photo; it is shrunk to ~100KB on arrival
 const MAX_PENDING = 200;                     // a full queue refuses more rather than growing without bound
@@ -39,7 +40,7 @@ function registerChurchLifeRoutes(app, deps) {
   const photoUpload = (field) => {
     const uploader = multer({ storage: multer.memoryStorage(), limits: { fileSize: PHOTO_LIMIT_BYTES, files: 1 } }).single(field);
     return (req, res, next) => uploader(req, res, (err) => {
-      if (!err) return next();
+      if (!err) return rejectOperatorKeys(req, res, next);
       const tooBig = err.code === 'LIMIT_FILE_SIZE';
       return res.status(tooBig ? 413 : 400).json({
         error: tooBig ? 'That photo is too large. Please send one under 8MB.' : 'We could not read that upload.'
@@ -428,7 +429,7 @@ function registerChurchLifeRoutes(app, deps) {
   const flyerUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: PHOTO_LIMIT_BYTES * 2, files: MAX_FLYERS } }).array('flyers', MAX_FLYERS);
   const flyers = (req, res, next) => flyerUpload(req, res, (err) => err
     ? res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A flyer is too large (16MB at most).' : `Up to ${MAX_FLYERS} flyers, images only.` })
-    : next());
+    : rejectOperatorKeys(req, res, next));
 
   // Reads the form, stores the new flyers and drops the ones taken off. Returns
   // { data } for the record, or { error }.

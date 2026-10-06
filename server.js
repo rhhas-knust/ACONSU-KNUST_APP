@@ -20,6 +20,8 @@ const push = require('./lib/push');
 const sms = require('./lib/sms');
 const mailer = require('./lib/mailer');
 const { compressIfImage } = require('./lib/imageProcess');
+const { rejectOperatorKeys, publicBaseUrl, safeEqual, csvSafe, isPushEndpoint } = require('./lib/requestGuard');
+const fileTypes = require('./lib/fileTypes');
 const { renderTableReport } = require('./lib/pdf');
 const { registerGroupRoutes } = require('./routes/groups');
 const { registerChatRoutes } = require('./routes/chat');
@@ -31,10 +33,19 @@ const crypto = require('crypto');
 // 30MB per file — covers most ebook PDFs and photos. Named rather than inlined
 // so the limit and the message a rejected upload gets can never disagree.
 const UPLOAD_LIMIT_BYTES = 30 * 1024 * 1024;
-const upload = multer({
+const rawUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: UPLOAD_LIMIT_BYTES }
 });
+// multer parses field names like  name[$ne]  into nested objects AFTER the
+// body parsers have run, so the operator-key check has to run again behind it.
+// Every route that takes an upload goes through here, so none can forget to.
+const upload = {
+  single: (name) => [rawUpload.single(name), rejectOperatorKeys],
+  array: (name, max) => [rawUpload.array(name, max), rejectOperatorKeys],
+  fields: (spec) => [rawUpload.fields(spec), rejectOperatorKeys],
+  none: () => [rawUpload.none(), rejectOperatorKeys]
+};
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -68,6 +79,9 @@ app.use(helmet({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// {"email": {"$ne": null}} and ?category[$ne]=x are not values, they are
+// database operators. See lib/requestGuard.js.
+app.use(rejectOperatorKeys);
 app.use(session({
   // Stored in MongoDB (see createSessionStore) so a restart or deploy no
   // longer signs everybody out. Undefined falls back to the in-memory store,
@@ -176,6 +190,26 @@ app.use((req, res, next) => {
 // `isAdmin` survives is exactly why logging out of a portal appeared to do
 // nothing. Logging out means the session ends — every endpoint below shares
 // this, which also matters on the shared campus devices this runs on.
+// A new session id at the moment somebody signs in. Without it, a session id
+// somebody else planted in the browser beforehand (session fixation) becomes a
+// signed-in session the moment they log in. What the session already held - a
+// member who then signs in to a portal keeps being a member - is carried across.
+// A real bcrypt hash of nothing in particular, checked when the account does
+// not exist so that the answer takes as long as one that does.
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-account-' + Math.random(), 10);
+
+function freshSession(req) {
+  const carried = { ...req.session };
+  delete carried.cookie;
+  return new Promise((resolve, reject) => {
+    req.session.regenerate((err) => {
+      if (err) return reject(err);
+      Object.assign(req.session, carried);
+      resolve();
+    });
+  });
+}
+
 function endSession(req, res) {
   if (!req.session) return res.json({ success: true });
   req.session.destroy(() => res.json({ success: true }));
@@ -185,9 +219,9 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
   const adminUser = process.env.ADMIN_USERNAME || 'admin';
   const adminPass = process.env.ADMIN_PASSWORD || 'changeme';
-  if (username === adminUser && password === adminPass) {
-    req.session.isAdmin = true;
-    return res.json({ success: true });
+  if (safeEqual(username, adminUser) && safeEqual(password, adminPass)) {
+    return freshSession(req).then(() => { req.session.isAdmin = true; res.json({ success: true }); })
+      .catch(() => res.status(500).json({ error: 'Could not sign in.' }));
   }
   return res.status(401).json({ error: 'Invalid credentials' });
 });
@@ -215,9 +249,9 @@ app.post('/api/shepherd/login', loginLimiter, (req, res) => {
   if (!shepherdUser || !shepherdPass) {
     return res.status(500).json({ error: 'Shepherding portal is not configured yet. Set SHEPHERD_USERNAME and SHEPHERD_PASSWORD in .env.' });
   }
-  if (username === shepherdUser && password === shepherdPass) {
-    req.session.isShepherd = true;
-    return res.json({ success: true });
+  if (safeEqual(username, shepherdUser) && safeEqual(password, shepherdPass)) {
+    return freshSession(req).then(() => { req.session.isShepherd = true; res.json({ success: true }); })
+      .catch(() => res.status(500).json({ error: 'Could not sign in.' }));
   }
   return res.status(401).json({ error: 'Invalid credentials' });
 });
@@ -503,7 +537,8 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     // The main env-configured admin login doubles as the bootstrap National Coordinator.
     const adminUser = process.env.ADMIN_USERNAME || 'admin';
     const adminPass = process.env.ADMIN_PASSWORD || 'changeme';
-    if (username === adminUser && password === adminPass) {
+    if (safeEqual(username, adminUser) && safeEqual(password, adminPass)) {
+      await freshSession(req);
       req.session.isAdmin = true;
       req.session.staff = { id: '', username: adminUser, name: 'National Administrator', role: 'nationalCoordinator', chapterId: '' };
       return res.json({ success: true, staff: req.session.staff });
@@ -513,8 +548,9 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     // accounts existed. Honour it here so whoever is using it today keeps
     // getting in while the admin creates their proper account.
     if (process.env.SHEPHERD_USERNAME
-        && username === process.env.SHEPHERD_USERNAME
-        && password === process.env.SHEPHERD_PASSWORD) {
+        && safeEqual(username, process.env.SHEPHERD_USERNAME)
+        && safeEqual(password, process.env.SHEPHERD_PASSWORD)) {
+      await freshSession(req);
       req.session.isShepherd = true;
       // Pinned to the seed chapter — this credential predates chapters existing at all.
       req.session.staff = { id: '', username, name: 'Shepherding Head', role: 'shepherding', chapterId: rolesLib.LEGACY_CHAPTER_ID };
@@ -522,9 +558,11 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     }
 
     const user = await models.StaffUser.findOne({ username: String(username).toLowerCase().trim() });
-    if (!user || !user.active) return res.status(401).json({ error: 'Invalid credentials' });
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+    // An unknown username used to answer measurably faster than a wrong
+    // password (no hash to check), which tells a stranger which usernames exist.
+    // A hash is always checked, so both take as long.
+    const ok = await bcrypt.compare(String(password), (user && user.passwordHash) || DUMMY_HASH);
+    if (!user || !user.active || !ok) return res.status(401).json({ error: 'Invalid credentials' });
     // A lapsed term is not a wrong password — say so, so the outgoing
     // executive knows to ask their Coordinator rather than retyping.
     if (isTermExpired(user)) {
@@ -546,6 +584,7 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       ).key;
     }
 
+    await freshSession(req);
     req.session.staff = {
       id: user.id, username: user.username, name: user.name || user.username,
       role: user.role, chapterId: user.chapterId || '',
@@ -836,8 +875,8 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email and password are required' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (typeof password !== 'string' || password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
   if (!chapterId) {
     return res.status(400).json({ error: 'Please select your ACONSU chapter' });
@@ -896,10 +935,10 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
   try {
-    const member = await models.Member.findOne({ email: email.toLowerCase().trim() });
-    if (!member) return res.status(401).json({ error: 'Invalid email or password' });
-    const match = await bcrypt.compare(password, member.passwordHash || '');
-    if (!match) return res.status(401).json({ error: 'Invalid email or password' });
+    const member = await models.Member.findOne({ email: String(email).toLowerCase().trim() });
+    const match = await bcrypt.compare(String(password), (member && member.passwordHash) || DUMMY_HASH);
+    if (!member || !match) return res.status(401).json({ error: 'Invalid email or password' });
+    await freshSession(req);
     req.session.memberId = member.id;
     res.json({ success: true, member: { id: member.id, name: member.name, email: member.email } });
   } catch (e) {
@@ -926,7 +965,12 @@ app.post('/api/auth/forgot-password', loginLimiter, async (req, res) => {
     member.resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await member.save();
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    // From configuration, never from the Host header (see publicBaseUrl).
+    const baseUrl = publicBaseUrl(req);
+    if (!baseUrl) {
+      console.error('Password reset requested but no PUBLIC_BASE_URL or RENDER_EXTERNAL_URL is set; refusing to build a link from the Host header.');
+      return res.json(genericMsg);
+    }
     const resetLink = `${baseUrl}/reset-password.html?token=${rawToken}&email=${encodeURIComponent(member.email)}`;
     mailer.sendMail({
       to: member.email,
@@ -943,7 +987,7 @@ app.post('/api/auth/forgot-password', loginLimiter, async (req, res) => {
 app.post('/api/auth/reset-password', loginLimiter, async (req, res) => {
   const { token, email, newPassword } = req.body;
   if (!token || !email || !newPassword) return res.status(400).json({ error: 'Missing reset details' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   try {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const member = await models.Member.findOne({
@@ -1045,7 +1089,7 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
 app.put('/api/member/password', requireMember, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both current and new password are required' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
   try {
     const member = await models.Member.findOne({ id: req.session.memberId });
     if (!member) return res.status(404).json({ error: 'Account not found' });
@@ -1866,6 +1910,10 @@ app.delete('/api/member/sermon-notes/:id', requireMember, async (req, res) => {
 
 app.get('/api/birthdays/today', async (req, res) => {
   try {
+    // Whose birthday it is, with a photo, is for the people who belong here. A
+    // stranger on the internet has no need of it, and no right to a member's
+    // face and birthday.
+    if (!(req.session && req.session.memberId) && !currentStaff(req) && !(req.session && req.session.isAdmin)) return res.json([]);
     const now = new Date();
     const month = now.getMonth() + 1;
     const day = now.getDate();
@@ -1940,9 +1988,12 @@ app.get('/api/push/vapid-public-key', (req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || '' });
 });
 
-app.post('/api/push/subscribe', async (req, res) => {
+app.post('/api/push/subscribe', formLimiter, async (req, res) => {
   const { subscription } = req.body;
   if (!subscription || !subscription.endpoint) return res.status(400).json({ error: 'Invalid subscription' });
+  // The server later POSTs to this address, so it must be a browser vendor's push
+  // service and nothing else (see isPushEndpoint).
+  if (!isPushEndpoint(subscription.endpoint)) return res.status(400).json({ error: 'Invalid subscription' });
   try {
     const existing = await models.PushSubscription.findOne({ endpoint: subscription.endpoint });
     if (existing) return res.json({ success: true }); // already subscribed on this device
@@ -1962,9 +2013,9 @@ app.post('/api/push/subscribe', async (req, res) => {
   }
 });
 
-app.post('/api/push/unsubscribe', async (req, res) => {
+app.post('/api/push/unsubscribe', formLimiter, async (req, res) => {
   const { endpoint } = req.body;
-  if (!endpoint) return res.status(400).json({ error: 'Endpoint required' });
+  if (typeof endpoint !== 'string' || !endpoint) return res.status(400).json({ error: 'Endpoint required' });
   try {
     await models.PushSubscription.deleteOne({ endpoint });
     res.json({ success: true });
@@ -2615,13 +2666,24 @@ app.get('/api/search', async (req, res) => {
 });
 
 // uploaded files (photos, ebooks, etc.) — list metadata only
+// The files this listing may name. Receipts, pastoral records and members' own
+// photos are never listed here: this endpoint needs no sign-in, and a list of
+// their ids is a list of things to download. Query values must be plain
+// strings; anything else (an object carrying a database operator) is ignored.
 app.get('/api/files', async (req, res) => {
   try {
     const query = {};
-    if (req.query.category) query['metadata.category'] = req.query.category;
-    if (req.query.pageSlug) query['metadata.pageSlug'] = req.query.pageSlug;
-    if (req.query.placement) query['metadata.placement'] = req.query.placement;
-    const files = await gridfs.listFiles(query);
+    const text = (v) => (typeof v === 'string' ? v : '');
+    const category = text(req.query.category);
+    if (category) {
+      if (fileTypes.isPrivateCategory(category)) return res.json([]);
+      query['metadata.category'] = category;
+    } else {
+      query['metadata.category'] = { $nin: fileTypes.PRIVATE_CATEGORIES };
+    }
+    if (text(req.query.pageSlug)) query['metadata.pageSlug'] = text(req.query.pageSlug);
+    if (text(req.query.placement)) query['metadata.placement'] = text(req.query.placement);
+    const files = (await gridfs.listFiles(query)).filter((f) => !fileTypes.isPrivateCategory(f.metadata && f.metadata.category));
     res.json(files.map((f) => ({
       id: f._id,
       filename: f.filename,
@@ -2643,12 +2705,44 @@ app.get('/api/files', async (req, res) => {
 });
 
 // stream a single file's actual content (image preview, book download, etc.)
+// Who may open a file that is not for the public. A refusal is "not found",
+// the same as a file that does not exist, so the id confirms nothing.
+function canOpenPrivateFile(req, meta) {
+  const category = meta && meta.category;
+  const staff = currentStaff(req);
+  const signedIn = !!(req.session && (req.session.memberId || req.session.isAdmin || req.session.isShepherd)) || !!staff;
+  if (category === 'member-profile') return signedIn;       // a member's own photo: members and staff
+  if (req.session && req.session.isAdmin) return true;      // the recovery login, as everywhere
+  const role = staff && staff.role;
+  const allowed = category === 'receipt'
+    ? ['nationalCoordinator', 'coordinator', 'chapterAdmin', 'finance', 'welfare', 'executive'].includes(role)
+    : (['nationalCoordinator', 'coordinator', 'chapterAdmin', 'shepherding'].includes(role) || !!(req.session && req.session.isShepherd));
+  if (!allowed) return false;
+  const scope = rolesLib.getActingScope(req);
+  // National sees individual records only while there is one chapter: the same
+  // rule as chapterConfidential().
+  if (scope.isNational) return !!rolesLib.getSoleActiveChapterId();
+  return !meta.chapterId || meta.chapterId === scope.chapterId;
+}
+
 app.get('/api/files/:id', async (req, res) => {
   try {
     const file = await gridfs.findFile(req.params.id);
     if (!file) return res.status(404).json({ error: 'File not found' });
-    res.set('Content-Type', file.metadata?.contentType || 'application/octet-stream');
-    res.set('Content-Disposition', `inline; filename="${file.filename}"`);
+    const meta = file.metadata || {};
+    const isPrivate = fileTypes.isPrivateCategory(meta.category);
+    if (isPrivate && !canOpenPrivateFile(req, meta)) return res.status(404).json({ error: 'File not found' });
+
+    // Shown in the browser only if it is the kind of file a browser shows without
+    // running it. Anything else - HTML, SVG, scripts, whatever it claimed to be -
+    // is handed over as an opaque download, so an uploaded page can never run as
+    // this app.
+    const serving = fileTypes.servingFor(meta.contentType);
+    res.set('Content-Type', serving.contentType);
+    res.set('Content-Disposition', `${serving.inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.filename || 'file')}`);
+    res.set('X-Content-Type-Options', 'nosniff');
+    if (!serving.inline) res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.set('Cache-Control', isPrivate ? 'private, no-store' : 'public, max-age=3600');
     gridfs.openDownloadStream(req.params.id).pipe(res);
   } catch (e) {
     res.status(404).json({ error: 'File not found' });
@@ -2922,10 +3016,16 @@ app.get('/api/verse-styles', (req, res) => {
   });
 });
 
-app.get('/api/verse-image', async (req, res) => {
+// Renders a 1080x1350 image on demand for anyone who asks, so it is limited like
+// the other things strangers can trigger, and the text it takes is capped.
+const verseImageLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many verse images requested. Please wait a minute.' }
+});
+app.get('/api/verse-image', verseImageLimiter, async (req, res) => {
   try {
-    let verseText = req.query.verse || '';
-    let reference = cleanText(String(req.query.reference || ''));
+    let verseText = typeof req.query.verse === 'string' ? req.query.verse.slice(0, 800) : '';
+    let reference = cleanText(String(typeof req.query.reference === 'string' ? req.query.reference : '')).slice(0, 80);
     if (!verseText) {
       const settings = await repo.getSettings();
       if (!settings.verseOfTheWeek) return res.status(400).json({ error: 'No verse configured' });
@@ -3836,7 +3936,8 @@ app.post('/api/shepherd/records', requireShepherd, upload.single('image'), async
     if (req.file) {
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
       imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
-        category: 'shepherding', contentType: compressed.contentType, title: name || memberId
+        category: 'shepherding', contentType: compressed.contentType, title: name || memberId,
+        chapterId: rolesLib.chapterIdForWrite(req)
       }));
     }
 
@@ -4644,7 +4745,7 @@ app.get('/api/finance/export.csv', chapterConfidential('Finance ledger entries')
     const budgetName = (id) => (budgets.find(b => b.id === id) || {}).name || '';
 
     const cell = (v) => {
-      const s = v === undefined || v === null ? '' : String(v);
+      const s = csvSafe(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const header = ['Date', 'Type', 'Category', 'Amount (GHS)', 'Method', 'Reference', 'Payee', 'Description', 'Budget', 'Approval', 'Recorded By'];

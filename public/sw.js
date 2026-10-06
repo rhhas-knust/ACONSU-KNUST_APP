@@ -55,6 +55,17 @@ const APP_SHELL = [
 // Responses that describe *who you are* are never written to the cache. Serving
 // a stale identity offline is worse than serving nothing: the page would render
 // as though the previous user were still signed in.
+// ONLY these API reads are kept for offline use. It used to be everything, which
+// put admin member lists, finance ledgers and pastoral records into the browser's
+// cache on the device - still there after sign-out, on a shared campus laptop.
+// Public content is worth keeping offline; anything behind a sign-in is not.
+const CACHEABLE_API = [
+  '/api/events', '/api/sermons', '/api/departments', '/api/executives', '/api/executive-positions',
+  '/api/pages', '/api/settings', '/api/chapters', '/api/public/', '/api/bible', '/api/daily-verse',
+  '/api/content', '/api/features', '/api/verse', '/api/prayer-wall', '/api/groups', '/api/forms',
+  '/api/search', '/api/files'
+];
+
 const NEVER_CACHE_API = [
   '/api/auth/me',
   '/api/portal/me',
@@ -110,7 +121,11 @@ self.addEventListener('fetch', (event) => {
           // Only ever store a success. Caching a 401/403/500 would mean that
           // once offline we'd confidently serve back an error we were told
           // once, instead of the last good data we actually have.
-          if (res && res.status === 200 && !NEVER_CACHE_API.some((p) => url.pathname.startsWith(p))) {
+          const cacheControl = res && res.headers ? (res.headers.get('Cache-Control') || '') : '';
+          if (res && res.status === 200
+              && CACHEABLE_API.some((p) => url.pathname.startsWith(p))
+              && !NEVER_CACHE_API.some((p) => url.pathname.startsWith(p))
+              && !/no-store|private/i.test(cacheControl)) {
             const clone = res.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }

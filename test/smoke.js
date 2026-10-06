@@ -2215,7 +2215,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and never caches who-you-are responses in the first place',
       sw.includes('NEVER_CACHE_API') && sw.includes("'/api/auth/me'"));
     check('and only ever caches a successful API response',
-      /res\.status === 200 && !NEVER_CACHE_API/.test(sw));
+      /res\.status === 200[\s\S]{0,260}NEVER_CACHE_API/.test(sw));
     for (const [page, file] of [['profile.html', 'profile.html'], ['more.html', 'more.html']]) {
       check(`${page} clears cached account data when signing out`,
         pub(file).includes('clearCachedAccountData()'));
@@ -4945,6 +4945,17 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('National can remove a live theme', w.status === 200, w.data);
     life._setNowForTests(null);
 
+    // An operator hidden in a field of the public alumni form (checked before the
+    // throttle test below uses up this device's allowance).
+    {
+      const op = new FormData();
+      Object.entries(valid).forEach(([k, v]) => op.append(k, v));
+      op.append('name[$ne]', 'x');
+      op.append('photo', new Blob([portrait], { type: 'image/jpeg' }), 'me.jpg');
+      w = await call('anon', 'POST', '/api/public/alumni-requests', op, true);
+      check('an operator hidden in a field of the public alumni form is refused', w.status === 400, w.data);
+    }
+
     // ---- last: the throttle ----
     let throttled = 0;
     for (let i = 0; i < 60 && !throttled; i++) {
@@ -5109,6 +5120,180 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and the tools folder is parse-checked before anything is published', /site\/tools\/\*\.js/.test(wf), null);
     check('a refused push back to main is a warning and never stops the publish',
       /git push origin HEAD:main; then/.test(wf) && /::warning::Could not save/.test(wf) && !/^\s*git push origin HEAD:main\s*$/m.test(wf), null);
+  }
+
+
+  console.log('\n== Security: what a stranger on the internet can and cannot do ==');
+  {
+    const guard = require('../lib/requestGuard');
+    const ft = require('../lib/fileTypes');
+    const fs = require('fs');
+    const path = require('path');
+
+    // ---- the small rules, on their own ----
+    check('an operator object is recognised, at any depth',
+      guard.hasOperatorKey({ a: { $ne: null } }) && guard.hasOperatorKey({ list: [{ b: { $gt: '' } }] }) && guard.hasOperatorKey({ 'a.b': 1 }), null);
+    check('and ordinary data is not', !guard.hasOperatorKey({ name: 'Ama', tags: ['a', 'b'], nested: { ok: 1 } }) && !guard.hasOperatorKey('text') && !guard.hasOperatorKey(null), null);
+    check('a reset link comes from configuration, not from the Host header',
+      guard.publicBaseUrl({ protocol: 'https', get: () => 'evil.example' }, { RENDER_EXTERNAL_URL: 'https://aconsu.example/' }) === 'https://aconsu.example'
+      && guard.publicBaseUrl({ protocol: 'https', get: () => 'evil.example' }, { PUBLIC_BASE_URL: 'https://mine.example', RENDER_EXTERNAL_URL: 'https://other.example' }) === 'https://mine.example', null);
+    check('and in production with none configured it refuses to guess', guard.publicBaseUrl({ protocol: 'https', get: () => 'evil.example' }, { NODE_ENV: 'production' }) === '', null);
+    check('while a developer machine still works', guard.publicBaseUrl({ protocol: 'http', get: () => 'localhost:3000' }, {}) === 'http://localhost:3000', null);
+    check('a password is compared the same way whatever is typed', guard.safeEqual('hunter2', 'hunter2') && !guard.safeEqual('hunter2', 'hunter3') && !guard.safeEqual('', 'x') && !guard.safeEqual(undefined, 'x'), null);
+    check('a spreadsheet cell that starts like a formula is made text',
+      ['=1+1', '+SUM(A1)', '-2+3', '@cmd', '\tx'].every(v => guard.csvSafe(v).startsWith("'")) && guard.csvSafe('Ama Mensah') === 'Ama Mensah' && guard.csvSafe(1200) === '1200', null);
+    check('only a browser vendor\'s push service is accepted as a push address',
+      guard.isPushEndpoint('https://fcm.googleapis.com/fcm/send/abc') && guard.isPushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/abc')
+      && guard.isPushEndpoint('https://web.push.apple.com/abc') && guard.isPushEndpoint('https://par02.notify.windows.com/w/?token=x'), null);
+    check('and not an internal or arbitrary one',
+      ['http://169.254.169.254/latest/meta-data/', 'https://169.254.169.254/', 'https://localhost/x', 'http://fcm.googleapis.com/x', 'https://fcm.googleapis.com:8443/x',
+       'https://user:pw@fcm.googleapis.com/x', 'https://evil.example/fcm.googleapis.com', 'https://fcm.googleapis.com.evil.example/x', 'javascript:alert(1)', '', null, { $ne: 1 }]
+        .every(v => !guard.isPushEndpoint(v)), null);
+    check('a file is known by its first bytes, not its name',
+      ft.sniff(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0])) === 'image/jpeg' && ft.sniff(Buffer.from('%PDF-1.7 and more text')) === 'application/pdf'
+      && ft.sniff(Buffer.from('<html><script>alert(1)</script></html>')) === '', null);
+    check('only pictures, audio, video and PDFs are ever shown in the browser',
+      ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'audio/mpeg', 'application/pdf'].every(t => ft.servingFor(t).inline)
+      && ['text/html', 'image/svg+xml', 'application/xhtml+xml', 'text/xml', 'application/javascript', 'text/plain', ''].every(t => !ft.servingFor(t).inline && ft.servingFor(t).contentType === 'application/octet-stream'), null);
+
+    // ---- files: who can list and open what ----
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('rest of a picture')]);
+    const put = (name, meta) => fakeGridfs.uploadBuffer(png, name, meta);
+    const f = {
+      receipt: await put('receipt.jpg', { category: 'receipt', contentType: 'image/jpeg', chapterId }),
+      receiptOther: await put('r2.jpg', { category: 'receipt', contentType: 'image/jpeg', chapterId: 'oversight-test' }),
+      pastoral: await put('visitor.jpg', { category: 'shepherding', contentType: 'image/jpeg', chapterId }),
+      pastoralOld: await put('old.jpg', { category: 'shepherding', contentType: 'image/jpeg' }),
+      profile: await put('me.jpg', { category: 'member-profile', contentType: 'image/jpeg', chapterId }),
+      photo: await put('hall.png', { category: 'photo', contentType: 'image/png' }),
+      html: await put('page.html', { category: 'photo', contentType: 'text/html' }),
+      svg: await put('logo.svg', { category: 'photo', contentType: 'image/svg+xml' }),
+      pdf: await put('report.pdf', { category: 'content_resource', contentType: 'application/pdf' }),
+      evilName: await put('a"b\r\nSet-Cookie: pwned=1.png', { category: 'photo', contentType: 'image/png' })
+    };
+    const open = (jar, id) => call(jar, 'GET', `/api/files/${id}`);
+    const raw = (id, jar) => fetch(BASE + `/api/files/${id}`, { headers: jars[jar] ? { cookie: jars[jar] } : {} });
+
+    for (const [name, id] of Object.entries({ receipt: f.receipt, pastoral: f.pastoral, 'member photo': f.profile })) {
+      check(`a stranger cannot open a ${name}`, (await open('anon', id)).status === 404, null);
+    }
+    let w = await call('anon', 'GET', '/api/files');
+    check('nor see them listed', w.status === 200 && !w.data.some(x => [f.receipt, f.receiptOther, f.pastoral, f.pastoralOld, f.profile].includes(x.id)), w.data.map(x => x.category));
+    check('while the pictures the public pages show are still listed', w.data.some(x => x.id === f.photo), w.data.length);
+    w = await call('anon', 'GET', '/api/files?category=receipt');
+    check('asking for the private categories by name gets nothing', w.status === 200 && w.data.length === 0, w.data);
+    w = await call('anon', 'GET', '/api/files?category[$ne]=nothing');
+    check('and an operator in the query string is refused', w.status === 400, w.data);
+    w = await call('anon', 'GET', '/api/files?category=photo');
+    check('an ordinary category still lists', w.status === 200 && w.data.some(x => x.id === f.photo), w.data);
+
+    check('a member can open a member photo, but not a receipt or a pastoral record',
+      (await open('member', f.profile)).status === 200 && (await open('member', f.receipt)).status === 404 && (await open('member', f.pastoral)).status === 404, null);
+    check('the finance officer opens their own chapter\'s receipt, not another\'s, and not a pastoral record',
+      (await open('fin', f.receipt)).status === 200 && (await open('fin', f.receiptOther)).status === 404 && (await open('fin', f.pastoral)).status === 404, null);
+    check('shepherding opens pastoral records, old and new, and not receipts',
+      (await open('shep', f.pastoral)).status === 200 && (await open('shep', f.pastoralOld)).status === 200 && (await open('shep', f.receipt)).status === 404, null);
+    check('a chapter\'s admin opens their own chapter\'s receipts and records, and not another chapter\'s',
+      (await open('ovAdmin', f.receipt)).status === 200 && (await open('ovAdmin', f.pastoral)).status === 200 && (await open('ovAdmin', f.receiptOther)).status === 404, null);
+    {
+      const lg = await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
+      const r = [(await open('otherAdmin', f.receipt)).status, (await open('otherAdmin', f.pastoral)).status, (await open('otherAdmin', f.receiptOther)).status];
+      check('another chapter\'s admin opens none of this chapter\'s, only their own', r.join() === '404,404,200', r);
+    }
+    check('National, with several chapters, is not handed one chapter\'s receipts or records',
+      (await open('natOv', f.receipt)).status === 404 && (await open('natOv', f.pastoral)).status === 404, null);
+    check('the recovery login can open anything', (await open('admin', f.receipt)).status === 200 && (await open('admin', f.pastoral)).status === 200, null);
+    let hdr = await raw(f.receipt, 'fin');
+    check('a private file is never kept by a browser or a proxy', /no-store/.test(hdr.headers.get('cache-control') || '') && /private/.test(hdr.headers.get('cache-control') || ''), hdr.headers.get('cache-control'));
+
+    // ---- what the browser is told to do with a file ----
+    hdr = await raw(f.html, 'anon');
+    check('an uploaded web page is handed over as a download, never shown',
+      hdr.headers.get('content-type') === 'application/octet-stream' && /^attachment/.test(hdr.headers.get('content-disposition') || ''), [hdr.headers.get('content-type'), hdr.headers.get('content-disposition')]);
+    check('inside a sandbox that runs nothing', /sandbox/.test(hdr.headers.get('content-security-policy') || '') && hdr.headers.get('x-content-type-options') === 'nosniff', hdr.headers.get('content-security-policy'));
+    hdr = await raw(f.svg, 'anon');
+    check('and so is an SVG, which can carry a script', /^attachment/.test(hdr.headers.get('content-disposition') || '') && hdr.headers.get('content-type') === 'application/octet-stream', hdr.headers.get('content-type'));
+    hdr = await raw(f.photo, 'anon');
+    check('a picture is still shown in the page, with its own type and a cache lifetime',
+      hdr.headers.get('content-type') === 'image/png' && /^inline/.test(hdr.headers.get('content-disposition') || '') && /public/.test(hdr.headers.get('cache-control') || ''), [hdr.headers.get('content-type'), hdr.headers.get('cache-control')]);
+    hdr = await raw(f.pdf, 'anon');
+    check('and a PDF opens', hdr.headers.get('content-type') === 'application/pdf' && /^inline/.test(hdr.headers.get('content-disposition') || ''), hdr.headers.get('content-type'));
+    hdr = await raw(f.evilName, 'anon');
+    check('a file name cannot add headers to the answer', !hdr.headers.get('set-cookie') && /filename\*=UTF-8''/.test(hdr.headers.get('content-disposition') || '') && !/[\r\n"]/.test(hdr.headers.get('content-disposition') || ''), hdr.headers.get('content-disposition'));
+
+    // ---- database operators, in every place a request can carry them ----
+    w = await call('anon', 'POST', '/api/auth/login', { email: { $ne: null }, password: 'x' });
+    check('a login with an operator instead of an email is refused outright', w.status === 400, w.data);
+    w = await call('anon', 'POST', '/api/auth/login', { email: 'a@b.co', password: { $gt: '' } });
+    check('or instead of a password', w.status === 400, w.data);
+    w = await call('anon', 'POST', '/api/push/unsubscribe', { endpoint: { $ne: null } });
+    check('so cannot be used to delete everybody\'s push subscriptions', w.status === 400, w.data);
+    w = await call('anon', 'POST', '/api/contact', { 'name.first': 'x', message: 'hi' });
+    check('a field name with a dot in it is refused too', w.status === 400, w.data);
+    const opForm = new FormData(); opForm.append('email[$ne]', 'x'); opForm.append('name', 'x'); opForm.append('password', 'longenough1');
+    w = await call('anon', 'POST', '/api/auth/register', opForm, true);
+    check('and so is an operator hidden in a multipart upload field', w.status === 400, w.data);
+
+    // ---- push ----
+    const sub = (endpoint) => call('anon', 'POST', '/api/push/subscribe', { subscription: { endpoint, keys: { p256dh: 'a', auth: 'b' } } });
+    check('an internal address is not accepted as a push address', (await sub('http://169.254.169.254/latest/meta-data/')).status === 400 && (await sub('https://localhost/x')).status === 400, null);
+    check('a real browser push service is', (await sub('https://fcm.googleapis.com/fcm/send/abc123')).status === 200, null);
+    w = await call('anon', 'POST', '/api/push/unsubscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/abc123' });
+    check('and can be removed by its own address', w.status === 200 && (await fakeModels.PushSubscription.find({ endpoint: 'https://fcm.googleapis.com/fcm/send/abc123' })).length === 0, w.data);
+
+    // ---- signing in ----
+    await registerMember('fixation.test', 'fixation@test.com');
+    w = await call('fix', 'POST', '/api/auth/login', { email: 'fixation@test.com', password: 'secret123' });
+    const before = jars.fix;
+    check('a member signs in', w.status === 200 && !!before, w.data);
+    w = await call('fix', 'POST', '/api/auth/login', { email: 'fixation@test.com', password: 'secret123' });
+    check('and gets a new session id every time they do, so one planted beforehand is worthless', w.status === 200 && jars.fix && jars.fix !== before, [before, jars.fix]);
+    const stale = await fetch(BASE + '/api/auth/me', { headers: { cookie: before } });
+    check('the old session id no longer signs anybody in', (await stale.json()).member === null, null);
+    w = await call('fix', 'GET', '/api/auth/me');
+    check('while the new one does', w.data.member && w.data.member.email === 'fixation@test.com', w.data);
+    w = await call('anon', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+    const staffBefore = jars.anon;
+    w = await call('anon', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+    check('a leadership account gets a new session id on sign-in as well', w.status === 200 && jars.anon !== staffBefore, [staffBefore, jars.anon]);
+    jars.anon = '';
+    const wrongPw = new FormData(); wrongPw.append('name', 'Short Pw'); wrongPw.append('email', 'short@test.com'); wrongPw.append('password', '1234567'); wrongPw.append('chapterId', chapterId);
+    wrongPw.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    w = await call('anon', 'POST', '/api/auth/register', wrongPw, true);
+    check('a member password must be at least 8 characters', w.status === 400 && /8 characters/.test(w.data.error), w.data);
+    w = await call('anon', 'POST', '/api/auth/reset-password', { token: 'x', email: 'a@b.co', newPassword: '1234567' });
+    check('and so must a reset one', w.status === 400 && /8 characters/.test(w.data.error), w.data);
+    const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    check('the reset link is built from configuration and nothing the sender typed',
+      /publicBaseUrl\(req\)/.test(serverSrc) && !/req\.get\('host'\)/.test(serverSrc) && !/req\.headers\.host/.test(serverSrc), null);
+
+    // ---- what leaves in an export, and who may see a birthday ----
+    await call('fin', 'POST', '/api/finance/entries', { entryType: 'expense', category: 'welfare', amount: 10, date: '2026-02-02', payee: '=HYPERLINK("http://evil.example","pay")', description: '+cmd' });
+    w = await call('fin', 'GET', '/api/finance/export.csv');
+    check('a payee that looks like a formula is exported as text', typeof w.data === 'string' && /'=HYPERLINK/.test(w.data) && !/(^|,)=HYPERLINK/m.test(w.data), String(w.data).slice(0, 200));
+    const today = new Date();
+    await fakeModels.Member.updateOne({ id: memberId }, { $set: { birthdayMonth: today.getMonth() + 1, birthdayDay: today.getDate() } });
+    w = await call('anon', 'GET', '/api/birthdays/today');
+    check('a stranger is shown nobody\'s birthday', w.status === 200 && Array.isArray(w.data) && w.data.length === 0, w.data);
+    w = await call('member', 'GET', '/api/birthdays/today');
+    check('a member is', w.status === 200 && w.data.length >= 1, w.data);
+
+    // ---- the service worker keeps public things offline and nothing else ----
+    const swSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8');
+    const cacheable = (swSrc.match(/const CACHEABLE_API = \[([\s\S]*?)\];/) || [, ''])[1];
+    check('the offline cache holds public content', ['/api/events', '/api/bible', '/api/public/'].every(p => cacheable.includes(`'${p}`)), cacheable);
+    check('and never anything behind a sign-in',
+      ['/api/admin', '/api/finance', '/api/shepherd', '/api/welfare', '/api/national', '/api/portal', '/api/member', '/api/auth', '/api/chat', '/api/executive/'].every(p => !cacheable.includes(`'${p}`)), cacheable);
+    check('nor a file marked private', /no-store\|private/.test(swSrc), null);
+
+    // ---- last: the on-demand image is limited ----
+    let limited = 0;
+    for (let i = 0; i < 30 && !limited; i++) {
+      const v = await fetch(BASE + '/api/verse-image?verse=' + encodeURIComponent('For God so loved the world ' + i));
+      if (v.status === 429) limited = i + 1;
+      await v.arrayBuffer();
+    }
+    check('asking for the verse image over and over is slowed down', limited > 0 && limited <= 30, limited);
   }
 
   // The send loop only ticks once a minute, so this one is opt-in: run it with
