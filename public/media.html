@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sermons & Media — ACONSU</title>
+<title>Sermons & Media | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -22,20 +24,19 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
+  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--ink); }
   .search-focus-card { border:2px solid var(--purple-deep); box-shadow:0 10px 24px rgba(91,44,130,0.12); }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="voice" data-hero-page="media" style="padding-bottom:48px;">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="voice" data-hero-page="media">
   <div class="hero-content">
-    <p class="eyebrow">The Word</p>
     <h1>Sermons &amp; Media</h1>
-    <p class="lede">Catch up on past messages, or press play on something to build your faith today.</p>
   </div>
 </section>
 
@@ -45,6 +46,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div id="sermonList" class="grid" style="grid-template-columns:1fr; gap:18px;"></div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -80,7 +83,7 @@ const searchQuery = mediaParams.get('q') || '';
         <p style="color:var(--ink-soft); margin-bottom:12px;">${escapeHtml(s.description || '')}</p>
         ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:var(--ink-faint);">Link coming soon</span>'}
       </div>
-    `).join('') || '<p class="empty-state">No sermons uploaded yet — check back soon.</p>';
+    `).join('') || '<p class="empty-state">No sermons uploaded yet. Check back soon.</p>';
     if (selectedSermonId) {
       const selectedCard = wrap.querySelector(`[data-sermon-id="${CSS.escape(selectedSermonId)}"]`);
       if (selectedCard) selectedCard.scrollIntoView({ behavior: 'smooth', block: 'start' });

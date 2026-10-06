@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ACONSU — The Apostles' Continuation Students Union</title>
+<title>ACONSU: The Apostles' Continuation Students Union</title>
 <meta name="description" content="ACONSU: a campus fellowship carrying the fire of the Holy Spirit and continuing the pattern of the apostles.">
 <script>
 /* Set the theme before the first paint. A page that renders light and then
@@ -13,7 +13,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -26,7 +28,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
      The system draws its own splash first: a purple screen (manifest
      background_color) with the app icon. This picks that exact screen up and
      carries it, so the handoff is invisible and the logo appears to sit still
-     and then spring — one motion rather than two screens.
+     and then spring. One motion rather than two screens.
 
      It lives here, above the stylesheet link, so the purple is painted on the
      first frame. It also removes itself in CSS rather than in script, so a
@@ -35,37 +37,29 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     position: fixed; inset: 0; z-index: 9999;
     background: #5B2C82;
     display: flex; align-items: center; justify-content: center;
-    animation: splashOut 340ms ease 720ms forwards;
+    animation: splashOut 200ms ease-out 400ms forwards;
   }
   /* The emblem's ring text is purple, so on a purple ground it would all but
      disappear. A soft glow behind it lifts the dark strokes without giving the
-     mark an edge to sit on — light behind the flame rather than a tile under
+     mark an edge to sit on. Light behind the flame rather than a tile under
      it. Drawn here rather than baked into the file so it scales with the art. */
   #appSplash .splash-mark {
     width: 280px; height: 280px; border-radius: 50%;
     display: grid; place-items: center;
-    background: radial-gradient(closest-side,
-      rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.55) 58%, rgba(255,255,255,0) 100%);
-    animation: splashPop 640ms cubic-bezier(0.2, 0.9, 0.25, 1.15) both;
+    background: #FFFFFF;
   }
   #appSplash img { width: 200px; height: 200px; }
-  @keyframes splashPop {
-    0%   { opacity: 0; transform: scale(0.74); }
-    55%  { opacity: 1; transform: scale(1.06); }
-    100% { opacity: 1; transform: scale(1); }
-  }
   @keyframes splashOut {
     to { opacity: 0; visibility: hidden; }
   }
   /* Tapping Home from the bottom nav should not replay the opening titles. */
   html[data-splash="skip"] #appSplash { display: none; }
   @media (prefers-reduced-motion: reduce) {
-    #appSplash { animation: splashOut 200ms ease 160ms forwards; }
-    #appSplash .splash-mark { animation: none; }
+    #appSplash { animation-duration: 1ms; }
   }
 
 .month-theme { border-radius:20px; padding:28px 26px; color:#fff; text-align:center;
-  background:linear-gradient(135deg, var(--purple-deep), var(--purple-rich)); box-shadow:0 18px 40px rgba(58,27,84,0.22); }
+  background:var(--purple-rich); }
 .month-theme .eyebrow { color:var(--flame-gold); margin-bottom:8px; }
 .month-theme h2 { color:#fff; margin:0 0 8px; }
 .month-theme .theme-scripture { color:#FFD79A; font-weight:800; margin:0 0 10px; }
@@ -90,7 +84,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </style>
 <script>
   // Runs while the head is still parsing, so the decision is made before the
-  // overlay is ever painted — no flash of a splash we meant to skip.
+  // overlay is ever painted - no flash of a splash we meant to skip.
   try {
     if (sessionStorage.getItem('aconsu.splashShown')) document.documentElement.dataset.splash = 'skip';
     else sessionStorage.setItem('aconsu.splashShown', '1');
@@ -99,29 +93,23 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css?v=8">
 <style>
   .live-stream-banner {
-    background: linear-gradient(135deg, #A93226, #C0392B);
-    color: #fff; border-radius: 16px; padding: 14px 20px; margin-bottom: 20px;
+    background: #A12B20;
+    color: #fff; border-radius: var(--radius); padding: 14px 20px; margin-bottom: 20px;
     display: flex; align-items: center; justify-content: space-between; gap: 14px;
-    box-shadow: 0 8px 24px rgba(192, 57, 43, 0.35); flex-wrap: wrap;
-    animation: pulseLive 2.2s infinite ease-in-out;
-  }
-  @keyframes pulseLive {
-    0%, 100% { box-shadow: 0 8px 24px rgba(192, 57, 43, 0.35); }
-    50% { box-shadow: 0 8px 32px rgba(192, 57, 43, 0.6); }
+    flex-wrap: wrap;
   }
   .live-pill {
-    background: var(--surface); color: #C0392B; font-weight: 900; font-size: 0.72rem;
-    padding: 3px 9px; border-radius: 999px; letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface); color:var(--bad-ink); font-weight: 700; font-size: 0.72rem;
+    padding: 3px 9px; border-radius:6px; letter-spacing: 0.05em; display: inline-flex; align-items: center; gap: 6px;
   }
-  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #C0392B; animation: blink 1.2s infinite; }
-  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #A12B20; }
   .verse-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; flex-wrap: wrap; gap: 10px; }
   .highlight-card {
     background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
-    flex: none; width: 260px; box-shadow: 0 6px 18px rgba(58,27,84,0.06); text-decoration: none; color: inherit;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    flex: none; width: 260px; text-decoration: none; color: inherit;
+    transition: border-color 150ms ease-out;
   }
-  .highlight-card:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+  @media (hover: hover) and (pointer: fine) { .highlight-card:hover { border-color: var(--brand); } }
   .highlight-thumb { height: 160px; background: var(--lilac-light); overflow: hidden; position: relative; }
   .highlight-thumb img { width: 100%; height: 100%; object-fit: cover; }
   .highlight-body { padding: 14px 16px; }
@@ -131,12 +119,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <!-- logo-splash.png is the emblem with its white backing removed, so the mark
      sits on the screen rather than on a white tile stuck to it. The white
-     inside the artwork — the book's pages, the dove — is untouched. -->
+     inside the artwork, the book's pages, the dove, is untouched. -->
 <div id="appSplash" aria-hidden="true">
   <span class="splash-mark"><img src="/icons/logo-splash.png" alt=""></span>
 </div>
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <div class="container" style="padding-top:20px;">
   <div id="homeHeaderBanner" class="home-header-banner" style="display:none;"></div>
@@ -150,23 +140,21 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section class="hero" data-art="dawn" data-hero-page="home" id="homeHero">
   <div id="heroBackgroundImage" style="position:absolute; inset:0; background-size:cover; background-position:center; filter:brightness(0.45) saturate(0.7); z-index:0;"></div>
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">Welcome to ACONSU</p>
-    <h1>Carrying the fire.<br>Continuing the pattern.</h1>
-    <p class="lede">A campus family devoted to the Word, to fellowship, to prayer — continuing steadfastly in the pattern the apostles left us. Come as you are.</p>
+    <h1>The Apostles' Continuation Students Union</h1>
+    <p class="lede">Services, Bible study and prayer for students. Find your chapter, see what is on this week, or give and pray from your phone.</p>
     <div class="hero-actions">
-      <a href="/events.html" class="btn btn-primary">See What's Coming Up</a>
-      <a href="/departments.html" class="btn btn-outline">Explore Departments</a>
-      <a href="/content.html?kind=live_service" class="btn btn-outline" style="border-color:var(--flame-gold); color:var(--flame-gold);">📺 Live Streams</a>
+      <a href="/events.html" class="btn btn-primary">Events</a>
+      <a href="/departments.html" class="btn btn-outline">Chapters</a>
+      <a href="/content.html?kind=live_service" class="btn btn-outline">Live services</a>
     </div>
-    <div id="heroSocialIcons" style="margin-top:2.5em;"></div>
+    <div id="heroSocialIcons"></div>
     <div id="countdownWrap"></div>
   </div>
 </section>
 
-<!-- The three things worth seeing first, on one row. Kept in this DOM order —
-     verse, quick access, events — so a phone still reads the way it always has;
+<!-- The three things worth seeing first, on one row. Kept in this DOM order -
+     verse, quick access, events. So a phone still reads the way it always has;
      the rail-width layout reorders them with `order` so what is happening next
      leads, which is what the space is for. -->
 <section class="home-dash">
@@ -175,22 +163,22 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
       <div class="dash-card dash-verse" id="verseOfDayCard">
         <div class="verse-actions">
-          <p class="eyebrow" style="color:rgba(255,255,255,0.75); margin:0;">Verse of the Day</p>
-          <button type="button" class="btn btn-sm" id="shareVerseBtn" style="background:rgba(255,255,255,0.2); color:#fff; border:none; padding:5px 12px; font-size:0.78rem; border-radius:999px; cursor:pointer;">📤 Share Verse</button>
+          <p class="meta" style="color:rgba(255,255,255,0.75); margin:0;">Verse of the Day</p>
+          <button type="button" class="btn btn-sm" id="shareVerseBtn" style="background:rgba(255,255,255,0.2); color:#fff; border:none; padding:5px 12px; font-size:0.78rem; border-radius:6px; cursor:pointer;">Share Verse</button>
         </div>
-        <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship, in the breaking of bread, and in prayers." — Acts 2:42</p>
+        <p class="verse-of-day-text" id="verseStrip">"And they continued steadfastly in the apostles' doctrine and fellowship, in the breaking of bread, and in prayers." (Acts 2:42)</p>
       </div>
 
       <div class="dash-card dash-quick">
         <div class="dash-head">
-          <h3>Quick Access</h3>
+          <h2>Quick Access</h2>
         </div>
         <div class="tile-grid" id="dashboardTiles"></div>
       </div>
 
       <div class="dash-card dash-events">
         <div class="dash-head">
-          <h3>Upcoming Events</h3>
+          <h2>Upcoming Events</h2>
           <a href="/events.html">View all</a>
         </div>
         <div class="dash-list" id="eventPreview"></div>
@@ -204,7 +192,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section id="themeSection" style="display:none; padding-bottom:12px;">
   <div class="container">
     <div class="month-theme">
-      <p class="eyebrow" id="themeMonth"></p>
+      <p class="meta" id="themeMonth"></p>
       <h2 id="themeTitle"></h2>
       <p class="theme-scripture" id="themeScripture"></p>
       <p class="theme-blurb" id="themeBlurb"></p>
@@ -219,7 +207,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <a class="alumni-teaser" href="/alumni.html">
       <span class="at-photo" id="atPhoto"></span>
       <span class="at-body">
-        <span class="at-eyebrow">Alumni spotlight · this week</span>
+        <span class="at-eyebrow">Alumnus of the week</span>
         <strong id="atName"></strong>
         <span class="at-work" id="atWork"></span>
       </span>
@@ -231,9 +219,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section id="highlightsSection" style="display:none; padding-bottom:12px;">
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">Moments &amp; Memories</p>
-      <h2>This Week at ACONSU</h2>
-      <p style="color:var(--ink-soft);">Catch up on life across our fellowship, outreaches, and campus gatherings.</p>
+      <h2>This week</h2>
     </div>
     <div id="highlightsStrip" style="display:flex; gap:16px; overflow-x:auto; padding-bottom:14px; -webkit-overflow-scrolling:touch;"></div>
   </div>
@@ -242,8 +228,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section id="flyerSection" style="display:none; padding-bottom:12px;">
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">Don't Miss This</p>
-      <h2>Event Flyers</h2>
+      <h2>Flyers</h2>
     </div>
     <div id="flyerStrip" style="display:flex; gap:16px; overflow-x:auto; padding-bottom:12px; -webkit-overflow-scrolling:touch;"></div>
   </div>
@@ -252,13 +237,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section>
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">Get Involved</p>
-      <h2>Find your place in the union</h2>
-      <p style="color:var(--ink-soft);">Every department is a door into deeper fellowship and service. Explore where you fit.</p>
+      <h2>Departments</h2>
     </div>
     <div class="grid" id="deptPreview"></div>
     <div style="text-align:center; margin-top:32px;">
-      <a href="/departments.html" class="btn btn-outline">View All Chapters</a>
+      <a href="/departments.html" class="btn btn-outline">All chapters</a>
     </div>
   </div>
 </section>
@@ -266,25 +249,24 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section class="alt-bg" id="groupsSection" style="display:none;">
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">Small Groups &amp; Fellowships</p>
-      <h2>Grow in a Small Circle</h2>
-      <p style="color:var(--ink-soft);">Connect with Bible study cells, prayer groups, and campus fellowships.</p>
+      <h2>Groups</h2>
     </div>
     <div class="grid" id="groupsPreview"></div>
     <div style="text-align:center; margin-top:32px;">
-      <a href="/groups.html" class="btn btn-outline">Browse All Groups</a>
+      <a href="/groups.html" class="btn btn-outline">All groups</a>
     </div>
   </div>
 </section>
 
 <section>
   <div class="container" style="text-align:center;">
-    <p class="eyebrow">We're Here for You</p>
-    <h2>Need Prayer?</h2>
-    <p style="max-width:520px; margin:0 auto 28px; color:var(--ink-soft);">Whatever you're carrying — an exam, a decision, a burden — bring it to the family. We would love to stand with you in prayer.</p>
-    <a href="/prayer.html" class="btn btn-flame">Submit a Prayer Request</a>
+    <h2>Need prayer?</h2>
+    <p style="max-width:520px; margin:0 auto 24px; color:var(--ink-soft);">Send a request and the prayer team will pray with you. You can stay anonymous.</p>
+    <a href="/prayer.html" class="btn btn-primary">Send a prayer request</a>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -318,14 +300,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   const heroSocialEl = document.getElementById('heroSocialIcons');
   if (heroSocialEl && settings) {
     const socialHtml = socialLinksHtml(settings);
-    heroSocialEl.innerHTML = `
-      <div style="margin-bottom:20px;">
-        <p style="font-family:var(--font-body); color:rgba(255,255,255,0.85); font-size:0.85rem; font-weight:600; margin-bottom:12px; text-transform:uppercase; letter-spacing:0.05em;">Connect With Us</p>
-        <div class="social-row" style="justify-content:center; gap:18px;">
-          ${socialHtml}
-        </div>
-      </div>
-    `;
+    heroSocialEl.innerHTML = socialHtml ? `<div class="social-row" style="justify-content:center;">${socialHtml}</div>` : '';
+    heroSocialEl.querySelectorAll('.social-icon-link').forEach(a => a.classList.add('on-light'));
   }
 
   // 1. Live stream broadcast alert
@@ -339,7 +315,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
             <span class="live-pill"><span class="live-dot"></span>LIVE SERVICE</span>
             <strong style="font-size:0.96rem;">${escapeHtml(activeStream.title)}</strong>
           </div>
-          <a href="/content.html?kind=live_service" class="btn btn-sm" style="background:#fff; color:#C0392B; font-weight:800; border:none; text-decoration:none; padding:6px 14px; border-radius:999px; white-space:nowrap;">Watch Stream &rarr;</a>
+          <a href="/content.html?kind=live_service" class="btn btn-sm" style="background:#fff; color:#C0392B; font-weight:800; border:none; text-decoration:none; padding:6px 14px; border-radius:6px; white-space:nowrap;">Watch Stream &rarr;</a>
         </div>
       `;
     }
@@ -360,7 +336,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       try {
         const badgeData = await fetchJSON('/api/member/badges');
         if (badgeData.currentStreak > 0) {
-          streakHtml = `<span class="streak-pill">🔥 ${badgeData.currentStreak}</span>`;
+          streakHtml = `<span class="streak-pill">${badgeData.currentStreak}-day streak</span>`;
         }
       } catch (e) { /* non-critical */ }
     }
@@ -383,13 +359,12 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     if (celebrants.length) {
       document.getElementById('birthdayBanner').innerHTML = `
         <div class="birthday-banner">
-          <span class="bday-emoji">🎉</span>
           <div>
             <strong style="display:block; margin-bottom:6px;">Happy Birthday!</strong>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               ${celebrants.map(c => `
                 <span class="bday-pill">
-                  <span class="avatar">${c.profileImageFileId ? `<img src="/api/files/${c.profileImageFileId}" alt="">` : '🎂'}</span>
+                  <span class="avatar">${c.profileImageFileId ? `<img src="/api/files/${c.profileImageFileId}" alt="">` : ''}</span>
                   ${escapeHtml(c.displayName)}
                 </span>
               `).join('')}
@@ -420,8 +395,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     `;
     
     menu.innerHTML = `
-      <button style="width:100%; padding:12px 16px; text-align:left; border:none; background:none; cursor:pointer; font-size:1rem; transition:background 0.2s;" class="share-menu-btn">📱 Share as Text</button>
-      <button style="width:100%; padding:12px 16px; text-align:left; border:none; background:none; cursor:pointer; font-size:1rem; transition:background 0.2s;" class="share-menu-btn">🖼️ Share as Image</button>
+      <button style="width:100%; padding:12px 16px; text-align:left; border:none; background:none; cursor:pointer; font-size:1rem; transition:background 0.2s;" class="share-menu-btn">Share as Text</button>
+      <button style="width:100%; padding:12px 16px; text-align:left; border:none; background:none; cursor:pointer; font-size:1rem; transition:background 0.2s;" class="share-menu-btn">Share as Image</button>
     `;
     
     document.body.appendChild(menu);
@@ -435,7 +410,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     // Share as text
     menu.querySelector('.share-menu-btn:nth-child(1)').addEventListener('click', () => {
       shareContent({
-        title: 'Verse of the Day — ACONSU',
+        title: 'Verse of the Day | ACONSU',
         text: `${verseText}\n\nRead more on the ACONSU App`,
         url: window.location.origin + '/bible.html'
       });
@@ -566,7 +541,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <span class="badge">${e.time}</span>
         </div>
       </div>`;
-    }).join('') || '<p class="empty-state">No upcoming events yet — check back soon.</p>';
+    }).join('') || '<p class="empty-state">No upcoming events yet. Check back soon.</p>';
 
     // Event Flyers Strip
     const flyerEvents = upcoming.filter(e => e.flyerFileId);
@@ -574,7 +549,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       document.getElementById('flyerSection').style.display = 'block';
       document.getElementById('flyerStrip').innerHTML = flyerEvents.map(e => `
         <a href="/events.html" style="flex:none; width:220px; display:block; text-decoration:none;">
-          <img src="/api/files/${e.flyerFileId}" alt="${escapeHtml(e.title)}" loading="lazy" style="width:100%; height:280px; object-fit:cover; border-radius:14px; box-shadow:0 12px 28px rgba(58,27,84,0.18);">
+          <img src="/api/files/${e.flyerFileId}" alt="${escapeHtml(e.title)}" loading="lazy" style="width:100%; height:280px; object-fit:cover; border-radius:14px; box-shadow:0 12px 28px rgba(0,0,0,0.18);">
           <p style="margin-top:8px; font-weight:700; font-size:0.88rem; color:var(--brand);">${escapeHtml(e.title)}</p>
         </a>
       `).join('');
@@ -591,9 +566,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           </div>
           <p style="color:var(--ink-soft); font-size:0.9rem; margin-bottom:12px;">${escapeHtml(g.description || 'Join this group for fellowship and spiritual growth.')}</p>
           <div style="font-size:0.82rem; color:var(--ink-faint); display:flex; gap:12px; flex-wrap:wrap;">
-            ${g.meetingDay ? `<span>🗓️ ${escapeHtml(g.meetingDay)}</span>` : ''}
-            ${g.meetingTime ? `<span>⏰ ${escapeHtml(g.meetingTime)}</span>` : ''}
-            <span>👥 ${g.memberCount || 0} members</span>
+            ${g.meetingDay ? `<span>${escapeHtml(g.meetingDay)}</span>` : ''}
+            ${g.meetingTime ? `<span>${escapeHtml(g.meetingTime)}</span>` : ''}
+            <span>${g.memberCount || 0} members</span>
           </div>
         </a>
       `).join('');

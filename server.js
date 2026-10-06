@@ -20,6 +20,9 @@ const push = require('./lib/push');
 const sms = require('./lib/sms');
 const mailer = require('./lib/mailer');
 const { compressIfImage } = require('./lib/imageProcess');
+const { rejectOperatorKeys, publicBaseUrl, safeEqual, csvSafe, isPushEndpoint } = require('./lib/requestGuard');
+const fileTypes = require('./lib/fileTypes');
+const securityHeaders = require('./lib/securityHeaders');
 const { renderTableReport } = require('./lib/pdf');
 const { registerGroupRoutes } = require('./routes/groups');
 const { registerChatRoutes } = require('./routes/chat');
@@ -28,13 +31,22 @@ const { registerMemberServiceRoutes } = require('./routes/member-services');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
-// 30MB per file — covers most ebook PDFs and photos. Named rather than inlined
+// 30MB per file - covers most ebook PDFs and photos. Named rather than inlined
 // so the limit and the message a rejected upload gets can never disagree.
 const UPLOAD_LIMIT_BYTES = 30 * 1024 * 1024;
-const upload = multer({
+const rawUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: UPLOAD_LIMIT_BYTES }
 });
+// multer parses field names like  name[$ne]  into nested objects AFTER the
+// body parsers have run, so the operator-key check has to run again behind it.
+// Every route that takes an upload goes through here, so none can forget to.
+const upload = {
+  single: (name) => [rawUpload.single(name), rejectOperatorKeys],
+  array: (name, max) => [rawUpload.array(name, max), rejectOperatorKeys],
+  fields: (spec) => [rawUpload.fields(spec), rejectOperatorKeys],
+  none: () => [rawUpload.none(), rejectOperatorKeys]
+};
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -48,7 +60,7 @@ app.set('trust proxy', 1);
 // without ceremony. In production they are a way in: 'changeme' signs you in
 // as the national administrator, and a known session secret lets anyone mint
 // a session cookie for any account. So production refuses to start on them
-// rather than running quietly wide open — a deploy that fails loudly is a far
+// rather than running quietly wide open - a deploy that fails loudly is a far
 // smaller problem than one nobody notices.
 if (isProd) {
   const insecure = [
@@ -64,10 +76,15 @@ if (isProd) {
 }
 
 app.use(helmet({
-  contentSecurityPolicy: false // keep simple for now; the app has no user-supplied scripts
+  contentSecurityPolicy: { useDefaults: false, directives: securityHeaders.cspDirectives(isProd) },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
+app.use(securityHeaders.permissionsPolicy);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// {"email": {"$ne": null}} and ?category[$ne]=x are not values, they are
+// database operators. See lib/requestGuard.js.
+app.use(rejectOperatorKeys);
 app.use(session({
   // Stored in MongoDB (see createSessionStore) so a restart or deploy no
   // longer signs everybody out. Undefined falls back to the in-memory store,
@@ -90,7 +107,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Configurable so the automated test suite (which legitimately signs many
 // more accounts in and out per run than any real IP would in 15 minutes,
 // especially now that it also exercises a second chapter's worth of
-// accounts) can raise it — production keeps the same strict default of 10.
+// accounts) can raise it - production keeps the same strict default of 10.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.LOGIN_RATE_LIMIT_MAX) || 10,
@@ -115,7 +132,7 @@ function requireAdmin(req, res, next) {
 
 // ---------- National is oversight, not an operator ----------
 //
-// A National Coordinator may READ any chapter — that is what oversight means —
+// A National Coordinator may READ any chapter - that is what oversight means -
 // may open a chapter, and may issue the accounts that run it. What it may not
 // do is operate a chapter: its settings, its events, its departments, its
 // people. Those belong to the chapter's own admin.
@@ -124,7 +141,7 @@ function requireAdmin(req, res, next) {
 // hid the chapter panels from National, but hiding is not refusing: every
 // /api/admin/* route still accepted a National Coordinator, because
 // isChapterAdminOrAbove() returns true for one. Anything able to send an HTTP
-// request — curl, or a nav item un-hidden in the browser — had the whole
+// request - curl, or a nav item un-hidden in the browser - had the whole
 // chapter dashboard. The tagline of a chapter could be rewritten from the
 // National account, and was, while testing this.
 //
@@ -134,7 +151,7 @@ function requireAdmin(req, res, next) {
 const NATIONAL_MAY_WRITE = [
   /^\/api\/national\//,          // chapters, founders, the church, features, reports
   /^\/api\/admin\/staff\b/,      // the chapter admin's own username and password
-  /^\/api\/admin\/settings\b/,   // global settings — already requireNational
+  /^\/api\/admin\/settings\b/,   // global settings - already requireNational
   /^\/api\/admin\/(login|logout)\b/,
   /^\/api\/portal\//,            // their own sign-in, sign-out and password
   /^\/api\/auth\//,
@@ -168,14 +185,34 @@ app.use((req, res, next) => {
 });
 
 // ---------- auth routes ----------
-// One session carries every identity this browser holds — the env admin flag,
-// a staff record, the shepherd flag, a member id — and the portals' own login
+// One session carries every identity this browser holds - the env admin flag,
+// a staff record, the shepherd flag, a member id - and the portals' own login
 // form can set two of them at once (see /api/portal/login, where the env admin
 // credentials set isAdmin *and* staff). So a logout that deletes only its own
 // key leaves the person signed in through another door: clearing `staff` while
 // `isAdmin` survives is exactly why logging out of a portal appeared to do
-// nothing. Logging out means the session ends — every endpoint below shares
+// nothing. Logging out means the session ends - every endpoint below shares
 // this, which also matters on the shared campus devices this runs on.
+// A new session id at the moment somebody signs in. Without it, a session id
+// somebody else planted in the browser beforehand (session fixation) becomes a
+// signed-in session the moment they log in. What the session already held - a
+// member who then signs in to a portal keeps being a member - is carried across.
+// A real bcrypt hash of nothing in particular, checked when the account does
+// not exist so that the answer takes as long as one that does.
+const DUMMY_HASH = bcrypt.hashSync('not-a-real-account-' + Math.random(), 10);
+
+function freshSession(req) {
+  const carried = { ...req.session };
+  delete carried.cookie;
+  return new Promise((resolve, reject) => {
+    req.session.regenerate((err) => {
+      if (err) return reject(err);
+      Object.assign(req.session, carried);
+      resolve();
+    });
+  });
+}
+
 function endSession(req, res) {
   if (!req.session) return res.json({ success: true });
   req.session.destroy(() => res.json({ success: true }));
@@ -185,9 +222,9 @@ app.post('/api/admin/login', loginLimiter, (req, res) => {
   const { username, password } = req.body;
   const adminUser = process.env.ADMIN_USERNAME || 'admin';
   const adminPass = process.env.ADMIN_PASSWORD || 'changeme';
-  if (username === adminUser && password === adminPass) {
-    req.session.isAdmin = true;
-    return res.json({ success: true });
+  if (safeEqual(username, adminUser) && safeEqual(password, adminPass)) {
+    return freshSession(req).then(() => { req.session.isAdmin = true; res.json({ success: true }); })
+      .catch(() => res.status(500).json({ error: 'Could not sign in.' }));
   }
   return res.status(401).json({ error: 'Invalid credentials' });
 });
@@ -199,7 +236,7 @@ app.get('/api/admin/check', (req, res) => {
 });
 
 // ---------- Shepherding Head auth ----------
-// A separate, dedicated login from both admin and member accounts — only the
+// A separate, dedicated login from both admin and member accounts - only the
 // Shepherding Head should ever have these credentials. Deliberately its own
 // portal (not a role flag on the admin account) so admin and shepherding
 // access can be handed to different people without sharing a password.
@@ -215,9 +252,9 @@ app.post('/api/shepherd/login', loginLimiter, (req, res) => {
   if (!shepherdUser || !shepherdPass) {
     return res.status(500).json({ error: 'Shepherding portal is not configured yet. Set SHEPHERD_USERNAME and SHEPHERD_PASSWORD in .env.' });
   }
-  if (username === shepherdUser && password === shepherdPass) {
-    req.session.isShepherd = true;
-    return res.json({ success: true });
+  if (safeEqual(username, shepherdUser) && safeEqual(password, shepherdPass)) {
+    return freshSession(req).then(() => { req.session.isShepherd = true; res.json({ success: true }); })
+      .catch(() => res.status(500).json({ error: 'Could not sign in.' }));
   }
   return res.status(401).json({ error: 'Invalid credentials' });
 });
@@ -233,29 +270,29 @@ app.get('/api/shepherd/check', (req, res) => {
 // so access can be handed to a person rather than to a shared password.
 // Three ways in are accepted, in this order:
 //   1. a StaffUser account with the matching role  (the normal case)
-//   2. the main admin session                       (admin can always get in — treated as the
+//   2. the main admin session                       (admin can always get in - treated as the
 //                                                      bootstrap National Coordinator, see lib/roles.js)
 //   3. the legacy SHEPHERD_* env login              (kept so nothing breaks mid-term)
-// The coordinator role — the Chapter Coordinator — deliberately satisfies
+// The coordinator role - the Chapter Coordinator - deliberately satisfies
 // *read* checks for every office in its own chapter, that's the whole point
 // of the role, but only some of the write ones (see requireChapterCoordinator
 // below for the powers that are genuinely coordinator-and-above).
 //
 // Multi-chapter note: every role below except nationalCoordinator requires a
-// chapterId (enforced when the account is created — see /api/admin/staff).
+// chapterId (enforced when the account is created - see /api/admin/staff).
 // lib/roles.js is what actually turns "which role" into "which chapter's
-// data this session may touch" — these helpers only answer "which role".
+// data this session may touch" - these helpers only answer "which role".
 const PORTAL_ROLES = [
   'nationalCoordinator', 'coordinator', 'chapterAdmin', 'executive',
   'finance', 'shepherding', 'publicity', 'welfare',
-  // A Patron holds no office portal of their own — their seat is on the
+  // A Patron holds no office portal of their own - their seat is on the
   // national council, and that is the whole of what the account is for.
   'patron'
 ];
 
 // An executive serves one academic year (section 9). The term deadline rides
 // in the session alongside the rest of the staff record, and is compared
-// against the clock here — the one place every permission check and every
+// against the clock here - the one place every permission check and every
 // require* middleware already funnels through. That means a term lapses
 // mid-session the moment the date passes, and a route written years from now
 // inherits the rule for free. Deliberately not a nightly sweep that flips
@@ -326,7 +363,7 @@ function currentStaff(req) {
 }
 
 // The academic year turns over on 1 August, matching
-// currentAcademicYearLabel() — so every executive in a chapter serves the
+// currentAcademicYearLabel() - so every executive in a chapter serves the
 // same year and hands over together, however far into it they were elected.
 function academicYearEndsAt() {
   const now = new Date();
@@ -358,14 +395,14 @@ function hasRole(req, role) {
   if (role === 'shepherding' && req.session.isShepherd) return true;
   if (staff && staff.role === role) return true;
   // An elected holder who IS that office acts in it, rather than only looking
-  // at it — the Publicity Head sends the chapter's announcements, which is the
+  // at it - the Publicity Head sends the chapter's announcements, which is the
   // whole reason they hold the office (see POSITION_OPENS_OFFICE).
   return !!(staff && staff.positionKey && POSITION_OPENS_OFFICE[staff.positionKey] === role);
 }
 
 // Read access: the role itself, or the coordinator who oversees all of them
-// (within their own chapter — chapterFilter() is what actually confines it).
-// National is deliberately excluded from that blanket bypass — a Chapter
+// (within their own chapter - chapterFilter() is what actually confines it).
+// National is deliberately excluded from that blanket bypass - a Chapter
 // Coordinator outranks every office in their own chapter, but not National.
 function canView(req, role) {
   if (role === 'nationalCoordinator') return hasRole(req, 'nationalCoordinator');
@@ -407,13 +444,13 @@ const requireCoordinator = requireRole('coordinator');
 
 // ---------- the national council ----------
 // The one body where the whole union sits together: the National Coordinator,
-// every Chapter Coordinator, every Chapter President, and the Patrons —
+// every Chapter Coordinator, every Chapter President, and the Patrons -
 // national and chapter alike.
 //
 // Membership grants exactly two things: reading the council and speaking in
 // it. It grants NOTHING about another chapter. A Chapter President on this
 // council still cannot see another chapter's members, money or welfare cases,
-// because nothing below ever widens chapterFilter — the council's own posts
+// because nothing below ever widens chapterFilter - the council's own posts
 // are simply not chapter-scoped data in the first place.
 const COUNCIL_SEATS = {
   nationalCoordinator: 'National Coordinator',
@@ -448,7 +485,7 @@ function requireCouncilChair(req, res, next) {
 }
 
 // ---------- chapter hierarchy helpers ----------
-// Chapter Admin (or above): the operational tier from section 5 — manages
+// Chapter Admin (or above): the operational tier from section 5 - manages
 // users/content/events/forms/attendance/reports for their own chapter.
 function isChapterAdminOrAbove(req) {
   if (req.session && req.session.isAdmin) return true;
@@ -460,7 +497,7 @@ function requireChapterAdmin(req, res, next) {
   if (isChapterAdminOrAbove(req)) return next();
   return res.status(401).json({ error: 'Not authenticated' });
 }
-// Chapter Coordinator (or above): the top chapter authority — approvals,
+// Chapter Coordinator (or above): the top chapter authority - approvals,
 // chapter-wide announcements, assigning who runs the chapter's offices.
 function isChapterCoordinatorOrAbove(req) {
   if (req.session && req.session.isAdmin) return true;
@@ -503,7 +540,8 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     // The main env-configured admin login doubles as the bootstrap National Coordinator.
     const adminUser = process.env.ADMIN_USERNAME || 'admin';
     const adminPass = process.env.ADMIN_PASSWORD || 'changeme';
-    if (username === adminUser && password === adminPass) {
+    if (safeEqual(username, adminUser) && safeEqual(password, adminPass)) {
+      await freshSession(req);
       req.session.isAdmin = true;
       req.session.staff = { id: '', username: adminUser, name: 'National Administrator', role: 'nationalCoordinator', chapterId: '' };
       return res.json({ success: true, staff: req.session.staff });
@@ -513,19 +551,22 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     // accounts existed. Honour it here so whoever is using it today keeps
     // getting in while the admin creates their proper account.
     if (process.env.SHEPHERD_USERNAME
-        && username === process.env.SHEPHERD_USERNAME
-        && password === process.env.SHEPHERD_PASSWORD) {
+        && safeEqual(username, process.env.SHEPHERD_USERNAME)
+        && safeEqual(password, process.env.SHEPHERD_PASSWORD)) {
+      await freshSession(req);
       req.session.isShepherd = true;
-      // Pinned to the seed chapter — this credential predates chapters existing at all.
+      // Pinned to the seed chapter - this credential predates chapters existing at all.
       req.session.staff = { id: '', username, name: 'Shepherding Head', role: 'shepherding', chapterId: rolesLib.LEGACY_CHAPTER_ID };
       return res.json({ success: true, staff: req.session.staff });
     }
 
     const user = await models.StaffUser.findOne({ username: String(username).toLowerCase().trim() });
-    if (!user || !user.active) return res.status(401).json({ error: 'Invalid credentials' });
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
-    // A lapsed term is not a wrong password — say so, so the outgoing
+    // An unknown username used to answer measurably faster than a wrong
+    // password (no hash to check), which tells a stranger which usernames exist.
+    // A hash is always checked, so both take as long.
+    const ok = await bcrypt.compare(String(password), (user && user.passwordHash) || DUMMY_HASH);
+    if (!user || !user.active || !ok) return res.status(401).json({ error: 'Invalid credentials' });
+    // A lapsed term is not a wrong password - say so, so the outgoing
     // executive knows to ask their Coordinator rather than retyping.
     if (isTermExpired(user)) {
       return res.status(403).json({
@@ -546,6 +587,7 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       ).key;
     }
 
+    await freshSession(req);
     req.session.staff = {
       id: user.id, username: user.username, name: user.name || user.username,
       role: user.role, chapterId: user.chapterId || '',
@@ -578,8 +620,8 @@ app.get('/api/portal/me', async (req, res) => {
     isNational: scope.isNational,
     chapter: chapter ? { id: chapter.id, name: chapter.name } : null,
     // Holding an office is not the same as outranking it. The env admin and a
-    // National Coordinator outrank every office — that's why hasRole() lets
-    // them through the API guards, and that stays — but an office portal is
+    // National Coordinator outrank every office - that's why hasRole() lets
+    // them through the API guards, and that stays - but an office portal is
     // the holder's own workspace. Seating the admin in it automatically meant
     // every portal opened as "the admin", and the office's own sign-in screen
     // became unreachable without clearing cookies. So entry to those portals
@@ -595,7 +637,7 @@ app.get('/api/portal/me', async (req, res) => {
         out[role] = { view: entitled, edit: entitled && hasRole(req, role) };
         return out;
       }, {});
-      // The council is not an office, so it is not in PORTAL_ROLES — but the
+      // The council is not an office, so it is not in PORTAL_ROLES - but the
       // portal shell decides admission from this map, so its seat belongs
       // here alongside them. Everyone who holds a seat may also speak.
       const seat = councilSeat(req);
@@ -627,8 +669,8 @@ function publicChapterId(req) {
 // testimony / contact message): the X-Chapter-Id header is normally present
 // (main.js sends it once a chapter is selected), but this is the safety net.
 // With exactly one active chapter there's no ambiguity to ask about, so this
-// defaults to it — the same "single chapter, zero friction" rule used
-// elsewhere — rather than ever letting someone's message silently vanish
+// defaults to it - the same "single chapter, zero friction" rule used
+// elsewhere - rather than ever letting someone's message silently vanish
 // into an unscoped void no chapter's inbox looks at. With more than one
 // active chapter and no header, the caller must reject rather than guess
 // which chapter's inbox should see it.
@@ -641,7 +683,7 @@ async function resolvePublicChapterId(req) {
 
 // A handful of read routes (departments/events/sermons/pages/executives/
 // testimonies) serve both the public site and the admin/leadership
-// dashboards. An authenticated chapter-scoped session always wins — so a
+// dashboards. An authenticated chapter-scoped session always wins - so a
 // Chapter Admin's dashboard shows their own chapter regardless of whatever
 // the public chapter-picker last selected on that browser. A national/admin
 // session with no chapter chosen sees everything, matching today's
@@ -719,7 +761,7 @@ function isActivatedMember(member) {
 // Saves a notification for the in-app feed AND fires a real push to every
 // subscribed device. Used both by the manual admin route and automatic
 // triggers (new event, new sermon, birthdays).
-// `chapterId` blank = national broadcast, visible in every chapter's feed —
+// `chapterId` blank = national broadcast, visible in every chapter's feed -
 // pass a real chapter id to keep an announcement inside one chapter.
 // `audience` (optional) confines an announcement to one department:
 // { departmentId, memberIds }. Without it this is a chapter-wide notice, which
@@ -741,7 +783,7 @@ async function createNotification(title, body, url, source, chapterId, audience)
 // ---------- the handover from Shepherding to the Coordinator ----------
 // Shepherding marks someone an Executive; only the Chapter Coordinator can
 // open the account that actually gives them a portal. Those are two people and
-// two portals, and nothing used to carry the news between them — so a member
+// two portals, and nothing used to carry the news between them - so a member
 // could sit labelled 'executive' for weeks with no account, no position and no
 // page, which is exactly what it looked like from outside.
 //
@@ -763,7 +805,7 @@ async function membersAwaitingAppointment(chapterId) {
     }));
 }
 
-// A chapter's Coordinators, as members — a coordinator account is
+// A chapter's Coordinators, as members - a coordinator account is
 // member-backed, which is what makes it possible to reach the person rather
 // than the office.
 async function coordinatorMemberIds(chapterId) {
@@ -783,7 +825,7 @@ async function tellCoordinatorSomeoneNeedsAnAccount(member) {
       body: `${member.name || 'A member'} has been marked an Executive. Give them a position and a portal account.`,
       url: '/coordinator.html'
     }, member.chapterId, memberIds);
-  } catch (e) { /* non-critical — the Leadership Accounts screen still shows them */ }
+  } catch (e) { /* non-critical - the Leadership Accounts screen still shows them */ }
 }
 
 // ---------- admin email helper ----------
@@ -797,9 +839,9 @@ function escapeHtmlForEmail(str) {
 async function notifyAdminByEmail(subject, html) {
   try {
     const settings = await repo.getSettings();
-    if (!settings.email) return; // no admin email configured — nothing to send to
+    if (!settings.email) return; // no admin email configured - nothing to send to
     mailer.sendMail({ to: settings.email, subject, html }).catch(() => {});
-  } catch (e) { /* non-critical — never let this break the original request */ }
+  } catch (e) { /* non-critical - never let this break the original request */ }
 }
 
 // Same idea, but for mail that belongs to one particular office (shepherding,
@@ -826,8 +868,12 @@ async function scheduleOnboardingTasks(member) {
   }, 'onb');
 }
 
+// The wording of the Terms of use and the Privacy policy a person agreed to when
+// they registered. Change it when either page changes in a way that matters.
+const POLICY_VERSION = '2026-10-06';
+
 // ---------- member auth routes ----------
-// Registration is multipart now — a profile photo is compulsory for member
+// Registration is multipart now - a profile photo is compulsory for member
 // registration (section 6), same upload pipeline as the profile-photo update
 // route below. Every new account starts life as a 'visitor': the Shepherding
 // workflow (section 7) is what moves someone from here to an active member.
@@ -836,14 +882,21 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email and password are required' });
   }
-  if (password.length < 6) {
-    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (typeof password !== 'string' || password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
   if (!chapterId) {
     return res.status(400).json({ error: 'Please select your ACONSU chapter' });
   }
   if (!req.file) {
     return res.status(400).json({ error: 'A profile photo is required to register' });
+  }
+  // Agreeing to the Terms and the privacy policy is a step the person takes, not
+  // something assumed from the account existing. It is also recorded: when, and
+  // which wording they agreed to, so a later change to the policy can be shown
+  // to people who agreed to an earlier one.
+  if (String(req.body.consent || '') !== 'true') {
+    return res.status(400).json({ error: 'Please tick the box to agree to the Terms of use and the Privacy policy.' });
   }
   const month = birthdayMonth ? Number(birthdayMonth) : null;
   const day = birthdayDay ? Number(birthdayDay) : null;
@@ -875,14 +928,15 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
       // the form asks them for a graduation year instead of a hostel. The
       // CLAIM is recorded; the stage is not granted here. Stage is
       // Shepherding's to set everywhere else in this system, and letting it be
-      // self-declared would make Alumni Connect — which is union-wide — a
+      // self-declared would make Alumni Connect - which is union-wide - a
       // directory anyone could write themselves into.
       registeredAsAlumni: String(memberKind || '') === 'alumni',
       graduationYear: String(graduationYear || '').replace(/[^0-9]/g, '').slice(0, 4),
       profileImageFileId,
       membershipStage: 'visitor',
       qrToken: crypto.randomBytes(16).toString('hex'),
-      birthdayMonth: month, birthdayDay: day
+      birthdayMonth: month, birthdayDay: day,
+      consentedAt: new Date(), consentVersion: POLICY_VERSION
     }, 'mem');
     scheduleOnboardingTasks(member).catch(() => {});
     req.session.memberId = member.id;
@@ -896,10 +950,10 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
   try {
-    const member = await models.Member.findOne({ email: email.toLowerCase().trim() });
-    if (!member) return res.status(401).json({ error: 'Invalid email or password' });
-    const match = await bcrypt.compare(password, member.passwordHash || '');
-    if (!match) return res.status(401).json({ error: 'Invalid email or password' });
+    const member = await models.Member.findOne({ email: String(email).toLowerCase().trim() });
+    const match = await bcrypt.compare(String(password), (member && member.passwordHash) || DUMMY_HASH);
+    if (!member || !match) return res.status(401).json({ error: 'Invalid email or password' });
+    await freshSession(req);
     req.session.memberId = member.id;
     res.json({ success: true, member: { id: member.id, name: member.name, email: member.email } });
   } catch (e) {
@@ -912,7 +966,7 @@ app.post('/api/auth/logout', (req, res) => endSession(req, res));
 // ---------- password reset ----------
 app.post('/api/auth/forgot-password', loginLimiter, async (req, res) => {
   const { email } = req.body;
-  // Always respond with the same generic message whether or not the email exists —
+  // Always respond with the same generic message whether or not the email exists -
   // this prevents anyone from using this endpoint to discover who has an account.
   const genericMsg = { success: true, message: 'If an account exists for that email, a reset link has been sent.' };
   if (!email) return res.json(genericMsg);
@@ -926,7 +980,12 @@ app.post('/api/auth/forgot-password', loginLimiter, async (req, res) => {
     member.resetTokenExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
     await member.save();
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    // From configuration, never from the Host header (see publicBaseUrl).
+    const baseUrl = publicBaseUrl(req);
+    if (!baseUrl) {
+      console.error('Password reset requested but no PUBLIC_BASE_URL or RENDER_EXTERNAL_URL is set; refusing to build a link from the Host header.');
+      return res.json(genericMsg);
+    }
     const resetLink = `${baseUrl}/reset-password.html?token=${rawToken}&email=${encodeURIComponent(member.email)}`;
     mailer.sendMail({
       to: member.email,
@@ -936,14 +995,14 @@ app.post('/api/auth/forgot-password', loginLimiter, async (req, res) => {
 
     res.json(genericMsg);
   } catch (e) {
-    res.json(genericMsg); // still generic, even on internal error — never leak account existence
+    res.json(genericMsg); // still generic, even on internal error - never leak account existence
   }
 });
 
 app.post('/api/auth/reset-password', loginLimiter, async (req, res) => {
   const { token, email, newPassword } = req.body;
   if (!token || !email || !newPassword) return res.status(400).json({ error: 'Missing reset details' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   try {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const member = await models.Member.findOne({
@@ -980,7 +1039,7 @@ app.get('/api/auth/me', async (req, res) => {
 });
 
 // Ghanaian academic years run roughly August-to-July, so "which year is this"
-// is computed rather than asked for — used only to label an academic-history
+// is computed rather than asked for - used only to label an academic-history
 // snapshot (section 8), never anything security- or access-relevant.
 function currentAcademicYearLabel() {
   const now = new Date();
@@ -1007,7 +1066,7 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
     }
     const level = req.body.level !== undefined ? req.body.level : existing.level;
     const hostel = req.body.hostel !== undefined ? req.body.hostel : existing.hostel;
-    // A real academic-year change (not just a typo fix) — snapshot where they
+    // A real academic-year change (not just a typo fix) - snapshot where they
     // were before overwriting, so "2025/2026: Level 200, Hostel A" is never lost.
     let academicHistory = existing.academicHistory || [];
     if ((level && level !== existing.level) || (hostel && hostel !== existing.hostel)) {
@@ -1026,7 +1085,7 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
       // Deliberately NOT taken from the request. This form sends no department
       // field, so `req.body.department || ''` silently blanked a member's
       // department every time they edited their phone number. Belonging to a
-      // department is also not a thing to grant yourself in passing — it is
+      // department is also not a thing to grant yourself in passing - it is
       // decided by the people who lead it, so it changes through its own route
       // and never as a side effect of saving a profile.
       department: existing.department || '',
@@ -1045,7 +1104,7 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
 app.put('/api/member/password', requireMember, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both current and new password are required' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
   try {
     const member = await models.Member.findOne({ id: req.session.memberId });
     if (!member) return res.status(404).json({ error: 'Account not found' });
@@ -1097,13 +1156,13 @@ app.post('/api/member/bible-read', requireMember, async (req, res) => {
 });
 
 // ---------- engagement: badges ----------
-// Computed live from real activity rather than stored as a separate ledger —
+// Computed live from real activity rather than stored as a separate ledger -
 // always accurate, and there's nothing to keep in sync if data changes later.
 // Where a member stands: the department they belong to, how far along the
 // membership journey they are, and who is shepherding them.
 //
-// All of this already existed server-side — it drives Shepherding's whole
-// workflow — but the member themselves could never see any of it. They
+// All of this already existed server-side - it drives Shepherding's whole
+// workflow - but the member themselves could never see any of it. They
 // registered, became a 'visitor', and nothing in the app told them what that
 // meant or what happened next.
 const MEMBERSHIP_JOURNEY = [
@@ -1111,13 +1170,13 @@ const MEMBERSHIP_JOURNEY = [
   { stage: 'under_review', label: 'Being welcomed', blurb: 'Shepherding is getting to know you. They will be in touch about becoming a full member.' },
   { stage: 'accepted', label: 'Accepted', blurb: 'You have been accepted into the chapter. A shepherd will be assigned to walk with you.' },
   { stage: 'active', label: 'Member', blurb: 'You are a full member of the chapter.' },
-  { stage: 'worker', label: 'Worker', blurb: 'You serve in a department — thank you for giving your time.' },
+  { stage: 'worker', label: 'Worker', blurb: 'You serve in a department. Thank you for giving your time.' },
   { stage: 'executive', label: 'Executive', blurb: 'You hold office in the chapter.' },
   { stage: 'alumni', label: 'Alumni', blurb: 'You have finished your studies. You are always part of the family.' }
 ];
 
 // What this member has signed up for. Registering was possible; seeing what
-// you had signed up for was not — the profile's "My Events" went to the same
+// you had signed up for was not - the profile's "My Events" went to the same
 // events page everyone else sees.
 app.get('/api/member/events', requireMember, async (req, res) => {
   try {
@@ -1328,7 +1387,7 @@ app.post('/api/member/departments/:id/request', requireMember, async (req, res) 
       chapterId, memberId: member.id, departmentId: department.id, status: 'pending'
     });
     // Asking twice is a double tap or an impatient second try, not a second
-    // request — the head should see one row, not a growing pile.
+    // request - the head should see one row, not a growing pile.
     if (existing.length) return res.json({ success: true, item: existing[0], alreadyPending: true });
 
     const item = await repo.create('departmentRequests', {
@@ -1365,7 +1424,7 @@ app.delete('/api/member/departments/:id/request', requireMember, async (req, res
   }
 });
 
-// Leaving is the member's own to do — being let in needs the head, stepping
+// Leaving is the member's own to do - being let in needs the head, stepping
 // back out does not.
 app.delete('/api/member/departments/:id', requireMember, async (req, res) => {
   try {
@@ -1392,7 +1451,7 @@ const ALUMNI_INDUSTRIES = [
   'Architecture & Built Environment', 'Other'
 ];
 
-// Browsing is for members who are actually part of the union — active and
+// Browsing is for members who are actually part of the union - active and
 // above. A visitor who registered an hour ago cannot pull a list of alumni
 // names, professions and employers, which is the obvious way this directory
 // would be abused.
@@ -1514,7 +1573,7 @@ app.put('/api/member/alumni-profile', requireMember, async (req, res) => {
       linkedin: cleanText(String(req.body.linkedin || '')).slice(0, 200)
     };
     if (fields.listed && !fields.profession) {
-      return res.status(400).json({ error: 'Add what you do before listing yourself — that is what other members will search for.' });
+      return res.status(400).json({ error: 'Add what you do before listing yourself, that is what other members will search for.' });
     }
     const existing = (await repo.getAll('alumniProfiles', { memberId: me.id }))[0];
     const item = existing
@@ -1543,7 +1602,7 @@ app.delete('/api/admin/alumni/:id', requireChapterAdmin, async (req, res) => {
 // ---------- ACONSU Rooms: small-group meetings ----------
 //
 // Peer-to-peer. The server introduces two browsers to each other and then gets
-// out of the way — no audio or video passes through it, which is the only
+// out of the way - no audio or video passes through it, which is the only
 // reason this can run on the hosting we have.
 //
 // That choice sets the ceiling. Each participant sends their own video to
@@ -1576,7 +1635,7 @@ function peerSummary(peerId, peer) {
 }
 
 // Who may be in this room. A department room is that department's; a chapter
-// room is that chapter's. Nothing here widens chapterFilter — the room itself
+// room is that chapter's. Nothing here widens chapterFilter - the room itself
 // carries the chapter it belongs to, and it is checked against the member's.
 async function canEnterRoom(member, room) {
   if (!member || !room || !room.open) return false;
@@ -1681,7 +1740,7 @@ app.get('/api/rooms/:id/events', requireMember, async (req, res) => {
   }
   const peers = roomPeers(room.id);
   if (peers.size >= (room.maxParticipants || ROOM_CAPACITY)) {
-    return res.status(409).json({ error: `This room is full — ${room.maxParticipants || ROOM_CAPACITY} people is the most it holds.` });
+    return res.status(409).json({ error: `This room is full, ${room.maxParticipants || ROOM_CAPACITY} people is the most it holds.` });
   }
   // One person, one seat: rejoining from a second tab replaces the first
   // rather than quietly eating a place in a four-seat room.
@@ -1754,7 +1813,7 @@ app.post('/api/rooms/:id/signal', requireMember, async (req, res) => {
 
 // What the browser should use to find a route between two peers. STUN is free
 // and public. TURN relays the media when a direct route cannot be found, which
-// on hostel wifi and mobile networks is a real share of the time — it is read
+// on hostel wifi and mobile networks is a real share of the time - it is read
 // from the environment so a chapter can add one without a code change, and its
 // absence is reported honestly rather than left to look like a bug.
 app.get('/api/rooms/ice-servers', requireMember, (req, res) => {
@@ -1804,7 +1863,7 @@ app.get('/api/member/badges', requireMember, async (req, res) => {
 });
 
 // ---------- Sermon Notes (section 17) ----------
-// Personal and private — a member only ever sees their own; there is
+// Personal and private - a member only ever sees their own; there is
 // deliberately no admin/shepherding view of these, unlike everything else
 // in the app that's chapter-visible to some staff role.
 app.get('/api/member/sermon-notes', requireMember, async (req, res) => {
@@ -1866,6 +1925,10 @@ app.delete('/api/member/sermon-notes/:id', requireMember, async (req, res) => {
 
 app.get('/api/birthdays/today', async (req, res) => {
   try {
+    // Whose birthday it is, with a photo, is for the people who belong here. A
+    // stranger on the internet has no need of it, and no right to a member's
+    // face and birthday.
+    if (!(req.session && req.session.memberId) && !currentStaff(req) && !(req.session && req.session.isAdmin)) return res.json([]);
     const now = new Date();
     const month = now.getMonth() + 1;
     const day = now.getDate();
@@ -1889,7 +1952,7 @@ app.get('/api/notifications', async (req, res) => {
   try {
     const base = contentChapterFilter(req);
     // Always include national broadcasts (blank chapterId) alongside this
-    // chapter's own — a national announcement should reach every chapter.
+    // chapter's own - a national announcement should reach every chapter.
     const filter = base.chapterId ? { $or: [{ chapterId: base.chapterId }, { chapterId: '' }] } : base;
     const items = await repo.getAll('notifications', filter);
 
@@ -1902,7 +1965,7 @@ app.get('/api/notifications', async (req, res) => {
       ownDepartments = memberDepartmentIds(me);
     }
     // Someone serving in Choir and Ushering is the audience for both, so this
-    // asks whether the notice belongs to any department they are in — reading
+    // asks whether the notice belongs to any department they are in - reading
     // a single field here would have shown them only their primary one.
     const forMe = items.filter(n => !n.departmentId || ownDepartments.includes(n.departmentId));
 
@@ -1916,7 +1979,7 @@ app.get('/api/notifications', async (req, res) => {
 // answering 503 when the database is away: the home page returns 200 whether
 // or not MongoDB is reachable, so a monitor watching '/' would call a chapter
 // healthy while every query behind it failed. This is the URL to point an
-// uptime checker at — it also keeps a sleeping free-tier instance awake.
+// uptime checker at - it also keeps a sleeping free-tier instance awake.
 //
 // It reveals nothing: no connection string, no host, no credentials.
 app.get('/api/health', async (req, res) => {
@@ -1940,15 +2003,18 @@ app.get('/api/push/vapid-public-key', (req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || '' });
 });
 
-app.post('/api/push/subscribe', async (req, res) => {
+app.post('/api/push/subscribe', formLimiter, async (req, res) => {
   const { subscription } = req.body;
   if (!subscription || !subscription.endpoint) return res.status(400).json({ error: 'Invalid subscription' });
+  // The server later POSTs to this address, so it must be a browser vendor's push
+  // service and nothing else (see isPushEndpoint).
+  if (!isPushEndpoint(subscription.endpoint)) return res.status(400).json({ error: 'Invalid subscription' });
   try {
     const existing = await models.PushSubscription.findOne({ endpoint: subscription.endpoint });
     if (existing) return res.json({ success: true }); // already subscribed on this device
     const memberId = (req.session && req.session.memberId) || '';
     // Denormalized so a chapter-scoped push send doesn't need to join through
-    // Member every time — see lib/push.js.
+    // Member every time - see lib/push.js.
     const owner = memberId ? await repo.getById('members', memberId) : null;
     await repo.create('pushSubscriptions', {
       endpoint: subscription.endpoint,
@@ -1962,9 +2028,9 @@ app.post('/api/push/subscribe', async (req, res) => {
   }
 });
 
-app.post('/api/push/unsubscribe', async (req, res) => {
+app.post('/api/push/unsubscribe', formLimiter, async (req, res) => {
   const { endpoint } = req.body;
-  if (!endpoint) return res.status(400).json({ error: 'Endpoint required' });
+  if (typeof endpoint !== 'string' || !endpoint) return res.status(400).json({ error: 'Endpoint required' });
   try {
     await models.PushSubscription.deleteOne({ endpoint });
     res.json({ success: true });
@@ -2006,7 +2072,7 @@ const BIBLE_TRANSLATIONS = [
 // Versions the union reads that the app is not free to serve as text.
 //
 // The church has approved NASB 2020, but the NASB is © The Lockman
-// Foundation: reproducing it — including proxying it through this server —
+// Foundation: reproducing it - including proxying it through this server -
 // needs a licence, and bible-api.com does not carry it. So it is offered as a
 // version that opens in a licensed reader, honestly labelled, instead of
 // quietly missing from the list. If the union obtains a licence (from The
@@ -2027,14 +2093,14 @@ const BIBLE_EXTERNAL_VERSIONS = [
 const EXTERNAL_VERSION_CODES = new Set(BIBLE_EXTERNAL_VERSIONS.map((v) => v.code));
 
 const bibleCache = new Map(); // key -> { data, expiresAt }
-const BIBLE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour — scripture text doesn't change
+const BIBLE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour - scripture text doesn't change
 const BIBLE_TRANSLATION_TTL_MS = 12 * 60 * 60 * 1000; // the catalogue changes far more rarely than it is asked for
 const BIBLE_TRANSLATION_RETRY_MS = 5 * 60 * 1000;     // how long a failed catalogue fetch is left alone
 let bibleTranslationCache = { list: null, expiresAt: 0 };
 
 // Our own label wins for a translation we already name well; everything else
-// keeps the service's own name. English first — that is what the chapter
-// reads — then alphabetically, with the KJV pinned at the top as the default.
+// keeps the service's own name. English first - that is what the chapter
+// reads - then alphabetically, with the KJV pinned at the top as the default.
 function mergeTranslations(live) {
   const known = new Map(BIBLE_TRANSLATIONS.map((t) => [t.code, t]));
   const merged = new Map();
@@ -2077,7 +2143,7 @@ async function loadBibleTranslations() {
     return list;
   } catch (e) {
     // Offline, or the service is down. The reader still offers the versions we
-    // know it carries rather than an empty picker — and the failure is held
+    // know it carries rather than an empty picker - and the failure is held
     // briefly, so a service that is down costs one slow request rather than a
     // six-second wait on every page load until it comes back.
     bibleTranslationCache = { list: BIBLE_TRANSLATIONS, expiresAt: Date.now() + BIBLE_TRANSLATION_RETRY_MS };
@@ -2151,7 +2217,7 @@ app.get('/api/bible/passage', async (req, res) => {
 
 
 // ---------- Bible Study (section 16) ----------
-// Always tied to a real passage — studyReference is meant to be handed
+// Always tied to a real passage - studyReference is meant to be handed
 // straight to /api/bible/passage above, so a study never repeats scripture
 // text that's already available in the reader.
 app.get('/api/bible-studies', async (req, res) => {
@@ -2222,7 +2288,7 @@ app.delete('/api/admin/bible-studies/:id', requireBibleStudyManager, async (req,
 // ---------- Form Builder (section 11) ----------
 // One generic engine (fields + submissions) reused for event registration,
 // travelling-event sign-ups, executive info, department activities and
-// welfare — a new "kind" of form never needs a new schema or a new route.
+// welfare - a new "kind" of form never needs a new schema or a new route.
 const FORM_FIELD_TYPES = ['short_text', 'long_text', 'multiple_choice', 'checkboxes', 'dropdown', 'date', 'time', 'phone', 'email', 'file'];
 
 function cleanFormFields(fields) {
@@ -2238,7 +2304,7 @@ function cleanFormFields(fields) {
     }));
 }
 
-// Chapter Admin/Coordinator or Publicity — the set of roles that already
+// Chapter Admin/Coordinator or Publicity - the set of roles that already
 // manage chapter content (forms, uploads, flyers) elsewhere in the app.
 function requireContentManager(req, res, next) {
   if (isChapterAdminOrAbove(req) || hasRole(req, 'publicity')) return next();
@@ -2378,7 +2444,7 @@ app.get('/api/admin/forms/:id/submissions', requireContentManager, async (req, r
 });
 
 // Resolves "which chapter" for a request that might be a member session, a
-// staff session, or anonymous — the community features below (Groups, Chat,
+// staff session, or anonymous - the community features below (Groups, Chat,
 // Volunteer scheduling, Welfare, Giving) are read/written by both members
 // and staff, unlike most Phase 2 routes which were one or the other.
 async function resolveViewerChapterId(req) {
@@ -2396,7 +2462,7 @@ async function resolveViewerChapterId(req) {
 // source of truth in this application entry point.
 // The welfare desk: the Welfare Officer, or a Chapter Admin standing in for
 // them. Defined once and handed to the routes module as well, because the
-// welfare request routes there need exactly the same answer — two copies of a
+// welfare request routes there need exactly the same answer - two copies of a
 // rule about who may see case notes is one copy too many.
 function requireWelfareOfficer(req, res, next) {
   if (isChapterAdminOrAbove(req) || hasRole(req, 'welfare')) return next();
@@ -2416,12 +2482,13 @@ registerChatRoutes(app, communityRouteDeps);
 // of routes/church-life.js). Registered after the oversight chokepoint above,
 // so National's writes here are the national ones and only those.
 registerChurchLifeRoutes(app, {
-  repo, rolesLib, gridfs, actorName, notifyAdminByEmail, escapeHtmlForEmail: escapeHtmlForEmail, compressIfImage
+  repo, rolesLib, gridfs, actorName, notifyAdminByEmail, escapeHtmlForEmail: escapeHtmlForEmail, compressIfImage,
+  isChapterAdminOrAbove
 });
 const { logMilestone } = registerMemberServiceRoutes(app, communityRouteDeps);
 
-// Who runs a department is the executive holding it — the roster card
-// carrying this department — rather than a name typed into the department
+// Who runs a department is the executive holding it - the roster card
+// carrying this department - rather than a name typed into the department
 // record itself. Those were two separate answers that could disagree, and
 // the typed one went stale the moment an office changed hands. Derived on
 // read so it is always whoever currently holds the office, with no second
@@ -2466,7 +2533,7 @@ app.get('/api/events', async (req, res) => {
   try {
     const base = contentChapterFilter(req);
     const chapterPart = base.chapterId ? { $or: [{ chapterId: base.chapterId }, { isNational: true }] } : base;
-    // Anonymous visitors only ever see published events — a submitted or
+    // Anonymous visitors only ever see published events - a submitted or
     // rejected event isn't public yet (section 9). Signed-in staff browsing
     // their own chapter's dashboard see everything, drafts included.
     const scope = rolesLib.getActingScope(req);
@@ -2613,14 +2680,25 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// uploaded files (photos, ebooks, etc.) — list metadata only
+// uploaded files (photos, ebooks, etc.) - list metadata only
+// The files this listing may name. Receipts, pastoral records and members' own
+// photos are never listed here: this endpoint needs no sign-in, and a list of
+// their ids is a list of things to download. Query values must be plain
+// strings; anything else (an object carrying a database operator) is ignored.
 app.get('/api/files', async (req, res) => {
   try {
     const query = {};
-    if (req.query.category) query['metadata.category'] = req.query.category;
-    if (req.query.pageSlug) query['metadata.pageSlug'] = req.query.pageSlug;
-    if (req.query.placement) query['metadata.placement'] = req.query.placement;
-    const files = await gridfs.listFiles(query);
+    const text = (v) => (typeof v === 'string' ? v : '');
+    const category = text(req.query.category);
+    if (category) {
+      if (fileTypes.isPrivateCategory(category)) return res.json([]);
+      query['metadata.category'] = category;
+    } else {
+      query['metadata.category'] = { $nin: fileTypes.PRIVATE_CATEGORIES };
+    }
+    if (text(req.query.pageSlug)) query['metadata.pageSlug'] = text(req.query.pageSlug);
+    if (text(req.query.placement)) query['metadata.placement'] = text(req.query.placement);
+    const files = (await gridfs.listFiles(query)).filter((f) => !fileTypes.isPrivateCategory(f.metadata && f.metadata.category));
     res.json(files.map((f) => ({
       id: f._id,
       filename: f.filename,
@@ -2629,7 +2707,7 @@ app.get('/api/files', async (req, res) => {
       contentType: f.metadata?.contentType || '',
       category: f.metadata?.category || '',
       pageSlug: f.metadata?.pageSlug || '',
-      // Files uploaded before placements existed have none — treat them as
+      // Files uploaded before placements existed have none - treat them as
       // library items so they still list cleanly.
       placement: f.metadata?.placement || 'library',
       targetId: f.metadata?.targetId || '',
@@ -2642,12 +2720,44 @@ app.get('/api/files', async (req, res) => {
 });
 
 // stream a single file's actual content (image preview, book download, etc.)
+// Who may open a file that is not for the public. A refusal is "not found",
+// the same as a file that does not exist, so the id confirms nothing.
+function canOpenPrivateFile(req, meta) {
+  const category = meta && meta.category;
+  const staff = currentStaff(req);
+  const signedIn = !!(req.session && (req.session.memberId || req.session.isAdmin || req.session.isShepherd)) || !!staff;
+  if (category === 'member-profile') return signedIn;       // a member's own photo: members and staff
+  if (req.session && req.session.isAdmin) return true;      // the recovery login, as everywhere
+  const role = staff && staff.role;
+  const allowed = category === 'receipt'
+    ? ['nationalCoordinator', 'coordinator', 'chapterAdmin', 'finance', 'welfare', 'executive'].includes(role)
+    : (['nationalCoordinator', 'coordinator', 'chapterAdmin', 'shepherding'].includes(role) || !!(req.session && req.session.isShepherd));
+  if (!allowed) return false;
+  const scope = rolesLib.getActingScope(req);
+  // National sees individual records only while there is one chapter: the same
+  // rule as chapterConfidential().
+  if (scope.isNational) return !!rolesLib.getSoleActiveChapterId();
+  return !meta.chapterId || meta.chapterId === scope.chapterId;
+}
+
 app.get('/api/files/:id', async (req, res) => {
   try {
     const file = await gridfs.findFile(req.params.id);
     if (!file) return res.status(404).json({ error: 'File not found' });
-    res.set('Content-Type', file.metadata?.contentType || 'application/octet-stream');
-    res.set('Content-Disposition', `inline; filename="${file.filename}"`);
+    const meta = file.metadata || {};
+    const isPrivate = fileTypes.isPrivateCategory(meta.category);
+    if (isPrivate && !canOpenPrivateFile(req, meta)) return res.status(404).json({ error: 'File not found' });
+
+    // Shown in the browser only if it is the kind of file a browser shows without
+    // running it. Anything else - HTML, SVG, scripts, whatever it claimed to be -
+    // is handed over as an opaque download, so an uploaded page can never run as
+    // this app.
+    const serving = fileTypes.servingFor(meta.contentType);
+    res.set('Content-Type', serving.contentType);
+    res.set('Content-Disposition', `${serving.inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.filename || 'file')}`);
+    res.set('X-Content-Type-Options', 'nosniff');
+    if (!serving.inline) res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.set('Cache-Control', isPrivate ? 'private, no-store' : 'public, max-age=3600');
     gridfs.openDownloadStream(req.params.id).pipe(res);
   } catch (e) {
     res.status(404).json({ error: 'File not found' });
@@ -2783,7 +2893,7 @@ app.get('/api/settings', async (req, res) => {
 // Wraps a line of scripture into SVG <tspan> rows.
 //
 // This exists because the image used to be laid out with <foreignObject>, and
-// librsvg — which sharp renders through — does not implement it. The plain
+// librsvg - which sharp renders through - does not implement it. The plain
 // <text> elements around it appeared, the verse inside it did not, so every
 // shared image was a purple gradient with a heading and no scripture on it.
 // Real <text> and <tspan> render, so the wrapping has to be done here rather
@@ -2806,13 +2916,13 @@ function escapeSvg(str) {
   ));
 }
 
-// "Book 3:16", "1 John 4:8", "Psalm 23" — a book name followed by numbers.
+// "Book 3:16", "1 John 4:8", "Psalm 23" - a book name followed by numbers.
 const SCRIPTURE_REF = /^\s*(?:[1-3]\s*)?[A-Za-z][A-Za-z.\s]{1,24}\s*\d{1,3}(?::\d{1,3}(?:\s*[-–]\s*\d{1,3})?)?\s*$/;
 
 // A verse arrives as one string, and the two conventions in this app put the
 // reference at opposite ends: the Coordinator's daily verse renders as
-// `"text" — Reference`, while the Verse of the Week an admin types into Site
-// Settings is prompted as `Acts 2:42 — And they continued...`. Splitting on
+// `"text" - Reference`, while the Verse of the Week an admin types into Site
+// Settings is prompted as `Acts 2:42 - And they continued...`. Splitting on
 // the dash alone got the settings one backwards, printing the scripture where
 // the reference belongs. So look at both sides and let the one that is shaped
 // like a reference win.
@@ -2821,11 +2931,11 @@ function splitVerseAndReference(raw) {
   const parts = text.split(/\s+[—–]\s+|\s+--?\s+/);
   if (parts.length >= 2) {
     const head = parts[0].trim();
-    const tail = parts.slice(1).join(' — ').trim();
+    const tail = parts.slice(1).join(', ').trim();
     if (SCRIPTURE_REF.test(head)) return { verse: tail, reference: head };
     const last = parts[parts.length - 1].trim();
     if (SCRIPTURE_REF.test(last)) {
-      return { verse: parts.slice(0, -1).join(' — ').trim(), reference: last };
+      return { verse: parts.slice(0, -1).join(', ').trim(), reference: last };
     }
   }
   return { verse: text, reference: '' };
@@ -2921,10 +3031,16 @@ app.get('/api/verse-styles', (req, res) => {
   });
 });
 
-app.get('/api/verse-image', async (req, res) => {
+// Renders a 1080x1350 image on demand for anyone who asks, so it is limited like
+// the other things strangers can trigger, and the text it takes is capped.
+const verseImageLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many verse images requested. Please wait a minute.' }
+});
+app.get('/api/verse-image', verseImageLimiter, async (req, res) => {
   try {
-    let verseText = req.query.verse || '';
-    let reference = cleanText(String(req.query.reference || ''));
+    let verseText = typeof req.query.verse === 'string' ? req.query.verse.slice(0, 800) : '';
+    let reference = cleanText(String(typeof req.query.reference === 'string' ? req.query.reference : '')).slice(0, 80);
     if (!verseText) {
       const settings = await repo.getSettings();
       if (!settings.verseOfTheWeek) return res.status(400).json({ error: 'No verse configured' });
@@ -3031,7 +3147,7 @@ app.get('/api/content/item/:id', async (req, res) => {
   } catch (e) { res.status(500).json({ error: 'Could not load content item' }); }
 });
 
-// Public chapter directory — powers the registration chapter dropdown and
+// Public chapter directory - powers the registration chapter dropdown and
 // the "choose your chapter" picker on the public site (see main.js). Only
 // active chapters are offered; payment/contact/about detail isn't needed
 // here so it's deliberately left off this response.
@@ -3046,7 +3162,7 @@ app.get('/api/chapters', async (req, res) => {
   }
 });
 
-// Public chapter profile (About page use) — deliberately excludes `payment`,
+// Public chapter profile (About page use) - deliberately excludes `payment`,
 // which stays visible only to that chapter's own leadership and National.
 app.get('/api/chapters/:id', async (req, res) => {
   try {
@@ -3141,7 +3257,7 @@ app.get('/api/admin/executive-applications', requireChapterAdmin, async (req, re
 // approvals" row of the responsibility matrix), and approving is one action
 // that provisions the whole person: the member is promoted, their portal
 // login is issued for this academic year, and their public roster card is
-// created — all linked by memberId. Before this, approval flipped a flag and
+// created - all linked by memberId. Before this, approval flipped a flag and
 // stopped, leaving "verified" executives with no way in and roster cards
 // belonging to nobody.
 app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinator, async (req, res) => {
@@ -3158,8 +3274,8 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
     let issuedLogin = false;
     let position = null;
     if (decision === 'approve') {
-      // The position is what grants capabilities, so it is settled here — by
-      // the Coordinator doing the vetting — and never by the executive
+      // The position is what grants capabilities, so it is settled here - by
+      // the Coordinator doing the vetting - and never by the executive
       // themselves. A portfolio holder must arrive with a real department in
       // this chapter, since that is what their panels operate on.
       position = positions.positionByKey(positionKey);
@@ -3169,10 +3285,10 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
       const wantsDepartment = String(department || '').trim();
       if (positions.requiresDepartment(position)) {
         if (!wantsDepartment) {
-          return res.status(400).json({ error: `A ${position.label} runs a department — choose which one.` });
+          return res.status(400).json({ error: `A ${position.label} runs a department, choose which one.` });
         }
         if (!await repo.getById('departments', wantsDepartment, { chapterId: member.chapterId })) {
-          return res.status(400).json({ error: 'That department is not in this chapter — pick one from the list.' });
+          return res.status(400).json({ error: 'That department is not in this chapter, pick one from the list.' });
         }
       } else if (wantsDepartment) {
         return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
@@ -3270,7 +3386,7 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
   }
 });
 
-// Reshuffling a sitting executive mid-year — the Secretary steps up to Vice
+// Reshuffling a sitting executive mid-year - the Secretary steps up to Vice
 // President, a portfolio changes hands. Kept with the Coordinator for the same
 // reason approval is: the position decides what its holder can do.
 app.patch('/api/admin/executives/:id/position', requireChapterCoordinator, async (req, res) => {
@@ -3284,9 +3400,9 @@ app.patch('/api/admin/executives/:id/position', requireChapterCoordinator, async
 
     const departmentId = String((req.body && req.body.department) || '').trim();
     if (positions.requiresDepartment(position)) {
-      if (!departmentId) return res.status(400).json({ error: `A ${position.label} runs a department — choose which one.` });
+      if (!departmentId) return res.status(400).json({ error: `A ${position.label} runs a department, choose which one.` });
       if (!await repo.getById('departments', departmentId, { chapterId: card.chapterId })) {
-        return res.status(400).json({ error: 'That department is not in this chapter — pick one from the list.' });
+        return res.status(400).json({ error: 'That department is not in this chapter, pick one from the list.' });
       }
     } else if (departmentId) {
       return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
@@ -3427,7 +3543,7 @@ app.post('/api/join-requests', formLimiter, async (req, res) => {
     }, 'join');
     res.json({ success: true });
     notifyAdminByEmail(
-      'New Join Request — ACONSU',
+      'New Join Request | ACONSU',
       `<p><strong>${escapeHtmlForEmail(name)}</strong> wants to join a department.</p><p>Email: ${escapeHtmlForEmail(email)}${phone ? '<br>Phone: ' + escapeHtmlForEmail(phone) : ''}</p><p>Log in to the admin dashboard to see full details.</p>`
     );
   } catch (e) {
@@ -3458,7 +3574,7 @@ app.post('/api/prayer-requests', formLimiter, async (req, res) => {
     }, 'prayer');
     res.json({ success: true });
     notifyAdminByEmail(
-      'New Prayer Request — ACONSU',
+      'New Prayer Request | ACONSU',
       `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> submitted a prayer request.</p><p>Log in to the admin dashboard to see it.</p>`
     );
   } catch (e) {
@@ -3467,10 +3583,10 @@ app.post('/api/prayer-requests', formLimiter, async (req, res) => {
 });
 
 // ---------- Prayer Wall (section 18) ----------
-// The public feed — only requests marked public/anonymous ever appear here;
+// The public feed - only requests marked public/anonymous ever appear here;
 // private and shepherd_only stay in the shepherding/admin inbox only. Names
 // are stripped for anonymous requests server-side, never just hidden by the
-// frontend, and the id list of who's praying is never exposed — only a count.
+// frontend, and the id list of who's praying is never exposed - only a count.
 app.get('/api/prayer-wall', async (req, res) => {
   try {
     const filter = { ...contentChapterFilter(req), visibility: { $in: ['public', 'anonymous'] } };
@@ -3510,7 +3626,7 @@ app.post('/api/prayer-requests/:id/pray', requireMember, async (req, res) => {
 
 // A member can mark their own request answered (and share a testimony);
 // chapter staff can also do it on behalf of someone who submitted signed out.
-// Deliberately not gated by requireMember alone — Shepherding/Chapter Admin
+// Deliberately not gated by requireMember alone - Shepherding/Chapter Admin
 // may also close this out on behalf of someone who submitted signed out, so
 // the "who's allowed" check has to happen inside, not in the route guard.
 app.patch('/api/prayer-requests/:id/answered', async (req, res) => {
@@ -3547,7 +3663,7 @@ app.post('/api/testimonies', formLimiter, async (req, res) => {
     // Testimonies are publicity's to review and publish.
     notifyOfficeByEmail(
       'publicityEmail',
-      'New Testimony Submitted — ACONSU',
+      'New Testimony Submitted | ACONSU',
       `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> shared a testimony awaiting review.</p><p>Open the Publicity portal to publish it.</p>`
     );
   } catch (e) {
@@ -3563,11 +3679,11 @@ app.post('/api/contact', formLimiter, async (req, res) => {
     if (!chapterId) return res.status(400).json({ error: 'Please select your chapter and try again.' });
     await repo.create('contactMessages', { chapterId, name, email, message, status: 'new' }, 'msg');
     res.json({ success: true });
-    // Contact messages are shepherding's to answer, so they get the mail too —
+    // Contact messages are shepherding's to answer, so they get the mail too -
     // alongside the admin, who keeps oversight of everything.
     notifyOfficeByEmail(
       'shepherdingEmail',
-      'New Contact Message — ACONSU',
+      'New Contact Message | ACONSU',
       `<p><strong>${escapeHtmlForEmail(name)}</strong> (${escapeHtmlForEmail(email)}) sent a message:</p><p>${escapeHtmlForEmail(message)}</p><p>Open the Shepherding portal to reply and mark it handled.</p>`
     );
   } catch (e) {
@@ -3593,7 +3709,7 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
     }
     await repo.create('eventRegistrations', {
       chapterId: event.chapterId || '', eventId: event.id, name, email, phone: phone || '',
-      // Only when they are signed in — the form stays open to anyone.
+      // Only when they are signed in - the form stays open to anyone.
       memberId: (req.session && req.session.memberId) || ''
     }, 'reg');
     res.json({ success: true });
@@ -3605,18 +3721,18 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
 
 // ---------- Shepherding portal data routes ----------
 // All routes below require the Shepherding Head login (requireShepherd), never
-// the main admin login or a member login — this is a deliberately separate,
+// the main admin login or a member login - this is a deliberately separate,
 // narrow-access area for pastoral care and finance records.
 
 // Merged member view: auto-imports name/email/phone/department/birthday/photo
 // live from the existing Member accounts, and attaches each person's
 // shepherding record (pastoral notes, address, attendance, etc.) if one exists.
-// This is what makes "auto-import" work — nothing about a member is duplicated
+// This is what makes "auto-import" work - nothing about a member is duplicated
 // or re-entered, it's joined at read time from data the church already has.
 // ---------- the check-up team (the pool every shepherd is drawn from) ----------
 // Shepherding sends a team out to check up on people, and it is that team the
 // individual shepherds come from. So "who may be assigned as a shepherd" is not
-// a free-text name and not a portal account — it is a member of THIS chapter
+// a free-text name and not a portal account - it is a member of THIS chapter
 // who has been put on the team.
 //
 // Nothing here filters on membershipStage: a few of the team are alumni, and an
@@ -3835,7 +3951,8 @@ app.post('/api/shepherd/records', requireShepherd, upload.single('image'), async
     if (req.file) {
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
       imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
-        category: 'shepherding', contentType: compressed.contentType, title: name || memberId
+        category: 'shepherding', contentType: compressed.contentType, title: name || memberId,
+        chapterId: rolesLib.chapterIdForWrite(req)
       }));
     }
 
@@ -3901,7 +4018,7 @@ app.get('/api/shepherd/attendance', requireViewRole('shepherding'), async (req, 
     if (from) records = records.filter(r => r.date >= from);
     if (to) records = records.filter(r => r.date <= to);
     records.sort((a, b) => (a.date < b.date ? 1 : -1));
-    // The list view only needs the totals — sending every person's mark for
+    // The list view only needs the totals - sending every person's mark for
     // every service would balloon the response for no reason.
     res.json(records.map((r) => ({
       id: r.id, date: r.date, serviceType: r.serviceType, title: r.title,
@@ -3917,7 +4034,7 @@ app.get('/api/shepherd/attendance', requireViewRole('shepherding'), async (req, 
   }
 });
 
-// The register for one specific service, with every person's mark — this is what
+// The register for one specific service, with every person's mark - this is what
 // the "take attendance" screen loads before it renders the checklist.
 app.get('/api/shepherd/attendance/:date', requireViewRole('shepherding'), async (req, res) => {
   try {
@@ -3970,7 +4087,7 @@ app.delete('/api/shepherd/attendance/:id', requireShepherd, async (req, res) => 
   }
 });
 
-// Attendance history for one person — how many of the last services they made.
+// Attendance history for one person - how many of the last services they made.
 app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherding'), async (req, res) => {
   try {
     const records = await repo.getAll('attendanceRecords', rolesLib.chapterFilter(req));
@@ -3995,7 +4112,7 @@ app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherdi
 });
 
 // ---------- Digital Membership Card (section 14) ----------
-// The QR encodes the member's qrToken, never their raw id/email — the
+// The QR encodes the member's qrToken, never their raw id/email - the
 // scanning side (below) resolves it back to a member server-side and checks
 // chapter membership before recording anything, so the code itself carries
 // no directly identifying information if seen out of context.
@@ -4027,7 +4144,7 @@ app.get('/api/member/card', requireMember, async (req, res) => {
 });
 
 // ---------- QR / manual attendance recording (section 13) ----------
-// Ushers/Shepherding/Publicity can take attendance at the door — same set of
+// Ushers/Shepherding/Publicity can take attendance at the door - same set of
 // roles allowed to manage chapter content, since "who's on the door" isn't
 // its own role in the hierarchy yet.
 function requireAttendanceTaker(req, res, next) {
@@ -4039,7 +4156,7 @@ function todayISODate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Shared by both the scan and the manual-search fallback — SCAN QR ->
+// Shared by both the scan and the manual-search fallback - SCAN QR ->
 // IDENTIFY MEMBER -> VERIFY CHAPTER -> RECORD ATTENDANCE (section 13). The
 // chapter check happens by construction: `member` is only ever found within
 // the scanner's own chapterFilter, so a mismatch surfaces as "not found"
@@ -4081,7 +4198,7 @@ app.post('/api/attendance/scan', requireAttendanceTaker, async (req, res) => {
   }
 });
 
-// Manual search fallback (section 13) — when scanning isn't available.
+// Manual search fallback (section 13) - when scanning isn't available.
 // Reuses the same member list Shepherding already sees; this just adds the
 // one-tap "mark present" action on top of it.
 app.post('/api/attendance/mark', requireAttendanceTaker, async (req, res) => {
@@ -4111,7 +4228,7 @@ app.get('/api/shepherd/attendance/:date/report.pdf', requireViewRole('shepherdin
     const present = record.marks.filter(m => m.status === 'present').length;
     renderTableReport(res, {
       title: 'Attendance Report',
-      subtitle: `${chapter ? chapter.name + ' — ' : ''}${record.title || record.serviceType} — ${record.date}`,
+      subtitle: `${chapter ? chapter.name + ', ' : ''}${record.title || record.serviceType}, ${record.date}`,
       generatedBy: actorName(req),
       filename: `aconsu-attendance-${record.date}.pdf`,
       columns: [
@@ -4132,7 +4249,7 @@ app.get('/api/shepherd/attendance/:date/report.pdf', requireViewRole('shepherdin
   }
 });
 
-// Attendance PERCENTAGE per member across a date range — the figure a
+// Attendance PERCENTAGE per member across a date range - the figure a
 // shepherd actually needs when deciding who to follow up with.
 app.get('/api/shepherd/attendance-summary.pdf', requireViewRole('shepherding'), async (req, res) => {
   try {
@@ -4148,16 +4265,16 @@ app.get('/api/shepherd/attendance-summary.pdf', requireViewRole('shepherding'), 
         const marked = records.filter(r => r.marks.some(mk => mk.memberId === m.id));
         const present = records.filter(r => r.marks.some(mk => mk.memberId === m.id && mk.status === 'present')).length;
         return {
-          name: m.name, department: m.department || '—',
+          name: m.name, department: m.department || '-',
           servicesRecorded: marked.length, present,
-          rate: marked.length ? `${Math.round((present / marked.length) * 100)}%` : '—'
+          rate: marked.length ? `${Math.round((present / marked.length) * 100)}%` : '-'
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     renderTableReport(res, {
       title: 'Attendance Percentage Report',
-      subtitle: `${chapter ? chapter.name + ' — ' : ''}${req.query.from || 'all time'} to ${req.query.to || 'present'} — ${records.length} service(s)`,
+      subtitle: `${chapter ? chapter.name + ', ' : ''}${req.query.from || 'all time'} to ${req.query.to || 'present'}, ${records.length} service(s)`,
       generatedBy: actorName(req),
       filename: `aconsu-attendance-summary-${new Date().toISOString().slice(0, 10)}.pdf`,
       columns: [
@@ -4208,7 +4325,7 @@ app.get('/api/shepherd/members/report.pdf', requireViewRole('shepherding'), asyn
 // ---------- Shepherding portal: member details ----------
 // Shepherding keeps the pastoral picture of each person up to date, so they can
 // correct the account details a member typed in a hurry at registration. Email
-// and password stay off-limits here — changing an email from another person's
+// and password stay off-limits here - changing an email from another person's
 // screen is how people get locked out of their own account.
 app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
   try {
@@ -4238,7 +4355,7 @@ app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
 // REGISTERED -> VISITOR -> SHEPHERDING REVIEW -> ACCEPTED -> ASSIGNED SHEPHERD
 // -> ACTIVE (section 7). Every registration already starts as 'visitor';
 // everything from here on is Shepherding moving someone forward (or, in
-// principle, back — e.g. correcting a mistaken acceptance).
+// principle, back - e.g. correcting a mistaken acceptance).
 // Derived from MEMBERSHIP_JOURNEY rather than typed again, so the stages
 // Shepherding can set and the journey a member is shown can never drift apart.
 const MEMBERSHIP_STAGES = MEMBERSHIP_JOURNEY.map(s => s.stage);
@@ -4256,13 +4373,13 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
 
     // Assigning a shepherd is allowed alongside any stage change, or on its own.
     // A shepherd is a member of this chapter who sits on the check-up team, so
-    // the name is never typed — it is read off the record the id points at and
+    // the name is never typed - it is read off the record the id points at and
     // can never drift out of sync with it.
     if (req.body.shepherdMemberId !== undefined) {
       const shepherdMemberId = String(req.body.shepherdMemberId || '').trim();
       if (shepherdMemberId) {
-        // Nobody shepherds themselves. The team shepherds the members —
-        // themselves excepted — and each of them is looked after by someone
+        // Nobody shepherds themselves. The team shepherds the members -
+        // themselves excepted - and each of them is looked after by someone
         // else on the team.
         if (shepherdMemberId === existing.id) {
           return res.status(400).json({ error: 'Nobody can be their own shepherd' });
@@ -4288,7 +4405,7 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
       }
     }
 
-    // First time reaching 'active' — issue the membership number the digital
+    // First time reaching 'active' - issue the membership number the digital
     // card (section 14) will show. Never reassigned once set.
     if (stage === 'active' && !existing.membershipNumber) {
       const activeCount = await models.Member.countDocuments({ chapterId: existing.chapterId, membershipStage: 'active' });
@@ -4299,7 +4416,7 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
 
     // Newly marked an Executive, and no account behind it: the Coordinator is
     // the only one who can finish this, so they are told rather than left to
-    // notice. Only on the change itself — re-saving the same stage is not news.
+    // notice. Only on the change itself - re-saving the same stage is not news.
     if (stage === 'executive' && existing.membershipStage !== 'executive') {
       const account = await models.StaffUser.findOne({ memberId: updated.id }).lean();
       if (!account) tellCoordinatorSomeoneNeedsAnAccount(updated);
@@ -4314,7 +4431,7 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
 
 // ---------- Shepherding portal: contact messages ----------
 // Messages sent through the public contact form land here as well as with the
-// admin — following up with the person who reached out is pastoral work.
+// admin - following up with the person who reached out is pastoral work.
 app.get('/api/shepherd/contact-messages', requireViewRole('shepherding'), async (req, res) => {
   try {
     const items = await repo.getAll('contactMessages', rolesLib.chapterFilter(req));
@@ -4392,7 +4509,7 @@ app.get('/api/finance/summary', requireViewRole('finance'), async (req, res) => 
       else byExpenseCategory[e.category] = (byExpenseCategory[e.category] || 0) + e.amount;
     });
 
-    // Month-by-month movement, oldest first — this is what the trend chart draws.
+    // Month-by-month movement, oldest first - this is what the trend chart draws.
     const monthly = {};
     entries.forEach((e) => {
       const month = (e.date || '').slice(0, 7);
@@ -4406,7 +4523,7 @@ app.get('/api/finance/summary', requireViewRole('finance'), async (req, res) => 
       byIncomeCategory, byExpenseCategory,
       monthly: Object.values(monthly).sort((a, b) => (a.month < b.month ? -1 : 1)),
       entryCount: entries.length,
-      // The running balance of everything ever recorded, regardless of the filter —
+      // The running balance of everything ever recorded, regardless of the filter -
       // what's actually in hand today.
       overallBalance: financeTotals(all).balance,
       pendingApprovals: all.filter(e => e.approvalStatus === 'pending').length
@@ -4623,7 +4740,7 @@ app.delete('/api/finance/budgets/:id', requireFinance, async (req, res) => {
     const filter = rolesLib.chapterFilter(req);
     const existing = await repo.getById('budgets', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Budget not found' });
-    // Ledger entries survive their budget — the money still moved. They simply
+    // Ledger entries survive their budget - the money still moved. They simply
     // stop pointing at a plan that no longer exists.
     await models.FinanceEntry.updateMany({ budgetId: req.params.id, ...filter }, { $set: { budgetId: '', budgetLineId: '' } });
     await repo.removeById('budgets', req.params.id, filter);
@@ -4643,7 +4760,7 @@ app.get('/api/finance/export.csv', chapterConfidential('Finance ledger entries')
     const budgetName = (id) => (budgets.find(b => b.id === id) || {}).name || '';
 
     const cell = (v) => {
-      const s = v === undefined || v === null ? '' : String(v);
+      const s = csvSafe(v);
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const header = ['Date', 'Type', 'Category', 'Amount (GHS)', 'Method', 'Reference', 'Payee', 'Description', 'Budget', 'Approval', 'Recorded By'];
@@ -4664,7 +4781,7 @@ app.get('/api/finance/export.csv', chapterConfidential('Finance ledger entries')
   }
 });
 
-// PDF sibling to the CSV export — same filtering, laid out to be read at a
+// PDF sibling to the CSV export - same filtering, laid out to be read at a
 // meeting rather than opened in a spreadsheet (section 37: Generate -> Preview
 // (the existing on-screen ledger) -> Download PDF).
 app.get('/api/finance/export.pdf', chapterConfidential('Finance ledger entries'), requireViewRole('finance'), async (req, res) => {
@@ -4708,7 +4825,7 @@ app.get('/api/finance/export.pdf', chapterConfidential('Finance ledger entries')
 // Does the actual sending for both "send now" and anything the scheduler picks
 // up later, so a scheduled announcement behaves exactly like an immediate one.
 // `chapterId` blank means a genuine national broadcast (National Coordinator
-// only — see the scheduled-send loop and the national announcements route);
+// only - see the scheduled-send loop and the national announcements route);
 // every chapter-level publicity send passes its own chapter through here.
 async function dispatchAnnouncement({ title, body, url, channels, audience, sourceId, chapterId }) {
   const useApp = !channels || channels.includes('app');
@@ -4724,10 +4841,10 @@ async function dispatchAnnouncement({ title, body, url, channels, audience, sour
     const text = `${title}\n${body}`.slice(0, 320); // ~2 SMS segments, keeps costs predictable
     const result = await sms.sendBatch(numbers, text, sourceId, chapterId);
     parts.push(result.configured
-      ? `SMS: ${result.sent} sent${result.failed ? `, ${result.failed} failed` : ''}${result.note ? ` — ${result.note}` : ''}`
-      : `SMS skipped — ${result.note}`);
+      ? `SMS: ${result.sent} sent${result.failed ? `, ${result.failed} failed` : ''}${result.note ? `: ${result.note}` : ''}`
+      : `SMS skipped: ${result.note}`);
   }
-  return parts.join(' · ') || 'Nothing to send — no channel was selected.';
+  return parts.join(' · ') || 'Nothing to send. No channel was selected.';
 }
 
 app.get('/api/publicity/overview', requireViewRole('publicity'), async (req, res) => {
@@ -4808,7 +4925,7 @@ app.post('/api/publicity/scheduled', requirePublicity, async (req, res) => {
   const when = new Date(scheduledFor);
   if (isNaN(when.getTime())) return res.status(400).json({ error: 'That send time is not a valid date and time' });
   if (when.getTime() < Date.now() - 60 * 1000) {
-    return res.status(400).json({ error: 'That send time is in the past — pick a time from now onwards' });
+    return res.status(400).json({ error: 'That send time is in the past, pick a time from now onwards' });
   }
   try {
     const item = await repo.create('scheduledNotifications', {
@@ -4890,7 +5007,7 @@ app.post('/api/publicity/events', requirePublicity, async (req, res) => {
     res.json({ success: true, item });
     createNotification(
       'New Event: ' + (item.title || 'Untitled'),
-      `${item.title || 'A new event'} — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
+      `${item.title || 'A new event'}: ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
       '/events.html', 'system', item.isNational ? '' : chapterId
     ).catch(() => {});
   } catch (e) {
@@ -4908,7 +5025,7 @@ app.put('/api/publicity/events/:id', requirePublicity, async (req, res) => {
     if (announceUpdate) {
       createNotification(
         'Event Update: ' + (item.title || 'Untitled'),
-        `${item.title || 'An event'} has been updated — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
+        `${item.title || 'An event'} has been updated: ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
         '/events.html', 'system', item.isNational ? '' : item.chapterId
       ).catch(() => {});
     }
@@ -4919,7 +5036,7 @@ app.put('/api/publicity/events/:id', requirePublicity, async (req, res) => {
 
 // ---------- Executive Portal (section 9) ----------
 // Self-service: an executive can only ever read/edit the one Executive
-// record tied to their own StaffUser id (staffId) — never anyone else's,
+// record tied to their own StaffUser id (staffId) - never anyone else's,
 // and never by guessing another executive's record id.
 async function findOwnExecutiveRecord(req) {
   const staff = currentStaff(req);
@@ -4928,7 +5045,7 @@ async function findOwnExecutiveRecord(req) {
 }
 
 // An executive's position is what decides what they can do, so it is resolved
-// here — from their own roster card, in their own chapter — and never taken
+// here - from their own roster card, in their own chapter - and never taken
 // from the request. Returns the card alongside the position so a caller that
 // needs both does not load the card twice.
 async function resolveOwnPosition(req) {
@@ -4953,7 +5070,7 @@ function requireCapability(capability, handler) {
       if (!positions.hasCapability(position, capability)) {
         return res.status(403).json({
           error: position.kind === 'unknown'
-            ? 'Your position has not been set yet — ask your Chapter Coordinator to set it, and this section will open up.'
+            ? 'Your position has not been set yet. Ask your Chapter Coordinator to set it, and this section will open up.'
             : `This section belongs to another office. Yours is ${position.label || 'not set'}.`
         });
       }
@@ -5078,7 +5195,7 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
 });
 
 // Event submission (section 9): EXECUTIVE -> SUBMITTED -> PUBLICITY REVIEW ->
-// APPROVED -> PUBLISHED. Never published directly — that's the whole point
+// APPROVED -> PUBLISHED. Never published directly - that's the whole point
 // of the workflow, and it's enforced here (status is always 'submitted'),
 // not left to whatever the client sends.
 app.post('/api/executive/events', requireRole('executive'), requireCapability(CAP.EVENTS, async (req, res, { staff }) => {
@@ -5108,14 +5225,14 @@ app.get('/api/executive/events', requireRole('executive'), requireCapability(CAP
 
 // ---------- a portfolio holder's own department ----------
 // Everything below is scoped by the department on the executive's own roster
-// card, resolved from that card rather than taken from the request — so an
+// card, resolved from that card rather than taken from the request - so an
 // executive can only ever run the department they actually hold, and only
 // inside their own chapter.
 
 // Department panels now sit behind a capability as well as a department:
 // only a portfolio holder (Evangelism, Welfare, Publicity, Prayer, Music) is
-// granted these, so an officer such as the President — who has no department
-// and never should — is turned away by the grant rather than being told to
+// granted these, so an officer such as the President - who has no department
+// and never should - is turned away by the grant rather than being told to
 // go and pick a department they do not have.
 function requireOwnDepartment(capability, handler) {
   return requireCapability(capability, async (req, res, ctx) => {
@@ -5123,7 +5240,7 @@ function requireOwnDepartment(capability, handler) {
       ? await repo.getById('departments', ctx.record.department, { chapterId: ctx.staff.chapterId })
       : null;
     if (!department) {
-      return res.status(400).json({ error: 'Your Chapter Coordinator has not attached a department to your office yet — ask them to set it, and this section will open up.' });
+      return res.status(400).json({ error: 'Your Chapter Coordinator has not attached a department to your office yet, ask them to set it, and this section will open up.' });
     }
     return await handler(req, res, department, ctx.staff);
   });
@@ -5212,7 +5329,7 @@ app.post('/api/executive/department/requests/:id/decide', requireRole('executive
   }, { chapterId: staff.chapterId });
 
   if (decision === 'approved') {
-    // Added to what they already serve in rather than replacing it — joining
+    // Added to what they already serve in rather than replacing it - joining
     // the Choir does not take someone out of Ushering.
     await setMemberDepartments(member.id, [...memberDepartmentIds(member), department.id]);
     createNotification(
@@ -5266,7 +5383,7 @@ app.post('/api/executive/department/meetings', requireRole('executive'), require
   res.json({ success: true, item });
 }));
 
-// An announcement to this department's own members, not the whole chapter —
+// An announcement to this department's own members, not the whole chapter -
 // chapter-wide announcements stay with the Coordinator and Publicity.
 app.post('/api/executive/department/announcement', requireRole('executive'), requireOwnDepartment(CAP.ANNOUNCE_DEPARTMENT, async (req, res, department, staff) => {
   const title = cleanText(req.body.title || '');
@@ -5379,7 +5496,7 @@ app.post('/api/executive/minutes', requireRole('executive'), requireCapability(C
   const date = String(req.body.date || '').trim() || new Date().toISOString().slice(0, 10);
   const title = cleanText(req.body.title || '');
   const body = cleanText(req.body.body || '');
-  if (!body) return res.status(400).json({ error: 'Minutes need a body — what was discussed.' });
+  if (!body) return res.status(400).json({ error: 'Minutes need a body, what was discussed.' });
   // Attendance is confined to this chapter's own executives, so a mistyped or
   // guessed id can never put someone else in the room.
   const execs = await repo.getAll('executives', { chapterId: staff.chapterId });
@@ -5481,7 +5598,7 @@ app.delete('/api/executive/daily-verses/:id', requireRole('executive'), requireC
   res.json({ success: true });
 }));
 
-// Today's verse, for the app. Public on purpose — it is scripture, and the
+// Today's verse, for the app. Public on purpose - it is scripture, and the
 // home screen shows it before anyone signs in.
 app.get('/api/daily-verse', async (req, res) => {
   try {
@@ -5504,7 +5621,7 @@ app.get('/api/daily-verse', async (req, res) => {
 // money was never in the treasury, and recording it there would say it was.
 //
 // The accountability is that the Coordinator and every executive can read the
-// whole book at any time, without asking the person holding it — see
+// whole book at any time, without asking the person holding it - see
 // /api/welfare/report below.
 const WELFARE_INCOME_CATEGORIES = ['tithe', 'semester_dues', 'donation', 'other'];
 
@@ -5563,18 +5680,18 @@ app.post('/api/welfare/ledger', requireWelfareOfficer, upload.single('receipt'),
     const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
     if (!chapterId) return res.status(400).json({ error: 'A chapter is required.' });
 
-    // Money going OUT is the half that needs evidence — the same rule the
+    // Money going OUT is the half that needs evidence - the same rule the
     // Treasurer files under. Money coming in is evidenced by the member who
     // paid it and the MoMo reference against it.
     let receiptFileId = '';
     if (entryType === 'expense') {
       if (!req.file) {
-        return res.status(400).json({ error: 'Attach the receipt or transfer screenshot — an expense without evidence cannot be recorded.' });
+        return res.status(400).json({ error: 'Attach the receipt or transfer screenshot, an expense without evidence cannot be recorded.' });
       }
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
       receiptFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
         category: 'receipt', placement: 'welfare', contentType: compressed.contentType,
-        title: `${category} — ${amount}`, chapterId
+        title: `${category}: ${amount}`, chapterId
       }));
     }
 
@@ -5623,7 +5740,7 @@ app.delete('/api/welfare/ledger/:id', requireWelfareOfficer, async (req, res) =>
 });
 
 // The report Welfare answers with. Readable by the Coordinator and by every
-// member of the executive body, not only by the desk that keeps it — a purse
+// member of the executive body, not only by the desk that keeps it - a purse
 // one person can both hold and hide is not accountable to anyone.
 function requireWelfareReportReader(req, res, next) {
   if (isChapterAdminOrAbove(req) || hasRole(req, 'welfare') || hasRole(req, 'executive')) return next();
@@ -5721,7 +5838,7 @@ app.post('/api/welfare/giving/:id/confirm', requireWelfareOfficer, async (req, r
     const today = new Date().toISOString().slice(0, 10);
     const receivedOn = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.receivedOn || '')) ? req.body.receivedOn : today;
     if (receivedOn > today) {
-      return res.status(400).json({ error: 'Money cannot have arrived in the future — check the date.' });
+      return res.status(400).json({ error: 'Money cannot have arrived in the future, check the date.' });
     }
     const reference = cleanText(req.body.reference || '') || intent.reference || '';
 
@@ -5823,7 +5940,7 @@ app.get('/api/welfare/report', requireWelfareReportReader, async (req, res) => {
 // disburses it and must account for every movement with evidence attached;
 // the Financial Secretary keeps the books and is the only executive who
 // writes to them. So a Treasurer's filing lands as 'pending' and stays there
-// until the Financial Secretary records it — the person holding the funds is
+// until the Financial Secretary records it - the person holding the funds is
 // never the person who records them.
 
 app.post('/api/executive/treasury/report', requireRole('executive'), upload.single('receipt'), requireCapability(CAP.TREASURY_REPORT, async (req, res, { staff }) => {
@@ -5838,11 +5955,11 @@ app.post('/api/executive/treasury/report', requireRole('executive'), upload.sing
   }
   // Evidence is the point of this route, so it is required rather than
   // optional: an unevidenced filing is exactly what this split prevents.
-  if (!req.file) return res.status(400).json({ error: 'Attach the receipt, transfer screenshot or other evidence — a filing without evidence cannot be recorded.' });
+  if (!req.file) return res.status(400).json({ error: 'Attach the receipt, transfer screenshot or other evidence, a filing without evidence cannot be recorded.' });
   const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
   const receiptFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
     category: 'receipt', placement: 'treasury', contentType: compressed.contentType,
-    title: `${category} — ${amount}`, chapterId: staff.chapterId
+    title: `${category}: ${amount}`, chapterId: staff.chapterId
   }));
   const item = await repo.create('financeEntries', {
     chapterId: staff.chapterId,
@@ -5887,7 +6004,7 @@ app.get('/api/executive/finance/ledger', requireRole('executive'), requireCapabi
   });
   const byDate = (a, b) => (a.date < b.date ? 1 : -1);
   res.json({
-    // What is waiting on them, first — this is the queue they work.
+    // What is waiting on them, first - this is the queue they work.
     awaiting: entries.filter(e => e.source === 'treasury' && e.approvalStatus === 'pending').sort(byDate).map(shape),
     ledger: entries.filter(e => e.approvalStatus !== 'pending').sort(byDate).slice(0, 100).map(shape)
   });
@@ -6029,7 +6146,7 @@ app.put('/api/council/meeting', requireCouncil, requireCouncilChair, async (req,
   try {
     const url = cleanText(req.body.meetingUrl || '');
     // A meeting link is something council members will click, so only real
-    // http(s) links are accepted — never a javascript: or data: URL typed in.
+    // http(s) links are accepted - never a javascript: or data: URL typed in.
     if (url && !/^https:\/\/[^\s]+$/i.test(url)) {
       return res.status(400).json({ error: 'The meeting link must be a full https:// address.' });
     }
@@ -6160,7 +6277,7 @@ app.patch('/api/publicity/events/:id/publish', requirePublicity, async (req, res
     res.json({ success: true, item });
     createNotification(
       'New Event: ' + (item.title || 'Untitled'),
-      `${item.title || 'A new event'} — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
+      `${item.title || 'A new event'}: ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
       '/events.html', 'system', item.isNational ? '' : item.chapterId
     ).catch(() => {});
   } catch (e) {
@@ -6180,7 +6297,7 @@ app.get('/api/publicity/sms-logs', requireViewRole('publicity'), async (req, res
 
 // ---------- Chapter Coordinator ----------
 // One screen showing the state of every office in ONE chapter. Mostly
-// read-only by design — the office that owns the work still does it — but
+// read-only by design - the office that owns the work still does it - but
 // the Chapter Coordinator additionally gets approval and chapter-wide
 // announcement powers below (section 4), which is what separates this role
 // from a plain read-only rollup.
@@ -6292,7 +6409,7 @@ app.get('/api/coordinator/pending-executives', requireViewRole('coordinator'), a
   }
 });
 
-// Chapter-wide announcements (section 4) — a separate, explicit Chapter
+// Chapter-wide announcements (section 4) - a separate, explicit Chapter
 // Coordinator action from Publicity's own composer, even though both end up
 // calling the same dispatch logic underneath.
 app.post('/api/coordinator/announcements', requireChapterCoordinator, async (req, res) => {
@@ -6316,7 +6433,7 @@ app.post('/api/coordinator/announcements', requireChapterCoordinator, async (req
 // ---------- National Coordinator ----------
 // Oversight across every chapter (section 3). requireNational accepts the
 // legacy global admin session too, so this works the moment the app is
-// deployed — no separate national account has to exist first.
+// deployed - no separate national account has to exist first.
 app.get('/api/national/chapters', rolesLib.requireNational, async (req, res) => {
   try {
     const chapters = await repo.getAll('chapters');
@@ -6330,7 +6447,7 @@ app.post('/api/national/chapters', rolesLib.requireNational, async (req, res) =>
   const { id, name, institution, location, address } = req.body;
   if (!id || !name) return res.status(400).json({ error: 'A chapter id and name are required' });
   const slug = String(id).toLowerCase().trim().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
-  if (!slug) return res.status(400).json({ error: 'That chapter id is not usable — try letters, numbers and hyphens.' });
+  if (!slug) return res.status(400).json({ error: 'That chapter id is not usable, try letters, numbers and hyphens.' });
   try {
     const existing = await repo.getById('chapters', slug);
     if (existing) return res.status(400).json({ error: 'A chapter with that id already exists' });
@@ -6370,7 +6487,7 @@ app.patch('/api/national/chapters/:id/status', rolesLib.requireNational, async (
   }
 });
 
-// Assign or change a chapter's Coordinator (section 3) — either promote an
+// Assign or change a chapter's Coordinator (section 3) - either promote an
 // existing staff account in that chapter, or create a brand new one. Any
 // current coordinator steps down to Chapter Admin rather than being deleted,
 // so their account and history stay intact.
@@ -6418,7 +6535,7 @@ app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNation
 // identifying) membership/attendance/finance/welfare figures across every
 // chapter, plus a per-chapter breakdown for comparison (section 3, 38).
 // Offices a chapter needs staffed to run day to day (the "Staff chapter
-// offices" row in GOVERNANCE_TIER_REVIEW.md's responsibility matrix) — a
+// offices" row in GOVERNANCE_TIER_REVIEW.md's responsibility matrix) - a
 // deliberately shorter list than every appointable role: executive is a
 // whole elected body, per-person, not one office to fill.
 const READINESS_OFFICE_ROLES = ['finance', 'shepherding', 'publicity', 'welfare'];
@@ -6436,7 +6553,7 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
       const chFinance = financeEntries.filter(f => f.chapterId === c.id);
       const chAttendance = attendance.filter(a => a.chapterId === c.id);
       const recent = [...chAttendance].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
-      // Chapter readiness rollup (Phase C, item 6) — a national oversight
+      // Chapter readiness rollup (Phase C, item 6) - a national oversight
       // signal that never opens the chapter's own records: who's appointed
       // and what's configured, not what anyone in the chapter is doing.
       const chStaff = staffUsers.filter(s => s.chapterId === c.id && s.active);
@@ -6485,7 +6602,7 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
 // ---- the wider church, and the men who began it -------------------------
 // Written here and nowhere else. A chapter coordinator cannot edit the
 // church's founders, in the same way they cannot edit another chapter's
-// executives — but for the opposite reason: not because these are somebody
+// executives - but for the opposite reason: not because these are somebody
 // else's, because they are everybody's.
 app.put('/api/national/church', rolesLib.requireNational, upload.single('logo'), async (req, res) => {
   try {
@@ -6550,7 +6667,7 @@ app.put('/api/national/founders/:id', rolesLib.requireNational, upload.single('i
     const existing = await repo.getById('churchFounders', req.params.id);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     // A photograph left out of the form means "keep the one he has", not
-    // "remove it" — the form is used to fix a spelling far more often than to
+    // "remove it" - the form is used to fix a spelling far more often than to
     // replace a picture.
     let imageFileId = existing.imageFileId || '';
     if (req.file) {
@@ -6626,7 +6743,7 @@ app.get('/api/national/reports/overview', rolesLib.requireNational, async (req, 
   } catch (e) { res.status(500).json({ error: 'Could not generate national report' }); }
 });
 
-// National announcement — reaches every chapter (blank chapterId).
+// National announcement - reaches every chapter (blank chapterId).
 app.post('/api/national/announcements', rolesLib.requireNational, async (req, res) => {
   const { title, body, url, channels } = req.body;
   if (!title || !body) return res.status(400).json({ error: 'Title and message are required' });
@@ -6642,7 +6759,7 @@ app.post('/api/national/announcements', rolesLib.requireNational, async (req, re
   }
 });
 
-// National report snapshots — persist a point-in-time snapshot of the live
+// National report snapshots - persist a point-in-time snapshot of the live
 // national dashboard numbers into a NationalReport document. Useful for
 // tracking growth trends over weeks/months without having to reconstruct
 // from raw collections every time. The snapshot captures per-chapter
@@ -6683,7 +6800,7 @@ app.post('/api/national/reports/snapshot', rolesLib.requireNational, async (req,
   }
 });
 
-// Retrieve historical national report snapshots — most recent first, capped
+// Retrieve historical national report snapshots - most recent first, capped
 // at 100. Use query params ?from=YYYY-MM-DD&to=YYYY-MM-DD to filter by date.
 app.get('/api/national/reports/history', rolesLib.requireNational, async (req, res) => {
   try {
@@ -6704,7 +6821,7 @@ app.get('/api/national/reports/history', rolesLib.requireNational, async (req, r
 // ---------- admin protected routes ----------
 // Leadership accounts. The admin creates one account per leader and assigns the
 // office it belongs to; passwords are hashed and never readable afterwards.
-// Only a National Coordinator may create/edit/hand over these two roles —
+// Only a National Coordinator may create/edit/hand over these two roles -
 // assigning and changing a Chapter Coordinator is explicitly a national
 // power (section 3), and nationalCoordinator accounts obviously can't be
 // self-service either. Everything else (chapterAdmin and below) can be
@@ -6732,7 +6849,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   if (NATIONAL_ONLY_ROLES.includes(role) && !scope.isNational) {
     return res.status(403).json({ error: 'Only the National Coordinator can assign this role.' });
   }
-  // Promotion to the executive body is the Chapter Coordinator's call — a
+  // Promotion to the executive body is the Chapter Coordinator's call - a
   // Chapter Admin runs the chapter's operations, but doesn't elect its
   // officers.
   if (role === 'executive' && !isChapterCoordinatorOrAbove(req)) {
@@ -6747,8 +6864,8 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   const MEMBER_BACKED_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'shepherding', 'publicity', 'welfare', 'executive'];
   // A National Patron belongs to the union rather than to any chapter, so they
   // are the one other account that legitimately has no chapterId. Saying so
-  // takes the explicit NATIONAL_SCOPE token — the same deliberate statement a
-  // national executive card takes — and only a national actor may make it.
+  // takes the explicit NATIONAL_SCOPE token - the same deliberate statement a
+  // national executive card takes - and only a national actor may make it.
   const wantsNationalPatron = role === 'patron'
     && String(req.body.chapterId || '') === rolesLib.NATIONAL_SCOPE;
   if (wantsNationalPatron && !scope.isNational) {
@@ -6761,9 +6878,9 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     ? ''
     : await resolveChapterIdForWrite(req, req.body.chapterId);
   if (role !== 'nationalCoordinator' && !wantsNationalPatron && !chapterId) {
-    return res.status(400).json({ error: 'A chapter is required for this role — this deployment now has more than one, please specify which.' });
+    return res.status(400).json({ error: 'A chapter is required for this role, this deployment now has more than one, please specify which.' });
   }
-  // An executive is a promoted member, vetted by the Coordinator — so the
+  // An executive is a promoted member, vetted by the Coordinator - so the
   // office is always attached to a real member record, never a free-floating
   // login. That link is what makes the one-year term and their own
   // appointment history mean anything.
@@ -6773,7 +6890,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   let promotedMember = null;
   if (MEMBER_BACKED_ROLES.includes(role)) {
     memberId = String(req.body.memberId || '').trim();
-    if (!memberId) return res.status(400).json({ error: 'Choose which member this account belongs to — every chapter leader is a member of the chapter first.' });
+    if (!memberId) return res.status(400).json({ error: 'Choose which member this account belongs to, every chapter leader is a member of the chapter first.' });
     // Scoped to the chapter, so an account here can never be pinned to
     // somebody else's member.
     promotedMember = await repo.getById('members', memberId, chapterId ? { chapterId } : undefined);
@@ -6782,15 +6899,15 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   if (role === 'executive') {
 
     // An executive without a position is an executive nothing can reason
-    // about — no capabilities, no place on the roster. Both ways of creating
+    // about - no capabilities, no place on the roster. Both ways of creating
     // one (here, and approving an application) settle it up front.
     position = positions.positionByKey(req.body.positionKey);
     if (!position) return res.status(400).json({ error: 'Choose the position this executive is being given.' });
     executiveDepartment = String(req.body.department || '').trim();
     if (positions.requiresDepartment(position)) {
-      if (!executiveDepartment) return res.status(400).json({ error: `A ${position.label} runs a department — choose which one.` });
+      if (!executiveDepartment) return res.status(400).json({ error: `A ${position.label} runs a department, choose which one.` });
       if (!await repo.getById('departments', executiveDepartment, { chapterId })) {
-        return res.status(400).json({ error: 'That department is not in this chapter — pick one from the list.' });
+        return res.status(400).json({ error: 'That department is not in this chapter, pick one from the list.' });
       }
     } else if (executiveDepartment) {
       return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
@@ -6810,7 +6927,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
       ...(role === 'executive' ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
     }, 'staff');
     // The public roster card is created here rather than waiting for the new
-    // executive to find the profile form — the same one-action provisioning
+    // executive to find the profile form - the same one-action provisioning
     // the approval route does.
     if (role === 'executive' && position) {
       await repo.create('executives', {
@@ -6829,8 +6946,8 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
         executiveDepartment,
         executiveVerifiedAt: new Date()
       });
-      // The appointment is the milestone, so it is logged here — at the moment
-      // the office is granted — rather than whenever they first open the
+      // The appointment is the milestone, so it is logged here - at the moment
+      // the office is granted - rather than whenever they first open the
       // profile form, which they might never do.
       await logMilestone({
         chapterId, memberId, memberName: user.name,
@@ -6858,7 +6975,7 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
     if (!scope.isNational && (NATIONAL_ONLY_ROLES.includes(existing.role) || (role && NATIONAL_ONLY_ROLES.includes(role)))) {
       return res.status(403).json({ error: 'Only the National Coordinator can change this role.' });
     }
-    // Renewing an executive for the new academic year — re-election keeps the
+    // Renewing an executive for the new academic year - re-election keeps the
     // same account, card and history rather than starting a person over.
     const isExecutive = (role || existing.role) === 'executive';
     const renewTerm = req.body.renewTerm === true && isExecutive;
@@ -6875,7 +6992,7 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
       ...(endTerm ? { termEndsAt: new Date() } : {})
     });
     // Anything that takes authority away, or hands it to a different person,
-    // has to reach the session they are using right now — not wait for them
+    // has to reach the session they are using right now - not wait for them
     // to sign out. A rename is left alone: it changes nothing they can do.
     const authorityChanged = endTerm
       || (active !== undefined && !active)
@@ -6924,7 +7041,7 @@ app.put('/api/admin/members/:id', requireChapterAdmin, async (req, res) => {
     const filter = rolesLib.chapterFilter(req, { required: false });
     const existing = await repo.getById('members', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Member not found' });
-    // Deliberately whitelist editable fields — never allow admin to touch
+    // Deliberately whitelist editable fields - never allow admin to touch
     // passwordHash or email through this route (email changes go through the
     // member's own account flow to avoid silently locking someone out).
     const { name, phone, level, programme, hostel, department, birthdayMonth, birthdayDay } = req.body;
@@ -6988,7 +7105,7 @@ function trendSummary(current, previous) {
   return { current, previous, delta, percent, direction };
 }
 
-// Builds the operational dashboard payload for one chapter — shared by the
+// Builds the operational dashboard payload for one chapter - shared by the
 // plain GET (first paint) and the SSE stream below (every push after that),
 // so there is exactly one place that computes the Rule-of-4 KPIs and the
 // activity feed, not two copies that can drift.
@@ -7071,7 +7188,7 @@ async function buildChapterOverview(chapterId) {
         id: m.id, type: 'contact_message', label: 'Contact message received', title: m.name || m.email || 'Visitor', detail: m.message || '', panel: 'contactMessages', at: m.createdAt
       })),
       ...attendance.map(a => ({
-        id: a.id, type: 'attendance', label: 'Service attendance logged', title: `${a.serviceType || 'service'} — ${a.date || ''}`, detail: `${turnout(a)} present/visitors`, panel: 'overview', at: a.createdAt
+        id: a.id, type: 'attendance', label: 'Service attendance logged', title: `${a.serviceType || 'service'}: ${a.date || ''}`, detail: `${turnout(a)} present/visitors`, panel: 'overview', at: a.createdAt
       })),
       ...financeEntries.filter(e => e.approvalStatus === 'pending').map(e => ({
         id: e.id, type: 'finance_pending', label: 'Finance approval pending', title: `${e.entryType} ${e.category}`, detail: `GHS ${Number(e.amount || 0).toFixed(2)}`, panel: 'reports', at: e.createdAt
@@ -7143,11 +7260,11 @@ app.get('/api/admin/overview', requireChapterAdmin, async (req, res) => {
   }
 });
 
-// Live push for the operational dashboard (Phase 2) — replaces the previous
+// Live push for the operational dashboard (Phase 2) - replaces the previous
 // client-side poll. One SSE connection per open dashboard; the server pushes
 // a freshly rebuilt overview whenever activityBus reports something in this
 // chapter changed (see repo.create() in lib/repo.js), instead of the client
-// re-fetching on a timer. Plain GET above still serves the first paint —
+// re-fetching on a timer. Plain GET above still serves the first paint -
 // this only carries updates after that.
 app.get('/api/admin/overview/stream', requireChapterAdmin, async (req, res) => {
   const chapterId = await resolveChapterIdForWrite(req, req.query.chapterId);
@@ -7168,7 +7285,7 @@ app.get('/api/admin/overview/stream', requireChapterAdmin, async (req, res) => {
       const overview = await buildChapterOverview(chapterId);
       res.write(`event: overview\ndata: ${JSON.stringify(overview)}\n\n`);
     } catch (e) {
-      // A build failure shouldn't take the connection down — the next
+      // A build failure shouldn't take the connection down - the next
       // activity event, or the client's own reconnect, tries again.
     }
   };
@@ -7206,7 +7323,7 @@ app.get('/api/admin/contact-messages', requireChapterAdmin, async (req, res) => 
 // API key is a live secret with its own read rules.
 
 // The key is never returned. A client needs to know whether one is set and
-// roughly which it is, never the value — anyone who can open this screen could
+// roughly which it is, never the value - anyone who can open this screen could
 // otherwise walk away with a credential that spends the chapter's money.
 function maskedSmsConfig(chapter) {
   const sms = (chapter && chapter.sms) || {};
@@ -7250,7 +7367,7 @@ app.put('/api/admin/chapter-sms', requireChapterAdmin, async (req, res) => {
     // mNotify registers sender IDs and rejects anything longer, so this is
     // caught here rather than as an opaque provider error after a failed send.
     if (senderId && senderId.length > 11) {
-      return res.status(400).json({ error: 'A sender ID can be at most 11 characters — that is the provider\'s limit.' });
+      return res.status(400).json({ error: 'A sender ID can be at most 11 characters, that is the provider\'s limit.' });
     }
 
     const existing = (chapter.sms && chapter.sms.apiKey) || '';
@@ -7367,7 +7484,7 @@ app.post('/api/admin/chapter-settings/banner', requireChapterAdmin, upload.singl
   }
 });
 
-// National settings only — a chapter's own About/contact/payment info lives
+// National settings only - a chapter's own About/contact/payment info lives
 // on its Chapter record instead (edited via the National/Chapter Coordinator
 // portals), so this stays a National Coordinator action.
 app.put('/api/admin/settings', rolesLib.requireNational, async (req, res) => {
@@ -7408,7 +7525,7 @@ app.get('/api/admin/events/:id/registrations', requireChapterAdmin, async (req, 
 
 // Every upload says where it is going to be used. This is stored on the file
 // itself, so the media library can show "this one is the Choir header" instead
-// of a wall of anonymous thumbnails — and so a header can be wired up to its
+// of a wall of anonymous thumbnails - and so a header can be wired up to its
 // department in the same step as the upload.
 const IMAGE_PLACEMENTS = {
   'department-header': {
@@ -7530,7 +7647,7 @@ app.post('/api/admin/uploads', requireContentManager, upload.single('file'), asy
 
     const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
     // A gallery placement is really "photo on this page", which the public pages
-    // already read through pageSlug — so keep that field in step with it.
+    // already read through pageSlug - so keep that field in step with it.
     const slug = placement === 'page-gallery' ? targetId : (pageSlug || '');
     const fileId = await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
       category: category || 'photo',
@@ -7616,7 +7733,7 @@ app.delete('/api/admin/files/:id', requireChapterAdmin, async (req, res) => {
     const file = await gridfs.findFile(req.params.id);
     if (!file) return res.status(404).json({ error: 'File not found' });
     // A chapter-scoped admin can only delete files uploaded under their own
-    // chapter — files predating this field (chapterId '') are treated as
+    // chapter - files predating this field (chapterId '') are treated as
     // belonging to nobody in particular and left to a national actor.
     if (!scope.isNational && (file.metadata || {}).chapterId !== scope.chapterId) {
       return res.status(403).json({ error: 'That file belongs to a different chapter.' });
@@ -7634,7 +7751,7 @@ app.delete('/api/admin/files/:id', requireChapterAdmin, async (req, res) => {
 
 app.post('/api/admin/executives', requireChapterAdmin, upload.single('image'), async (req, res) => {
   try {
-    // A national actor may deliberately create a NATIONAL executive — one of
+    // A national actor may deliberately create a NATIONAL executive - one of
     // the union's own officers rather than a chapter's. That is a different
     // statement from "I forgot to pick a chapter", so it has to be said
     // explicitly with the NATIONAL_SCOPE token; everything else still
@@ -7644,7 +7761,7 @@ app.post('/api/admin/executives', requireChapterAdmin, upload.single('image'), a
     const chapterId = wantsNational
       ? rolesLib.NATIONAL_CHAPTER_ID
       : await resolveChapterIdForWrite(req, req.body.chapterId);
-    if (!wantsNational && !chapterId) return res.status(400).json({ error: 'A chapter is required — this deployment now has more than one, please specify which.' });
+    if (!wantsNational && !chapterId) return res.status(400).json({ error: 'A chapter is required, this deployment now has more than one, please specify which.' });
     let imageFileId = '';
     if (req.file) {
       const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
@@ -7652,7 +7769,7 @@ app.post('/api/admin/executives', requireChapterAdmin, upload.single('image'), a
         category: 'executive', contentType: compressed.contentType, title: req.body.name || req.file.originalname, chapterId
       }));
     }
-    // This route creates a roster card on its own — a name and a face on the
+    // This route creates a roster card on its own - a name and a face on the
     // public page, with no portal login behind it. It still records a real
     // position where one is given, so the card ranks correctly and reads the
     // same as every other. Capabilities are not involved: there is no account
@@ -7689,7 +7806,7 @@ app.put('/api/admin/executives/:id', requireChapterAdmin, upload.single('image')
         gridfs.deleteFile(existing.imageFileId).catch(() => {}); // best-effort cleanup of the old photo
       }
     }
-    // Where a real position is held, its label is the position's — not
+    // Where a real position is held, its label is the position's - not
     // whatever is typed here. Otherwise the card could read "President" while
     // the capabilities behind it stayed those of a Music Director. Changing
     // the position itself goes through /api/admin/executives/:id/position.
@@ -7724,7 +7841,7 @@ app.delete('/api/admin/executives/:id', requireChapterAdmin, async (req, res) =>
 
 // When a national actor (the bootstrap admin login, or a real National
 // Coordinator account) writes chapter-scoped content without saying which
-// chapter, and exactly one chapter exists, default to it — keeps today's
+// chapter, and exactly one chapter exists, default to it - keeps today's
 // single-chapter flow exactly as frictionless as before this shipped, while
 // still requiring an explicit choice the moment a second chapter exists. A
 // chapter-scoped admin/coordinator always writes into their own chapter,
@@ -7734,7 +7851,7 @@ async function resolveChapterIdForWrite(req, explicitChapterId) {
   if (!scope.isNational) return scope.chapterId;
   if (explicitChapterId) return explicitChapterId;
   // A national actor who has chosen a chapter in the dashboard's scope
-  // selector has already said which chapter they mean — that choice arrives
+  // selector has already said which chapter they mean - that choice arrives
   // on the request (see lib/roles.js selectedChapterId) and counts here just
   // as an explicit ?chapterId= would.
   if (scope.chapterId) return scope.chapterId;
@@ -7882,21 +7999,21 @@ app.delete('/api/admin/content/:id', requireContentManager, async (req, res) => 
     try {
       const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
       if (!chapterId && !(resource === 'events' && req.body.isNational)) {
-        return res.status(400).json({ error: 'A chapter is required — this deployment now has more than one, please specify which.' });
+        return res.status(400).json({ error: 'A chapter is required, this deployment now has more than one, please specify which.' });
       }
       const item = await repo.create(resource, { ...req.body, chapterId }, prefix);
       res.json({ success: true, item });
-      // Automatic announcement — fires after responding, so it never slows down or breaks the save itself.
+      // Automatic announcement - fires after responding, so it never slows down or breaks the save itself.
       if (resource === 'events') {
         createNotification(
           'New Event: ' + (item.title || 'Untitled'),
-          `${item.title || 'A new event'} — ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
+          `${item.title || 'A new event'}: ${item.date || ''} ${item.time || ''}${item.location ? ' at ' + item.location : ''}`.trim(),
           '/events.html', 'system', item.isNational ? '' : chapterId
         ).catch(() => {});
       } else if (resource === 'sermons') {
         createNotification(
           'New Sermon: ' + (item.title || 'Untitled'),
-          `${item.speaker ? item.speaker + ' — ' : ''}${item.title || 'A new sermon'} is now available.`,
+          `${item.speaker ? item.speaker + ': ' : ''}${item.title || 'A new sermon'} is now available.`,
           '/media.html', 'system', chapterId
         ).catch(() => {});
       }
@@ -7907,7 +8024,7 @@ app.delete('/api/admin/content/:id', requireContentManager, async (req, res) => 
 
   app.put(`/api/admin/${resource}/:id`, requireChapterAdmin, async (req, res) => {
     const filter = rolesLib.chapterFilter(req, { required: false });
-    // chapterId isn't editable through this route — moving a record between
+    // chapterId isn't editable through this route - moving a record between
     // chapters isn't a supported operation, and silently allowing it here
     // would be exactly the kind of body-tampering section 43 rules out.
     const { chapterId, ...body } = req.body;
@@ -7934,7 +8051,7 @@ app.get('*', (req, res, next) => {
 // ---------- upload failures ----------
 // A rejected upload used to fall through to Express's default handler, which
 // answers with an HTML page carrying a full stack trace and absolute server
-// paths — to a client that asked for JSON and will try to parse it as JSON.
+// paths - to a client that asked for JSON and will try to parse it as JSON.
 // So an oversized photo showed the member nothing useful, and told anyone
 // looking exactly where the code lives on disk.
 //
@@ -7975,7 +8092,7 @@ async function checkBirthdaysAndNotify() {
     const members = await models.Member.find({ birthdayMonth: month, birthdayDay: day }).lean();
 
     // One notification per chapter, so Chapter A never sees a shout-out for a
-    // Chapter B member — grouped rather than sent per-member to keep it to a
+    // Chapter B member - grouped rather than sent per-member to keep it to a
     // single friendly push per chapter per day, same tone as before.
     const byChapter = new Map();
     members.forEach((m) => {
@@ -8051,7 +8168,7 @@ async function processOnboardingTasks() {
         const chapterName = chapter ? chapter.name : 'your chapter';
         const payload = task.sequence === 'day0_welcome'
           ? {
-            subject: `Welcome to ${chapterName} — ACONSU`,
+            subject: `Welcome to ${chapterName} | ACONSU`,
             html: `<p>Hi ${escapeHtmlForEmail(member.name || task.memberName || 'there')},</p><p>Welcome to ${escapeHtmlForEmail(chapterName)}. We're glad you're here.</p><p>You are now in our membership workflow as a visitor. A shepherd will follow up shortly.</p>`
           }
           : {
@@ -8115,12 +8232,12 @@ async function checkRetentionAlerts() {
           }, 'ral');
           notifyOfficeByEmail(
             'shepherdingEmail',
-            'Retention Alert — 30+ days inactive',
+            'Retention Alert: 30+ days inactive',
             `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please follow up from the Shepherding portal.</p>`
           );
           notifyOfficeByEmail(
             'welfareEmail',
-            'Welfare Attention Needed — 30+ days inactive',
+            'Welfare Attention Needed: 30+ days inactive',
             `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please coordinate care support if needed.</p>`
           );
         } else if (open.daysAbsent !== daysAbsent) {

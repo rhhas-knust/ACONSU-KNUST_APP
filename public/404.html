@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Page Not Found — ACONSU</title>
+<title>Page Not Found | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -23,15 +25,18 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="has-side-rail">
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 <section class="hero" data-art="calm" data-hero-page="not-found">
   <div class="hero-content">
-    <p class="eyebrow">404</p>
     <h1>We couldn't find that page</h1>
     <p class="lede">Let's get you back home.</p>
     <a href="/index.html" class="btn btn-primary">Back to Home</a>
   </div>
 </section>
+</main>
+
 <footer class="site-footer" id="site-footer"></footer>
 <script src="/js/main.js"></script>
 <script>initLayout('');</script>

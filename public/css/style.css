@@ -1,4 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,500&family=Manrope:wght@400;500;600;700;800&display=swap');
+/* Fonts are served from this app (/fonts). Nothing is requested from Google. */
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/source-sans-3-latin-400-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/source-sans-3-latin-ext-400-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/source-sans-3-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/source-sans-3-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/source-sans-3-latin-700-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Sans 3'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/source-sans-3-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/source-serif-4-latin-600-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 600; font-display: swap; src: url('/fonts/source-serif-4-latin-ext-600-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/source-serif-4-latin-700-normal.woff2') format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Source Serif 4'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/source-serif-4-latin-ext-700-normal.woff2') format('woff2'); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 
 :root {
   --purple-deep: #5B2C82;
@@ -10,8 +20,8 @@
   --flame-red: #A93226;
   --white: #FFFFFF;
   --paper: #FDFBFF;
-  --line: rgba(58, 27, 84, 0.12);
-  --shadow: 0 12px 32px rgba(58, 27, 84, 0.12);
+  --line: rgba(0,0,0,0.12);
+  --shadow: 0 12px 32px rgba(0,0,0,0.12);
 
   /* Semantic tokens: what a colour is FOR, not what it is. A theme swaps
      these; everything else reads them. The palette above stays fixed - the
@@ -22,26 +32,29 @@
   --surface-2: #F6EEFB;     /* inset fills, table headers, quiet blocks */
   --surface-3: #EFE6F6;     /* one step further in */
   --ink: #241530;           /* body text */
-  --ink-soft: #5a4468;      /* secondary text */
-  --ink-faint: #8a7595;     /* hints, meta, timestamps */
-  --heading: #3A1B54;       /* headings */
+  --ink-soft: #4B3F57;      /* secondary text */
+  --ink-faint: #675A73;     /* hints, meta, timestamps */
+  --heading: #1F1727;       /* headings: the body ink, not a purple */
   --brand: #5B2C82;         /* links and accents on a light surface */
   --brand-strong: #3A1B54;  /* the same job, one step heavier */
-  --border: rgba(58, 27, 84, 0.12);
-  --shadow-color: rgba(58, 27, 84, 0.12);
-  --header-bg: rgba(253, 251, 255, 0.85);   /* translucent, so the page shows through the blur */
-  --art-veil-top: rgba(253,251,255,0.70);   /* over a chapter's own hero artwork */
-  --art-veil-bottom: rgba(253,251,255,0.86);
+  --border: rgba(0,0,0,0.12);
+  --shadow-color: rgba(0,0,0,0.12);
+  --header-bg: #FFFFFF;
+  --art-veil: rgba(253,251,255,0.82);   /* over a chapter's own hero artwork */
   /* Status tints - pills, badges, attendance marks. Pale chip with dark ink in
      the light; deep chip with bright ink in the dark. */
-  --ok-bg: #D9F0DE;   --ok-ink: #2E7D4F;
-  --warn-bg: #FCE9C9; --warn-ink: #A9670E;
-  --bad-bg: #FBDFDA;  --bad-ink: #A93226;
+  --ok-bg: #E3F3E8;   --ok-ink: #1B6B3A;
+  --warn-bg: #FFF1D6; --warn-ink: #7A4B00;
+  --bad-bg: #FCE9E7;  --bad-ink: #A12B20;
+  --info-bg: #E7EFFA; --info-ink: #1F4E8C;
+  --action: #5B2C82;  --action-ink: #FFFFFF;  --action-hover: #46206A;   /* the main button */
+  --accent: #8A5200;    /* the gold, dark enough to read as text */
+  --focus: #1D5FD0;
   --mute-bg: #EDE3F2; --mute-ink: #5a4468;
   --row-hover: #FBF7FD;
-  --radius: 14px;
-  --font-display: 'Fraunces', serif;
-  --font-body: 'Manrope', sans-serif;
+  --radius: 8px;
+  --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-body: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --max-w: 1180px;
 }
 
@@ -55,8 +68,8 @@
   --surface-2: #2C2040;
   --surface-3: #372850;
   --ink: #F1E9F7;
-  --ink-soft: #C6B4D6;
-  --ink-faint: #9B87AE;
+  --ink-soft: #CDBFDA;
+  --ink-faint: #B3A2C2;
   --heading: #EBDDF6;
   --brand: #C9A3E8;         /* the deep purple is unreadable on a dark page */
   --brand-strong: #E0C8F5;
@@ -64,12 +77,15 @@
   --shadow-color: rgba(0, 0, 0, 0.5);
   --line: rgba(233, 217, 245, 0.14);
   --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --header-bg: rgba(23, 16, 31, 0.85);
-  --art-veil-top: rgba(23,16,31,0.62);
-  --art-veil-bottom: rgba(23,16,31,0.80);
+  --header-bg: #17101F;
+  --art-veil: rgba(23,16,31,0.78);
   --ok-bg: #16301F;   --ok-ink: #6FD394;
   --warn-bg: #362508; --warn-ink: #E9AE52;
-  --bad-bg: #3A1614;  --bad-ink: #F0897C;
+  --bad-bg: #3A1614;  --bad-ink: #FF9A8F;
+  --info-bg: #14263F; --info-ink: #9CC0F5;
+  --action: #D2B0EE;  --action-ink: #1B0F28;  --action-hover: #E3CBF5;
+  --accent: #F2B65C;
+  --focus: #8DB8FF;
   --mute-bg: #2C2040; --mute-ink: #C6B4D6;
   --row-hover: #2A1E3C;
   /* Tints that were pale washes on white have to become deep washes on dark,
@@ -80,7 +96,6 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
 
 /* A class that sets `display` beats the browser's own rule for [hidden], so a
    hidden element would otherwise still be on screen. */
@@ -103,9 +118,9 @@ h1, h2, h3, h4 {
   font-weight: 600;
 }
 
-h1 { font-size: clamp(2.4rem, 5vw, 3.6rem); }
-h2 { font-size: clamp(1.7rem, 3vw, 2.4rem); }
-h3 { font-size: 1.3rem; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); }
+h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
+h3 { font-size: 1.2rem; }
 
 p { margin: 0 0 1em; }
 a { color: inherit; text-decoration: none; }
@@ -117,47 +132,51 @@ img { max-width: 100%; display: block; }
   padding: 0 24px;
 }
 
-.eyebrow {
-  font-family: var(--font-body);
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-size: 0.75rem;
-  color: var(--flame-gold);
+/* A plain muted label. Used where a value needs a name above it, never as
+   decoration over a heading. */
+.meta, .field-label {
+  font-size: 0.9rem;
+  color: var(--ink-faint);
+  font-weight: 600;
+  margin: 0 0 4px;
 }
+
+/* A line of plain text above a form's submit button: what the data is used for. */
+.form-notice { font-size: 0.95rem; color: var(--ink-soft); margin: 4px 0 14px; }
+
+.consent-line { display: flex; gap: 12px; align-items: flex-start; margin: 4px 0 16px; font-size: 0.95rem; color: var(--ink-soft); }
+.consent-line input { width: 22px; height: 22px; flex: none; margin-top: 2px; accent-color: var(--purple-deep); }
+.consent-line a { color: var(--brand); text-decoration: underline; }
 
 /* ---------- buttons ---------- */
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 13px 26px;
-  border-radius: 999px;
-  font-weight: 700;
-  font-size: 0.95rem;
-  border: 2px solid transparent;
+  min-height: 44px;
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.2;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+  transition: background-color 150ms ease-out, color 150ms ease-out, border-color 150ms ease-out, transform 120ms ease-out;
   font-family: var(--font-body);
 }
-.btn-primary {
-  background: var(--purple-deep);
-  color: var(--white);
-}
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(91,44,130,0.35); }
-.btn-outline {
-  background: transparent;
-  border-color: var(--brand);
-  color: var(--brand);
-}
-.btn-outline:hover { background: var(--purple-deep); color: var(--white); }
-.btn-flame {
-  background: linear-gradient(120deg, var(--flame-gold), var(--flame-red));
-  color: var(--white);
-}
-.btn-flame:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(169,50,38,0.35); }
-.btn-sm { padding: 9px 18px; font-size: 0.85rem; }
+.btn:active { transform: scale(0.97); }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.6; cursor: not-allowed; transform: none; }
+.btn-primary { background: var(--action); color: var(--action-ink); }
+.btn-outline { background: transparent; border-color: var(--brand); color: var(--brand); }
+.btn-flame { background: var(--flame-gold); color: #241530; }
+.btn-sm { min-height: 40px; padding: 8px 14px; font-size: 0.95rem; }
 .btn-block { width: 100%; justify-content: center; }
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover { background: var(--action-hover); }
+  .btn-outline:hover { background: var(--action); color: var(--action-ink); }
+  .btn-flame:hover { background: #F2A93A; }
+}
 
 /* ---------- nav ---------- */
 .site-header {
@@ -165,8 +184,6 @@ img { max-width: 100%; display: block; }
   top: 0;
   z-index: 100;
   background: var(--header-bg);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
 }
 .nav {
@@ -188,7 +205,7 @@ img { max-width: 100%; display: block; }
   text-decoration: none;
   flex-shrink: 0;
 }
-.nav-brand img { height: 40px; width: 40px; border-radius: 50%; object-fit: cover; box-shadow: 0 2px 8px rgba(58,27,84,0.12); }
+.nav-brand img { height: 40px; width: 40px; border-radius: 50%; object-fit: cover; }
 .nav-links {
   display: flex;
   gap: 26px;
@@ -198,8 +215,9 @@ img { max-width: 100%; display: block; }
   font-weight: 600;
   font-size: 0.92rem;
 }
-.nav-links a { padding: 6px 0; border-bottom: 2px solid transparent; transition: border-color 0.2s ease, color 0.2s ease; text-decoration: none; color: var(--ink); }
-.nav-links a:hover, .nav-links a.active { border-color: var(--flame-gold); color: var(--brand); font-weight: 700; }
+.nav-links a { padding: 10px 0; border-bottom: 2px solid transparent; transition: border-color 150ms ease-out, color 150ms ease-out; text-decoration: none; color: var(--ink); }
+.nav-links a.active { border-color: var(--brand); color: var(--brand); font-weight: 700; }
+@media (hover: hover) and (pointer: fine) { .nav-links a:hover { border-color: var(--brand); color: var(--brand); } }
 .nav-cta { display: flex; align-items: center; gap: 12px; }
 
 @media (max-width: 860px) {
@@ -212,15 +230,14 @@ img { max-width: 100%; display: block; }
   .nav-btn-account { padding: 6px 14px !important; font-size: 0.8rem !important; }
 }
 
-/* ---------- hero ---------- */
+/* ---------- page header ---------- */
 .home-header-banner {
   max-width: 1160px;
   margin: 0 auto 18px;
-  border-radius: 22px;
+  border-radius: var(--radius);
   overflow: hidden;
-  border: 1px solid rgba(91,44,130,0.12);
-  box-shadow: 0 16px 36px rgba(58,27,84,0.12);
-  background: var(--lilac-light);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
 }
 .home-header-banner img {
   display: block;
@@ -228,214 +245,52 @@ img { max-width: 100%; display: block; }
   height: clamp(220px, 33vw, 430px);
   object-fit: cover;
 }
+/* Flat and quiet: a title, and a photo behind it only when a chapter has
+   uploaded one for that page. The built-in "scenes" this used to draw out of
+   gradients are gone; a page header does not need to be decorated. */
 .hero {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(120% 140% at 50% -10%, var(--lilac-light) 0%, var(--bg) 55%);
-  padding: 72px 24px 64px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  padding: 36px 24px 28px;
   text-align: center;
-  min-height: 420px;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.hero-flame {
-  position: absolute;
-  bottom: -60px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 480px;
-  height: 480px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(232,151,30,0.18) 0%, rgba(169,50,38,0.08) 45%, transparent 70%);
-  filter: blur(6px);
-  animation: flicker 5s ease-in-out infinite;
-  pointer-events: none;
-}
-@keyframes flicker {
-  0%, 100% { opacity: 0.7; transform: translateX(-50%) scale(1); }
-  50% { opacity: 1; transform: translateX(-50%) scale(1.06); }
-}
-/* ---------- hero art ----------
-   Every page's header used to be the same flat lilac wash, which read as a
-   blank wall rather than as a page. Each page now wears a scene suited to what
-   it is for, and each scene is drawn in CSS — layered gradients and a motif —
-   so a page on mobile data costs nothing extra to look like something.
 
-   A chapter can upload its own artwork for any page on top of this (see
-   .hero-art below). The scene is what shows until they do, and what shows if
-   the image is slow, so the page is never bare. */
-
-.hero[data-art] { background: linear-gradient(180deg, var(--hero-wash-a, #F4EBFB) 0%, var(--bg) 64%); }
-.hero[data-art]::before {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-}
-
-/* Sunrise — home. Gold breaking along the bottom, purple weight at the top. */
-.hero[data-art="dawn"] {
-  --hero-wash-a: #E4D0F2; --hero-wash-b: #F7F0FC;
-  background:
-    radial-gradient(78% 52% at 50% 108%, rgba(232,151,30,0.58) 0%, rgba(232,151,30,0) 60%),
-    radial-gradient(60% 44% at 8% -8%, rgba(91,44,130,0.42) 0%, rgba(91,44,130,0) 68%),
-    radial-gradient(54% 40% at 94% 0%, rgba(169,50,38,0.26) 0%, rgba(169,50,38,0) 66%),
-    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 54%, var(--bg) 100%);
-}
-.hero[data-art="dawn"]::before {
-  background: conic-gradient(from 200deg at 50% 118%,
-    rgba(255,255,255,0.30) 0deg, transparent 15deg, rgba(255,255,255,0.20) 30deg,
-    transparent 46deg, rgba(255,255,255,0.26) 62deg, transparent 80deg);
-}
-
-/* Roots — about. Bands of deepening purple, like strata. */
-.hero[data-art="roots"] {
-  --hero-wash-a: #E3D2F1; --hero-wash-b: #F6EFFC;
-  background:
-    linear-gradient(180deg, rgba(91,44,130,0.34) 0%, rgba(91,44,130,0.10) 38%, transparent 66%),
-    radial-gradient(64% 46% at 86% 98%, rgba(232,151,30,0.34) 0%, transparent 62%),
-    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 52%, var(--bg) 100%);
-}
-.hero[data-art="roots"]::before {
-  background: repeating-linear-gradient(94deg,
-    rgba(255,255,255,0.34) 0 2px, transparent 2px 58px);
-}
-
-/* Scripture — the Bible pages. Ruled light, like a page under the words. */
-.hero[data-art="word"] {
-  --hero-wash-a: #DFCBEF; --hero-wash-b: #F5EDFB;
-  background:
-    radial-gradient(72% 52% at 50% -14%, rgba(91,44,130,0.46) 0%, rgba(91,44,130,0) 62%),
-    radial-gradient(52% 38% at 90% 104%, rgba(232,151,30,0.36) 0%, transparent 60%),
-    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 50%, var(--bg) 100%);
-}
-.hero[data-art="word"]::before {
-  background: repeating-linear-gradient(180deg,
-    rgba(91,44,130,0.13) 0 1px, transparent 1px 30px);
-  mask-image: radial-gradient(70% 70% at 50% 50%, #000 30%, transparent 78%);
-  -webkit-mask-image: radial-gradient(70% 70% at 50% 50%, #000 30%, transparent 78%);
-}
-
-/* Gathering — people: events, departments, groups, alumni, chat. */
-.hero[data-art="gather"] {
-  --hero-wash-a: #E7D7F4; --hero-wash-b: #F6EFFC;
-  background:
-    radial-gradient(52% 40% at 14% 4%, rgba(232,151,30,0.40) 0%, transparent 62%),
-    radial-gradient(56% 42% at 88% 92%, rgba(91,44,130,0.40) 0%, transparent 62%),
-    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 54%, var(--bg) 100%);
-}
-.hero[data-art="gather"]::before {
-  background-image: radial-gradient(rgba(91,44,130,0.22) 1.8px, transparent 1.9px);
-  background-size: 28px 28px;
-  mask-image: radial-gradient(76% 70% at 50% 46%, #000 20%, transparent 76%);
-  -webkit-mask-image: radial-gradient(76% 70% at 50% 46%, #000 20%, transparent 76%);
-}
-
-/* Flame — prayer and welfare. An ember low and centred. */
-.hero[data-art="flame"] {
-  --hero-wash-a: #E8D6F0; --hero-wash-b: #F7EFFB;
-  background:
-    radial-gradient(56% 42% at 50% 106%, rgba(169,50,38,0.44) 0%, rgba(169,50,38,0) 58%),
-    radial-gradient(38% 30% at 50% 100%, rgba(232,151,30,0.60) 0%, rgba(232,151,30,0) 62%),
-    radial-gradient(56% 42% at 4% 0%, rgba(91,44,130,0.34) 0%, transparent 66%),
-    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 52%, var(--bg) 100%);
-}
-.hero[data-art="flame"]::before {
-  background: conic-gradient(from 210deg at 50% 112%,
-    rgba(255,255,255,0.26) 0deg, transparent 22deg, rgba(255,255,255,0.34) 42deg,
-    transparent 64deg, rgba(255,255,255,0.22) 84deg);
-}
-
-/* Harvest — giving. Gold-led, with sheaf strokes. */
-.hero[data-art="harvest"] {
-  --hero-wash-a: #F2E0C6; --hero-wash-b: #FBF4E9;
-  background:
-    radial-gradient(70% 52% at 50% 102%, rgba(232,151,30,0.56) 0%, rgba(232,151,30,0) 60%),
-    radial-gradient(48% 36% at 10% 2%, rgba(91,44,130,0.34) 0%, transparent 66%),
-    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 52%, var(--bg) 100%);
-}
-.hero[data-art="harvest"]::before {
-  background: repeating-linear-gradient(68deg,
-    rgba(255,255,255,0.40) 0 2px, transparent 2px 20px);
-  mask-image: linear-gradient(180deg, transparent 38%, #000 100%);
-  -webkit-mask-image: linear-gradient(180deg, transparent 38%, #000 100%);
-}
-
-/* Voice — sermons, media, rooms. Bands spreading like sound. */
-.hero[data-art="voice"] {
-  --hero-wash-a: #E2D2F3; --hero-wash-b: #F5EEFC;
-  background:
-    radial-gradient(58% 44% at 50% 102%, rgba(91,44,130,0.44) 0%, transparent 62%),
-    radial-gradient(44% 34% at 90% 0%, rgba(232,151,30,0.34) 0%, transparent 66%),
-    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 52%, var(--bg) 100%);
-}
-.hero[data-art="voice"]::before {
-  background: repeating-radial-gradient(60% 46% at 50% 104%,
-    rgba(255,255,255,0.40) 0 1.5px, transparent 1.5px 26px);
-}
-
-/* Calm — reading and utility pages. Present, but quiet. */
-.hero[data-art="calm"] {
-  --hero-wash-a: #E9DCF6; --hero-wash-b: #F6EFFC;
-  background:
-    radial-gradient(54% 40% at 86% 2%, rgba(91,44,130,0.30) 0%, transparent 66%),
-    radial-gradient(48% 36% at 10% 98%, rgba(232,151,30,0.26) 0%, transparent 66%),
-    linear-gradient(180deg, var(--hero-wash-a) 0%, var(--hero-wash-b) 54%, var(--bg) 100%);
-}
-
-/* The chapter's own artwork, laid over the scene. It fades in only once the
-   image has actually loaded, so a slow or missing file leaves the scene in
-   place rather than flashing a blank rectangle. */
-/* Dark: each scene keeps its own coloured washes - the gold breaking along the
-   bottom of "dawn", the strata of "roots" - and only the pale base underneath
-   them goes deep. One pair of values per scene, because the hue is what makes
-   each one that scene. */
-:root[data-theme="dark"] .hero[data-art] { --hero-wash-a: #2A1C3D; --hero-wash-b: #1D1429; }
-:root[data-theme="dark"] .hero[data-art="dawn"] { --hero-wash-a: #301344; --hero-wash-b: #1C082B; }
-:root[data-theme="dark"] .hero[data-art="roots"] { --hero-wash-a: #2E1542; --hero-wash-b: #1B082B; }
-:root[data-theme="dark"] .hero[data-art="word"] { --hero-wash-a: #2E1442; --hero-wash-b: #1C092A; }
-:root[data-theme="dark"] .hero[data-art="gather"] { --hero-wash-a: #2E1344; --hero-wash-b: #1B082B; }
-:root[data-theme="dark"] .hero[data-art="flame"] { --hero-wash-a: #33173F; --hero-wash-b: #1F0A29; }
-:root[data-theme="dark"] .hero[data-art="harvest"] { --hero-wash-a: #473010; --hero-wash-b: #2B1D08; }
-:root[data-theme="dark"] .hero[data-art="voice"] { --hero-wash-a: #2B1244; --hero-wash-b: #19082B; }
-:root[data-theme="dark"] .hero[data-art="calm"] { --hero-wash-a: #2B1245; --hero-wash-b: #1B082B; }
-
+/* The chapter's own artwork, laid behind the title. It fades in only once the
+   image has loaded, so a slow or missing file leaves the plain header in place.
+   A flat veil keeps the words readable over whatever was photographed; which
+   way it goes is the chapter's choice when they upload. */
 .hero-art {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background-size: cover; background-position: center;
-  opacity: 0; transition: opacity 0.45s ease;
+  opacity: 0; transition: opacity 200ms ease-out;
 }
 .hero-art.is-loaded { opacity: 1; }
-/* Artwork is artwork; the words on top still have to be readable over it.
-   Which way the veil goes is the chapter's call when they upload — a light
-   picture keeps the dark heading, a dark one gets light text instead. */
-.hero-art::after {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, var(--art-veil-top) 0%, var(--art-veil-bottom) 100%);
-}
-.hero[data-art-tone="dark"] .hero-art::after {
-  background: linear-gradient(180deg, rgba(36,21,48,0.58) 0%, rgba(36,21,48,0.76) 100%);
-}
+.hero-art::after { content: ''; position: absolute; inset: 0; background: var(--art-veil); }
+.hero[data-art-tone="dark"] .hero-art::after { background: rgba(36,21,48,0.72); }
 .hero[data-art-tone="dark"] .hero-content h1,
 .hero[data-art-tone="dark"] .hero-content h2 { color: #FFFFFF; }
 .hero[data-art-tone="dark"] .hero-content .lede,
-.hero[data-art-tone="dark"] .hero-content p { color: rgba(255,255,255,0.88); }
-.hero[data-art-tone="dark"] .hero-content .eyebrow { color: var(--flame-gold); }
+.hero[data-art-tone="dark"] .hero-content p { color: rgba(255,255,255,0.92); }
 .hero-content { z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .hero-art { transition: none; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .hero-art { transition: none; }
-}
+#homeHero { padding: 56px 24px 44px; }
 
-/* A page whose job is reading should start reading. The full hero is most of
-   a phone screen of nothing on the way to the first verse. */
-.hero.hero-compact { min-height: 0; padding: 46px 24px 30px; }
-.hero.hero-compact h1 { font-size: clamp(1.9rem, 5vw, 2.6rem); }
+/* A page whose job is reading should start reading. */
+.hero.hero-compact { min-height: 0; padding: 32px 24px 24px; }
+.hero.hero-compact h1 { font-size: clamp(1.8rem, 5vw, 2.4rem); }
 .hero.hero-compact .lede { font-size: 1rem; margin-bottom: 0; }
-.hero.hero-compact .hero-flame { width: 320px; height: 320px; bottom: -170px; }
 
 .hero-content { position: relative; max-width: 760px; margin: 0 auto; }
 .hero h1 { margin-bottom: 0.35em; }
-.hero .lede { font-size: 1.15rem; color: var(--ink-soft); max-width: 560px; margin: 0 auto 2em; }
-.hero-actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 2.5em; }
+.hero .lede { font-size: 1.1rem; color: var(--ink-soft); max-width: 560px; margin: 0 auto 1.5em; }
+.hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 1.5em; }
 
 /* countdown */
 .countdown {
@@ -468,19 +323,19 @@ section { padding: 72px 24px; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 28px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 150ms ease-out;
 }
-.card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+@media (hover: hover) and (pointer: fine) { a.card:hover, .card.is-link:hover { border-color: var(--brand); } }
 .card-icon {
   width: 46px; height: 46px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--flame-gold), var(--flame-red));
+  background: var(--surface-3);
   margin-bottom: 16px;
 }
 .dept-card { display: flex; flex-direction: column; gap: 10px; }
 .dept-meta { display: flex; gap: 10px; font-size: 0.82rem; color: var(--brand); font-weight: 700; }
 
-/* Department header photos — the thumbnail on a card, and the full banner on
-   the department's own page. Both fall back to the flame gradient when no
+/* Department header photos - the thumbnail on a card, and the full banner on
+   the department's own page. Both fall back to a plain tint when no
    photo has been set yet, so a department never looks broken. */
 .dept-thumb {
   aspect-ratio: 16 / 9;
@@ -489,12 +344,10 @@ section { padding: 72px 24px; }
   background: var(--lilac-light);
   margin-bottom: 4px;
 }
-.dept-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.35s ease; }
-.dept-card:hover .dept-thumb img { transform: scale(1.05); }
+.dept-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .dept-thumb-fallback {
   display: block; width: 100%; height: 100%;
-  background: linear-gradient(135deg, var(--purple-deep), var(--flame-gold));
-  opacity: 0.85;
+  background: var(--surface-3);
 }
 
 .dept-banner { position: relative; width: 100%; height: clamp(200px, 34vw, 380px); overflow: hidden; }
@@ -503,7 +356,7 @@ section { padding: 72px 24px; }
   position: absolute; inset: 0;
   display: flex; flex-direction: column; justify-content: flex-end;
   padding: 28px clamp(20px, 6vw, 64px);
-  background: linear-gradient(to top, rgba(36, 21, 48, 0.88) 0%, rgba(36, 21, 48, 0.35) 45%, rgba(36, 21, 48, 0.05) 100%);
+  background: rgba(36, 21, 48, 0.62);
   color: #fff;
 }
 .dept-banner-overlay h1 { color: #fff; margin: 0 0 6px; font-size: clamp(1.7rem, 5vw, 3rem); }
@@ -525,22 +378,22 @@ section { padding: 72px 24px; }
   padding: 56px 24px 28px;
 }
 .footer-grid { display: grid; gap: 32px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 32px; }
-.footer-grid h4 { color: var(--white); font-size: 1rem; margin-bottom: 14px; }
-.footer-grid a { display: block; margin-bottom: 8px; color: #C9B3D8; font-size: 0.9rem; }
-.footer-grid a:hover { color: var(--flame-gold); }
-.footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 20px; font-size: 0.82rem; color: #B79CC7; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.footer-grid .footer-title { color: var(--white); font-family: var(--font-display); font-weight: 600; font-size: 1.05rem; margin: 0 0 10px; }
+.footer-grid a { display: block; padding: 6px 0; color: #E2D3EE; font-size: 0.95rem; }
+@media (hover: hover) and (pointer: fine) { .footer-grid a:hover { color: #fff; text-decoration: underline; } }
+.footer-bottom { border-top: 1px solid rgba(255,255,255,0.12); padding-top: 20px; font-size: 0.82rem; color: #CDB9DA; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
 .social-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .social-icon-link {
-  width: 38px; height: 38px; border-radius: 50%;
+  width: 44px; height: 44px; border-radius: 50%;
   background: rgba(255,255,255,0.12); display: inline-flex; align-items: center; justify-content: center;
-  color: #fff; text-decoration: none; transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  color: #fff; text-decoration: none; transition: background-color 150ms ease-out, color 150ms ease-out, transform 120ms ease-out;
 }
 .social-icon-link svg { width: 19px; height: 19px; }
-.social-icon-link:hover { transform: translateY(-3px) scale(1.06); box-shadow: 0 6px 16px rgba(0,0,0,0.25); color: #fff; }
+.social-icon-link:active { transform: scale(0.95); }
 
 .social-icon-link.social-whatsapp:hover { background: #25D366 !important; }
 .social-icon-link.social-youtube:hover { background: #FF0000 !important; }
-.social-icon-link.social-instagram:hover { background: linear-gradient(45deg, #f09433, #dc2743, #bc1888) !important; }
+.social-icon-link.social-instagram:hover { background: #C13584 !important; }
 .social-icon-link.social-facebook:hover { background: #1877F2 !important; }
 .social-icon-link.social-tiktok:hover { background: #000000 !important; color: #25F4EE !important; }
 .social-icon-link.social-twitter:hover { background: #000000 !important; }
@@ -586,15 +439,13 @@ section { padding: 72px 24px; }
 }
 .social-row .social-icon-link:not(.on-light):hover {
   background: rgba(255, 255, 255, 0.28);
-  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-  transform: translateY(-4px) scale(1.1);
 }
 .social-row .social-icon-link svg { width: 20px; height: 20px; }
 
 /* Override brand colors on hover for brand-colored experience */
 .social-row .social-icon-link.social-whatsapp:hover { background: #25D366 !important; }
 .social-row .social-icon-link.social-youtube:hover { background: #FF0000 !important; }
-.social-row .social-icon-link.social-instagram:hover { background: linear-gradient(45deg, #f09433, #dc2743, #bc1888) !important; }
+.social-row .social-icon-link.social-instagram:hover { background: #C13584 !important; }
 .social-row .social-icon-link.social-facebook:hover { background: #1877F2 !important; }
 .social-row .social-icon-link.social-tiktok:hover { background: #000000 !important; color: #25F4EE !important; }
 .social-row .social-icon-link.social-twitter:hover { background: #000000 !important; }
@@ -639,7 +490,7 @@ section { padding: 72px 24px; }
   font-size: 1.05rem;
 }
 .badge {
-  display: inline-block; padding: 4px 12px; border-radius: 999px;
+  display: inline-block; padding: 4px 12px; border-radius: 6px;
   background: var(--lilac-mid); color: var(--brand-strong); font-size: 0.75rem; font-weight: 700;
 }
 .divider-dove { text-align: center; margin: 8px 0 32px; opacity: 0.5; font-size: 1.4rem; }
@@ -664,8 +515,7 @@ section { padding: 72px 24px; }
   cursor: pointer;
   border: 1px solid var(--line);
 }
-.gallery-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; }
-.gallery-item:hover img { transform: scale(1.05); }
+.gallery-item img { width: 100%; height: 100%; object-fit: cover; }
 
 .lightbox-backdrop {
   display: none; position: fixed; inset: 0; background: rgba(36,21,48,0.88);
@@ -679,9 +529,9 @@ section { padding: 72px 24px; }
 .book-card { display: flex; flex-direction: column; gap: 10px; }
 .book-icon {
   width: 100%; aspect-ratio: 3/4; border-radius: 10px;
-  background: linear-gradient(135deg, var(--purple-deep), var(--purple-rich));
+  background: var(--purple-deep);
   display: flex; align-items: center; justify-content: center;
-  color: var(--lilac-light); font-family: var(--font-display); font-size: 2rem;
+  color: #fff; font-family: var(--font-display); font-size: 2rem;
 }
 .book-meta { font-size: 0.78rem; color: var(--ink-faint); }
 
@@ -694,7 +544,7 @@ section { padding: 72px 24px; }
 .pub-modal { background: var(--surface); border-radius: 14px; padding: 28px; max-width: 460px; width: 100%; }
 
 /* ---------- event registration badges ---------- */
-.spots-badge { font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.spots-badge { font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 6px; }
 .spots-badge.plenty { background: var(--ok-bg); color: var(--ok-ink); }
 .spots-badge.low { background: var(--warn-bg); color: var(--warn-ink); }
 .spots-badge.full { background: var(--bad-bg); color: var(--bad-ink); }
@@ -714,7 +564,7 @@ section { padding: 72px 24px; }
 
 /* ---------- the wider church, and its founding fathers ---------- */
 /* The church's own mark, not a chapter's. A logo is drawn with its own space
-   around it and is often not rectangular, so it is fitted whole — `cover`,
+   around it and is often not rectangular, so it is fitted whole: `cover`,
    right for a photograph, would cut the edge off a wordmark and crop a round
    seal square. */
 .church-mark { text-align: center; max-width: 62ch; margin: 0 auto 34px; }
@@ -727,7 +577,7 @@ section { padding: 72px 24px; }
    site's founders use them: standing portraits are tall, so four of them in
    one column is an enormous scroll on a phone, and at the generic width four
    men break three-then-one on a laptop. Defined after .grid, which is what
-   makes it win — both are one class deep. */
+   makes it win. Both are one class deep. */
 .founder-grid {
   align-items: start;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -754,7 +604,7 @@ section { padding: 72px 24px; }
   position: absolute;
   border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 16px 40px rgba(58,27,84,0.22);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.22);
   border: 4px solid var(--white);
   animation: floatY 6s ease-in-out infinite;
   pointer-events: none;
@@ -762,46 +612,46 @@ section { padding: 72px 24px; }
   animation-fill-mode: forwards;
 }
 .float-deco img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.float-deco.fade-in { animation: floatIn 0.8s ease forwards, floatY 6s ease-in-out 0.8s infinite; }
-@keyframes floatIn {
-  from { opacity: 0; transform: translateY(24px) scale(0.92); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@keyframes floatY {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-16px); }
-}
-@media (max-width: 900px) {
-  .float-deco { display: none; } /* keep mobile hero clean and fast */
-}
-
-/* ---------- scroll reveal ---------- */
-.reveal-pre { opacity: 0; transform: translateY(18px); transition: opacity 0.5s ease, transform 0.5s ease; }
-.reveal-in { opacity: 1; transform: translateY(0); }
+/* Floating pictures and scroll reveals are gone: content is there when the
+   page is, and nothing moves unless the reader did something. */
+.float-deco { display: none !important; }
+.reveal-pre, .reveal-in { opacity: 1; transform: none; }
 
 /* ---------- skeleton loaders ---------- */
-.skeleton { background: linear-gradient(90deg, var(--lilac-light) 25%, var(--lilac-mid) 50%, var(--lilac-light) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: var(--radius); }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton { background: var(--surface-3); animation: skeleton-pulse 1.3s ease-in-out infinite alternate; border-radius: var(--radius); }
+@keyframes skeleton-pulse { from { opacity: 1; } to { opacity: 0.55; } }
+.skeleton-line { height: 14px; margin: 0 0 10px; }
+.skeleton-line.short { width: 40%; }
+.skeleton-row { height: 56px; margin-bottom: 8px; }
+.skeleton-stack { padding: 4px 0; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
 .skeleton-card { height: 140px; }
 .skeleton-grid { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* ---------- skip link ---------- */
+.skip-link { position: fixed; left: 12px; top: -64px; z-index: 1000; background: var(--purple-deep); color: #fff; padding: 12px 18px; border-radius: 6px; font-weight: 600; transition: top 120ms ease-out; }
+.skip-link:focus { top: 12px; }
+main { display: block; }
+main:focus { outline: none; }
+
 /* ---------- focus visibility (accessibility) ---------- */
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
-  outline: 3px solid var(--flame-gold);
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
 /* ---------- smoother button micro-interaction ---------- */
-.btn { transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, filter 0.18s ease; }
-.btn:active { transform: translateY(0) scale(0.97); }
 
 /* ---------- birthday banner ---------- */
 .birthday-banner {
-  background: linear-gradient(120deg, var(--flame-gold), var(--flame-red));
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-ink);
   border-radius: var(--radius);
   padding: 20px 24px;
   margin-bottom: 32px;
-  color: #fff;
+  color: var(--warn-ink);
   display: flex;
   align-items: center;
   gap: 16px;
@@ -809,7 +659,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 .birthday-banner .bday-emoji { font-size: 2rem; }
 .birthday-avatars { display: flex; gap: -8px; }
-.bday-pill { background: rgba(255,255,255,0.18); border-radius: 999px; padding: 6px 14px 6px 6px; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.88rem; }
+.bday-pill { background: rgba(255,255,255,0.18); border-radius: 6px; padding: 6px 14px 6px 6px; display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.88rem; }
 .bday-pill .avatar { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.3); overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:0.8rem; }
 .bday-pill .avatar img { width:100%; height:100%; object-fit:cover; }
 
@@ -822,10 +672,9 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .reader-bar {
   position: sticky; top: 0; z-index: 320;
   background: rgba(255,255,255,0.93);
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line); border-radius: var(--radius);
   padding: 12px; margin-bottom: 20px;
-  box-shadow: 0 6px 20px rgba(58,27,84,0.07);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.07);
   display: grid; gap: 10px;
 }
 .reader-pickers { display:grid; gap:8px; grid-template-columns: 1.5fr 1fr; }
@@ -854,7 +703,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
 .reader {
   --reader-bg:#fff; --reader-ink:#241530; --reader-soft:rgba(36,21,48,0.58);
-  --reader-rule:rgba(58,27,84,0.12); --reader-accent:var(--flame-gold);
+  --reader-rule:rgba(0,0,0,0.12); --reader-accent:var(--flame-gold);
   --reader-size:1.08rem;
   background:var(--reader-bg); color:var(--reader-ink);
   border:1px solid var(--reader-rule); border-radius:var(--radius);
@@ -919,17 +768,15 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 /* ---------- bottom tab bar (mobile app nav) ---------- */
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 350;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--surface);
   border-top: 1px solid var(--line);
   display: flex; justify-content: space-around; align-items: center;
   padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0px));
-  box-shadow: 0 -8px 24px rgba(58,27,84,0.08);
+  box-shadow: 0 -8px 24px rgba(0,0,0,0.08);
 }
 .bottom-nav-item {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
-  color: #9b87a8; background: none; border: none; text-decoration: none;
+  color: var(--ink-soft); background: none; border: none; text-decoration: none;
   font-family: 'Manrope', sans-serif; font-size: 0.68rem; font-weight: 700;
   padding: 4px 6px; flex: 1; cursor: pointer; position: relative;
   transition: color 0.15s ease, transform 0.1s ease;
@@ -939,7 +786,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .bottom-nav-item.active svg { transform: translateY(-1px); }
 .bottom-nav-item.active::after {
   content: ''; position: absolute; bottom: -3px; width: 14px; height: 3px;
-  border-radius: 999px; background: var(--flame-gold);
+  border-radius: 6px; background: var(--flame-gold);
 }
 
 /* keep bottom nav mobile/tablet-only; desktop keeps the top nav experience */
@@ -949,7 +796,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 /* ---------- in-app notifications ---------- */
 .notif-count {
   position: absolute; top: -6px; right: -8px; min-width: 17px; height: 17px;
-  padding: 0 4px; border-radius: 999px; background: var(--flame-red); color: #fff;
+  padding: 0 4px; border-radius: 6px; background: var(--flame-red); color: #fff;
   font-family: var(--font-body); font-size: 0.66rem; font-weight: 800;
   display: grid; place-items: center; border: 2px solid var(--paper);
 }
@@ -958,10 +805,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   top: calc(env(safe-area-inset-top, 0px) + 60px); right: 12px; left: 12px;
   max-width: 380px; margin-left: auto;
   background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
-  box-shadow: 0 20px 48px rgba(36,21,48,0.24);
-  overflow: hidden; animation: notifIn 160ms ease-out;
+  box-shadow: 0 8px 24px rgba(36,21,48,0.18);
+  overflow: hidden; animation: notifIn 150ms ease-out;
 }
-@keyframes notifIn { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes notifIn { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .notif-panel { animation: none; } }
 .notif-panel-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 13px 16px; border-bottom: 1px solid var(--line);
@@ -978,7 +826,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .notif-row:hover { background: var(--lilac-light); }
 /* Unread is marked on the left edge rather than by colouring the text, so a
    read and an unread notice are still the same thing to read. */
-.notif-row.unread { box-shadow: inset 3px 0 0 var(--flame-gold); background: rgba(232,151,30,0.05); }
+.notif-row.unread { background: var(--info-bg); }
 .notif-row-title { font-weight: 700; font-size: 0.9rem; }
 .notif-row-body { font-size: 0.85rem; color: var(--ink-soft); }
 .notif-row-when { font-size: 0.72rem; color: var(--ink-faint); }
@@ -986,25 +834,24 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
 /* ---------- the home dashboard row ----------
    Three cards that used to be three full-width sections stacked down the page.
-   Same content, same ids, same renderers — only where they sit changed. */
+   Same content, same ids, same renderers. Only where they sit changed. */
 .home-dash { padding: 18px 0 8px; }
 .dash-grid { display: grid; gap: 16px; }
 .dash-card {
   background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
-  padding: 20px; box-shadow: 0 8px 24px rgba(58,27,84,0.06);
+  padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.06);
   display: flex; flex-direction: column; min-width: 0;
 }
 .dash-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-.dash-head h3 { margin: 0; font-size: 1.05rem; }
+.dash-head h2, .dash-head h3 { margin: 0; font-size: 1.15rem; }
 .dash-head a { font-size: 0.8rem; font-weight: 700; color: var(--brand); }
 .dash-head a:hover { text-decoration: underline; }
 
-/* The verse keeps its own colour — it is the one card that is a thing to read
+/* The verse keeps its own colour - it is the one card that is a thing to read
    rather than a list to scan. */
 .dash-card.dash-verse {
-  background: linear-gradient(135deg, var(--purple-deep), var(--purple-rich) 60%, var(--flame-red));
+  background: var(--purple-rich);
   color: #fff; border-color: transparent;
-  box-shadow: 0 16px 36px rgba(58,27,84,0.25);
 }
 
 /* The event rows are the same markup the full events page renders, so they are
@@ -1043,7 +890,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
    Three tiers, not two. On a phone: top bar plus bottom tabs. On a tablet: the
    top bar carries the links, as it always has. From 1024px there is room for a
    rail, so the links move into it and the top bar keeps only who you are and
-   what is waiting for you — the shape a person expects of an app on a laptop
+   what is waiting for you. The shape a person expects of an app on a laptop
    rather than of a website. */
 .side-nav { display: none; }
 
@@ -1102,12 +949,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
      with a blank strip down the left. Tie the gap to the thing that fills it. */
   body.has-side-rail { padding-left: 248px; }
   /* With a rail carrying the navigation, the hero no longer has to introduce
-     the app — so it stops taking the whole screen before the dashboard. */
+     the app. So it stops taking the whole screen before the dashboard. */
   .hero { min-height: 340px; padding: 52px 24px 44px; }
   #site-header {
     position: sticky; top: 0; z-index: 100;
     background: var(--header-bg);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     border-bottom: 1px solid var(--line);
   }
   /* The rail carries the links now; repeating them across the top would be two
@@ -1124,13 +970,12 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
    leftover menu. */
 .more-hero {
   padding: 28px 0 16px;
-  background: linear-gradient(160deg, var(--lilac-light) 0%, var(--paper) 100%);
+  background: var(--surface-2);
 }
 .more-account-card {
-  background: linear-gradient(135deg, var(--purple-rich), var(--purple-deep));
-  border-radius: 18px;
+  background: var(--purple-rich);
+  border-radius: var(--radius);
   padding: 4px;
-  box-shadow: 0 16px 36px rgba(58, 27, 84, 0.20);
 }
 .more-account-inner {
   display: flex; align-items: center; gap: 14px;
@@ -1153,12 +998,13 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .more-tile-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .more-tile {
   display: flex; align-items: center; gap: 14px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
   padding: 16px 18px; width: 100%; cursor: pointer;
   text-decoration: none; color: var(--ink);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: border-color 150ms ease-out, transform 120ms ease-out;
 }
-.more-tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--lilac-mid); }
+.more-tile:active { transform: scale(0.98); }
+@media (hover: hover) and (pointer: fine) { .more-tile:hover { border-color: var(--brand); } }
 .more-tile-icon {
   width: 44px; height: 44px; border-radius: 12px; flex: none;
   background: var(--lilac-light); color: var(--brand);
@@ -1170,7 +1016,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .more-tile-text small { display: block; color: var(--ink-soft); font-size: 0.82rem; margin-top: 2px; }
 .more-tile .more-chevron { color: var(--lilac-mid); }
 .more-tile-badge {
-  background: var(--flame-red); color: #fff; border-radius: 999px;
+  background: var(--flame-red); color: #fff; border-radius: 6px;
   font-size: 0.68rem; padding: 1px 7px; font-weight: 800;
 }
 
@@ -1190,32 +1036,32 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
   padding: 18px 8px; display: flex; flex-direction: column; align-items: center; gap: 8px;
   text-decoration: none; color: var(--ink); text-align: center; position: relative;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 150ms ease-out, transform 120ms ease-out;
 }
-.tile:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+.tile:active { transform: scale(0.97); }
+@media (hover: hover) and (pointer: fine) { .tile:hover { border-color: var(--brand); } }
 .tile-icon {
   width: 50px; height: 50px; border-radius: 14px;
-  background: linear-gradient(135deg, var(--purple-deep), var(--purple-rich));
+  background: var(--purple-deep);
   display: flex; align-items: center; justify-content: center; color: #fff;
 }
 .tile-icon svg { width: 24px; height: 24px; }
 .tile .tile-label { font-size: 0.76rem; font-weight: 700; line-height: 1.2; }
 .tile-badge {
   position: absolute; top: 8px; right: 12px; background: var(--flame-red); color: #fff;
-  font-size: 0.62rem; font-weight: 800; border-radius: 999px; padding: 1px 6px; min-width: 16px;
+  font-size: 0.62rem; font-weight: 800; border-radius: 6px; padding: 1px 6px; min-width: 16px;
 }
 
 /* ---------- greeting bar (home) ---------- */
 .greeting-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
 .greeting-bar h2 { font-size: 1.4rem; }
 .greeting-icons { display: flex; align-items: center; gap: 14px; }
-.streak-pill { background: var(--lilac-light); border: 1px solid var(--lilac-mid); border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 0.85rem; color: var(--brand); }
+.streak-pill { background: var(--lilac-light); border: 1px solid var(--lilac-mid); border-radius: 6px; padding: 5px 12px; font-weight: 800; font-size: 0.85rem; color: var(--brand); }
 
 /* ---------- verse of the day card ---------- */
 .verse-of-day-card {
-  background: linear-gradient(135deg, var(--purple-deep), var(--purple-rich) 60%, var(--flame-red));
-  border-radius: 20px; padding: 26px 24px; color: #fff;
-  box-shadow: 0 16px 36px rgba(58,27,84,0.25);
+  background: var(--purple-rich);
+  border-radius: var(--radius); padding: 24px; color: #fff;
 }
 .verse-of-day-text { font-family: var(--font-display); font-size: 1.25rem; line-height: 1.5; margin: 6px 0 0; }
 
@@ -1270,3 +1116,11 @@ body {
   from { transform: translateY(100%); opacity: 0.8; }
   to { transform: translateY(0); opacity: 1; }
 }
+
+/* A reader who asked for less motion gets none that is not needed to understand the page. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+
+/* The page title in a portal's top bar is for screen readers; on the purple bar it still has to be a readable colour. */
+.portal-topbar h1, .admin-topbar h1 { color: #fff; }

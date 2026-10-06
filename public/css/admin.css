@@ -11,11 +11,11 @@
 
 body { background: var(--lilac-light); }
 .admin-shell { display: none; }
-.admin-topbar { background: var(--purple-rich); color: #fff; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(58,27,84,0.12); }
+.admin-topbar { background: var(--purple-rich); color: #fff; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,0.12); }
 .admin-topbar-left { display: flex; align-items: center; gap: 14px; }
 .admin-topbar-right { display: flex; align-items: center; gap: 12px; }
 .mobile-nav-toggle, .mobile-actions-toggle { display: none; }
-.chapter-badge { background: rgba(255,255,255,0.16); padding: 4px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; color: var(--flame-gold); letter-spacing: 0.02em; border: 1px solid rgba(232,151,30,0.3); }
+.chapter-badge { background: rgba(255,255,255,0.16); padding: 4px 12px; border-radius: 4px; font-size: 0.85rem; font-weight: 700; color: #FFE3B0; letter-spacing: 0.02em; border: 1px solid rgba(232,151,30,0.3); }
 .cmd-trigger { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; padding: 6px 14px; font-size: 0.8rem; font-family: inherit; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: background 0.15s ease; }
 .cmd-trigger:hover { background: rgba(255,255,255,0.22); }
 .cmd-trigger kbd { background: rgba(0,0,0,0.25); padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; font-family: monospace; border: 1px solid rgba(255,255,255,0.15); }
@@ -44,13 +44,13 @@ body { background: var(--lilac-light); }
 body.oversight-only .admin-panel :is(input, select, textarea):disabled { opacity: 0.75; cursor: default; }
 .kpi-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 18px; }
 .kpi-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer; }
-.kpi-card:hover { border-color: #d2c3de; box-shadow: 0 6px 20px rgba(58,27,84,0.08); }
-.kpi-card .kpi-label { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: #8f7b9b; font-weight: 800; }
+.kpi-card:hover { border-color: #d2c3de; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
+.kpi-card .kpi-label { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-faint); font-weight: 700; }
 .kpi-card .kpi-value { margin: 8px 0 6px; font-size: 1.7rem; color: var(--brand); font-weight: 800; line-height: 1.1; }
 .kpi-card .kpi-trend { font-size: 0.8rem; font-weight: 700; }
-.kpi-card .kpi-trend.up { color: #2e7d4f; }
-.kpi-card .kpi-trend.down { color: var(--flame-red); }
-.kpi-card .kpi-trend.flat { color: #7b6a89; }
+.kpi-card .kpi-trend.up { color: var(--ok-ink); }
+.kpi-card .kpi-trend.down { color: var(--bad-ink); }
+.kpi-card .kpi-trend.flat { color: var(--ink-faint); }
 .overview-stream { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .overview-stream ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .overview-stream li { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
@@ -71,7 +71,7 @@ body.oversight-only .admin-panel :is(input, select, textarea):disabled { opacity
 
 .login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .field-row { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-.app-watermark { text-align: center; padding: 24px 12px; font-size: 0.75rem; color: #a993b3; }
+.app-watermark { text-align: center; padding: 24px 12px; font-size: 0.85rem; color: var(--ink-faint); }
 table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 10px; overflow: hidden; }
 th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); font-size: 0.88rem; vertical-align: top; }
 th { background: var(--lilac-light); font-family: var(--font-body); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em; color: var(--brand); }

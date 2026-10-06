@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Groups — ACONSU</title>
+<title>Groups | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -23,32 +25,33 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .group-type-filter { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:24px; }
-  .group-type-filter button { border:2px solid var(--line); background:var(--surface); color:#5a4468; padding:7px 16px; border-radius:999px; font-weight:700; font-size:0.82rem; cursor:pointer; }
+  .group-type-filter button { border:2px solid var(--line); background:var(--surface); color:var(--ink-soft); padding:7px 16px; border-radius:6px; font-weight:700; font-size:0.82rem; cursor:pointer; }
   .group-type-filter button.active { border-color:var(--brand); background:var(--purple-deep); color:#fff; }
   .group-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:14px; }
   .group-card h3 { margin:0 0 4px; }
-  .group-card .meta { font-size:0.82rem; color:#8a7595; margin-bottom:8px; }
+  .group-card .meta { font-size:0.82rem; color:var(--ink-faint); margin-bottom:8px; }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="groups" style="padding-bottom:40px;">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="gather" data-hero-page="groups">
   <div class="hero-content">
-    <p class="eyebrow">Belong</p>
     <h1>Groups</h1>
-    <p class="lede">Bible Study, Prayer, Fellowship and Cell groups — find one and join in.</p>
   </div>
 </section>
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
     <div class="group-type-filter" id="typeFilter"></div>
-    <div id="groupList"><p class="empty-state">Loading...</p></div>
+    <div id="groupList"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Group — ACONSU</title>
+<title>Group | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -23,34 +25,36 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .group-tabs { display:flex; gap:8px; border-bottom:1px solid var(--line); margin:20px 0; overflow-x:auto; }
-  .group-tabs button { border:none; background:none; padding:10px 6px; font-weight:700; font-size:0.88rem; color:#8a7595; cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; }
+  .group-tabs button { border:none; background:none; padding:10px 6px; font-weight:700; font-size:0.88rem; color:var(--ink-faint); cursor:pointer; white-space:nowrap; border-bottom:2px solid transparent; }
   .group-tabs button.active { color:var(--brand); border-color:var(--brand); }
   .post-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
   .post-card.announcement { border-color:var(--flame-gold); background:#FFF8EC; }
   .post-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
-  .post-card .when { font-size:0.75rem; color:#8a7595; }
-  .member-chip { display:inline-flex; align-items:center; gap:8px; background:var(--lilac-light); border-radius:999px; padding:4px 12px 4px 4px; font-size:0.82rem; margin:0 6px 6px 0; }
+  .post-card .when { font-size:0.75rem; color:var(--ink-faint); }
+  .member-chip { display:inline-flex; align-items:center; gap:8px; background:var(--lilac-light); border-radius:6px; padding:4px 12px 4px 4px; font-size:0.82rem; margin:0 6px 6px 0; }
   .member-chip img, .member-chip .fallback { width:26px; height:26px; border-radius:50%; object-fit:cover; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--brand); font-size:0.75rem; }
   .meeting-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="group" style="padding-bottom:32px;">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="gather" data-hero-page="group">
   <div class="hero-content" id="groupHero">
-    <p class="eyebrow">Group</p>
     <h1>Loading...</h1>
   </div>
 </section>
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
-    <div id="groupBody"><p class="empty-state">Loading...</p></div>
+    <div id="groupBody"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -63,7 +67,7 @@ const groupId = new URLSearchParams(location.search).get('id');
 async function reloadGroup() {
   GROUP = await fetchJSON(`/api/groups/${groupId}`);
   document.getElementById('groupHero').innerHTML = `
-    <p class="eyebrow">${escapeHtml(GROUP.type.replace('_', ' '))}</p>
+    <p class="meta">${escapeHtml(GROUP.type.replace('_', ' '))}</p>
     <h1>${escapeHtml(GROUP.name)}</h1>
     <p class="lede">${escapeHtml(GROUP.description || '')}</p>
   `;
@@ -88,7 +92,7 @@ function renderAbout(body) {
   body.innerHTML = `
     <div class="portal-card" style="background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px;">
       <p><strong>Leader:</strong> ${escapeHtml(GROUP.leaderName || 'Not yet assigned')}</p>
-      ${GROUP.meetingDay ? `<p><strong>Meets:</strong> ${escapeHtml(GROUP.meetingDay)} ${escapeHtml(GROUP.meetingTime || '')} ${GROUP.meetingLocation ? '— ' + escapeHtml(GROUP.meetingLocation) : ''}</p>` : ''}
+      ${GROUP.meetingDay ? `<p><strong>Meets:</strong> ${escapeHtml(GROUP.meetingDay)} ${escapeHtml(GROUP.meetingTime || '')} ${GROUP.meetingLocation ? 'at ' + escapeHtml(GROUP.meetingLocation) : ''}</p>` : ''}
       <div style="margin-top:14px;">${joinBtn}</div>
     </div>
     ${GROUP.resources.length ? `
@@ -173,7 +177,7 @@ function openEditGroupForm() {
 
 async function renderPosts(body) {
   if (!currentMember) { body.innerHTML = '<p class="empty-state">Log in and join this group to see its discussion.</p>'; return; }
-  body.innerHTML = '<p class="empty-state">Loading...</p>';
+  body.innerHTML = '<div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>';
   try {
     const posts = await fetchJSON(`/api/groups/${groupId}/posts`);
     body.innerHTML = `
@@ -189,12 +193,12 @@ async function renderPosts(body) {
       <div id="postsList">
         ${posts.map(p => `
           <div class="post-card ${p.isAnnouncement ? 'announcement' : ''}">
-            ${p.isAnnouncement ? '<span class="badge">📌 Announcement</span>' : ''}
+            ${p.isAnnouncement ? '<span class="badge">Announcement</span>' : ''}
             <p style="margin:6px 0;">${escapeHtml(p.body)}</p>
             <div class="who">${escapeHtml(p.authorName || 'Someone')}</div>
             <div class="when">${dateTimeLabelSafe(p.createdAt)}</div>
           </div>
-        `).join('') || '<p class="empty-state">No posts yet — say hello!</p>'}
+        `).join('') || '<p class="empty-state">No posts yet. Say hello!</p>'}
       </div>
     `;
     const form = document.getElementById('postForm');
@@ -215,19 +219,19 @@ async function renderPosts(body) {
 
 async function renderMeetings(body) {
   if (!currentMember) { body.innerHTML = '<p class="empty-state">Log in and join this group to see its meetings.</p>'; return; }
-  body.innerHTML = '<p class="empty-state">Loading...</p>';
+  body.innerHTML = '<div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>';
   try {
     const meetings = await fetchJSON(`/api/groups/${groupId}/meetings`);
     body.innerHTML = `
       ${GROUP.isLeader ? `
         <div style="display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-          <button class="btn btn-primary btn-sm" id="quickAttendanceBtn">⚡ 3-Tap Attendance</button>
+          <button class="btn btn-primary btn-sm" id="quickAttendanceBtn">3-Tap Attendance</button>
           <button class="btn btn-outline btn-sm" id="logMeetingBtn">+ Log a Meeting</button>
         </div>
       ` : ''}
       ${meetings.map(m => `
         <div class="meeting-card">
-          <strong>${shortDateSafe(m.date)}</strong>${m.topic ? ` — ${escapeHtml(m.topic)}` : ''}
+          <strong>${shortDateSafe(m.date)}</strong>${m.topic ? `: ${escapeHtml(m.topic)}` : ''}
           <div class="tiny muted">${escapeHtml(m.location || '')} · ${m.attendeeMemberIds.length} attended</div>
           ${m.notes ? `<p style="margin-top:6px; font-size:0.88rem;">${escapeHtml(m.notes)}</p>` : ''}
         </div>

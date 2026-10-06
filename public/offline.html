@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>You're Offline — ACONSU</title>
+<title>You're Offline | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -58,8 +60,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   p { color: rgba(255,255,255,0.74); line-height: 1.65; margin: 0 0 22px; font-size: 0.95rem; }
   .btn {
     display: inline-block; border: none; cursor: pointer;
-    background: var(--flame-gold); color: var(--purple-ink);
-    padding: 13px 30px; border-radius: 999px;
+    background: var(--flame-gold); color:var(--ink);
+    padding: 13px 30px; border-radius:6px;
     font-weight: 700; font-size: 0.92rem; font-family: inherit;
     text-decoration: none;
   }
@@ -90,7 +92,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </style>
 </head>
 <body>
-<div class="wrap">
+<main class="wrap">
 
   <div class="mark" aria-hidden="true">
     <svg viewBox="0 0 24 24" fill="none" stroke="#E8971E" stroke-width="2" stroke-linecap="round">
@@ -104,7 +106,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </svg>
   </div>
 
-  <p class="eyebrow">No Connection</p>
   <h1>You're offline</h1>
   <p>
     This page hasn't been saved to your device yet, so there's nothing to show you
@@ -126,7 +127,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
   <p class="status" id="status">Waiting for a connection…</p>
 
-</div>
+</main>
 
 <script>
   var statusEl = document.getElementById('status');
@@ -135,11 +136,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     location.reload();
   });
 
-  // When the device comes back, say so and reload on its own — someone who
+  // When the device comes back, say so and reload on its own - someone who
   // walked back into signal shouldn't have to work out that they should tap
   // anything.
   window.addEventListener('online', function () {
-    statusEl.textContent = 'Back online — reloading…';
+    statusEl.textContent = 'Back online. Reloading…';
     statusEl.className = 'status back';
     setTimeout(function () { location.reload(); }, 700);
   });

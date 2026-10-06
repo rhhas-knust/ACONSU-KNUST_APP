@@ -6,6 +6,16 @@
 //   npm test              — the full suite
 //   SMOKE_SLOW=1 npm test — also waits out the 60s scheduled-send tick
 const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
+// Registration now needs the box ticked. Every account the suite makes ticks it,
+// the way the form does, unless a test is deliberately leaving it out.
+{
+  const realFetch = global.fetch;
+  global.fetch = (url, opts) => {
+    if (/\/api\/auth\/register$/.test(String(url)) && opts && opts.body instanceof FormData
+        && !opts.body.has('consent') && !global.__noAutoConsent) opts.body.append('consent', 'true');
+    return realFetch(url, opts);
+  };
+}
 
 (async () => {
   process.env.MONGODB_URI = 'mongodb://stub/aconsu_test';
@@ -2215,7 +2225,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and never caches who-you-are responses in the first place',
       sw.includes('NEVER_CACHE_API') && sw.includes("'/api/auth/me'"));
     check('and only ever caches a successful API response',
-      /res\.status === 200 && !NEVER_CACHE_API/.test(sw));
+      /res\.status === 200[\s\S]{0,260}NEVER_CACHE_API/.test(sw));
     for (const [page, file] of [['profile.html', 'profile.html'], ['more.html', 'more.html']]) {
       check(`${page} clears cached account data when signing out`,
         pub(file).includes('clearCachedAccountData()'));
@@ -2911,9 +2921,10 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and that is more than a couple of pages', dressed >= 20, dressed);
 
     const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'css', 'style.css'), 'utf8');
-    const missingScene = [...new Set(catalogue.HERO_PAGES.map(p => p.scene))]
-      .filter(scene => !css.includes(`.hero[data-art="${scene}"]`));
-    check('and every scene a page asks for is actually drawn', !missingScene.length, missingScene);
+    // The built-in scenes were layers of gradients. They are gone: a page
+    // header is flat until a chapter uploads a picture of its own.
+    check('the built-in gradient scenes are no longer drawn',
+      !/\.hero\[data-art="[a-z]+"\]/.test(css) && !/hero-flame/.test(css), null);
 
     // Nothing is uploaded yet, so the pages are wearing their built-in scenes.
     r = await call('anon', 'GET', '/api/settings', null, false, { 'X-Chapter-Id': chapterId });
@@ -3215,7 +3226,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       '--bg', '--surface', '--surface-2', '--surface-3',
       '--ink', '--ink-soft', '--ink-faint', '--heading',
       '--brand', '--brand-strong', '--border', '--header-bg',
-      '--art-veil-top', '--art-veil-bottom',
+      '--art-veil',
       '--ok-bg', '--ok-ink', '--warn-bg', '--warn-ink',
       '--bad-bg', '--bad-ink', '--mute-bg', '--mute-ink', '--row-hover'
     ];
@@ -3913,24 +3924,17 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
         /::error file=\$f::[\s\S]{0,200}exit 1/.test(wf), null);
     }
 
-    // ---- a photo behind the heading ----
-    check('a chapter can put a photo behind the heading', 'heroImage' in CHAPTER, Object.keys(CHAPTER));
-    check('and say whether it needs light words or dark ones', 'heroImageTone' in CHAPTER, Object.keys(CHAPTER));
-    check('blank keeps the gradient rather than an empty frame',
-      /if \(has\(C\.heroImage\)\)/.test(js), null);
-    // The heading has to stay readable whatever was photographed. A chapter
-    // should not have to test their own photo to discover it is not.
-    check('the photo never goes on bare - a wash sits over it',
-      /\.hero\[data-hero-tone\]::before \{/.test(css)
-      && /\.hero\[data-hero-tone="dark"\]::before/.test(css), null);
-    check('and the words flip to match the wash, not the picture',
-      /\.hero\[data-hero-tone="dark"\] h1 \{ color: #fff; \}/.test(css), null);
-    // The wash is inset:0 over the whole hero, so without this it would cover
-    // the heading it exists to make readable.
-    check('the heading sits above the wash rather than under it',
-      /\.hero\[data-hero-tone\] \.wrap \{ position: relative; z-index: 1; \}/.test(css), null);
-    check('an unrecognised tone falls back to the safe one rather than no wash',
-      /C\.heroImageTone === 'light' \? 'light' : 'dark'/.test(js), null);
+    // ---- a photo beside the heading ----
+    check('a chapter can put a photo beside the heading', 'heroImage' in CHAPTER, Object.keys(CHAPTER));
+    check('and describe it for people who cannot see it', 'heroImageAlt' in CHAPTER, Object.keys(CHAPTER));
+    check('blank leaves the opening as text rather than an empty frame',
+      /if \(!has\(C\.heroImage\)\) \{ box\.remove\(\); hero\.classList\.add\('no-photo'\)/.test(js), null);
+    // The words never sit on the picture, so they can never be unreadable on it,
+    // and there is no wash or gradient to maintain.
+    check('the photo is a picture next to the words, not a background behind them',
+      /id="heroImg"/.test(html) && !/data-hero-tone|--hero-photo/.test(css + js), null);
+    check('and it is described to a screen reader from the chapter file',
+      /img\.alt = has\(C\.heroImageAlt\) \? C\.heroImageAlt : ''/.test(js), null);
 
     // ---- who leads the chapter ----
     check('a chapter can list its coordinators', 'coordinators' in CHAPTER, Object.keys(CHAPTER));
@@ -3965,7 +3969,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // The tap target on a phone should be the card, not a line of text in it.
     check('the whole card is the link',
       /'<a class="card report-card' \+ \(has\(r\.photo\) \? ' has-photo' : ''\)/.test(js)
-      && /' href="' \+ esc\(r\.file\) \+ '" target="_blank" rel="noopener">'/.test(js), null);
+      && /' href="' \+ esc\(r\.file\) \+ '" target="_blank" rel="noopener noreferrer">'/.test(js), null);
     // Same treatment the activities get: a picture across the top when there is
     // one, and no grey band promising a photograph that was never added.
     check('a report can carry a picture, usually lifted out of the report itself',
@@ -3974,7 +3978,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       /\.report-card:not\(\.has-photo\) \.report-row/.test(css)
       && /has\(r\.photo\)\s*\?\s*'<img class="card-photo"/.test(js), null);
     check('and opens in its own tab, without handing over the page',
-      /report-card[\s\S]{0,120}target="_blank" rel="noopener"/.test(js), null);
+      /report-card[\s\S]{0,120}target="_blank" rel="noopener noreferrer"/.test(js), null);
 
     // ---- the wider church, and the men who began it ----
     // The chapter is a fraction of the church. The men who founded the church
@@ -4027,7 +4031,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // in a browser the first time the real photographs went in.
     check('a standing portrait is framed rather than cropped to a circle',
       /\.founder-face \{[\s\S]{0,200}aspect-ratio: 3 \/ 4;/.test(css)
-      && /\.founder-face \{[\s\S]{0,200}border-radius: 12px;/.test(css), null);
+      && /\.founder-face \{[\s\S]{0,200}border-radius: 6px;/.test(css), null);
     // It shares the circle rule with the chapter's faces, and both are (0,1,0),
     // so the only thing making the square corners win is coming later in the
     // file. Move this block up and every founder is a circle again.
@@ -4105,8 +4109,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // The welcome names the chapter. Bound rather than typed into the HTML, so
     // the next chapter to copy this folder gets its own name here without
     // touching anything but chapter.js - the rule the whole folder rests on.
-    check('the welcome names the chapter',
-      /Welcome to <span data-bind="name">/.test(html), null);
+    check('the page names the chapter from chapter.js, not from typed-in text',
+      /<span data-bind="name">/.test(html) && !/>ACONSU KNUST</.test(html.replace(/<title>[\s\S]*?<\/title>/, '')), null);
 
     // The same maker's line the app carries, read from the app rather than
     // retyped, so the two cannot drift apart.
@@ -4119,13 +4123,13 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       // In the footer, under the chapter's own name, not competing with it.
       check('quietly, at the foot of the page',
         html.indexOf('app-watermark') > html.indexOf('<footer')
-        && /\.app-watermark \{[\s\S]{0,160}font-size: 0\.72rem;/.test(css), null);
+        && /\.app-watermark \{[\s\S]{0,160}font-size: 0\.85rem;/.test(css), null);
     }
 
     check('it follows the reader\'s light or dark setting',
       /@media \(prefers-color-scheme: dark\)/.test(css), null);
     check('and reads on a phone without sideways scrolling',
-      /@media \(max-width: 720px\)/.test(css), null);
+      /@media \(max-width: 760px\)/.test(css) && /@media \(max-width: 640px\)/.test(css), null);
 
     // GitHub Pages serves this under /<repo>/, not at a domain root. One
     // leading slash anywhere and the stylesheet, the script or the logo 404s
@@ -4768,6 +4772,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       themeForm({ title: 'Walking in Newness', scripture: 'Romans 6:4', blurb: 'A month of renewal.' }, [flyer(), flyer()]), true);
     check('National sets the month\'s theme with its prayer flyers', w.status === 200 && w.data.item.flyerFileIds.length === 2, w.data);
     const twoFlyers = w.data.item.flyerFileIds;
+    const octThemeId = w.data.item.id;
     w = await call('anon', 'GET', '/api/public/theme');
     check('the app shows it to anyone', w.data.theme && w.data.theme.title === 'Walking in Newness' && w.data.theme.flyerFileIds.length === 2, w.data);
     w = await call('anon', 'GET', '/api/public/site-feed');
@@ -4788,10 +4793,172 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     life._setNowForTests(() => new Date(Date.UTC(2026, 10, 1, 0, 5)));
     w = await call('anon', 'GET', '/api/public/theme');
     check('until its month begins', w.data.theme.title === 'The Year of Open Doors' && w.data.month === nextMonth, w.data);
-    w = await call('natOv', 'DELETE', `/api/national/themes/${thisMonth}`);
+    w = await call('natOv', 'DELETE', `/api/national/themes/${octThemeId}`);
     check('a theme can be removed', w.status === 200, w.data);
     check('with its flyers', await gone(twoFlyers[0]), null);
     life._setNowForTests(null);
+
+
+    // ---- the admins approve ----
+    // Alumni: National approves any chapter's requests, and a chapter's own admin
+    // approves their own chapter's, and nobody else's. Themes: a chapter's admin
+    // can only propose; National approves; nothing shows until then.
+    const otherChapter = 'oversight-test';
+    const near = { ...valid };
+    await ask({ ...near, name: 'Own Chapter Person', chapterId });
+    await ask({ ...near, name: 'Other Chapter Person', chapterId: otherChapter });
+    const ownReq = (await fakeModels.AlumniEntry.find({ name: 'Own Chapter Person' }))[0];
+    const otherReq = (await fakeModels.AlumniEntry.find({ name: 'Other Chapter Person' }))[0];
+    check('a request can be made to either chapter', !!ownReq && !!otherReq && otherReq.chapterId === otherChapter, [ownReq, otherReq]);
+
+    // a second chapter's own admin, so the walls between chapters can be tested from both sides
+    const fdm = new FormData();
+    fdm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    fdm.append('name', 'Other Admin'); fdm.append('email', 'otheradmin@test.com'); fdm.append('password', 'secret123'); fdm.append('chapterId', otherChapter);
+    const otherMember = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fdm })).json()).member;
+    w = await call('admin', 'POST', '/api/admin/staff', { username: 'other.chapteradmin', name: 'Other Admin', role: 'chapterAdmin', password: 'password123', memberId: otherMember.id, chapterId: otherChapter });
+    check('the other chapter has its own admin', w.status === 200, w.data);
+    await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
+    await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password123' });
+
+    w = await call('ovAdmin', 'GET', '/api/admin/alumni');
+    check('a chapter admin sees their own chapter\'s waiting requests, with the contact to check',
+      w.status === 200 && w.data.items.some(i => i.id === ownReq.id && i.contact === 'efua@example.com'), w.data);
+    check('and none of another chapter\'s', !w.data.items.some(i => i.id === otherReq.id) && w.data.items.every(i => i.chapterId === chapterId), w.data.items.map(i => i.chapterId));
+    w = await call('anon', 'GET', '/api/admin/alumni');
+    check('the chapter door is closed to the public', w.status === 401, w.data);
+    w = await call('fin', 'GET', '/api/admin/alumni');
+    check('and to a finance officer, who reviews nothing', w.status === 401, w.data);
+    w = await call('natOv', 'GET', '/api/admin/alumni');
+    check('National can still look in (oversight)', w.status === 200, w.data);
+    w = await call('natOv', 'POST', `/api/admin/alumni/${ownReq.id}/decision`, { decision: 'approve' });
+    check('but National decides through its own door, not by running a chapter\'s', w.status === 403, w.data);
+
+    w = await call('ovAdmin', 'POST', `/api/admin/alumni/${otherReq.id}/decision`, { decision: 'approve' });
+    check('a chapter admin cannot approve another chapter\'s request', w.status === 404, w.data);
+    w = await call('otherAdmin', 'POST', `/api/admin/alumni/${ownReq.id}/decision`, { decision: 'approve' });
+    check('and the other chapter\'s admin cannot approve this one\'s', w.status === 404, w.data);
+    w = await call('ovAdmin', 'PUT', `/api/admin/alumni/${otherReq.id}`, form({ name: 'Hacked', about: 'A long enough sentence here.' }), true);
+    check('nor edit it', w.status === 404, w.data);
+    w = await call('ovAdmin', 'DELETE', `/api/admin/alumni/${otherReq.id}`);
+    check('nor remove it', w.status === 404, w.data);
+    check('which is still waiting, untouched', (await fakeModels.AlumniEntry.find({ id: otherReq.id }))[0].status === 'pending', null);
+
+    w = await call('ovAdmin', 'POST', `/api/admin/alumni/${ownReq.id}/decision`, { decision: 'approve' });
+    check('a chapter admin approves their own chapter\'s request', w.status === 200 && w.data.item.status === 'approved', w.data);
+    w = await call('anon', 'GET', '/api/public/alumni');
+    check('and it is on the public wall at once', w.data.items.some(i => i.id === ownReq.id), w.data);
+    w = await call('ovAdmin', 'PUT', `/api/admin/alumni/${ownReq.id}`, form({ name: 'Own Chapter Person', about: 'Still a long enough sentence.', chapterId: otherChapter }), true);
+    check('a chapter admin cannot move someone into another chapter', w.status === 200 && w.data.item.chapterId === chapterId, w.data);
+    w = await call('ovAdmin', 'POST', '/api/admin/alumni', form({ name: 'Added By Admin', about: 'Added straight onto the wall by the chapter.', chapterId: otherChapter }), true);
+    check('what a chapter admin adds directly always goes to their own chapter', w.status === 200 && w.data.item.chapterId === chapterId && w.data.item.status === 'approved', w.data);
+    w = await call('ovAdmin', 'POST', '/api/national/alumni/spotlight/pin', { entryId: ownReq.id });
+    check('choosing the week\'s spotlight stays with National', w.status === 401, w.data);
+    w = await call('ovAdmin', 'GET', '/api/national/alumni');
+    check('and so does the all-chapters view', w.status === 401, w.data);
+    w = await call('natOv', 'POST', `/api/national/alumni/${otherReq.id}/decision`, { decision: 'approve' });
+    check('National approves the other chapter\'s request from its own door', w.status === 200, w.data);
+    w = await call('otherAdmin', 'GET', '/api/admin/alumni');
+    check('where the other chapter\'s admin sees theirs, and not this one\'s',
+      w.data.items.some(i => i.id === otherReq.id) && !w.data.items.some(i => i.id === ownReq.id), w.data.items.map(i => i.name));
+    w = await call('ovAdmin', 'POST', `/api/admin/alumni/${(await fakeModels.AlumniEntry.find({ name: 'Added By Admin' }))[0].id}/decision`, { decision: 'unlist' });
+    check('a chapter admin can take down one of their own', w.status === 200 && w.data.item.status === 'unlisted', w.data);
+
+    // ---- themes: propose, then approve ----
+    const far = '2031-03', far2 = '2031-04';
+    const farForm = (title, extra = {}, withFlyer = true) => themeForm({ title, scripture: 'Psalm 1:3', ...extra }, withFlyer ? [flyer()] : []);
+    w = await call('anon', 'PUT', `/api/admin/themes/${far}`, farForm('Nope'), true);
+    check('the public cannot propose a theme', w.status === 401, w.data);
+    w = await call('fin', 'PUT', `/api/admin/themes/${far}`, farForm('Nope'), true);
+    check('nor a finance officer', w.status === 401, w.data);
+    w = await call('ovAdmin', 'PUT', '/api/admin/themes/2020-01', farForm('Too late'), true);
+    check('a month that has already passed cannot be proposed', w.status === 400, w.data);
+    w = await call('ovAdmin', 'PUT', '/api/admin/themes/2031-13', farForm('Bad month'), true);
+    check('nor one that is not a month', w.status === 400, w.data);
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far}`, themeForm({ title: '' }), true);
+    check('a proposal needs a title', w.status === 400, w.data);
+
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far}`, farForm('Roots and Fruit', { blurb: 'Planted by the water.' }), true);
+    check('a chapter admin proposes the church\'s theme for a month', w.status === 200 && w.data.item.status === 'pending' && w.data.item.flyerFileIds.length === 1, w.data);
+    const propId = w.data.item.id;
+    const propFlyer = w.data.item.flyerFileIds[0];
+    life._setNowForTests(() => new Date(Date.UTC(2031, 2, 10, 9, 0)));
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('and, still waiting, it shows nowhere', w.data.theme === null, w.data);
+    w = await call('anon', 'GET', '/api/public/site-feed');
+    check('not even in the website feed', w.data.theme === null, w.data);
+    w = await call('natOv', 'GET', '/api/national/themes');
+    const queued = w.data.items.find(t => t.id === propId);
+    check('National sees it waiting, and from which chapter', queued && queued.status === 'pending' && queued.chapterName && w.data.pending >= 1, queued);
+    check('and the month still counts as having no theme', w.data.hasCurrent === false, w.data);
+    w = await call('ovAdmin', 'POST', `/api/national/themes/${propId}/decision`, { decision: 'approve' });
+    check('a chapter admin cannot approve their own proposal', w.status === 401, w.data);
+    w = await call('otherAdmin', 'GET', '/api/admin/themes');
+    check('another chapter\'s admin does not see it', w.status === 200 && !w.data.items.some(t => t.id === propId), w.data);
+    w = await call('otherAdmin', 'DELETE', `/api/admin/themes/${propId}`);
+    check('nor withdraw it', w.status === 404, w.data);
+    w = await call('ovAdmin', 'GET', '/api/admin/themes');
+    check('the proposing admin sees it, waiting', w.data.items.some(t => t.id === propId && t.status === 'pending'), w.data);
+
+    w = await call('natOv', 'POST', `/api/national/themes/${propId}/decision`, { decision: 'approve' });
+    check('National approves it', w.status === 200 && w.data.item.status === 'approved', w.data);
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('and now the church shows it', w.data.theme && w.data.theme.title === 'Roots and Fruit' && w.data.theme.flyerFileIds.length === 1, w.data);
+    w = await call('anon', 'GET', '/api/public/site-feed');
+    check('and so does the website feed', w.data.theme && w.data.theme.title === 'Roots and Fruit', w.data);
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far}`, farForm('Changed after approval'), true);
+    check('once live, the chapter admin can no longer change it', w.status === 403, w.data);
+    w = await call('ovAdmin', 'DELETE', `/api/admin/themes/${propId}`);
+    check('nor take it down', w.status === 403, w.data);
+
+    // a different chapter proposes the same month; approving it replaces the live one
+    w = await call('otherAdmin', 'PUT', `/api/admin/themes/${far}`, farForm('A Better Word'), true);
+    check('another chapter can propose for the same month', w.status === 200 && w.data.item.status === 'pending', w.data);
+    const rivalId = w.data.item.id;
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('while the first stays live', w.data.theme.title === 'Roots and Fruit', w.data);
+    w = await call('natOv', 'POST', `/api/national/themes/${rivalId}/decision`, { decision: 'approve' });
+    check('approving the second replaces the first', w.status === 200 && w.data.replaced === true, w.data);
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('so the church shows the second', w.data.theme.title === 'A Better Word', w.data);
+    check('and the first one\'s flyer is deleted with it', await gone(propFlyer), null);
+    check('leaving exactly one live theme for the month', (await fakeModels.MonthlyTheme.find({ month: far, status: 'approved' })).length === 1, null);
+    w = await call('natOv', 'PUT', `/api/national/themes/${far}`, themeForm({ title: 'National has the last word' }), true);
+    check('National writing the month directly updates the live theme, not a second one',
+      w.status === 200 && w.data.item.id === rivalId && (await fakeModels.MonthlyTheme.find({ month: far, status: 'approved' })).length === 1, w.data);
+
+    // declined, corrected, sent again, withdrawn
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far2}`, farForm('First try'), true);
+    const tryId = w.data.item.id, tryFlyer = w.data.item.flyerFileIds[0];
+    w = await call('natOv', 'POST', `/api/national/themes/${tryId}/decision`, { decision: 'decline', reason: 'Please use the church\'s wording' });
+    check('National can decline a proposal, with a reason', w.status === 200 && w.data.item.status === 'declined', w.data);
+    w = await call('ovAdmin', 'GET', '/api/admin/themes');
+    const seen = w.data.items.find(t => t.id === tryId);
+    check('and the chapter admin is told why', seen && seen.status === 'declined' && /church's wording/.test(seen.declineReason), seen);
+    w = await call('natOv', 'POST', `/api/national/themes/${tryId}/decision`, { decision: 'decline' });
+    check('a decision on something already decided is refused', w.status === 400, w.data);
+    life._setNowForTests(null);
+    w = await call('ovAdmin', 'PUT', `/api/admin/themes/${far2}`, farForm('Second try', { keepFlyers: JSON.stringify([tryFlyer]) }, false), true);
+    check('the chapter admin corrects it and sends it again', w.status === 200 && w.data.item.status === 'pending' && w.data.item.declineReason === '' && w.data.item.id === tryId && w.data.item.title === 'Second try', w.data);
+    w = await call('ovAdmin', 'DELETE', `/api/admin/themes/${tryId}`);
+    check('or withdraws it while it is still waiting', w.status === 200, w.data);
+    check('taking its flyer with it', await gone(tryFlyer), null);
+    w = await call('natOv', 'POST', `/api/national/themes/${rivalId}/decision`, { decision: 'whatever' });
+    check('an unknown decision is refused', w.status === 400, w.data);
+    w = await call('natOv', 'DELETE', `/api/national/themes/${rivalId}`);
+    check('National can remove a live theme', w.status === 200, w.data);
+    life._setNowForTests(null);
+
+    // An operator hidden in a field of the public alumni form (checked before the
+    // throttle test below uses up this device's allowance).
+    {
+      const op = new FormData();
+      Object.entries(valid).forEach(([k, v]) => op.append(k, v));
+      op.append('name[$ne]', 'x');
+      op.append('photo', new Blob([portrait], { type: 'image/jpeg' }), 'me.jpg');
+      w = await call('anon', 'POST', '/api/public/alumni-requests', op, true);
+      check('an operator hidden in a field of the public alumni form is refused', w.status === 400, w.data);
+    }
 
     // ---- last: the throttle ----
     let throttled = 0;
@@ -4959,6 +5126,186 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       /git push origin HEAD:main; then/.test(wf) && /::warning::Could not save/.test(wf) && !/^\s*git push origin HEAD:main\s*$/m.test(wf), null);
   }
 
+
+  console.log('\n== Security: what a stranger on the internet can and cannot do ==');
+  {
+    const guard = require('../lib/requestGuard');
+    const ft = require('../lib/fileTypes');
+    const fs = require('fs');
+    const path = require('path');
+
+    // ---- the small rules, on their own ----
+    check('an operator object is recognised, at any depth',
+      guard.hasOperatorKey({ a: { $ne: null } }) && guard.hasOperatorKey({ list: [{ b: { $gt: '' } }] }) && guard.hasOperatorKey({ 'a.b': 1 }), null);
+    check('and ordinary data is not', !guard.hasOperatorKey({ name: 'Ama', tags: ['a', 'b'], nested: { ok: 1 } }) && !guard.hasOperatorKey('text') && !guard.hasOperatorKey(null), null);
+    check('a reset link comes from configuration, not from the Host header',
+      guard.publicBaseUrl({ protocol: 'https', get: () => 'evil.example' }, { RENDER_EXTERNAL_URL: 'https://aconsu.example/' }) === 'https://aconsu.example'
+      && guard.publicBaseUrl({ protocol: 'https', get: () => 'evil.example' }, { PUBLIC_BASE_URL: 'https://mine.example', RENDER_EXTERNAL_URL: 'https://other.example' }) === 'https://mine.example', null);
+    check('and in production with none configured it refuses to guess', guard.publicBaseUrl({ protocol: 'https', get: () => 'evil.example' }, { NODE_ENV: 'production' }) === '', null);
+    check('while a developer machine still works', guard.publicBaseUrl({ protocol: 'http', get: () => 'localhost:3000' }, {}) === 'http://localhost:3000', null);
+    check('a password is compared the same way whatever is typed', guard.safeEqual('hunter2', 'hunter2') && !guard.safeEqual('hunter2', 'hunter3') && !guard.safeEqual('', 'x') && !guard.safeEqual(undefined, 'x'), null);
+    check('a spreadsheet cell that starts like a formula is made text',
+      ['=1+1', '+SUM(A1)', '-2+3', '@cmd', '\tx'].every(v => guard.csvSafe(v).startsWith("'")) && guard.csvSafe('Ama Mensah') === 'Ama Mensah' && guard.csvSafe(1200) === '1200', null);
+    check('only a browser vendor\'s push service is accepted as a push address',
+      guard.isPushEndpoint('https://fcm.googleapis.com/fcm/send/abc') && guard.isPushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/abc')
+      && guard.isPushEndpoint('https://web.push.apple.com/abc') && guard.isPushEndpoint('https://par02.notify.windows.com/w/?token=x'), null);
+    check('and not an internal or arbitrary one',
+      ['http://169.254.169.254/latest/meta-data/', 'https://169.254.169.254/', 'https://localhost/x', 'http://fcm.googleapis.com/x', 'https://fcm.googleapis.com:8443/x',
+       'https://user:pw@fcm.googleapis.com/x', 'https://evil.example/fcm.googleapis.com', 'https://fcm.googleapis.com.evil.example/x', 'javascript:alert(1)', '', null, { $ne: 1 }]
+        .every(v => !guard.isPushEndpoint(v)), null);
+    check('a file is known by its first bytes, not its name',
+      ft.sniff(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0])) === 'image/jpeg' && ft.sniff(Buffer.from('%PDF-1.7 and more text')) === 'application/pdf'
+      && ft.sniff(Buffer.from('<html><script>alert(1)</script></html>')) === '', null);
+    check('only pictures, audio, video and PDFs are ever shown in the browser',
+      ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'audio/mpeg', 'application/pdf'].every(t => ft.servingFor(t).inline)
+      && ['text/html', 'image/svg+xml', 'application/xhtml+xml', 'text/xml', 'application/javascript', 'text/plain', ''].every(t => !ft.servingFor(t).inline && ft.servingFor(t).contentType === 'application/octet-stream'), null);
+
+    // ---- files: who can list and open what ----
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('rest of a picture')]);
+    const put = (name, meta) => fakeGridfs.uploadBuffer(png, name, meta);
+    const f = {
+      receipt: await put('receipt.jpg', { category: 'receipt', contentType: 'image/jpeg', chapterId }),
+      receiptOther: await put('r2.jpg', { category: 'receipt', contentType: 'image/jpeg', chapterId: 'oversight-test' }),
+      pastoral: await put('visitor.jpg', { category: 'shepherding', contentType: 'image/jpeg', chapterId }),
+      pastoralOld: await put('old.jpg', { category: 'shepherding', contentType: 'image/jpeg' }),
+      profile: await put('me.jpg', { category: 'member-profile', contentType: 'image/jpeg', chapterId }),
+      photo: await put('hall.png', { category: 'photo', contentType: 'image/png' }),
+      html: await put('page.html', { category: 'photo', contentType: 'text/html' }),
+      svg: await put('logo.svg', { category: 'photo', contentType: 'image/svg+xml' }),
+      pdf: await put('report.pdf', { category: 'content_resource', contentType: 'application/pdf' }),
+      evilName: await put('a"b\r\nSet-Cookie: pwned=1.png', { category: 'photo', contentType: 'image/png' })
+    };
+    const open = (jar, id) => call(jar, 'GET', `/api/files/${id}`);
+    const raw = (id, jar) => fetch(BASE + `/api/files/${id}`, { headers: jars[jar] ? { cookie: jars[jar] } : {} });
+
+    for (const [name, id] of Object.entries({ receipt: f.receipt, pastoral: f.pastoral, 'member photo': f.profile })) {
+      check(`a stranger cannot open a ${name}`, (await open('anon', id)).status === 404, null);
+    }
+    let w = await call('anon', 'GET', '/api/files');
+    check('nor see them listed', w.status === 200 && !w.data.some(x => [f.receipt, f.receiptOther, f.pastoral, f.pastoralOld, f.profile].includes(x.id)), w.data.map(x => x.category));
+    check('while the pictures the public pages show are still listed', w.data.some(x => x.id === f.photo), w.data.length);
+    w = await call('anon', 'GET', '/api/files?category=receipt');
+    check('asking for the private categories by name gets nothing', w.status === 200 && w.data.length === 0, w.data);
+    w = await call('anon', 'GET', '/api/files?category[$ne]=nothing');
+    check('and an operator in the query string is refused', w.status === 400, w.data);
+    w = await call('anon', 'GET', '/api/files?category=photo');
+    check('an ordinary category still lists', w.status === 200 && w.data.some(x => x.id === f.photo), w.data);
+
+    check('a member can open a member photo, but not a receipt or a pastoral record',
+      (await open('member', f.profile)).status === 200 && (await open('member', f.receipt)).status === 404 && (await open('member', f.pastoral)).status === 404, null);
+    check('the finance officer opens their own chapter\'s receipt, not another\'s, and not a pastoral record',
+      (await open('fin', f.receipt)).status === 200 && (await open('fin', f.receiptOther)).status === 404 && (await open('fin', f.pastoral)).status === 404, null);
+    check('shepherding opens pastoral records, old and new, and not receipts',
+      (await open('shep', f.pastoral)).status === 200 && (await open('shep', f.pastoralOld)).status === 200 && (await open('shep', f.receipt)).status === 404, null);
+    check('a chapter\'s admin opens their own chapter\'s receipts and records, and not another chapter\'s',
+      (await open('ovAdmin', f.receipt)).status === 200 && (await open('ovAdmin', f.pastoral)).status === 200 && (await open('ovAdmin', f.receiptOther)).status === 404, null);
+    {
+      const lg = await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
+      const r = [(await open('otherAdmin', f.receipt)).status, (await open('otherAdmin', f.pastoral)).status, (await open('otherAdmin', f.receiptOther)).status];
+      check('another chapter\'s admin opens none of this chapter\'s, only their own', r.join() === '404,404,200', r);
+    }
+    check('National, with several chapters, is not handed one chapter\'s receipts or records',
+      (await open('natOv', f.receipt)).status === 404 && (await open('natOv', f.pastoral)).status === 404, null);
+    check('the recovery login can open anything', (await open('admin', f.receipt)).status === 200 && (await open('admin', f.pastoral)).status === 200, null);
+    let hdr = await raw(f.receipt, 'fin');
+    check('a private file is never kept by a browser or a proxy', /no-store/.test(hdr.headers.get('cache-control') || '') && /private/.test(hdr.headers.get('cache-control') || ''), hdr.headers.get('cache-control'));
+
+    // ---- what the browser is told to do with a file ----
+    hdr = await raw(f.html, 'anon');
+    check('an uploaded web page is handed over as a download, never shown',
+      hdr.headers.get('content-type') === 'application/octet-stream' && /^attachment/.test(hdr.headers.get('content-disposition') || ''), [hdr.headers.get('content-type'), hdr.headers.get('content-disposition')]);
+    check('inside a sandbox that runs nothing', /sandbox/.test(hdr.headers.get('content-security-policy') || '') && hdr.headers.get('x-content-type-options') === 'nosniff', hdr.headers.get('content-security-policy'));
+    hdr = await raw(f.svg, 'anon');
+    check('and so is an SVG, which can carry a script', /^attachment/.test(hdr.headers.get('content-disposition') || '') && hdr.headers.get('content-type') === 'application/octet-stream', hdr.headers.get('content-type'));
+    hdr = await raw(f.photo, 'anon');
+    check('a picture is still shown in the page, with its own type and a cache lifetime',
+      hdr.headers.get('content-type') === 'image/png' && /^inline/.test(hdr.headers.get('content-disposition') || '') && /public/.test(hdr.headers.get('cache-control') || ''), [hdr.headers.get('content-type'), hdr.headers.get('cache-control')]);
+    hdr = await raw(f.pdf, 'anon');
+    check('and a PDF opens', hdr.headers.get('content-type') === 'application/pdf' && /^inline/.test(hdr.headers.get('content-disposition') || ''), hdr.headers.get('content-type'));
+    hdr = await raw(f.evilName, 'anon');
+    check('a file name cannot add headers to the answer', !hdr.headers.get('set-cookie') && /filename\*=UTF-8''/.test(hdr.headers.get('content-disposition') || '') && !/[\r\n"]/.test(hdr.headers.get('content-disposition') || ''), hdr.headers.get('content-disposition'));
+
+    // ---- database operators, in every place a request can carry them ----
+    w = await call('anon', 'POST', '/api/auth/login', { email: { $ne: null }, password: 'x' });
+    check('a login with an operator instead of an email is refused outright', w.status === 400, w.data);
+    w = await call('anon', 'POST', '/api/auth/login', { email: 'a@b.co', password: { $gt: '' } });
+    check('or instead of a password', w.status === 400, w.data);
+    w = await call('anon', 'POST', '/api/push/unsubscribe', { endpoint: { $ne: null } });
+    check('so cannot be used to delete everybody\'s push subscriptions', w.status === 400, w.data);
+    w = await call('anon', 'POST', '/api/contact', { 'name.first': 'x', message: 'hi' });
+    check('a field name with a dot in it is refused too', w.status === 400, w.data);
+    const opForm = new FormData(); opForm.append('email[$ne]', 'x'); opForm.append('name', 'x'); opForm.append('password', 'longenough1');
+    w = await call('anon', 'POST', '/api/auth/register', opForm, true);
+    check('and so is an operator hidden in a multipart upload field, for that reason and not another',
+      w.status === 400 && /could not be understood/.test(JSON.stringify(w.data)), w.data);
+
+    // ---- push ----
+    const sub = (endpoint) => call('anon', 'POST', '/api/push/subscribe', { subscription: { endpoint, keys: { p256dh: 'a', auth: 'b' } } });
+    check('an internal address is not accepted as a push address', (await sub('http://169.254.169.254/latest/meta-data/')).status === 400 && (await sub('https://localhost/x')).status === 400, null);
+    check('a real browser push service is', (await sub('https://fcm.googleapis.com/fcm/send/abc123')).status === 200, null);
+    w = await call('anon', 'POST', '/api/push/unsubscribe', { endpoint: 'https://fcm.googleapis.com/fcm/send/abc123' });
+    check('and can be removed by its own address', w.status === 200 && (await fakeModels.PushSubscription.find({ endpoint: 'https://fcm.googleapis.com/fcm/send/abc123' })).length === 0, w.data);
+
+    // ---- signing in ----
+    await registerMember('fixation.test', 'fixation@test.com');
+    w = await call('fix', 'POST', '/api/auth/login', { email: 'fixation@test.com', password: 'secret123' });
+    const before = jars.fix;
+    check('a member signs in', w.status === 200 && !!before, w.data);
+    w = await call('fix', 'POST', '/api/auth/login', { email: 'fixation@test.com', password: 'secret123' });
+    check('and gets a new session id every time they do, so one planted beforehand is worthless', w.status === 200 && jars.fix && jars.fix !== before, [before, jars.fix]);
+    const stale = await fetch(BASE + '/api/auth/me', { headers: { cookie: before } });
+    check('the old session id no longer signs anybody in', (await stale.json()).member === null, null);
+    w = await call('fix', 'GET', '/api/auth/me');
+    check('while the new one does', w.data.member && w.data.member.email === 'fixation@test.com', w.data);
+    w = await call('anon', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+    const staffBefore = jars.anon;
+    w = await call('anon', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+    check('a leadership account gets a new session id on sign-in as well', w.status === 200 && jars.anon !== staffBefore, [staffBefore, jars.anon]);
+    jars.anon = '';
+    const wrongPw = new FormData(); wrongPw.append('name', 'Short Pw'); wrongPw.append('email', 'short@test.com'); wrongPw.append('password', '1234567'); wrongPw.append('chapterId', chapterId);
+    wrongPw.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    w = await call('anon', 'POST', '/api/auth/register', wrongPw, true);
+    check('a member password must be at least 8 characters', w.status === 400 && /8 characters/.test(w.data.error), w.data);
+    w = await call('anon', 'POST', '/api/auth/reset-password', { token: 'x', email: 'a@b.co', newPassword: '1234567' });
+    check('and so must a reset one', w.status === 400 && /8 characters/.test(w.data.error), w.data);
+    const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    check('the reset link is built from configuration and nothing the sender typed',
+      /publicBaseUrl\(req\)/.test(serverSrc) && !/req\.get\('host'\)/.test(serverSrc) && !/req\.headers\.host/.test(serverSrc), null);
+
+    // ---- what leaves in an export, and who may see a birthday ----
+    await call('fin', 'POST', '/api/finance/entries', { entryType: 'expense', category: 'welfare', amount: 10, date: '2026-02-02', payee: '=HYPERLINK("http://evil.example","pay")', description: '+cmd' });
+    w = await call('fin', 'GET', '/api/finance/export.csv');
+    check('a payee that looks like a formula is exported as text', typeof w.data === 'string' && /'=HYPERLINK/.test(w.data) && !/(^|,)=HYPERLINK/m.test(w.data), String(w.data).slice(0, 200));
+    const today = new Date();
+    await fakeModels.Member.updateOne({ id: memberId }, { $set: { birthdayMonth: today.getMonth() + 1, birthdayDay: today.getDate() } });
+    w = await call('anon', 'GET', '/api/birthdays/today');
+    check('a stranger is shown nobody\'s birthday', w.status === 200 && Array.isArray(w.data) && w.data.length === 0, w.data);
+    w = await call('member', 'GET', '/api/birthdays/today');
+    check('a member is', w.status === 200 && w.data.length >= 1, w.data);
+
+    // ---- the service worker keeps public things offline and nothing else ----
+    const swSrc = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8');
+    check('the offline cache only keeps API answers that are on the list',
+      /&& CACHEABLE_API\.some\(\(p\) => url\.pathname\.startsWith\(p\)\)/.test(swSrc), null);
+    check('and what is stored for a file records what it is, not what the uploader said it was',
+      /contentType: fileTypes\.storedType\(buffer, metadata && metadata\.contentType\)/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'gridfs.js'), 'utf8'))
+      && require('../lib/fileTypes').storedType(Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'), 'text/html') === 'image/png', null);
+    const cacheable = (swSrc.match(/const CACHEABLE_API = \[([\s\S]*?)\];/) || [, ''])[1];
+    check('the offline cache holds public content', ['/api/events', '/api/bible', '/api/public/'].every(p => cacheable.includes(`'${p}`)), cacheable);
+    check('and never anything behind a sign-in',
+      ['/api/admin', '/api/finance', '/api/shepherd', '/api/welfare', '/api/national', '/api/portal', '/api/member', '/api/auth', '/api/chat', '/api/executive/'].every(p => !cacheable.includes(`'${p}`)), cacheable);
+    check('nor a file marked private', /no-store\|private/.test(swSrc), null);
+
+    // ---- last: the on-demand image is limited ----
+    let limited = 0;
+    for (let i = 0; i < 30 && !limited; i++) {
+      const v = await fetch(BASE + '/api/verse-image?verse=' + encodeURIComponent('For God so loved the world ' + i));
+      if (v.status === 429) limited = i + 1;
+      await v.arrayBuffer();
+    }
+    check('asking for the verse image over and over is slowed down', limited > 0 && limited <= 30, limited);
+  }
+
   // The send loop only ticks once a minute, so this one is opt-in: run it with
   // SMOKE_SLOW=1 when the scheduling path itself is what changed.
   if (process.env.SMOKE_SLOW === '1') {
@@ -4974,6 +5321,125 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('scheduler recorded an outcome', /posted to the app/.test(fired.result || ''), fired.result);
   const afterCount = (await fakeModels.Notification.find({})).length;
   check('it reached the in-app feed', afterCount === beforeCount + 1, { beforeCount, afterCount });
+  }
+
+  console.log('\n== Policies, consent, and a plain page: what a visitor and a regulator can check ==');
+  {
+    const fs = require('fs');
+    const path = require('path');
+    const root = path.join(__dirname, '..');
+    const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+    const files = (dir, ext) => fs.readdirSync(path.join(root, dir)).filter(f => f.endsWith(ext)).map(f => path.join(dir, f));
+
+    // ---- registration is an agreement, and it is recorded ----
+    global.__noAutoConsent = true;
+    const noBox = new FormData();
+    noBox.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    noBox.append('name', 'No Box'); noBox.append('email', 'nobox@test.com'); noBox.append('password', 'secret123'); noBox.append('chapterId', chapterId);
+    let w = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: noBox })).json();
+    check('an account cannot be made without agreeing to the terms and the policy', /agree/i.test(w.error || ''), w);
+    check('and nothing is created when they have not', (await fakeModels.Member.find({ email: 'nobox@test.com' })).length === 0, null);
+    global.__noAutoConsent = false;
+    const withBox = new FormData();
+    withBox.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    withBox.append('name', 'With Box'); withBox.append('email', 'withbox@test.com'); withBox.append('password', 'secret123'); withBox.append('chapterId', chapterId); withBox.append('consent', 'true');
+    w = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: withBox })).json();
+    const boxed = (await fakeModels.Member.find({ email: 'withbox@test.com' }))[0];
+    check('with it ticked the account is made', w.success === true && !!boxed, w);
+    check('and when they agreed, and to which wording, is kept', !!boxed && !!boxed.consentedAt && boxed.consentVersion === '2026-10-06', boxed && { at: boxed.consentedAt, v: boxed.consentVersion });
+    const reg = read('public/register.html');
+    check('the form asks for it with a box that must be ticked, linked to both documents',
+      /<input type="checkbox" id="agree" required>/.test(reg) && /href="\/terms\.html"/.test(reg) && /href="\/privacy\.html"/.test(reg), null);
+    check('the form no longer says six characters when the server wants eight', /minlength="8"/.test(reg) && !/At least 6 characters/.test(reg), null);
+
+    // ---- notices where a form collects something personal ----
+    for (const [f, label] of [['contact.html', 'the contact form'], ['prayer.html', 'the prayer and testimony forms'], ['welfare.html', 'the welfare form'], ['events.html', 'event registration']]) {
+      check(label + ' says what the details are used for, beside the button', /class="form-notice"/.test(read('public/' + f)), null);
+    }
+
+    // ---- the policies exist, in the app and on the website, and are linked ----
+    for (const f of ['privacy', 'terms', 'cookies', 'refunds']) {
+      const html = read('public/' + f + '.html');
+      check('the app has a ' + f + ' page with something in it', html.length > 2500 && /<h1>/.test(html), html.length);
+    }
+    const appFooter = read('public/js/main.js');
+    check('the app footer links to all four on every page', ['privacy', 'terms', 'cookies', 'refunds'].every(f => appFooter.includes('/' + f + '.html')), null);
+    const priv = read('public/privacy.html');
+    check('the privacy policy names the Data Protection Act and where to complain',
+      /Act 843/.test(priv) && /Data\s+Protection Commission of Ghana/.test(priv), null);
+    check('and says plainly that the videos are not loaded until pressed', /Nothing is loaded from them until you\s+press the button/.test(priv), null);
+    check('and covers under-18s and storage outside Ghana', /under 18/.test(priv) && /outside Ghana/.test(priv), null);
+    check('the cookies page says there is no banner because nothing needs consent', /no cookie banner/.test(read('public/cookies.html')), null);
+    check('the refund page says the app takes no payments, and gives a window and a route',
+      /does not take payments/.test(read('public/refunds.html')) && /within 14 days/.test(read('public/refunds.html')) && /contact\.html/.test(read('public/refunds.html')), null);
+    for (const f of ['privacy', 'terms', 'cookies']) {
+      const html = read('site/' + f + '.html');
+      check('the website has a ' + f + ' page', html.length > 2000 && /<h1>/.test(html), html.length);
+    }
+    const siteIndex = read('site/index.html');
+    check('and the website footer links to them', ['privacy.html', 'terms.html', 'cookies.html'].every(l => siteIndex.includes('href="' + l + '"')), null);
+    check('the website says it sets no cookies and stores nothing', /sets <strong>no cookies<\/strong>/.test(read('site/cookies.html')), null);
+    check('the alumni form agreement links to the explanation of how it is used', /href="privacy\.html#alumni"/.test(siteIndex), null);
+    check('the service worker keeps the new pages for offline reading',
+      ['/terms.html', '/cookies.html', '/refunds.html'].every(p => read('public/sw.js').includes("'" + p + "'")), null);
+
+    // ---- nothing is fetched from another company ----
+    const allFront = [...files('public', '.html'), ...files('public/css', '.css'), ...files('public/js', '.js'), 'site/index.html', 'site/styles.css', 'site/site.js', 'site/privacy.html'];
+    const outside = [];
+    for (const f of allFront) {
+      const src = read(f);
+      (src.match(/https?:\/\/(?:fonts\.googleapis|fonts\.gstatic|cdnjs|cdn\.jsdelivr|unpkg|www\.google-analytics|www\.googletagmanager)[^\s"')]*/g) || []).forEach(u => outside.push(f + ' ' + u));
+    }
+    check('no page loads a font, script or tracker from another company', outside.length === 0, outside.slice(0, 5));
+    check('the fonts are files served by the app and the site',
+      fs.existsSync(path.join(root, 'public/fonts/source-sans-3-latin-400-normal.woff2')) && fs.existsSync(path.join(root, 'site/fonts/source-serif-4-latin-700-normal.woff2')), null);
+
+    // ---- a page that does not look made by a template ----
+    const userFacing = [...files('public', '.html'), ...files('public/js', '.js'), 'site/index.html', 'site/site.js', 'site/chapter.js', 'site/privacy.html', 'site/terms.html', 'site/cookies.html'];
+    const dashes = userFacing.filter(f => read(f).includes('—'));
+    check('no em dash anywhere in the pages or their scripts', dashes.length === 0, dashes);
+    const css = [...files('public/css', '.css'), 'site/styles.css'].map(f => [f, read(f)]);
+    check('no stylesheet draws a gradient', css.every(([, c]) => !/-gradient\(/.test(c.replace(/\/\*[\s\S]*?\*\//g, ''))), css.filter(([, c]) => /-gradient\(/.test(c.replace(/\/\*[\s\S]*?\*\//g, ''))).map(([f]) => f));
+    check('and none turns a button into a pill', css.every(([, c]) => !/\.btn[^{]*\{[^}]*999px/.test(c)), null);
+    const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+    const withEmoji = userFacing.filter(f => emoji.test(read(f)));
+    check('no emoji stands in for an icon', withEmoji.length === 0, withEmoji);
+    check('no page carries a decorative label above its heading', !userFacing.some(f => /class="eyebrow/.test(read(f))), null);
+    check('nothing fades or floats in as it scrolls into view',
+      !/IntersectionObserver/.test(read('public/js/main.js')) && !/IntersectionObserver/.test(read('site/site.js')), null);
+    check('and what moves respects a request for less motion',
+      /prefers-reduced-motion: reduce/.test(read('public/css/style.css')) && /prefers-reduced-motion: reduce/.test(read('site/styles.css')), null);
+    check('a button gives way slightly when pressed and only a pointer hovers',
+      /\.btn:active \{ transform: scale\(0\.97\); \}/.test(read('public/css/style.css')) && /\(hover: hover\) and \(pointer: fine\)/.test(read('public/css/style.css')), null);
+    check('every colour that means something has a name: ok, warning, error, information',
+      ['--ok-ink', '--warn-ink', '--bad-ink', '--info-ink'].every(t => read('public/css/style.css').includes(t)) && ['--ok', '--warn', '--bad', '--info'].every(t => read('site/styles.css').includes(t + ':')), null);
+    check('loading is shown as a grey block, not as the word Loading',
+      /\.skeleton \{/.test(read('public/css/style.css')) && /\.skeleton \{/.test(read('site/styles.css')), null);
+
+    // ---- what the browser is told it may load ----
+    {
+      const res = await fetch(BASE + '/index.html');
+      const csp = res.headers.get('content-security-policy') || '';
+      check('every page is sent with a Content-Security-Policy', csp.length > 100, csp.slice(0, 60));
+      check('which allows scripts only from the app itself', /script-src 'self' 'unsafe-inline'/.test(csp) && !/script-src[^;]*https?:/.test(csp), csp);
+      check('forbids plugins, and framing by other sites, and posting to other sites', /object-src 'none'/.test(csp) && /frame-ancestors 'self'/.test(csp) && /form-action 'self'/.test(csp), csp);
+      check('and lets a page frame only YouTube (no-cookie) and Facebook', /frame-src https:\/\/www\.youtube-nocookie\.com https:\/\/www\.facebook\.com(;|$)/.test(csp), csp);
+      check('connections go back to the app only', /connect-src 'self'(;|$)/.test(csp), csp);
+      const pp = res.headers.get('permissions-policy') || '';
+      check('camera and microphone are for this app only and nothing else is asked for', /camera=\(self\)/.test(pp) && /microphone=\(self\)/.test(pp) && /geolocation=\(\)/.test(pp), pp);
+      check('a page does not say where it came from to other sites beyond its origin', /strict-origin-when-cross-origin/.test(res.headers.get('referrer-policy') || ''), res.headers.get('referrer-policy'));
+      const content = read('public/content.html');
+      check('a video is a button until pressed: no iframe from another company is written into the page',
+        !/<iframe[^>]*src="https:\/\/www\.(youtube|facebook)/.test(content) && /class="btn btn-primary video-play"/.test(content), null);
+    }
+
+    // ---- favicon ----
+    for (const f of ['favicon.ico', 'favicon-16.png', 'favicon-32.png']) {
+      check('the app has ' + f, fs.existsSync(path.join(root, 'public', f)), null);
+      check('and the website has ' + f, fs.existsSync(path.join(root, 'site', f)), null);
+    }
+    check('the website has an apple touch icon', fs.existsSync(path.join(root, 'site/apple-touch-icon.png')), null);
+    check('every app page declares the icon set', files('public', '.html').filter(f => !/offline|404/.test(f)).every(f => /rel="icon"/.test(read(f))), null);
   }
 
   console.log(`\n${failures ? `${failures} FAILURES` : 'all checks passed'}`);

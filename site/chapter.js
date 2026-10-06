@@ -6,7 +6,7 @@
    yours. Another chapter copies this folder and changes this file only.
 
    ANYTHING LEFT BLANK DISAPPEARS. A blank phone number does not render an
-   empty row, and a blank service list does not render an empty section — so
+   empty row, and a blank service list does not render an empty section, so
    this site is publishable today with half of it filled in, and it will still
    look finished. Fill in the rest as you get it.
 
@@ -16,26 +16,22 @@
 
 window.CHAPTER = {
   // ---- who you are ----------------------------------------------------
-  name: 'ACONSU — KNUST',
+  name: 'ACONSU KNUST',
   fullName: "The Apostles' Continuation Students Union",
   institution: 'Kwame Nkrumah University of Science and Technology',
   location: 'Kumasi, Ghana',
   tagline: 'ACONSU!! THE APOSTLES!!!',
 
   // Shown under the name on the opening screen. One or two sentences.
-  lede: 'A family of students at KNUST who love God, love His Word, and genuinely '
-      + 'love one another. Sunday mornings, midweek evenings, prayer on the Parade '
-      + 'grounds — there is always something happening, and always room for one '
-      + 'more. Come exactly as you are.',
+  lede: 'We are a Christian fellowship of KNUST students. We hold services on Sundays and Thursdays, pray together on Tuesdays and study the Bible during the week. Everyone is welcome.',
 
   // ---- a photo behind the heading ---------------------------------------
   // Put the file in this folder's images/ directory and write the path
-  // relative to it. Blank keeps the purple-and-gold gradient, which is a
-  // perfectly good header - only use a photo if it is a good one.
+  // relative to it. Blank leaves the opening as text only. It is shown beside
+  // the heading, not behind it, so the words never depend on the photo.
   //
-  // WHAT MAKES A GOOD ONE: wide rather than tall (it is cropped to a band),
-  // busy at the edges rather than the middle, since the heading sits over the
-  // centre. A congregation, the auditorium, the campus.
+  // WHAT MAKES A GOOD ONE: wide rather than tall (it is cropped to 3:2),
+  // a congregation, the auditorium or the campus.
   //
   // SIZE IT FIRST. About 1600px wide and under 300KB. A 4MB photo straight off
   // a phone costs a fresher on campus data real money and several seconds, and
@@ -45,7 +41,8 @@ window.CHAPTER = {
   // 'dark' puts the heading in white over a darkened photo. 'light' keeps the
   // purple heading and lays a pale wash over instead. Dark suits most photos;
   // try light only if yours is very pale.
-  heroImageTone: 'dark',
+  // What the photo shows, for people who cannot see it.
+  heroImageAlt: 'A group of ACONSU KNUST members standing together outdoors',
 
   // ---- when and where you meet ---------------------------------------
   // Each line is one meeting. Leave the list empty and the whole section goes.
@@ -60,21 +57,10 @@ window.CHAPTER = {
   mapUrl: 'https://maps.app.goo.gl/UzeXchSvjjCmi3nH9?g_st=aw',
 
   // ---- what you believe ----------------------------------------------
-  story: 'ACONSU began with a simple conviction: that the years a student spends '
-       + 'on this campus are some of the most formative of their life, and that God '
-       + 'means to meet them here — in the lecture hall, in the hostel, in the small '
-       + 'hours before an exam. So we do what the early church did. We open the Word '
-       + 'together, we pray together, we eat together, and we carry one another. A '
-       + 'degree is worth having. A generation raised in Christ is worth far more.',
-  belief: 'We hold the Scriptures as the final authority for what we believe and how '
-        + 'we live, and everything else follows from that. We are here to help every '
-        + 'student grow in Christ, find the gift God has put in them, and carry that '
-        + 'fire with them — into every hall, every hostel, every workplace and every '
-        + 'city they go on to.',
-  vision: 'Raising students who continue steadfastly in Christ and carry His life '
-        + 'into every campus, every workplace and every city they walk into.',
-  values: 'Scripture, prayer, fellowship, service and holy living. Not slogans on a '
-        + 'wall — the five things our week is actually built around.',
+  story: 'ACONSU is a student fellowship on the KNUST campus. We meet to read the Bible, pray, worship and support one another through university life.',
+  belief: 'We hold the Scriptures as the final authority for what we believe and how we live. We want every student to grow in Christ and find the gift God has given them.',
+  vision: 'To raise students who continue steadfastly in Christ and take His life into every campus, workplace and city they go to.',
+  values: 'Scripture, prayer, fellowship, service and holy living.',
 
   // ---- the wider church, and the men who began it -------------------------
   // This chapter is one part of The Apostles' Continuation Church, not the
@@ -90,9 +76,7 @@ window.CHAPTER = {
     // cropped, so it keeps whatever space was drawn around it; a PNG keeps its
     // transparency.
     logo: '',        // e.g. 'images/church-logo.png'
-    blurb: 'Our chapter is one part of the wider church — one fraction of a family '
-         + 'that has been continuing steadfastly a good deal longer than any of us '
-         + 'have been on this campus.',
+    blurb: 'This chapter is one part of the wider church, which has been meeting for much longer than the chapter has existed.',
   },
 
   // The founding fathers. Same rule as everywhere else: somebody with no photo
@@ -119,7 +103,7 @@ window.CHAPTER = {
     { name: 'Apostle Paul Manu', role: 'Founding Member',
       about: 'A man of sacrifice, who left his government job for full-time ministry. '
            + 'He planted the church across the Bono and Ahafo regions and carried its '
-           + 'message as far as Germany — more than 50 churches have come of it.',
+           + 'message as far as Germany. More than 50 churches have come of it.',
       photo: 'images/church-founding-member.jpg', inMemoriam: true },
 
     { name: 'Apostle Ebenezer Annan', role: 'General Secretary, the Church',
@@ -185,33 +169,27 @@ window.CHAPTER = {
   // plenty for these - they are shown as a band roughly 400px across.
   ministries: [
     { name: 'Bible Study',
-      blurb: 'Verse by verse, book by book — with room for every question you have '
-           + 'been afraid to ask out loud.',
+      blurb: 'We read the Bible book by book and verse by verse, with time for questions.',
       photo: 'images/bible-study.jpg' },
 
     { name: 'Prayer',
-      blurb: 'Standing together for this campus, this nation and each other. No '
-           + 'request is too small to bring.',
+      blurb: 'We pray together for the campus, the nation and one another. You can bring any request.',
       photo: 'images/prayer.jpg' },
 
     { name: 'Music & Worship',
-      blurb: 'The sound of the house. If you sing, play, or simply cannot keep '
-           + 'still when the music starts, there is a place for you here.',
+      blurb: 'Leading worship at our services. If you sing or play an instrument, you can join.',
       photo: 'images/worship.jpg' },
 
     { name: 'Evangelism',
-      blurb: 'Taking the message out of the auditorium and into the halls, the '
-           + 'hostels and the streets of Kumasi.',
+      blurb: 'Sharing the gospel in the halls, the hostels and the streets of Kumasi.',
       photo: 'images/evangelism.jpg' },
 
     { name: 'Welfare',
-      blurb: 'Nobody should go through a hard semester alone. A meal, a hand, a '
-           + 'listening ear, somebody checking on you — quietly, and without fuss.',
+      blurb: 'Help for members who are struggling: a meal, practical help, or someone to talk to.',
       photo: 'images/welfare.jpg' },
 
     { name: 'Media',
-      blurb: 'Cameras, sound, screens and everything else that carries a service to '
-           + 'the people who could not be in the room.',
+      blurb: 'Cameras, sound and screens, so services reach people who could not attend.',
       photo: 'images/media.jpg' },
   ],
 
@@ -244,7 +222,7 @@ window.CHAPTER = {
       title: 'Annual Evangelism Outreach',
       date: 'Sekyere Kwamang · September 2026',
       blurb: 'About forty-five of us spent a week there on the theme "I will go '
-           + 'back to my Father". We went with clothes as well as a message — people '
+           + 'back to my Father". We went with clothes as well as a message. People '
            + 'we met in earlier years had told us they had nothing to wear to '
            + 'church, so the Union gathered and carried them.',
       photo: 'images/report-kwamang-2026.jpg',
@@ -290,9 +268,7 @@ window.CHAPTER = {
   // it - so `message` is ignored for one.
   freshers: {
     heading: 'New on campus?',
-    blurb: 'Find us before the homesickness does. Join the freshers group and '
-         + 'somebody will be looking out for you on your very first Sunday — by '
-         + 'name.',
+    blurb: 'Join the freshers WhatsApp group and someone will welcome you before your first Sunday service.',
     buttonLabel: 'Join the freshers WhatsApp group',
     link: 'https://chat.whatsapp.com/ETj54WcQMe14bc4kAwwAFd?s=cl&p=i&mlu=0&ilr=4',
     message: "Hi! I'm a fresher and I'd like to join ACONSU.",

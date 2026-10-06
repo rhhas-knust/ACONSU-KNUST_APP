@@ -1,7 +1,7 @@
-// ACONSU service worker — enables offline access and installability.
+// ACONSU service worker - enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v16';
+const CACHE_NAME = 'aconsu-v17';
 
 const APP_SHELL = [
   '/index.html',
@@ -29,6 +29,9 @@ const APP_SHELL = [
   '/prayer.html',
   '/contact.html',
   '/privacy.html',
+  '/terms.html',
+  '/cookies.html',
+  '/refunds.html',
   '/login.html',
   '/register.html',
   '/forgot-password.html',
@@ -37,6 +40,12 @@ const APP_SHELL = [
   '/page.html',
   '/404.html',
   '/css/style.css',
+  '/fonts/source-sans-3-latin-400-normal.woff2',
+  '/fonts/source-sans-3-latin-600-normal.woff2',
+  '/fonts/source-sans-3-latin-700-normal.woff2',
+  '/fonts/source-serif-4-latin-600-normal.woff2',
+  '/fonts/source-serif-4-latin-700-normal.woff2',
+  '/favicon.ico',
   '/js/main.js',
   '/images/logo.jpg',
   '/manifest.json',
@@ -55,6 +64,17 @@ const APP_SHELL = [
 // Responses that describe *who you are* are never written to the cache. Serving
 // a stale identity offline is worse than serving nothing: the page would render
 // as though the previous user were still signed in.
+// ONLY these API reads are kept for offline use. It used to be everything, which
+// put admin member lists, finance ledgers and pastoral records into the browser's
+// cache on the device - still there after sign-out, on a shared campus laptop.
+// Public content is worth keeping offline; anything behind a sign-in is not.
+const CACHEABLE_API = [
+  '/api/events', '/api/sermons', '/api/departments', '/api/executives', '/api/executive-positions',
+  '/api/pages', '/api/settings', '/api/chapters', '/api/public/', '/api/bible', '/api/daily-verse',
+  '/api/content', '/api/features', '/api/verse', '/api/prayer-wall', '/api/groups', '/api/forms',
+  '/api/search', '/api/files'
+];
+
 const NEVER_CACHE_API = [
   '/api/auth/me',
   '/api/portal/me',
@@ -63,7 +83,7 @@ const NEVER_CACHE_API = [
   '/api/national/alumni'
 ];
 
-// A meeting's signalling stream never ends, so there is no response to cache —
+// A meeting's signalling stream never ends, so there is no response to cache -
 // trying would hold a clone of an infinite body open for as long as the call
 // lasts. These are passed straight to the network, untouched.
 const PASS_THROUGH = [
@@ -73,7 +93,7 @@ const PASS_THROUGH = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => {
-      // Non-fatal — if a shell asset is missing at install time, the SW still activates
+      // Non-fatal - if a shell asset is missing at install time, the SW still activates
       // and pages will just be fetched from network as usual.
     })
   );
@@ -110,7 +130,11 @@ self.addEventListener('fetch', (event) => {
           // Only ever store a success. Caching a 401/403/500 would mean that
           // once offline we'd confidently serve back an error we were told
           // once, instead of the last good data we actually have.
-          if (res && res.status === 200 && !NEVER_CACHE_API.some((p) => url.pathname.startsWith(p))) {
+          const cacheControl = res && res.headers ? (res.headers.get('Cache-Control') || '') : '';
+          if (res && res.status === 200
+              && CACHEABLE_API.some((p) => url.pathname.startsWith(p))
+              && !NEVER_CACHE_API.some((p) => url.pathname.startsWith(p))
+              && !/no-store|private/i.test(cacheControl)) {
             const clone = res.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           }
@@ -121,7 +145,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Admin and the leadership portals are never cached — they must always
+  // Admin and the leadership portals are never cached - they must always
   // reflect live session/auth state, never a stale signed-in-looking shell.
   const LIVE_ONLY = [
     '/admin.html',
@@ -178,7 +202,7 @@ self.addEventListener('fetch', (event) => {
 // A signed-out device must not keep one person's records where the next person
 // to open the app offline would be shown them. The page posts this the moment a
 // logout succeeds; we drop every cached /api/ response and leave the static
-// shell alone, so the app still opens offline — just with nobody's data in it.
+// shell alone, so the app still opens offline - just with nobody's data in it.
 self.addEventListener('message', (event) => {
   if (!event.data || event.data.type !== 'CLEAR_API_CACHE') return;
   event.waitUntil(

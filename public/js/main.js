@@ -9,7 +9,7 @@ async function fetchJSON(url, options) {
     const chapterId = getSelectedChapterId();
     if (chapterId) opts.headers = { ...(opts.headers || {}), 'X-Chapter-Id': chapterId };
   }
-  // An upload that is slow is not a sleeping server — it is a big photo on a
+  // An upload that is slow is not a sleeping server - it is a big photo on a
   // mobile connection, which is the normal case at registration. Telling those
   // two apart decides which message is honest.
   const done = beginRequest(opts.body instanceof FormData);
@@ -26,7 +26,7 @@ async function fetchJSON(url, options) {
 // ---------- slow first request (free-tier cold start) ----------
 // The server sleeps when nobody has used it for a while, and the request that
 // wakes it can take the better part of a minute. To a member that is a dead
-// screen, and a dead screen reads as a broken app — so say what is happening
+// screen, and a dead screen reads as a broken app - so say what is happening
 // rather than leaving them to guess. Only shown when a request is genuinely
 // slow, so a warm server never shows it at all.
 const SLOW_REQUEST_MS = 4000;
@@ -54,8 +54,8 @@ function beginRequest(isUpload) {
 function showSlowBanner(isUpload) {
   if (document.getElementById('wakingBanner')) return;
   const message = isUpload
-    ? 'Still uploading — a photo can take a while on mobile data.'
-    : 'Waking the server up — this can take a moment the first time today.';
+    ? 'Still uploading. A photo can take a while on mobile data.'
+    : 'Waking the server up. This can take a moment the first time today.';
   const el = document.createElement('div');
   el.id = 'wakingBanner';
   el.setAttribute('role', 'status');
@@ -97,7 +97,7 @@ async function clearCachedAccountData() {
 // which chapter it's showing. With a single active chapter (true for most
 // deployments most of the time) this resolves itself silently on first
 // visit. The moment a second chapter exists, a visitor is asked once and
-// it's remembered on that device from then on — a signed-in member's own
+// it's remembered on that device from then on - a signed-in member's own
 // account overrides it automatically once they log in (see initLayout).
 const CHAPTER_STORAGE_KEY = 'aconsu_chapter_id';
 
@@ -116,9 +116,9 @@ function showChapterPicker(chapters) {
     const backdrop = document.createElement('div');
     backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px;';
     backdrop.innerHTML = `
-      <div style="background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:'Manrope',sans-serif;">
+      <div style="background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:var(--font-body);">
         <h3 style="margin:0 0 6px; font-family:'Fraunces',serif; color:var(--purple-deep,#3A1B54);">Choose your ACONSU chapter</h3>
-        <p style="color:#5a4468; font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters — pick yours to continue. You can change this later from your profile.</p>
+        <p style="color:var(--ink-soft); font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters. Pick yours to continue. You can change this later from your profile.</p>
         <div id="chapterPickList" style="display:flex; flex-direction:column; gap:10px;"></div>
       </div>
     `;
@@ -141,7 +141,7 @@ function showChapterPicker(chapters) {
 }
 
 // Resolves (and, if needed, asks) which chapter this browser is looking at.
-// Safe to call on every page load — instant once a chapter is already
+// Safe to call on every page load - instant once a chapter is already
 // chosen. Called from initLayout, so ordinary pages never need this directly.
 async function ensureChapterSelected() {
   if (getSelectedChapterId()) return getSelectedChapterId();
@@ -154,7 +154,7 @@ async function ensureChapterSelected() {
     if (Array.isArray(chapters) && chapters.length > 1) {
       return await showChapterPicker(chapters);
     }
-  } catch (e) { /* chapters not reachable yet — pages fall back to unscoped content */ }
+  } catch (e) { /* chapters not reachable yet - pages fall back to unscoped content */ }
   return '';
 }
 
@@ -168,7 +168,7 @@ function escapeHtml(str) {
 // Initials for somebody with no photograph yet.
 //
 // Nearly every name on these pages carries a title, and taking the first
-// letter of the name as written gives "Apostle E. K. Owusu" the initials AE —
+// letter of the name as written gives "Apostle E. K. Owusu" the initials AE -
 // the A belongs to the office, not the man. Titles are skipped, unless the
 // title is all that was written, in which case it is kept rather than leaving
 // an empty circle.
@@ -215,7 +215,7 @@ const ICON_TELEGRAM = '<path d="M21.5 2 2 9.5l7 3 2.5 7.5 3-4 6 4.5z"/>';
 const ICON_SPOTIFY = '<circle cx="12" cy="12" r="10"/><path d="M7.5 9c2.5-1.5 6 0 7.5 2m0-5.5c3.5-2 8 0 11 3M9 13.5c1.5-.5 4 0 5 1.5" fill="none"/>';
 
 // Renders the platform icons for whatever links a settings/contact object
-// has set — used by the site footer, contact page, and social connect strips.
+// has set - used by the site footer, contact page, and social connect strips.
 function socialLinksHtml(s) {
   const cfg = s || {};
   const links = [
@@ -234,16 +234,14 @@ function socialLinksHtml(s) {
     cfg.spotify && { href: cfg.spotify, icon: ICON_SPOTIFY, label: 'Spotify', cls: 'social-spotify' }
   ].filter(Boolean);
 
-  // If no custom social links are on file yet, provide standard union handles
-  const list = links.length ? links : [
-    { href: 'https://wa.me/', icon: ICON_WHATSAPP, label: 'WhatsApp', cls: 'social-whatsapp' },
-    { href: 'https://youtube.com', icon: ICON_YOUTUBE, label: 'YouTube', cls: 'social-youtube' },
-    { href: 'https://instagram.com', icon: ICON_INSTAGRAM, label: 'Instagram', cls: 'social-instagram' },
-    { href: 'https://facebook.com', icon: ICON_FACEBOOK, label: 'Facebook', cls: 'social-facebook' }
-  ];
+  // Only the accounts a chapter has actually set. There used to be a row of
+  // generic YouTube, Instagram and Facebook home-page links here when nothing was
+  // set; those pointed nowhere that belonged to the union, so a chapter with no
+  // accounts now shows no row at all.
+  const list = links;
 
   return list.map(l => `
-    <a href="${escapeHtml(l.href)}" target="_blank" rel="noopener" aria-label="${l.label}" title="${l.label}" class="social-icon-link ${l.cls}">
+    <a href="${escapeHtml(l.href)}" target="_blank" rel="noopener noreferrer" aria-label="${l.label} (opens in a new tab)" title="${l.label}" class="social-icon-link ${l.cls}">
       ${svgIcon(l.icon)}
     </a>
   `).join('');
@@ -291,7 +289,7 @@ async function subscribeToPush() {
   return true;
 }
 
-// Quietly re-register a device that has already granted permission — no prompt,
+// Quietly re-register a device that has already granted permission - no prompt,
 // no button, nothing shown. This keeps the server's subscription list accurate
 // (browsers rotate endpoints) without ever asking a member twice.
 async function resubscribePushIfAlreadyAllowed() {
@@ -313,7 +311,7 @@ async function resubscribePushIfAlreadyAllowed() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ subscription: sub })
     });
-  } catch (e) { /* alerts are optional — never let this surface to the member */ }
+  } catch (e) { /* alerts are optional - never let this surface to the member */ }
 }
 
 async function unsubscribeFromPush() {
@@ -358,7 +356,7 @@ function renderPaginationControls(containerId, totalItems, perPage, currentPage,
   el.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:center; gap:14px; margin-top:16px;">
       <button type="button" id="${containerId}-prev" class="btn btn-outline btn-sm" ${currentPage <= 1 ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>&larr; Prev</button>
-      <span style="font-size:0.85rem; color:#5a4468; font-weight:700;">Page ${currentPage} of ${totalPages}</span>
+      <span style="font-size:0.85rem; color:var(--ink-soft); font-weight:700;">Page ${currentPage} of ${totalPages}</span>
       <button type="button" id="${containerId}-next" class="btn btn-outline btn-sm" ${currentPage >= totalPages ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}>Next &rarr;</button>
     </div>
   `;
@@ -374,7 +372,7 @@ function dailyCheckin() {
   if (localStorage.getItem('aconsu_last_checkin') === todayKey) return; // already pinged today
   fetchJSON('/api/member/checkin', { method: 'POST' })
     .then(() => localStorage.setItem('aconsu_last_checkin', todayKey))
-    .catch(() => {}); // non-critical — silently skip if it fails
+    .catch(() => {}); // non-critical - silently skip if it fails
 }
 
 const BOTTOM_TABS = [
@@ -394,6 +392,7 @@ function renderBottomNav(activePath, customPages, member) {
   // linked to, shared, and reached with the back button like anything else.
   const nav = document.createElement('nav');
   nav.id = 'bottomNav';
+  nav.setAttribute('aria-label', 'App tabs');
   nav.className = 'bottom-nav';
   nav.innerHTML = `
     ${BOTTOM_TABS.map(t => `
@@ -432,7 +431,7 @@ async function renderVerseOfDay(settings) {
   const daily = await fetchJSON('/api/daily-verse').then(r => r && r.item).catch(() => null);
   if (daily && daily.reference) {
     verseEl.textContent = daily.text
-      ? `"${daily.text}" — ${daily.reference}`
+      ? `"${daily.text}": ${daily.reference}`
       : daily.reference;
     // Kept apart as well as joined: sharing this verse as an image needs the
     // two halves, and guessing them back out of one string is guesswork.
@@ -478,9 +477,9 @@ function renderHeader(activePath, customPages, member) {
     ? `<a href="/profile.html" class="btn btn-outline btn-sm nav-btn-account">${escapeHtml(member.name.split(' ')[0])}</a>`
     : `<a href="/login.html" class="btn btn-outline btn-sm nav-btn-account">Log In</a>`;
   el.innerHTML = `
-    <nav class="nav">
+    <nav class="nav" aria-label="Main">
       <a href="/index.html" class="nav-brand">
-        <img src="/images/logo.jpg" alt="ACONSU logo">
+        <img src="/images/logo.jpg" alt="" width="40" height="40">
         <span>ACONSU</span>
       </a>
       <ul class="nav-links" id="navLinks">${links}</ul>
@@ -569,7 +568,7 @@ function wireThemeToggle() {
 }
 
 // ---------- in-app notifications ----------
-// The bell stays a real link to /notifications.html — it works with no script,
+// The bell stays a real link to /notifications.html - it works with no script,
 // it can be opened in a new tab, and it is still where the full history lives.
 // The click is only intercepted to show the last few in place, because reading
 // one notice should not cost you the page you were on.
@@ -622,7 +621,7 @@ async function toggleNotificationPanel(bell) {
   document.body.appendChild(panel);
   document.addEventListener('keydown', notifEscHandler);
 
-  // Anything outside closes it — including the bell, which toggles.
+  // Anything outside closes it - including the bell, which toggles.
   setTimeout(() => {
     document.addEventListener('click', function away(e) {
       if (panel.contains(e.target) || bell.contains(e.target)) return;
@@ -654,7 +653,7 @@ async function toggleNotificationPanel(bell) {
     `).join('');
   }
 
-  // Marked seen on opening, not on visiting the full page — opening the panel
+  // Marked seen on opening, not on visiting the full page - opening the panel
   // IS having seen them, and the badge should agree with what you just read.
   markNotificationsSeen();
   bell.querySelector('.notif-count')?.remove();
@@ -764,7 +763,7 @@ function renderSideNav(activePath, customPages, member) {
     <a href="/index.html" class="side-nav-brand">
       <img src="/images/logo.jpg" alt=""><span>ACONSU</span>
     </a>
-    <nav class="side-nav-scroll">
+    <nav class="side-nav-scroll" aria-label="App sections">
       ${groups.map(g => `
         ${g.title ? `<p class="side-nav-title">${escapeHtml(g.title)}</p>` : ''}
         ${g.links.map(item).join('')}
@@ -787,37 +786,42 @@ function renderFooter(settings) {
     <div class="container">
       <div class="footer-grid">
         <div>
-          <h4>ACONSU</h4>
-          <p style="color:#C9B3D8; font-size:0.9rem;">${escapeHtml(s.fullName || "The Apostles' Continuation Students Union")}</p>
+          <p class="footer-title">ACONSU</p>
+          <p style="color:#E2D3EE; font-size:0.95rem;">${escapeHtml(s.fullName || "The Apostles' Continuation Students Union")}</p>
           <div class="social-row">${socialLinksHtml(s)}</div>
         </div>
         <div>
-          <h4>Explore</h4>
+          <p class="footer-title">Explore</p>
           <a href="/departments.html">Departments</a>
           <a href="/events.html">Events</a>
           <a href="/media.html">Sermons &amp; Media</a>
           <a href="/prayer.html">Prayer Wall</a>
         </div>
         <div>
-          <h4>Get Involved</h4>
+          <p class="footer-title">Get Involved</p>
           <a href="/departments.html">Join a Department</a>
           <a href="/alumni.html">Alumni Connect</a>
           <a href="/prayer.html">Submit a Prayer Request</a>
           <a href="/contact.html">Contact Us</a>
-          <a href="/privacy.html">Privacy Policy</a>
         </div>
         <div>
-          <h4>Reach Us</h4>
-          <a href="#">${escapeHtml(s.address || 'Campus Fellowship Auditorium')}</a>
+          <p class="footer-title">Legal</p>
+          <a href="/privacy.html">Privacy policy</a>
+          <a href="/terms.html">Terms of use</a>
+          <a href="/cookies.html">Cookies and storage</a>
+          <a href="/refunds.html">Giving and refunds</a>
+        </div>
+        <div>
+          <p class="footer-title">Reach Us</p>
+          <span style="display:block; padding:6px 0; color:#E2D3EE; font-size:0.95rem;">${escapeHtml(s.address || 'Campus Fellowship Auditorium')}</span>
           ${s.email ? `<a href="mailto:${s.email}">${escapeHtml(s.email)}</a>` : ''}
           ${s.phone ? `<a href="tel:${s.phone}">${escapeHtml(s.phone)}</a>` : ''}
         </div>
       </div>
       <div class="footer-bottom">
         <span>&copy; ${new Date().getFullYear()} ACONSU. All Rights Reserved.</span>
-        <span>Built with love, for the union.</span>
       </div>
-      <div style="text-align:center; padding-top:10px; font-size:0.72rem; color:#9b86a9;">Powered by HasTech Solutions</div>
+      <div style="text-align:center; padding-top:10px; font-size:0.85rem; color:#CDB9DA;">Powered by HasTech Solutions</div>
     </div>
   `;
 }
@@ -830,7 +834,7 @@ async function initLayout(activePath) {
     member = authRes.member;
     if (member) {
       dailyCheckin();
-      // A signed-in member's own chapter is authoritative — keeps this
+      // A signed-in member's own chapter is authoritative - keeps this
       // browser in step even if it last browsed anonymously as another
       // chapter (a shared/public computer, a link from a friend, etc.).
       if (member.chapterId && member.chapterId !== getSelectedChapterId()) {
@@ -873,7 +877,7 @@ function applyHeroArtwork(settings) {
   layer.className = 'hero-art';
 
   // Nothing is shown until the picture has actually decoded. A slow file leaves
-  // the scene where it is, and a missing one leaves it there for good — better
+  // the scene where it is, and a missing one leaves it there for good - better
   // than a blank rectangle, and much better than dark text on a dark image
   // because the tone was flipped before the veil under it existed.
   const probe = new Image();
@@ -902,7 +906,7 @@ function startCountdown(targetDate, targetTime, elId) {
     const now = new Date();
     let diff = target - now;
     if (diff <= 0) {
-      el.innerHTML = '<div class="countdown-caption">We are live now — see you inside!</div>';
+      el.innerHTML = '<div class="countdown-caption">We are live now. See you inside!</div>';
       clearInterval(timer);
       return;
     }
@@ -948,7 +952,7 @@ window.addEventListener('appinstalled', () => {
   if (banner) banner.remove();
 });
 
-// Safari never fires `beforeinstallprompt` — there is no programmatic install on
+// Safari never fires `beforeinstallprompt` - there is no programmatic install on
 // iOS at all. Since we are not shipping through the App Store, Add to Home Screen
 // is the *only* way an iPhone member can get the app, and Apple surfaces it
 // nowhere obvious. Without this, every iOS visitor stays on a browser tab
@@ -1027,7 +1031,7 @@ function showInstallBanner() {
       </div>
     </div>
     <div style="display:flex; gap:8px; flex-shrink:0;">
-      <button id="installBtn" style="background:#fff; color:#3A1B54; border:none; padding:8px 16px; border-radius:999px; font-weight:700; font-size:0.85rem; cursor:pointer;">Install</button>
+      <button id="installBtn" style="background:#fff; color:var(--brand-strong); border:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Install</button>
       <button id="dismissInstallBtn" style="background:none; color:#fff; border:none; font-size:1.2rem; cursor:pointer; opacity:0.8;">&times;</button>
     </div>
   `;
@@ -1061,9 +1065,9 @@ function ensureToastHost() {
 function showToast(message, type) {
   const host = ensureToastHost();
   const toast = document.createElement('div');
-  const bg = type === 'error' ? '#A93226' : type === 'success' ? '#2E7D4F' : '#3A1B54';
+  const bg = type === 'error' ? '#A93226' : type === 'success' ? 'var(--ok-ink)' : '#3A1B54';
   toast.textContent = message;
-  toast.style.cssText = `background:${bg}; color:#fff; padding:14px 18px; border-radius:10px; font-family:'Manrope',sans-serif; font-weight:600; font-size:0.9rem; box-shadow:0 12px 28px rgba(0,0,0,0.2); opacity:0; transform:translateY(12px); transition:opacity 0.25s ease, transform 0.25s ease;`;
+  toast.style.cssText = `background:${bg}; color:#fff; padding:14px 18px; border-radius:10px; font-family:var(--font-body); font-weight:600; font-size:0.9rem; box-shadow:0 12px 28px rgba(0,0,0,0.2); opacity:0; transform:translateY(12px); transition:opacity 0.25s ease, transform 0.25s ease;`;
   host.appendChild(toast);
   requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
   setTimeout(() => {
@@ -1074,44 +1078,35 @@ function showToast(message, type) {
 }
 
 // ---------- scroll-reveal for cards/sections ----------
-function initScrollReveal(selector) {
-  const els = document.querySelectorAll(selector || '.card, .form-card');
-  if (!('IntersectionObserver' in window) || !els.length) return;
-  const io = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add('reveal-in');
-        io.unobserve(entry.target);
-      }
-    });
-  }, { threshold: 0.1 });
-  els.forEach(el => { el.classList.add('reveal-pre'); io.observe(el); });
+// Content is simply there when the page is; nothing is hidden until it scrolls into view.
+function initScrollReveal() { /* intentionally empty */ }
+
+// Grey blocks where a list is still loading, so the page does not jump when it arrives.
+function skeletonHtml() {
+  return '<div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>';
 }
 
-// ---------- floating decorative images ----------
-function renderFloatingImages(containerId, fileIds, positions) {
-  const container = document.getElementById(containerId);
-  if (!container || !fileIds || !fileIds.length) return;
-  const defaultPositions = [
-    { top: '8%', left: '4%', width: '140px', height: '100px', rotate: '-6deg', delay: '0s' },
-    { top: '12%', right: '5%', width: '120px', height: '160px', rotate: '5deg', delay: '0.15s' },
-    { bottom: '6%', left: '8%', width: '130px', height: '90px', rotate: '4deg', delay: '0.3s' },
-    { bottom: '10%', right: '6%', width: '110px', height: '140px', rotate: '-4deg', delay: '0.45s' }
-  ];
-  const pos = positions || defaultPositions;
-  fileIds.slice(0, pos.length).forEach((fileId, i) => {
-    const p = pos[i];
-    const div = document.createElement('div');
-    div.className = 'float-deco';
-    Object.assign(div.style, {
-      top: p.top || 'auto', left: p.left || 'auto', right: p.right || 'auto', bottom: p.bottom || 'auto',
-      width: p.width, height: p.height, transform: `rotate(${p.rotate})`, animationDelay: p.delay
+// A table wider than the screen scrolls sideways. A keyboard user can only
+// scroll it if it can take focus, so every scrolling table wrapper gets that, and
+// a name a screen reader can announce. Done once for tables that exist and again
+// for any a script draws later.
+(function () {
+  function mark(root) {
+    (root.querySelectorAll ? root.querySelectorAll('.table-wrap:not([tabindex])') : []).forEach((el) => {
+      el.setAttribute('tabindex', '0');
     });
-    div.innerHTML = `<img src="/api/files/${fileId}" alt="" loading="lazy">`;
-    container.appendChild(div);
-    setTimeout(() => div.classList.add('fade-in'), 50 + i * 120);
-  });
-}
+  }
+  function start() {
+    mark(document);
+    new MutationObserver((list) => { list.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1) mark(n); })); })
+      .observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
+
+// ---------- floating decorative images ----------
+// Floating decorative pictures were removed; kept so older callers do not break.
+function renderFloatingImages() { /* intentionally empty */ }
 
 // ---------- mobile haptic feedback & share ----------
 function triggerHaptic(duration = 10) {
@@ -1175,8 +1170,8 @@ async function pickVerseCardStyle() {
     const backdrop = document.createElement('div');
     backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.58); z-index:9999; display:flex; align-items:flex-end; justify-content:center; padding:0;';
     backdrop.innerHTML = `
-      <div role="dialog" aria-label="Choose a background" style="background:#fff; width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px)); font-family:'Manrope',sans-serif;">
-        <h3 style="margin:0 0 4px; font-family:'Fraunces',serif; font-size:1.15rem; color:#3A1B54;">Choose a background</h3>
+      <div role="dialog" aria-label="Choose a background" style="background:#fff; width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px)); font-family:var(--font-body);">
+        <h3 style="margin:0 0 4px; font-family:'Fraunces',serif; font-size:1.15rem; color:var(--brand-strong);">Choose a background</h3>
         <p style="margin:0 0 16px; font-size:0.85rem; color:#6b5878;">Your choice is remembered for next time.</p>
         <div id="verseStyleGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;"></div>
         <button type="button" id="verseStyleCancel" class="btn btn-outline btn-sm" style="width:100%; margin-top:16px;">Cancel</button>
@@ -1193,7 +1188,7 @@ async function pickVerseCardStyle() {
       const chip = document.createElement('span');
       chip.style.cssText = `display:block; height:74px; border-radius:9px; background:${style.swatch || '#5B2C82'};`;
       const name = document.createElement('span');
-      name.style.cssText = 'display:block; font-size:0.72rem; font-weight:700; color:#3A1B54; padding:6px 2px 4px; text-align:center;';
+      name.style.cssText = 'display:block; font-size:0.72rem; font-weight:700; color:var(--brand-strong); padding:6px 2px 4px; text-align:center;';
       name.textContent = style.label;
       btn.append(chip, name);
       btn.addEventListener('click', () => {
@@ -1248,10 +1243,10 @@ async function shareVerseCard({ text, reference, filename }) {
 
 // ---------- offline / online network connectivity banner ----------
 window.addEventListener('offline', () => {
-  showToast('📡 You are currently offline. Viewing cached content.', 'error');
+  showToast('You are currently offline. Viewing cached content.', 'error');
 });
 window.addEventListener('online', () => {
-  showToast('⚡ Back online! Connection restored.', 'success');
+  showToast('Back online! Connection restored.', 'success');
 });
 
 

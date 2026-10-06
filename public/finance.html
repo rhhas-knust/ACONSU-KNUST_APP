@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Finance Office — ACONSU</title>
+<title>Finance Office | ACONSU</title>
 <meta name="robots" content="noindex">
 <script>
 /* Set the theme before the first paint. A page that renders light and then
@@ -13,17 +13,19 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <meta name="theme-color" content="#5B2C82">
 <link rel="stylesheet" href="/css/style.css">
 <link rel="stylesheet" href="/css/portal.css">
 </head>
 <body>
 
-<div class="portal-login-wrap" id="portalLoginWrap" style="display:none;">
+<div role="main" class="portal-login-wrap" id="portalLoginWrap" style="display:none;">
   <form class="portal-login-card" id="portalLoginForm">
     <img class="mark" src="/images/logo.jpg" alt="ACONSU">
-    <h2>Finance Office</h2>
+    <h1>Finance Office</h1>
     <p class="sub">Budgets, the ledger and financial reporting for ACONSU.</p>
     <div class="field">
       <label for="portalUsername">Username</label>
@@ -40,7 +42,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </div>
 
 <div class="portal-shell" id="portalShell">
-  <div class="portal-topbar">
+  <header class="portal-topbar">
+    <h1 class="sr-only">Finance office</h1>
     <div class="brand">
       <button class="portal-menu-toggle" id="portalMenuToggle" aria-label="Toggle menu">&#9776;</button>
       <img src="/images/logo.jpg" alt="ACONSU">
@@ -54,10 +57,10 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <button type="button" class="theme-toggle theme-toggle-onbrand" id="themeToggle" aria-label="Switch between light and dark"></button>
       <button class="btn btn-outline btn-sm" id="portalLogoutBtn" style="color:#fff; border-color:rgba(255,255,255,0.4);">Log Out</button>
     </div>
-  </div>
+  </header>
   <div class="portal-layout">
     <div class="portal-side" id="portalNav"></div>
-    <div class="portal-main" id="portalMain"></div>
+    <div role="main" class="portal-main" id="portalMain"></div>
   </div>
 </div>
 

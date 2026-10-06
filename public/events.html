@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Events — ACONSU</title>
+<title>Events | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -22,20 +24,19 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
+  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--ink); }
   .search-focus-card { border:2px solid var(--purple-deep); box-shadow:0 10px 24px rgba(91,44,130,0.12); }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="events" style="padding-bottom:48px;">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="gather" data-hero-page="events">
   <div class="hero-content">
-    <p class="eyebrow">Mark Your Calendar</p>
     <h1>Events</h1>
-    <p class="lede">Services, retreats and gatherings — everything happening in the union.</p>
     <div id="countdownWrap"></div>
   </div>
 </section>
@@ -49,7 +50,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <div class="pub-modal-backdrop" id="regModalBackdrop">
   <div class="pub-modal">
-    <h3 id="regModalTitle">Register</h3>
+    <h2 id="regModalTitle">Register</h2>
     <p id="regAutofillNote" style="display:none; font-size:0.85rem; color:var(--ink-soft); margin-bottom:14px;"></p>
     <form id="regForm">
       <div class="field">
@@ -65,6 +66,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <input type="tel" id="regPhone">
       </div>
       <div style="display:flex; gap:10px;">
+      <p class="form-notice">Your details are used only for this event. <a href="/privacy.html">Privacy policy</a>.</p>
         <button type="submit" class="btn btn-primary" id="regSubmitBtn">Confirm Registration</button>
         <button type="button" class="btn btn-outline" id="regCancelBtn">Cancel</button>
       </div>
@@ -72,6 +74,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
   </div>
 </div>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -102,7 +106,7 @@ function canRegister(e) {
   try {
     const authRes = await fetchJSON('/api/auth/me');
     CURRENT_MEMBER = authRes.member;
-  } catch (e) { /* fine to stay logged out — form just starts blank */ }
+  } catch (e) { /* fine to stay logged out - form just starts blank */ }
   try {
     const events = await fetchJSON('/api/events');
     CURRENT_EVENTS = events;
@@ -131,8 +135,8 @@ function canRegister(e) {
           <div class="mon">${d.toLocaleDateString('en-US', { month: 'short' })}</div>
         </div>`}
         <div style="flex:1;">
-          <h3 style="margin-bottom:6px;">${escapeHtml(e.title)}</h3>
-          <p style="font-size:0.9rem; color:var(--ink-soft); margin-bottom:6px;">${formatDate(e.date)} · ${e.time} — ${escapeHtml(e.location)}</p>
+          <h2 style="margin-bottom:6px; font-size:1.2rem;">${escapeHtml(e.title)}</h2>
+          <p style="font-size:0.9rem; color:var(--ink-soft); margin-bottom:6px;">${formatDate(e.date)} · ${e.time}, ${escapeHtml(e.location)}</p>
           <p style="font-size:0.92rem; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(e.description || '')}</p>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             ${e.category ? `<span class="badge">${escapeHtml(e.category)}</span>` : ''}
@@ -140,7 +144,7 @@ function canRegister(e) {
             ${e.isNational ? `<span class="badge">National</span>` : ''}
             ${spotsBadge(e)}
           </div>
-          ${e.videoUrl ? `<p style="margin-top:8px;"><a href="${escapeHtml(e.videoUrl)}" target="_blank" rel="noopener" style="color:var(--brand); font-weight:700; font-size:0.85rem;">▶ Watch video</a></p>` : ''}
+          ${e.videoUrl ? `<p style="margin-top:8px;"><a href="${escapeHtml(e.videoUrl)}" target="_blank" rel="noopener" style="color:var(--brand); font-weight:700; font-size:0.85rem;">Watch video</a></p>` : ''}
           ${e.registrationEnabled ? `
             <div style="margin-top:12px;">
               <button class="btn btn-flame btn-sm" data-register="${e.id}" ${canRegister(e) ? '' : 'disabled style="opacity:0.5;cursor:not-allowed;"'}>
@@ -183,7 +187,7 @@ function openRegModal(eventId) {
   const event = CURRENT_EVENTS.find(e => e.id === eventId);
   if (!event) return;
   ACTIVE_EVENT_ID = eventId;
-  document.getElementById('regModalTitle').textContent = `Register — ${event.title}`;
+  document.getElementById('regModalTitle').textContent = `Register: ${event.title}`;
   document.getElementById('regMsg').textContent = '';
   document.getElementById('regMsg').className = 'form-msg';
   document.getElementById('regForm').reset();

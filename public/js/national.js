@@ -1,8 +1,8 @@
 /* ============================================================
-   National Coordinator — oversight across every ACONSU chapter.
+   National Coordinator. Oversight across every ACONSU chapter.
    Creates/edits/activates chapters, assigns Chapter Coordinators,
    and gives a national, aggregated view (never individually
-   identifying data — see section 38 of the platform spec).
+   identifying data. See section 38 of the platform spec).
    ============================================================ */
 
 // ---------- dashboard ----------
@@ -13,7 +13,7 @@ async function renderNationalDashboard(el) {
     <div class="panel-head">
       <div>
         <h2>ACONSU, Nationally</h2>
-        <p class="sub">Every chapter, on one screen. Updated live — last read ${dateTimeLabel(data.generatedAt)}.</p>
+        <p class="sub">Every chapter, on one screen. Updated live. Last read ${dateTimeLabel(data.generatedAt)}.</p>
       </div>
     </div>
 
@@ -29,7 +29,7 @@ async function renderNationalDashboard(el) {
 
     <div class="portal-card">
       <h3>Chapter Comparison</h3>
-      <p class="hint">Aggregated figures only — no individual member data appears here.</p>
+      <p class="hint">Aggregated figures only. No individual member data appears here.</p>
       <div class="table-wrap">
         <table class="portal-table">
           <thead><tr><th>Chapter</th><th>Status</th><th class="num">Members</th><th class="num">Visitors</th><th class="num">Execs</th><th class="num">Upcoming Events</th><th class="num">Last Service</th><th class="num">Balance</th></tr></thead>
@@ -42,10 +42,10 @@ async function renderNationalDashboard(el) {
                 <td class="num">${c.visitorCount}</td>
                 <td class="num">${c.executiveCount}</td>
                 <td class="num">${c.upcomingEvents}</td>
-                <td class="num">${c.lastServiceAttendance === null ? '—' : c.lastServiceAttendance}</td>
+                <td class="num">${c.lastServiceAttendance === null ? '-' : c.lastServiceAttendance}</td>
                 <td class="num">${money(c.balance)}</td>
               </tr>
-            `).join('') || emptyRow(8, 'No chapters yet — create the first one from the Chapters tab.')}
+            `).join('') || emptyRow(8, 'No chapters yet. Create the first one from the Chapters tab.')}
           </tbody>
         </table>
       </div>
@@ -53,7 +53,7 @@ async function renderNationalDashboard(el) {
 
     <div class="portal-card">
       <h3>Chapter Readiness</h3>
-      <p class="hint">Is this chapter standing on its own — not what it's doing. Welfare cases and the finance ledger stay inside the chapter either way.</p>
+      <p class="hint">Is this chapter standing on its own. Not what it's doing. Welfare cases and the finance ledger stay inside the chapter either way.</p>
       <div class="table-wrap">
         <table class="portal-table">
           <thead><tr><th>Chapter</th><th>Coordinator</th><th>Admin</th><th>Offices Staffed</th><th>Settings</th><th>Last Activity</th></tr></thead>
@@ -68,7 +68,7 @@ async function renderNationalDashboard(el) {
                 <td>${readinessPill(c.readiness.settingsComplete, 'Complete', 'Incomplete')}</td>
                 <td class="tiny muted">${c.readiness.lastActivityAt ? dateTimeLabel(c.readiness.lastActivityAt) : 'No activity yet'}</td>
               </tr>
-            `).join('') || emptyRow(6, 'No chapters yet — create the first one from the Chapters tab.')}
+            `).join('') || emptyRow(6, 'No chapters yet. Create the first one from the Chapters tab.')}
           </tbody>
         </table>
       </div>
@@ -95,7 +95,7 @@ function chapterForm(chapter) {
       <div class="field"><label>Chapter Name</label>
         <input type="text" id="cName" value="${escapeHtml(chapter?.name || '')}" placeholder="e.g. ACONSU-Legon" required></div>
       <div class="field"><label>Full Name (optional)</label>
-        <input type="text" id="cFullName" value="${escapeHtml(chapter?.fullName || '')}" placeholder="The Apostles' Continuation Students Union — Legon"></div>
+        <input type="text" id="cFullName" value="${escapeHtml(chapter?.fullName || '')}" placeholder="The Apostles' Continuation Students Union: Legon"></div>
       <div class="field-row">
         <div class="field"><label>Institution</label><input type="text" id="cInstitution" value="${escapeHtml(chapter?.institution || '')}" placeholder="e.g. University of Ghana"></div>
         <div class="field"><label>Location</label><input type="text" id="cLocation" value="${escapeHtml(chapter?.location || '')}" placeholder="e.g. Legon, Accra"></div>
@@ -146,7 +146,7 @@ function chapterForm(chapter) {
 function assignCoordinatorForm(chapter, staffInChapter) {
   const existing = staffInChapter.filter(s => s.role !== 'coordinator');
   showModal(`
-    <h3>Assign Chapter Coordinator — ${escapeHtml(chapter.name)}</h3>
+    <h3>Assign Chapter Coordinator: ${escapeHtml(chapter.name)}</h3>
     <p class="hint">The current coordinator (if any) steps down to Chapter Admin rather than losing their account.</p>
     <form id="assignForm">
       <div class="choice-grid" style="margin-bottom:16px;">
@@ -222,7 +222,7 @@ async function renderChapters(el) {
           ${chapters.map(c => `
             <tr>
               <td><strong>${escapeHtml(c.name)}</strong><br><small class="muted">${escapeHtml(c.id)}</small></td>
-              <td>${escapeHtml(c.institution || '—')}</td>
+              <td>${escapeHtml(c.institution || '-')}</td>
               <td>${escapeHtml(c.coordinatorName || 'Not assigned')}</td>
               <td>${pill(c.status, c.status === 'active' ? 'green' : 'grey')}</td>
               <td>
@@ -251,7 +251,7 @@ async function renderChapters(el) {
     let chapterStaff = [];
     try {
       chapterStaff = await fetchJSON(`/api/admin/staff?chapterId=${encodeURIComponent(chapter.id)}`);
-    } catch (e) { /* fall through with an empty list — "new account" still works */ }
+    } catch (e) { /* fall through with an empty list - "new account" still works */ }
     assignCoordinatorForm(chapter, chapterStaff.filter(s => s.chapterId === chapter.id));
   }));
   el.querySelectorAll('[data-toggle]').forEach(btn => btn.addEventListener('click', async () => {
@@ -274,7 +274,7 @@ async function renderNationalAnnouncements(el) {
     <div class="panel-head">
       <div>
         <h2>National Announcement</h2>
-        <p class="sub">Reaches every chapter at once — for anything that isn't chapter-specific. Each Chapter Coordinator has their own chapter-wide announcement tool for local news.</p>
+        <p class="sub">Reaches every chapter at once. For anything that isn't chapter-specific. Each Chapter Coordinator has their own chapter-wide announcement tool for local news.</p>
       </div>
     </div>
     <div class="portal-card" style="max-width:560px;">
@@ -310,7 +310,7 @@ async function renderNationalAnnouncements(el) {
 
 async function renderNationalReports(el) {
   const rows = await fetchJSON('/api/national/reports/overview');
-  el.innerHTML = `<div class="panel-head"><div><h2>National Reports</h2><p class="sub">Chapter-level comparison only — sensitive personal records stay in the local chapter.</p></div></div>
+  el.innerHTML = `<div class="panel-head"><div><h2>National Reports</h2><p class="sub">Chapter-level comparison only. Sensitive personal records stay in the local chapter.</p></div></div>
   <div class="portal-card"><div class="table-wrap"><table class="portal-table"><thead><tr><th>Chapter</th><th>Status</th><th class="num">Active members</th><th class="num">Visitors</th><th class="num">Events</th><th class="num">Services</th><th class="num">Open welfare</th></tr></thead><tbody>${rows.map(r=>`<tr><td><strong>${escapeHtml(r.chapterName)}</strong></td><td>${pill(r.status,r.status==='active'?'green':'grey')}</td><td class="num">${r.activeMembers}</td><td class="num">${r.visitors}</td><td class="num">${r.events}</td><td class="num">${r.servicesRecorded}</td><td class="num">${r.openWelfareRequests}</td></tr>`).join('')||emptyRow(7,'No chapters yet.')}</tbody></table></div></div>`;
 }
 
@@ -390,8 +390,8 @@ async function renderNationalExecutives(el) {
         <tbody>
           ${national.map(e => `
             <tr>
-              <td><strong>${escapeHtml(e.name || '—')}</strong>${e.bio ? `<br><small class="muted">${escapeHtml(e.bio.slice(0, 80))}${e.bio.length > 80 ? '…' : ''}</small>` : ''}</td>
-              <td>${escapeHtml(e.role || '—')}</td>
+              <td><strong>${escapeHtml(e.name || '-')}</strong>${e.bio ? `<br><small class="muted">${escapeHtml(e.bio.slice(0, 80))}${e.bio.length > 80 ? '…' : ''}</small>` : ''}</td>
+              <td>${escapeHtml(e.role || '-')}</td>
               <td class="num">${Number(e.order || 0)}</td>
               <td>
                 <div class="row-actions">
@@ -400,7 +400,7 @@ async function renderNationalExecutives(el) {
                 </div>
               </td>
             </tr>
-          `).join('') || emptyRow(4, 'No national executives yet — add the union\'s national officers here.')}
+          `).join('') || emptyRow(4, 'No national executives yet. Add the union\'s national officers here.')}
         </tbody>
       </table>
     </div>
@@ -423,8 +423,8 @@ async function renderNationalExecutives(el) {
 }
 
 // ---------- national events ----------
-// Events open to everyone — the public, prospective members, anyone who
-// hasn't logged in — rather than one chapter's own members. Stored with an
+// Events open to everyone - the public, prospective members, anyone who
+// hasn't logged in - rather than one chapter's own members. Stored with an
 // empty chapterId and isNational: true, the same convention as national
 // executives; a chapter's own events (registration drives, cell meetings,
 // local services) stay each chapter's own admin's to run.
@@ -432,7 +432,7 @@ function nationalEventForm(event) {
   const isEdit = !!event;
   showModal(`
     <h3>${isEdit ? 'Edit National Event' : 'New National Event'}</h3>
-    <p class="hint">Open to the public — visitors and non-members can see and register for this without signing in. A chapter's own events are managed inside that chapter.</p>
+    <p class="hint">Open to the public. Visitors and non-members can see and register for this without signing in. A chapter's own events are managed inside that chapter.</p>
     <form id="nationalEventForm">
       <div class="field"><label>Event Title</label>
         <input type="text" id="neTitle" value="${escapeHtml(event?.title || '')}" required></div>
@@ -496,7 +496,7 @@ async function renderNationalEvents(el) {
     <div class="panel-head">
       <div>
         <h2>National Events</h2>
-        <p class="sub">Open to the public — visitors and non-members can register without signing in. Each chapter runs its own events separately.</p>
+        <p class="sub">Open to the public. Visitors and non-members can register without signing in. Each chapter runs its own events separately.</p>
       </div>
       <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newNationalEventBtn">+ New Event</button></div>
     </div>
@@ -506,9 +506,9 @@ async function renderNationalEvents(el) {
         <tbody>
           ${national.map(e => `
             <tr>
-              <td><strong>${escapeHtml(e.title || '—')}</strong></td>
+              <td><strong>${escapeHtml(e.title || '-')}</strong></td>
               <td>${shortDate(e.date)} ${escapeHtml(e.time || '')}</td>
-              <td>${escapeHtml(e.location || '—')}</td>
+              <td>${escapeHtml(e.location || '-')}</td>
               <td>${e.registrationEnabled ? pill(e.capacity > 0 ? `cap ${e.capacity}` : 'unlimited', 'green') : pill('off', 'grey')}</td>
               <td>
                 <div class="row-actions">
@@ -517,7 +517,7 @@ async function renderNationalEvents(el) {
                 </div>
               </td>
             </tr>
-          `).join('') || emptyRow(5, 'No national events yet — add one open to the whole public here.')}
+          `).join('') || emptyRow(5, 'No national events yet. Add one open to the whole public here.')}
         </tbody>
       </table>
     </div>
@@ -554,7 +554,7 @@ async function renderFeatures(el) {
 
 // ---------- the wider church, and the men who began it ----------
 // Edited here and nowhere else, on purpose. A chapter's coordinator cannot
-// touch these — not because they belong to another chapter, but because they
+// touch these - not because they belong to another chapter, but because they
 // belong to all of them. Every chapter's About page reads the same list, so
 // there is one account of who founded the church rather than one per chapter,
 // drifting apart with every typo.
@@ -575,11 +575,11 @@ function founderForm(man) {
           <input type="number" id="fdOrder" value="${Number(man?.order || 0)}"></div>
         <div class="field"><label>Photograph (optional)</label>
           <input type="file" id="fdImage" accept="image/*">
-          <small class="muted">Upload it straight off the phone — it is resized on the way in. Someone with no photograph yet shows his initials instead.</small></div>
+          <small class="muted">Upload it straight off the phone. It is resized on the way in. Someone with no photograph yet shows his initials instead.</small></div>
       </div>
       <div class="field checkbox-field">
         <input type="checkbox" id="fdMemoriam" ${man?.inMemoriam ? 'checked' : ''}>
-        <label for="fdMemoriam" style="margin:0;">He has gone — show “In loving memory” on his card</label>
+        <label for="fdMemoriam" style="margin:0;">He has gone. Show “In loving memory” on his card</label>
       </div>
       <div style="display:flex; gap:10px; margin-top:22px;">
         <button type="submit" class="btn btn-primary">Save</button>
@@ -623,7 +623,7 @@ async function renderChurch(el) {
     <div class="panel-head">
       <div>
         <h2>The Wider Church</h2>
-        <p class="sub">The Apostles' Continuation Church itself — its logo and the men who began it. Every chapter is a fraction of it, so every chapter's About page shows exactly what is set here.</p>
+        <p class="sub">The Apostles' Continuation Church itself. Its logo and the men who began it. Every chapter is a fraction of it, so every chapter's About page shows exactly what is set here.</p>
       </div>
       <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newFounderBtn">+ Add a Founder</button></div>
     </div>
@@ -649,8 +649,8 @@ async function renderChurch(el) {
         <tbody>
           ${founders.length ? founders.map(f => `
             <tr>
-              <td><strong>${escapeHtml(f.name || '—')}</strong>${f.inMemoriam ? ' <span class="tiny muted">(in loving memory)</span>' : ''}${f.about ? `<br><small class="muted">${escapeHtml(f.about.slice(0, 80))}${f.about.length > 80 ? '…' : ''}</small>` : ''}</td>
-              <td>${escapeHtml(f.role || '—')}</td>
+              <td><strong>${escapeHtml(f.name || '-')}</strong>${f.inMemoriam ? ' <span class="tiny muted">(in loving memory)</span>' : ''}${f.about ? `<br><small class="muted">${escapeHtml(f.about.slice(0, 80))}${f.about.length > 80 ? '…' : ''}</small>` : ''}</td>
+              <td>${escapeHtml(f.role || '-')}</td>
               <td class="num">${Number(f.order || 0)}</td>
               <td>
                 <div class="row-actions">
@@ -701,207 +701,34 @@ async function renderChurch(el) {
 }
 
 // ---------- Alumni: who is on the wall, and who is celebrated this week ----------
-// Approving happens here and nowhere else: an alumnus asks from the website or
-// the app, National looks, and the answer is the same one for both places. A
-// chapter's own admin cannot approve - the wall belongs to the whole union.
-const ALUMNI_STATUS = { pending: 'Waiting', approved: 'On the wall', unlisted: 'Unlisted', declined: 'Declined' };
-const monthName = (key) => {
-  const [y, m] = String(key || '').split('-').map(Number);
-  return y && m ? new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : '';
-};
-
-function alumniThumb(e) {
-  return e.imageFileId
-    ? `<img class="al-thumb" src="/api/files/${encodeURIComponent(e.imageFileId)}" alt="">`
-    : `<span class="al-thumb al-initial">${escapeHtml((e.name || '?').charAt(0))}</span>`;
-}
-
-function alumniForm(person, chapters) {
-  const isEdit = !!person;
-  showModal(`
-    <h3>${isEdit ? 'Edit alumnus' : 'Add an alumnus'}</h3>
-    <p class="hint">${isEdit
-      ? 'Fix a spelling or change the photo. Leave the photo empty to keep the current one.'
-      : 'Added straight onto the wall - there is nothing to approve. For someone you know who will never fill in a form.'}</p>
-    <form id="alumniEditForm">
-      <div class="field"><label>Name</label><input type="text" id="aeName" maxlength="80" value="${escapeHtml(person?.name || '')}" required></div>
-      <div class="field"><label>Chapter</label>
-        <select id="aeChapter" required>
-          ${chapters.map(c => `<option value="${escapeHtml(c.id)}" ${c.id === person?.chapterId ? 'selected' : ''}>${escapeHtml(c.name || c.id)}</option>`).join('')}
-        </select></div>
-      <div class="field"><label>A few words about them</label><textarea id="aeAbout" rows="4" maxlength="400" required>${escapeHtml(person?.about || '')}</textarea></div>
-      <div class="field-row">
-        <div class="field"><label>What they do now</label><input type="text" id="aeWork" maxlength="120" value="${escapeHtml(person?.currentWork || '')}"></div>
-        <div class="field"><label>Class of</label><input type="number" id="aeClass" min="1950" max="2100" value="${escapeHtml(person?.classOf || '')}"></div>
-      </div>
-      <div class="field"><label>Photo</label><input type="file" id="aePhoto" accept="image/*">
-        <small class="muted">Resized on the way in. Their phone's location data is removed.</small></div>
-      <div style="display:flex; gap:10px; margin-top:20px;">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
-      </div>
-      <div class="form-msg" id="aeMsg"></div>
-    </form>
-  `);
-  document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
-  document.getElementById('alumniEditForm').addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const body = new FormData();
-    body.append('name', document.getElementById('aeName').value);
-    body.append('chapterId', document.getElementById('aeChapter').value);
-    body.append('about', document.getElementById('aeAbout').value);
-    body.append('currentWork', document.getElementById('aeWork').value);
-    body.append('classOf', document.getElementById('aeClass').value);
-    const file = document.getElementById('aePhoto').files[0];
-    if (file) body.append('photo', file);
-    try {
-      const res = await fetch(isEdit ? `/api/national/alumni/${person.id}` : '/api/national/alumni', { method: isEdit ? 'PUT' : 'POST', body });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Could not save.');
-      closeModal();
-      showToast(isEdit ? 'Saved' : 'Added to the wall', 'success');
-      openPanel('alumni');
-    } catch (err) { setFormMsg('aeMsg', err.message || 'Could not save.', 'error'); }
-  });
-}
-
-async function alumniDecision(id, decision, reason) {
-  await fetchJSON(`/api/national/alumni/${id}/decision`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, reason })
-  });
-}
-
-async function renderAlumni(el) {
-  const [data, chapters] = await Promise.all([fetchJSON('/api/national/alumni'), fetchJSON('/api/chapters')]);
-  const by = (status) => data.items.filter(e => e.status === status);
-  const pending = by('pending'), wall = by('approved'), other = [...by('unlisted'), ...by('declined')];
-  const celebrated = data.items.find(e => e.id === data.spotlight.entryId);
-  const when = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-
-  el.innerHTML = `
-    <div class="panel-head">
-      <div>
-        <h2>Alumni</h2>
-        <p class="sub">Alumni ask to be listed from the website or the app. Approve a request and they appear on the website and in the app's Alumni Connect. Every week one of them is celebrated, the same person in both places.</p>
-      </div>
-      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newAlumnusBtn">+ Add an alumnus</button></div>
-    </div>
-
-    <div class="al-celebrate">
-      ${celebrated ? alumniThumb(celebrated) : ''}
-      <div>
-        <small class="muted">Celebrating this week (${escapeHtml(data.spotlight.weekKey)})${data.spotlight.pinned ? ' · chosen by you' : ' · chosen automatically'}</small>
-        <strong>${celebrated ? escapeHtml(celebrated.name) : 'Nobody yet - approve someone to start the rotation'}</strong>
-      </div>
-      ${data.spotlight.pinned ? '<button class="btn btn-outline btn-sm" id="releaseSpotBtn" style="margin-left:auto;">Back to automatic</button>' : ''}
-    </div>
-
-    <h3>Waiting for you (${pending.length})</h3>
-    <div class="al-queue">
-      ${pending.length ? pending.map(e => `
-        <div class="al-request">
-          ${alumniThumb(e)}
-          <div style="flex:1; min-width:0;">
-            <h4>${escapeHtml(e.name)}</h4>
-            <p class="meta">${escapeHtml(e.chapterName || e.chapterId)} · asked ${escapeHtml(when(e.createdAt))} · from the ${e.via === 'site' ? 'website' : 'app'}${e.classOf ? ' · class of ' + escapeHtml(e.classOf) : ''}</p>
-            ${e.currentWork ? `<p><strong>${escapeHtml(e.currentWork)}</strong></p>` : ''}
-            <p>${escapeHtml(e.about)}</p>
-            ${e.contact ? `<p class="private">To check it is them (private): ${escapeHtml(e.contact)}</p>` : '<p class="private">No contact left to check with.</p>'}
-            <div class="row-actions" style="margin-top:10px;">
-              <button data-approve="${e.id}">Approve</button>
-              <button data-edit-alumnus="${e.id}">Edit</button>
-              <button data-decline="${e.id}" class="danger">Decline</button>
-            </div>
-          </div>
-        </div>`).join('') : '<p class="muted">Nobody is waiting. New requests appear here, and you get an email when one arrives.</p>'}
-    </div>
-
-    <h3>On the wall (${wall.length})</h3>
-    <div class="table-wrap" style="margin-bottom:26px;">
-      <table class="portal-table">
-        <thead><tr><th></th><th>Name</th><th>Chapter</th><th></th></tr></thead>
-        <tbody>
-          ${wall.length ? wall.map(e => `
-            <tr>
-              <td style="width:64px;">${alumniThumb(e)}</td>
-              <td><strong>${escapeHtml(e.name)}</strong>${e.id === data.spotlight.entryId ? ' <span class="badge-soft">This week</span>' : ''}<br><small class="muted">${escapeHtml(e.currentWork || '')}</small></td>
-              <td>${escapeHtml(e.chapterName || e.chapterId)}</td>
-              <td><div class="row-actions">
-                ${e.id === data.spotlight.entryId ? '' : `<button data-pin="${e.id}">Celebrate this week</button>`}
-                <button data-edit-alumnus="${e.id}">Edit</button>
-                <button data-unlist="${e.id}">Unlist</button>
-                <button data-remove-alumnus="${e.id}" class="danger">Remove</button>
-              </div></td>
-            </tr>`).join('') : '<tr><td colspan="4" class="muted">Nobody on the wall yet.</td></tr>'}
-        </tbody>
-      </table>
-    </div>
-
-    ${other.length ? `<details><summary>Unlisted and declined (${other.length})</summary>
-      <div class="table-wrap" style="margin-top:12px;"><table class="portal-table"><tbody>
-        ${other.map(e => `<tr>
-          <td><strong>${escapeHtml(e.name)}</strong><br><small class="muted">${ALUMNI_STATUS[e.status]}${e.declineReason ? ' · ' + escapeHtml(e.declineReason) : ''}</small></td>
-          <td><div class="row-actions">
-            ${e.status === 'unlisted' ? `<button data-approve="${e.id}">Put back</button>` : ''}
-            <button data-remove-alumnus="${e.id}" class="danger">Remove</button>
-          </div></td></tr>`).join('')}
-      </tbody></table></div></details>` : ''}
-  `;
-
-  const find = (id) => data.items.find(e => e.id === id);
-  const act = async (fn, done) => {
-    try { await fn(); showToast(done, 'success'); openPanel('alumni'); }
-    catch (err) { showToast(err.message || 'Could not do that.', 'error'); }
-  };
-  document.getElementById('newAlumnusBtn').addEventListener('click', () => alumniForm(null, chapters));
-  const release = document.getElementById('releaseSpotBtn');
-  if (release) release.addEventListener('click', () => act(() => fetchJSON('/api/national/alumni/spotlight/pin', { method: 'DELETE' }), 'Back to automatic'));
-  el.querySelectorAll('[data-approve]').forEach(b => b.addEventListener('click', () => act(() => alumniDecision(b.dataset.approve, 'approve'), 'Approved. They are on the wall.')));
-  el.querySelectorAll('[data-edit-alumnus]').forEach(b => b.addEventListener('click', () => alumniForm(find(b.dataset.editAlumnus), chapters)));
-  el.querySelectorAll('[data-pin]').forEach(b => b.addEventListener('click', () => act(() => fetchJSON('/api/national/alumni/spotlight/pin', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entryId: b.dataset.pin })
-  }), 'Celebrating them this week')));
-  el.querySelectorAll('[data-unlist]').forEach(b => b.addEventListener('click', () => {
-    if (confirm('Take them off the wall? You can put them back.')) act(() => alumniDecision(b.dataset.unlist, 'unlist'), 'Unlisted');
-  }));
-  el.querySelectorAll('[data-remove-alumnus]').forEach(b => b.addEventListener('click', () => {
-    if (confirm('Remove them for good, and delete their photo?')) act(() => fetchJSON(`/api/national/alumni/${b.dataset.removeAlumnus}`, { method: 'DELETE' }), 'Removed');
-  }));
-  el.querySelectorAll('[data-decline]').forEach(b => b.addEventListener('click', () => {
-    const e = find(b.dataset.decline);
-    showModal(`
-      <h3>Decline ${escapeHtml(e.name)}?</h3>
-      <p class="hint">Their photo is deleted. You can say why, for your own records; it is not sent to them.</p>
-      <form id="declineForm">
-        <div class="field"><label>Reason (optional)</label><input type="text" id="dcReason" maxlength="200" placeholder="We could not place you"></div>
-        <div style="display:flex; gap:10px; margin-top:18px;">
-          <button type="submit" class="btn btn-primary">Decline</button>
-          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
-        </div>
-      </form>`);
-    document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
-    document.getElementById('declineForm').addEventListener('submit', (ev) => {
-      ev.preventDefault();
-      const reason = document.getElementById('dcReason').value;
-      closeModal();
-      act(() => alumniDecision(e.id, 'decline', reason), 'Declined');
-    });
-  }));
+// The screens are shared with a chapter admin's dashboard (js/church-life-ui.js):
+// National sees every chapter's requests and chooses the week's spotlight; a
+// chapter's admin sees their own chapter's. Either can approve.
+function renderAlumni(el) {
+  return ChurchLifeUI.alumniPanel(el, { base: '/api/national/alumni', national: true, reopen: () => openPanel('alumni') });
 }
 
 // ---------- The monthly theme ----------
-// One theme for the whole church per month, with its prayer flyers. Written
-// here, shown on the app's home page and on every chapter's website. A month
-// with no theme shows nothing at all, so keeping it current is the whole job.
+// One theme for the whole church per month, with its prayer flyers. National can
+// write it directly. A chapter's admin can only propose one; it waits here and
+// shows nowhere until National approves it. A month with no theme shows nothing
+// at all, so keeping it current is the whole job.
 async function renderTheme(el) {
   const data = await fetchJSON('/api/national/themes');
+  const { monthName } = ChurchLifeUI;
+  const live = data.items.filter(t => t.status === 'approved');
+  const waiting = data.items.filter(t => t.status === 'pending');
+  const declined = data.items.filter(t => t.status === 'declined');
   const dayOfMonth = new Date().getUTCDate();
-  let editing = data.items.find(t => t.month === data.month) || null;
+  let editing = live.find(t => t.month === data.month) || null;
 
   const warn = !data.hasCurrent
-    ? `<div class="flag-warn">There is no theme for ${escapeHtml(monthName(data.month))}, so the app and the website are showing none. Set it below.</div>`
+    ? `<div class="flag-warn">There is no theme for ${escapeHtml(monthName(data.month))}, so the app and the website are showing none. Set it below${waiting.some(t => t.month === data.month) ? ', or approve the one waiting' : ''}.</div>`
     : (!data.hasNext && dayOfMonth >= 22
       ? `<div class="flag-warn">${escapeHtml(monthName(data.nextMonth))} begins soon and has no theme yet.</div>` : '');
+
+  const flyerStrip = (t) => t.flyerFileIds.length
+    ? `<div class="cl-flyers">${t.flyerFileIds.slice(0, 3).map(id => `<img src="/api/files/${encodeURIComponent(id)}" alt="">`).join('')}</div>` : '';
 
   function draw() {
     const t = editing;
@@ -909,9 +736,26 @@ async function renderTheme(el) {
     el.innerHTML = `
       <div class="panel-head"><div>
         <h2>Monthly Theme</h2>
-        <p class="sub">The church's theme for the month, with its meditative prayer flyers. It appears on the app's home page and on the chapter websites on the first of the month. You can write next month's ahead of time.</p>
+        <p class="sub">The church's theme for the month, with its meditative prayer flyers. It appears on the app's home page and on the chapter websites on the first of the month. A chapter's admin can send one for you to approve; you can also write it yourself, and next month's ahead of time.</p>
       </div></div>
       ${warn}
+
+      ${waiting.length ? `<h3>Waiting for your approval (${waiting.length})</h3>
+      <div class="cl-proposals">${waiting.map(x => {
+        const liveNow = live.find(l => l.month === x.month);
+        return `<div class="cl-proposal">${flyerStrip(x)}
+          <div style="flex:1; min-width:0;">
+            <h4>${escapeHtml(x.title)}</h4>
+            <p class="meta">${escapeHtml(monthName(x.month))}${x.scripture ? ' · ' + escapeHtml(x.scripture) : ''} · from ${escapeHtml(x.chapterName || 'a chapter')}${x.proposedByName ? ' (' + escapeHtml(x.proposedByName) + ')' : ''}</p>
+            ${x.blurb ? `<p>${escapeHtml(x.blurb)}</p>` : ''}
+            ${liveNow ? `<p class="cl-note">Approving this replaces <strong>${escapeHtml(liveNow.title)}</strong>, which is live for ${escapeHtml(monthName(x.month))}.</p>` : ''}
+            <div class="row-actions" style="margin-top:10px;">
+              <button data-approve-theme="${x.id}" data-replaces="${liveNow ? escapeHtml(liveNow.title) : ''}" data-when="${escapeHtml(monthName(x.month))}">Approve</button>
+              <button data-decline-theme="${x.id}" class="danger">Decline</button>
+            </div>
+          </div></div>`;
+      }).join('')}</div>` : ''}
+
       <form class="portal-card" id="themeForm">
         <h3>${t ? 'Edit' : 'Set'} the theme for ${escapeHtml(monthName(month))}</h3>
         <div class="field"><label>Month</label><input type="month" id="thMonth" value="${escapeHtml(month)}" required ${t ? 'disabled' : ''}></div>
@@ -929,15 +773,20 @@ async function renderTheme(el) {
           <span class="form-msg" id="thMsg"></span>
         </div>
       </form>
+
       <div class="table-wrap">
         <table class="portal-table">
-          <thead><tr><th>Month</th><th>Theme</th><th>Flyers</th><th></th></tr></thead>
+          <thead><tr><th>Month</th><th>Theme</th><th>From</th><th></th></tr></thead>
           <tbody>
-            ${data.items.length ? data.items.map(x => `<tr>
-              <td><strong>${escapeHtml(monthName(x.month))}</strong>${x.month === data.month ? ' <span class="badge-soft">Now</span>' : ''}</td>
-              <td>${escapeHtml(x.title)}${x.scripture ? `<br><small class="muted">${escapeHtml(x.scripture)}</small>` : ''}</td>
-              <td class="num">${x.flyerFileIds.length}</td>
-              <td><div class="row-actions"><button data-edit-theme="${x.month}">Edit</button><button data-remove-theme="${x.month}" class="danger">Remove</button></div></td>
+            ${[...live, ...declined].length ? [...live, ...declined].map(x => `<tr>
+              <td><strong>${escapeHtml(monthName(x.month))}</strong>${x.month === data.month && x.status === 'approved' ? ' <span class="badge-soft">Now</span>' : ''}</td>
+              <td>${escapeHtml(x.title)}${x.scripture ? `<br><small class="muted">${escapeHtml(x.scripture)}</small>` : ''}
+                  ${x.status === 'declined' ? `<br><span class="cl-chip no">Declined</span>${x.declineReason ? ` <small class="muted">${escapeHtml(x.declineReason)}</small>` : ''}` : ''}</td>
+              <td>${escapeHtml(x.chapterName || 'National')}</td>
+              <td><div class="row-actions">
+                ${x.status === 'approved' ? `<button data-edit-theme="${x.id}">Edit</button>` : ''}
+                <button data-remove-theme="${x.id}" data-title="${escapeHtml(x.title)}" class="danger">Remove</button>
+              </div></td>
             </tr>`).join('') : '<tr><td colspan="4" class="muted">No themes yet.</td></tr>'}
           </tbody>
         </table>
@@ -953,9 +802,7 @@ async function renderTheme(el) {
       [...document.getElementById('thFlyers').files].forEach(f => body.append('flyers', f));
       const m = t ? t.month : document.getElementById('thMonth').value;
       try {
-        const res = await fetch(`/api/national/themes/${encodeURIComponent(m)}`, { method: 'PUT', body });
-        const out = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(out.error || 'Could not save.');
+        await ChurchLifeUI.sendForm(`/api/national/themes/${encodeURIComponent(m)}`, 'PUT', body);
         showToast('Theme saved', 'success');
         openPanel('theme');
       } catch (err) { setFormMsg('thMsg', err.message || 'Could not save.', 'error'); }
@@ -963,20 +810,52 @@ async function renderTheme(el) {
     const another = document.getElementById('thNew');
     if (another) another.addEventListener('click', () => { editing = null; draw(); });
     el.querySelectorAll('[data-edit-theme]').forEach(b => b.addEventListener('click', () => {
-      editing = data.items.find(x => x.month === b.dataset.editTheme); draw(); window.scrollTo({ top: 0, behavior: 'smooth' });
+      editing = live.find(x => x.id === b.dataset.editTheme); draw(); window.scrollTo({ top: 0, behavior: 'smooth' });
     }));
-    el.querySelectorAll('[data-remove-theme]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm(`Remove the theme for ${monthName(b.dataset.removeTheme)}, and its flyers?`)) return;
-      try { await fetchJSON(`/api/national/themes/${encodeURIComponent(b.dataset.removeTheme)}`, { method: 'DELETE' }); showToast('Removed', 'success'); openPanel('theme'); }
-      catch (err) { showToast(err.message || 'Could not remove.', 'error'); }
+    const act = async (fn, done) => {
+      try { await fn(); showToast(done, 'success'); openPanel('theme'); }
+      catch (err) { showToast(err.message || 'Could not do that.', 'error'); }
+    };
+    el.querySelectorAll('[data-approve-theme]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.replaces && !confirm(`This replaces "${b.dataset.replaces}", which is live for ${b.dataset.when}. Approve anyway?`)) return;
+      act(() => fetchJSON(`/api/national/themes/${b.dataset.approveTheme}/decision`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'approve' })
+      }), 'Approved. It is live for its month.');
+    }));
+    el.querySelectorAll('[data-decline-theme]').forEach(b => b.addEventListener('click', () => {
+      const x = waiting.find(w => w.id === b.dataset.declineTheme);
+      showModal(`
+        <h3>Decline "${escapeHtml(x.title)}"?</h3>
+        <p class="hint">Their flyers are kept so they can correct it and send it again. Say why - they will see it.</p>
+        <form id="declineThemeForm">
+          <div class="field"><label>Reason</label><input type="text" id="dtReason" maxlength="200" placeholder="Please use the church's wording"></div>
+          <div style="display:flex; gap:10px; margin-top:18px;">
+            <button type="submit" class="btn btn-primary">Decline</button>
+            <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+          </div>
+        </form>`);
+      ChurchLifeUI.wireCancel();
+      document.getElementById('declineThemeForm').addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const reason = document.getElementById('dtReason').value;
+        closeModal();
+        act(() => fetchJSON(`/api/national/themes/${x.id}/decision`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'decline', reason })
+        }), 'Declined');
+      });
+    }));
+    el.querySelectorAll('[data-remove-theme]').forEach(b => b.addEventListener('click', () => {
+      if (confirm(`Remove "${b.dataset.title}", and its flyers?`)) {
+        act(() => fetchJSON(`/api/national/themes/${b.dataset.removeTheme}`, { method: 'DELETE' }), 'Removed');
+      }
     }));
   }
   draw();
 }
 
-// This portal is always national scope, never chapter-scoped — so a chapter
+// This portal is always national scope, never chapter-scoped - so a chapter
 // chosen elsewhere in the same browser (the admin dashboard's own scope
-// selector, or the public site's chapter picker — both share fetchJSON's
+// selector, or the public site's chapter picker - both share fetchJSON's
 // X-Chapter-Id store in main.js) must not silently leak into requests made
 // here. Without this, National Executives, Reports and the rest of this
 // portal could end up scoped to whatever chapter admin.html was last

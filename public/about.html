@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>About — ACONSU</title>
+<title>About | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,31 +26,29 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="roots" data-hero-page="about" style="padding-bottom:48px; position:relative;" id="aboutHero">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="roots" data-hero-page="about" id="aboutHero">
   <div class="hero-content">
-    <p class="eyebrow">Who We Are</p>
     <h1 id="aboutTitle">About ACONSU</h1>
-    <p class="lede" id="aboutLede">The Apostles' Continuation Students Union — a family of students, on campus for a purpose bigger than a degree.</p>
+    <p class="lede" id="aboutLede">The Apostles' Continuation Students Union. A family of students, on campus for a purpose bigger than a degree.</p>
   </div>
 </section>
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
     <h2>Our Story</h2>
-    <p style="color:var(--ink-soft);" id="aboutHistory">ACONSU exists to see students encounter God and continue steadfastly in the pattern the apostles left the early church: the Word, fellowship, prayer, and one another. We believe campus life is fertile ground for a generation to be raised — not just academically, but spiritually.</p>
+    <p style="color:var(--ink-soft);" id="aboutHistory">ACONSU exists to see students encounter God and continue steadfastly in the pattern the apostles left the early church: the Word, fellowship, prayer, and one another. We believe campus life is fertile ground for a generation to be raised. Not just academically, but spiritually.</p>
     <h2 style="margin-top:2em;">What We Believe</h2>
     <p style="color:var(--ink-soft);" id="aboutMission">We hold to the Scriptures as the final authority for faith and living, and we exist to help every student grow in Christ, discover their gifts, and carry that fire into every hostel, lecture hall and city they go on to.</p>
     <div class="grid" style="margin-top:32px;">
       <div class="card">
-        <p class="eyebrow">Vision</p>
         <h3 style="margin-bottom:8px;">Our Vision</h3>
         <p style="color:var(--ink-soft); margin:0;" id="aboutVision">Raising students who continue steadfastly in Christ and carry His life into every campus and city.</p>
       </div>
       <div class="card">
-        <p class="eyebrow">Values</p>
         <h3 style="margin-bottom:8px;">What Shapes Us</h3>
         <p style="color:var(--ink-soft); margin:0;" id="aboutValues">Scripture, prayer, fellowship, service, and holy living remain central to our chapter life.</p>
       </div>
@@ -63,8 +63,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section id="churchSection" hidden>
   <div class="container">
     <div class="church-mark">
-      <img id="churchLogo" alt="" hidden>
-      <p class="eyebrow">Our Roots</p>
+      <img id="churchLogo" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="" hidden>
       <h2 id="churchName">The wider church</h2>
       <p style="color:var(--ink-soft);" id="churchBlurb"></p>
     </div>
@@ -76,7 +75,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section class="alt-bg">
   <div class="container">
     <div class="section-head">
-      <p class="eyebrow">Leadership</p>
       <h2 id="leadershipHeading">Meet the Executives</h2>
       <p style="color:var(--ink-soft);" id="leadershipBlurb">The team serving and leading ACONSU this session.</p>
     </div>
@@ -92,12 +90,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section>
   <div class="container" style="text-align:center; max-width:640px;">
-    <p class="eyebrow">Stay Connected</p>
     <h2>Follow ACONSU</h2>
     <p style="color:var(--ink-soft); margin-bottom:20px;">Join our online community, watch sermons, and follow updates across all our platforms.</p>
     <div id="aboutSocialRow" class="social-row" style="justify-content:center; gap:12px;"></div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

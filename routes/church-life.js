@@ -14,7 +14,8 @@
 const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const life = require('../lib/churchLife');
-const { processPortrait, } = require('../lib/imageProcess');
+const { processPortrait } = require('../lib/imageProcess');
+const { rejectOperatorKeys } = require('../lib/requestGuard');
 
 const PHOTO_LIMIT_BYTES = 8 * 1024 * 1024;   // a phone photo; it is shrunk to ~100KB on arrival
 const MAX_PENDING = 200;                     // a full queue refuses more rather than growing without bound
@@ -29,7 +30,7 @@ const SITE_ORIGINS = (process.env.SITE_ORIGINS || 'https://rhhas-knust.github.io
   .split(',').map(s => s.trim()).filter(Boolean);
 
 function registerChurchLifeRoutes(app, deps) {
-  const { repo, rolesLib, gridfs, actorName, notifyAdminByEmail, escapeHtmlForEmail, compressIfImage } = deps;
+  const { repo, rolesLib, gridfs, actorName, notifyAdminByEmail, escapeHtmlForEmail, compressIfImage, isChapterAdminOrAbove } = deps;
   const requireNational = rolesLib.requireNational;
 
   // ---------- small helpers ----------
@@ -39,7 +40,7 @@ function registerChurchLifeRoutes(app, deps) {
   const photoUpload = (field) => {
     const uploader = multer({ storage: multer.memoryStorage(), limits: { fileSize: PHOTO_LIMIT_BYTES, files: 1 } }).single(field);
     return (req, res, next) => uploader(req, res, (err) => {
-      if (!err) return next();
+      if (!err) return rejectOperatorKeys(req, res, next);
       const tooBig = err.code === 'LIMIT_FILE_SIZE';
       return res.status(tooBig ? 413 : 400).json({
         error: tooBig ? 'That photo is too large. Please send one under 8MB.' : 'We could not read that upload.'
@@ -148,7 +149,7 @@ function registerChurchLifeRoutes(app, deps) {
   }
 
   async function currentTheme() {
-    return (await repo.getAll('monthlyThemes', { month: life.monthKey() }))[0] || null;
+    return (await repo.getAll('monthlyThemes', { month: life.monthKey(), status: 'approved' }))[0] || null;
   }
 
   // ---------- public reads ----------
@@ -208,7 +209,7 @@ function registerChurchLifeRoutes(app, deps) {
   app.post('/api/public/alumni-requests', siteCors, requestLimiter, photoUpload('photo'), async (req, res) => {
     const thanks = (name) => ({
       success: true,
-      message: `Thank you${name ? ', ' + name.split(' ')[0] : ''}. Your request has gone to National for review. Once it is approved you will appear on the Alumni wall.`
+      message: `Thank you${name ? ', ' + name.split(' ')[0] : ''}. Your request has gone to the admins for review. Once it is approved you will appear on the Alumni wall.`
     });
     try {
       // A hidden field no person ever sees or fills. A bot fills every field it
@@ -246,7 +247,7 @@ function registerChurchLifeRoutes(app, deps) {
       }, 'alum');
       res.json(thanks(fields.name));
       notifyAdminByEmail(
-        'New Alumni request — ACONSU',
+        'New Alumni request | ACONSU',
         `<p><strong>${escapeHtmlForEmail(entry.name)}</strong> (${escapeHtmlForEmail(chapter.name || chapter.id)}) asked to join the Alumni wall.</p>`
         + `<p>${escapeHtmlForEmail(entry.about)}</p><p>Open the National portal, Alumni, to approve or decline.</p>`
       );
@@ -255,109 +256,135 @@ function registerChurchLifeRoutes(app, deps) {
     }
   });
 
-  // ---------- National: the queue ----------
-  app.get('/api/national/alumni', requireNational, async (req, res) => {
-    try {
-      const names = await chapterNames();
-      const entries = (await repo.getAll('alumniEntries', {})).map(e => ({ ...e, chapterName: names.get(e.chapterId) || '' }));
-      const order = { pending: 0, approved: 1, unlisted: 2, declined: 3 };
-      entries.sort((a, b) => (order[a.status] - order[b.status]) || (new Date(b.createdAt) - new Date(a.createdAt)));
-      const spotlight = await currentSpotlight();
-      res.json({
-        counts: ['pending', 'approved', 'unlisted', 'declined'].reduce((o, s) => ({ ...o, [s]: entries.filter(e => e.status === s).length }), {}),
-        spotlight: { weekKey: spotlight.weekKey, pinned: spotlight.pinned, entryId: spotlight.entry ? spotlight.entry.id : '' },
-        items: entries
-      });
-    } catch (e) { res.status(500).json({ error: 'Could not load the alumni' }); }
-  });
+  // ---------- reviewing the queue: National, and a chapter's own admin ----------
+  // One set of handlers behind two doors. National reaches every chapter's
+  // requests. A chapter's admin or coordinator reaches only their own chapter's,
+  // and every lookup below carries that filter, so an id guessed from another
+  // chapter is simply "not found". Choosing this week's spotlight is not here: it
+  // is the whole church's celebration, so it stays with National.
+  const chapterReviewerScope = (req) => {
+    const s = rolesLib.getActingScope(req);
+    if (s.isNational) return { chapterId: s.chapterId || '' };   // oversight: whatever they chose to look at
+    return { chapterId: s.chapterId && s.chapterId !== '__none__' ? s.chapterId : null };
+  };
+  const requireChapterReviewer = (req, res, next) => {
+    if (!isChapterAdminOrAbove(req) || chapterReviewerScope(req).chapterId === null) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    return next();
+  };
+  const nationalScope = () => ({ chapterId: '' });
 
-  // National can add someone straight onto the wall - an alumnus they know
-  // who will never fill in a form.
-  app.post('/api/national/alumni', requireNational, photoUpload('photo'), async (req, res) => {
-    try {
-      const { fields, error } = readFields(req.body);
-      if (error) return res.status(400).json({ error });
-      const chapter = await resolveChapter(req.body.chapterId);
-      if (!chapter) return res.status(400).json({ error: 'Choose the chapter this alumnus came through.' });
-      let imageFileId = '';
-      if (req.file) {
-        try { imageFileId = await storePortrait(req.file, fields.name); }
-        catch (e) { return res.status(400).json({ error: 'That does not look like a photo. Please use a JPG or PNG.' }); }
-      }
-      const item = await repo.create('alumniEntries', {
-        ...fields, chapterId: chapter.id, imageFileId, status: 'approved', via: 'national',
-        approvedAt: new Date(), approvedBy: actorName(req)
-      }, 'alum');
-      res.json({ success: true, item });
-    } catch (e) { res.status(500).json({ error: 'Could not add the alumnus' }); }
-  });
+  function mountAlumniReview(base, guard, scopeOf) {
+    const filterOf = (req) => { const c = scopeOf(req).chapterId; return c ? { chapterId: c } : {}; };
+    const mine = (req) => scopeOf(req).chapterId || '';   // '' = every chapter (National)
 
-  // Fix a spelling before approving, or swap the photo.
-  app.put('/api/national/alumni/:id', requireNational, photoUpload('photo'), async (req, res) => {
-    try {
-      const existing = await repo.getById('alumniEntries', req.params.id);
-      if (!existing) return res.status(404).json({ error: 'Not found' });
-      const { fields, error } = readFields({ ...existing, ...req.body });
-      if (error) return res.status(400).json({ error });
-      let chapterId = existing.chapterId;
-      if (req.body.chapterId && req.body.chapterId !== existing.chapterId) {
-        const chapter = await resolveChapter(req.body.chapterId);
-        if (!chapter) return res.status(400).json({ error: 'That chapter does not exist.' });
-        chapterId = chapter.id;
-      }
-      let imageFileId = existing.imageFileId || '';
-      if (req.file) {
-        try { imageFileId = await storePortrait(req.file, fields.name); }
-        catch (e) { return res.status(400).json({ error: 'That does not look like a photo. Please use a JPG or PNG.' }); }
-        dropFile(existing.imageFileId);
-      }
-      const item = await repo.patchById('alumniEntries', existing.id, { ...fields, chapterId, imageFileId });
-      res.json({ success: true, item });
-    } catch (e) { res.status(500).json({ error: 'Could not update the alumnus' }); }
-  });
+    app.get(base, guard, async (req, res) => {
+      try {
+        const names = await chapterNames();
+        const entries = (await repo.getAll('alumniEntries', filterOf(req))).map(e => ({ ...e, chapterName: names.get(e.chapterId) || '' }));
+        const order = { pending: 0, approved: 1, unlisted: 2, declined: 3 };
+        entries.sort((a, b) => (order[a.status] - order[b.status]) || (new Date(b.createdAt) - new Date(a.createdAt)));
+        const spotlight = await currentSpotlight();
+        res.json({
+          counts: ['pending', 'approved', 'unlisted', 'declined'].reduce((o, s) => ({ ...o, [s]: entries.filter(e => e.status === s).length }), {}),
+          spotlight: { weekKey: spotlight.weekKey, pinned: spotlight.pinned, entryId: spotlight.entry ? spotlight.entry.id : '' },
+          items: entries
+        });
+      } catch (e) { res.status(500).json({ error: 'Could not load the alumni' }); }
+    });
 
-  app.post('/api/national/alumni/:id/decision', requireNational, async (req, res) => {
-    try {
-      const entry = await repo.getById('alumniEntries', req.params.id);
-      if (!entry) return res.status(404).json({ error: 'Not found' });
-      const decision = String(req.body.decision || '');
-      let patch;
-      if (decision === 'approve') {
-        if (!['pending', 'unlisted'].includes(entry.status)) return res.status(400).json({ error: 'Only a waiting or unlisted request can be approved.' });
-        if (!entry.imageFileId) return res.status(400).json({ error: 'This request has no photo. Add one first (Edit), then approve.' });
-        patch = { status: 'approved', approvedAt: new Date(), approvedBy: actorName(req), declineReason: '' };
-      } else if (decision === 'decline') {
-        if (entry.status !== 'pending') return res.status(400).json({ error: 'Only a waiting request can be declined. Use Unlist to take someone down.' });
-        // A declined stranger's photo is not kept.
+    // Add someone straight onto the wall - an alumnus who will never fill in a
+    // form. A chapter's admin adds to their own chapter, whatever the request says.
+    app.post(base, guard, photoUpload('photo'), async (req, res) => {
+      try {
+        const { fields, error } = readFields(req.body);
+        if (error) return res.status(400).json({ error });
+        const chapter = await resolveChapter(mine(req) || req.body.chapterId);
+        if (!chapter) return res.status(400).json({ error: 'Choose the chapter this alumnus came through.' });
+        let imageFileId = '';
+        if (req.file) {
+          try { imageFileId = await storePortrait(req.file, fields.name); }
+          catch (e) { return res.status(400).json({ error: 'That does not look like a photo. Please use a JPG or PNG.' }); }
+        }
+        const item = await repo.create('alumniEntries', {
+          ...fields, chapterId: chapter.id, imageFileId, status: 'approved', via: 'national',
+          approvedAt: new Date(), approvedBy: actorName(req)
+        }, 'alum');
+        res.json({ success: true, item });
+      } catch (e) { res.status(500).json({ error: 'Could not add the alumnus' }); }
+    });
+
+    // Fix a spelling before approving, or swap the photo.
+    app.put(`${base}/:id`, guard, photoUpload('photo'), async (req, res) => {
+      try {
+        const existing = await repo.getById('alumniEntries', req.params.id, filterOf(req));
+        if (!existing) return res.status(404).json({ error: 'Not found' });
+        const { fields, error } = readFields({ ...existing, ...req.body });
+        if (error) return res.status(400).json({ error });
+        let chapterId = existing.chapterId;
+        // Only National moves someone between chapters.
+        if (!mine(req) && req.body.chapterId && req.body.chapterId !== existing.chapterId) {
+          const chapter = await resolveChapter(req.body.chapterId);
+          if (!chapter) return res.status(400).json({ error: 'That chapter does not exist.' });
+          chapterId = chapter.id;
+        }
+        let imageFileId = existing.imageFileId || '';
+        if (req.file) {
+          try { imageFileId = await storePortrait(req.file, fields.name); }
+          catch (e) { return res.status(400).json({ error: 'That does not look like a photo. Please use a JPG or PNG.' }); }
+          dropFile(existing.imageFileId);
+        }
+        const item = await repo.patchById('alumniEntries', existing.id, { ...fields, chapterId, imageFileId });
+        res.json({ success: true, item });
+      } catch (e) { res.status(500).json({ error: 'Could not update the alumnus' }); }
+    });
+
+    app.post(`${base}/:id/decision`, guard, async (req, res) => {
+      try {
+        const entry = await repo.getById('alumniEntries', req.params.id, filterOf(req));
+        if (!entry) return res.status(404).json({ error: 'Not found' });
+        const decision = String(req.body.decision || '');
+        let patch;
+        if (decision === 'approve') {
+          if (!['pending', 'unlisted'].includes(entry.status)) return res.status(400).json({ error: 'Only a waiting or unlisted request can be approved.' });
+          if (!entry.imageFileId) return res.status(400).json({ error: 'This request has no photo. Add one first (Edit), then approve.' });
+          patch = { status: 'approved', approvedAt: new Date(), approvedBy: actorName(req), declineReason: '' };
+        } else if (decision === 'decline') {
+          if (entry.status !== 'pending') return res.status(400).json({ error: 'Only a waiting request can be declined. Use Unlist to take someone down.' });
+          // A declined stranger's photo is not kept.
+          dropFile(entry.imageFileId);
+          patch = { status: 'declined', declineReason: oneLine(req.body.reason, 200), imageFileId: '' };
+        } else if (decision === 'unlist') {
+          if (entry.status !== 'approved') return res.status(400).json({ error: 'Only someone on the wall can be unlisted.' });
+          patch = { status: 'unlisted' };
+        } else {
+          return res.status(400).json({ error: 'Unknown decision' });
+        }
+        const item = await repo.patchById('alumniEntries', entry.id, patch);
+        if (decision === 'unlist') {
+          // If they were this week's celebrated alumnus, the week chooses again.
+          const slot = (await repo.getAll('alumniSpotlights', { entryId: entry.id, weekKey: life.isoWeekKey() }))[0];
+          if (slot) { await repo.removeById('alumniSpotlights', slot.id); await releaseWeek(entry.id, slot.weekKey); }
+        }
+        res.json({ success: true, item });
+      } catch (e) { res.status(500).json({ error: 'Could not record that decision' }); }
+    });
+
+    app.delete(`${base}/:id`, guard, async (req, res) => {
+      try {
+        const entry = await repo.getById('alumniEntries', req.params.id, filterOf(req));
+        if (!entry) return res.status(404).json({ error: 'Not found' });
+        const slots = await repo.getAll('alumniSpotlights', { entryId: entry.id });
+        for (const slot of slots) await repo.removeById('alumniSpotlights', slot.id);
         dropFile(entry.imageFileId);
-        patch = { status: 'declined', declineReason: oneLine(req.body.reason, 200), imageFileId: '' };
-      } else if (decision === 'unlist') {
-        if (entry.status !== 'approved') return res.status(400).json({ error: 'Only someone on the wall can be unlisted.' });
-        patch = { status: 'unlisted' };
-      } else {
-        return res.status(400).json({ error: 'Unknown decision' });
-      }
-      const item = await repo.patchById('alumniEntries', entry.id, patch);
-      if (decision === 'unlist') {
-        // If they were this week's celebrated alumnus, the week chooses again.
-        const slot = (await repo.getAll('alumniSpotlights', { entryId: entry.id, weekKey: life.isoWeekKey() }))[0];
-        if (slot) { await repo.removeById('alumniSpotlights', slot.id); await releaseWeek(entry.id, slot.weekKey); }
-      }
-      res.json({ success: true, item });
-    } catch (e) { res.status(500).json({ error: 'Could not record that decision' }); }
-  });
-
-  app.delete('/api/national/alumni/:id', requireNational, async (req, res) => {
-    try {
-      const entry = await repo.getById('alumniEntries', req.params.id);
-      if (!entry) return res.status(404).json({ error: 'Not found' });
-      const slots = await repo.getAll('alumniSpotlights', { entryId: entry.id });
-      for (const slot of slots) await repo.removeById('alumniSpotlights', slot.id);
-      dropFile(entry.imageFileId);
-      await repo.removeById('alumniEntries', entry.id);
-      res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: 'Could not remove the alumnus' }); }
-  });
+        await repo.removeById('alumniEntries', entry.id);
+        res.json({ success: true });
+      } catch (e) { res.status(500).json({ error: 'Could not remove the alumnus' }); }
+    });
+  }
+  mountAlumniReview('/api/national/alumni', requireNational, nationalScope);
+  mountAlumniReview('/api/admin/alumni', requireChapterReviewer, chapterReviewerScope);
 
   // ---------- National: this week's spotlight ----------
   app.post('/api/national/alumni/spotlight/pin', requireNational, async (req, res) => {
@@ -393,75 +420,180 @@ function registerChurchLifeRoutes(app, deps) {
     } catch (e) { res.status(500).json({ error: 'Could not release the spotlight' }); }
   });
 
-  // ---------- National: the monthly theme ----------
+
+  // ---------- the monthly theme ----------
+  // One theme for the whole church per month. National can write it directly. A
+  // chapter's admin can only PROPOSE one: it waits, and shows nowhere, until
+  // National approves it. Once approved a chapter can no longer change it - the
+  // church's theme must not move under a chapter's hand after it has gone live.
   const flyerUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: PHOTO_LIMIT_BYTES * 2, files: MAX_FLYERS } }).array('flyers', MAX_FLYERS);
   const flyers = (req, res, next) => flyerUpload(req, res, (err) => err
     ? res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A flyer is too large (16MB at most).' : `Up to ${MAX_FLYERS} flyers, images only.` })
-    : next());
+    : rejectOperatorKeys(req, res, next));
+
+  // Reads the form, stores the new flyers and drops the ones taken off. Returns
+  // { data } for the record, or { error }.
+  async function themeFromRequest(req, existing, month) {
+    const title = oneLine(req.body.title, 120);
+    if (!title) return { error: 'The theme needs a title.' };
+    // Flyers the form still shows are kept; the rest are removed. Anything not
+    // in the existing record cannot be "kept" - the ids are checked.
+    let keep = [];
+    try { keep = JSON.parse(req.body.keepFlyers || '[]'); } catch (e) { keep = []; }
+    const have = (existing && existing.flyerFileIds) || [];
+    keep = (Array.isArray(keep) ? keep : []).filter(id => have.includes(id));
+    const incoming = (req.files || []).filter(f => String(f.mimetype).startsWith('image/'));
+    if (keep.length + incoming.length > MAX_FLYERS) return { error: `At most ${MAX_FLYERS} flyers for a month.` };
+    const added = [];
+    for (const f of incoming) {
+      const c = await compressIfImage(f.buffer, f.mimetype);
+      added.push(String(await gridfs.uploadBuffer(c.buffer, f.originalname, {
+        category: 'monthlyTheme', contentType: c.contentType, title, chapterId: rolesLib.NATIONAL_CHAPTER_ID
+      })));
+    }
+    have.filter(id => !keep.includes(id)).forEach(dropFile);
+    return {
+      data: {
+        month, title,
+        scripture: oneLine(req.body.scripture, 200),
+        blurb: String(req.body.blurb || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, 1200),
+        flyerFileIds: [...keep, ...added]
+      }
+    };
+  }
+  const approvedFor = async (month) => (await repo.getAll('monthlyThemes', { month, status: 'approved' }))[0] || null;
+  const dropTheme = async (theme) => {
+    (theme.flyerFileIds || []).forEach(dropFile);
+    await repo.removeById('monthlyThemes', theme.id);
+  };
 
   app.get('/api/national/themes', requireNational, async (req, res) => {
     try {
-      const themes = await repo.getAll('monthlyThemes', {});
-      themes.sort((a, b) => String(b.month).localeCompare(String(a.month)));
+      const names = await chapterNames();
+      const themes = (await repo.getAll('monthlyThemes', {})).map(t => ({ ...t, chapterName: names.get(t.proposedByChapterId) || '' }));
+      const order = { pending: 0, approved: 1, declined: 2 };
+      themes.sort((a, b) => String(b.month).localeCompare(String(a.month)) || (order[a.status] - order[b.status]));
       const month = life.monthKey();
       const d = life.now();
       const nextMonth = life.monthKey(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)));
+      const live = themes.filter(t => t.status === 'approved');
       res.json({
         month, nextMonth,
-        hasCurrent: themes.some(t => t.month === month),
-        hasNext: themes.some(t => t.month === nextMonth),
+        hasCurrent: live.some(t => t.month === month),
+        hasNext: live.some(t => t.month === nextMonth),
+        pending: themes.filter(t => t.status === 'pending').length,
         items: themes
       });
     } catch (e) { res.status(500).json({ error: 'Could not load the themes' }); }
   });
 
+  // National writes the church's theme for a month directly: it is live as soon
+  // as it is saved.
   app.put('/api/national/themes/:month', requireNational, flyers, async (req, res) => {
     try {
       const month = req.params.month;
       if (!life.isMonthKey(month)) return res.status(400).json({ error: 'The month must look like 2026-11.' });
-      const title = oneLine(req.body.title, 120);
-      if (!title) return res.status(400).json({ error: 'The theme needs a title.' });
-      const existing = (await repo.getAll('monthlyThemes', { month }))[0];
-
-      // Flyers the form still shows are kept; the rest are removed. Anything
-      // not in the existing record cannot be "kept" - the ids are checked.
-      let keep = [];
-      try { keep = JSON.parse(req.body.keepFlyers || '[]'); } catch (e) { keep = []; }
-      const have = (existing && existing.flyerFileIds) || [];
-      keep = (Array.isArray(keep) ? keep : []).filter(id => have.includes(id));
-      const incoming = (req.files || []).filter(f => String(f.mimetype).startsWith('image/'));
-      if (keep.length + incoming.length > MAX_FLYERS) return res.status(400).json({ error: `At most ${MAX_FLYERS} flyers for a month.` });
-
-      const added = [];
-      for (const f of incoming) {
-        const c = await compressIfImage(f.buffer, f.mimetype);
-        added.push(String(await gridfs.uploadBuffer(c.buffer, f.originalname, {
-          category: 'monthlyTheme', contentType: c.contentType, title, chapterId: rolesLib.NATIONAL_CHAPTER_ID
-        })));
-      }
-      have.filter(id => !keep.includes(id)).forEach(dropFile);
-
-      const data = {
-        month, title,
-        scripture: oneLine(req.body.scripture, 200),
-        blurb: String(req.body.blurb || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, 1200),
-        flyerFileIds: [...keep, ...added]
-      };
+      const existing = await approvedFor(month);
+      const out = await themeFromRequest(req, existing, month);
+      if (out.error) return res.status(400).json({ error: out.error });
+      const data = { ...out.data, status: 'approved', declineReason: '', decidedAt: new Date(), decidedBy: actorName(req) };
       const item = existing
         ? await repo.updateById('monthlyThemes', existing.id, { ...existing, ...data })
-        : await repo.create('monthlyThemes', data, 'theme');
+        : await repo.create('monthlyThemes', { ...data, proposedByChapterId: '', proposedByName: actorName(req) }, 'theme');
       res.json({ success: true, item });
     } catch (e) { res.status(500).json({ error: 'Could not save the theme' }); }
   });
 
-  app.delete('/api/national/themes/:month', requireNational, async (req, res) => {
+  // Approve or decline a chapter's proposal.
+  app.post('/api/national/themes/:id/decision', requireNational, async (req, res) => {
     try {
-      const existing = (await repo.getAll('monthlyThemes', { month: req.params.month }))[0];
-      if (!existing) return res.status(404).json({ error: 'Not found' });
-      (existing.flyerFileIds || []).forEach(dropFile);
-      await repo.removeById('monthlyThemes', existing.id);
+      const theme = await repo.getById('monthlyThemes', req.params.id);
+      if (!theme) return res.status(404).json({ error: 'Not found' });
+      const decision = String(req.body.decision || '');
+      if (decision === 'approve') {
+        if (theme.status === 'approved') return res.status(400).json({ error: 'That theme is already live.' });
+        // One live theme per month: approving this one replaces the one that was.
+        const live = await approvedFor(theme.month);
+        if (live) await dropTheme(live);
+        const item = await repo.patchById('monthlyThemes', theme.id, { status: 'approved', declineReason: '', decidedAt: new Date(), decidedBy: actorName(req) });
+        return res.json({ success: true, item, replaced: !!live });
+      }
+      if (decision === 'decline') {
+        if (theme.status !== 'pending') return res.status(400).json({ error: 'Only a waiting proposal can be declined.' });
+        const item = await repo.patchById('monthlyThemes', theme.id, { status: 'declined', declineReason: oneLine(req.body.reason, 200), decidedAt: new Date(), decidedBy: actorName(req) });
+        return res.json({ success: true, item });
+      }
+      return res.status(400).json({ error: 'Unknown decision' });
+    } catch (e) { res.status(500).json({ error: 'Could not record that decision' }); }
+  });
+
+  app.delete('/api/national/themes/:id', requireNational, async (req, res) => {
+    try {
+      const theme = await repo.getById('monthlyThemes', req.params.id);
+      if (!theme) return res.status(404).json({ error: 'Not found' });
+      await dropTheme(theme);
       res.json({ success: true });
     } catch (e) { res.status(500).json({ error: 'Could not remove the theme' }); }
+  });
+
+  // A chapter's admin: their own proposals, and which months already have a
+  // theme so they are not proposing for nothing.
+  app.get('/api/admin/themes', requireChapterReviewer, async (req, res) => {
+    try {
+      const chapterId = chapterReviewerScope(req).chapterId;
+      const month = life.monthKey();
+      const d = life.now();
+      const nextMonth = life.monthKey(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)));
+      const all = await repo.getAll('monthlyThemes', {});
+      const mineOnly = chapterId ? all.filter(t => t.proposedByChapterId === chapterId) : [];
+      mineOnly.sort((a, b) => String(b.month).localeCompare(String(a.month)));
+      res.json({
+        month, nextMonth,
+        live: all.filter(t => t.status === 'approved' && t.month >= month).map(t => ({ month: t.month, title: t.title }))
+          .sort((a, b) => a.month.localeCompare(b.month)),
+        items: mineOnly
+      });
+    } catch (e) { res.status(500).json({ error: 'Could not load the themes' }); }
+  });
+
+  app.put('/api/admin/themes/:month', requireChapterReviewer, flyers, async (req, res) => {
+    try {
+      const chapterId = chapterReviewerScope(req).chapterId;
+      if (!chapterId) return res.status(400).json({ error: 'Propose a theme from your own chapter\'s admin account.' });
+      const month = req.params.month;
+      if (!life.isMonthKey(month)) return res.status(400).json({ error: 'The month must look like 2026-11.' });
+      if (month < life.monthKey()) return res.status(400).json({ error: 'That month has already passed.' });
+      const existing = (await repo.getAll('monthlyThemes', { month, proposedByChapterId: chapterId }))[0] || null;
+      if (existing && existing.status === 'approved') {
+        return res.status(403).json({ error: 'That theme is already approved and live. Ask National if it needs to change.' });
+      }
+      const out = await themeFromRequest(req, existing, month);
+      if (out.error) return res.status(400).json({ error: out.error });
+      // Whatever it was before - new, waiting or declined - it is now waiting.
+      const data = { ...out.data, status: 'pending', declineReason: '', decidedAt: null, decidedBy: '' };
+      const item = existing
+        ? await repo.updateById('monthlyThemes', existing.id, { ...existing, ...data })
+        : await repo.create('monthlyThemes', { ...data, proposedByChapterId: chapterId, proposedByName: actorName(req) }, 'theme');
+      res.json({ success: true, item });
+      const names = await chapterNames();
+      notifyAdminByEmail(
+        'Monthly theme waiting for approval | ACONSU',
+        `<p><strong>${escapeHtmlForEmail(names.get(chapterId) || chapterId)}</strong> proposed a theme for ${escapeHtmlForEmail(month)}: `
+        + `<strong>${escapeHtmlForEmail(item.title)}</strong>.</p><p>Open the National portal, Monthly Theme, to approve or decline.</p>`
+      );
+    } catch (e) { res.status(500).json({ error: 'Could not send the theme' }); }
+  });
+
+  // Withdraw a proposal that has not gone live.
+  app.delete('/api/admin/themes/:id', requireChapterReviewer, async (req, res) => {
+    try {
+      const chapterId = chapterReviewerScope(req).chapterId;
+      const theme = chapterId ? await repo.getById('monthlyThemes', req.params.id, { proposedByChapterId: chapterId }) : null;
+      if (!theme) return res.status(404).json({ error: 'Not found' });
+      if (theme.status === 'approved') return res.status(403).json({ error: 'That theme is already live. Ask National to remove it.' });
+      await dropTheme(theme);
+      res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: 'Could not withdraw the theme' }); }
   });
 
   return { currentSpotlight, currentTheme };

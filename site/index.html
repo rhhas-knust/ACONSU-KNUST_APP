@@ -3,23 +3,35 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ACONSU — KNUST</title>
-<meta name="description" content="The Apostles' Continuation Students Union, KNUST chapter — a family of students who love God, His Word and one another. Services, prayer meetings and Bible study on campus. Come as you are.">
+<!-- Everything this page loads comes from this folder. The one exception is the
+     alumni request form, which sends a single request to the app when somebody
+     presses Send; that address is the only one allowed below. Change it if
+     chapter.js points somewhere else. No fonts, scripts, analytics or embeds are
+     loaded from anyone else. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://aconsu-knust-app.onrender.com; form-action 'self'; base-uri 'self'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>ACONSU KNUST</title>
+<meta name="description" content="The Apostles' Continuation Students Union at KNUST. Sunday services, midweek meetings, prayer and Bible study on campus. Everyone is welcome.">
 <meta name="theme-color" content="#5B2C82">
-<link rel="icon" href="images/logo.jpg">
-<meta property="og:title" content="ACONSU — KNUST">
-<meta property="og:description" content="A family of students at KNUST who love God, His Word and one another. There is always room for one more.">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:title" content="ACONSU KNUST">
+<meta property="og:description" content="The Apostles' Continuation Students Union at KNUST. Services, prayer and Bible study on campus.">
 <meta property="og:image" content="images/logo.jpg">
 <meta property="og:type" content="website">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
+<a class="skip-link" href="#main">Skip to content</a>
+
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#top"><img src="images/logo.jpg" alt=""><span data-bind="name">ACONSU</span></a>
-    <nav>
-      <a class="nav-link" href="#visit">Visit</a>
+    <a class="brand" href="#top"><img src="images/logo.jpg" alt="" width="40" height="40"><span data-bind="name">ACONSU</span></a>
+    <nav aria-label="Main">
+      <a class="nav-link" href="#visit">Services</a>
       <a class="nav-link" href="#about">About</a>
       <a class="nav-link" href="#alumni">Alumni</a>
       <a class="nav-link" href="#contact">Contact</a>
@@ -28,39 +40,42 @@
   </div>
 </header>
 
-<main id="top">
+<main id="main">
+  <span id="top"></span>
 
   <section class="hero">
     <div class="wrap">
-      <p class="eyebrow">Welcome to <span data-bind="name">ACONSU</span></p>
-      <h1 data-bind="tagline">Carrying the fire.</h1>
-      <p class="lede" data-bind="lede"></p>
-      <div class="hero-cta">
-        <a class="btn btn-primary" href="#visit">Plan a Visit</a>
-        <a class="btn btn-ghost" href="#about">Who We Are</a>
+      <div>
+        <h1 data-bind="tagline">ACONSU at KNUST</h1>
+        <p class="lede" data-bind="lede"></p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#visit">Service times</a>
+          <a class="btn btn-ghost" href="#about">About us</a>
+        </div>
       </div>
+      <div class="hero-photo is-loading" id="heroPhoto" hidden><img id="heroImg" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="" width="1600" height="1067" fetchpriority="high"></div>
     </div>
   </section>
 
-  <!-- Freshers. Sits directly under the hero because somebody arriving on
+  <!-- Freshers. Sits directly under the opening because somebody arriving on
        campus for the first time needs one obvious next step, not a scroll.
        Hidden entirely until there is a link to give them. -->
   <section class="freshers" data-section="freshers" hidden>
     <div class="wrap">
-      <p class="eyebrow">Freshers</p>
-      <h2 data-bind="freshersHeading"></h2>
-      <p data-bind="freshersBlurb"></p>
-      <a class="btn btn-gold" id="freshersLink" target="_blank" rel="noopener"></a>
+      <div>
+        <h2 data-bind="freshersHeading"></h2>
+        <p data-bind="freshersBlurb"></p>
+      </div>
+      <a class="btn btn-light" id="freshersLink" target="_blank" rel="noopener noreferrer"></a>
     </div>
   </section>
 
-  <!-- When and where. Hidden entirely until there is something to say. -->
   <!-- The church's theme for the month, with its prayer flyers. Written in the
        app by National and copied here (data/feed.json). Hidden entirely until
        there is one, so an unset month leaves no gap. -->
   <section class="theme" data-section="theme" hidden>
     <div class="wrap">
-      <p class="eyebrow" id="themeMonth"></p>
+      <p class="meta" id="themeMonth"></p>
       <h2 id="themeTitle"></h2>
       <p class="theme-scripture" id="themeScripture"></p>
       <p class="theme-blurb" id="themeBlurb"></p>
@@ -68,102 +83,70 @@
     </div>
   </section>
 
-  <section id="visit" class="alt" data-section="visit" hidden>
+  <!-- When and where. Hidden entirely until there is something to say. -->
+  <section id="visit" data-section="visit" hidden>
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Come and See</p>
-        <h2>When we meet</h2>
-        <p>You do not need to know anybody. You do not need to bring anything. You do not even
-           need to be sure what you believe yet. Come as you are.</p>
-      </div>
-      <div class="grid" id="services"></div>
-      <p style="margin-top:26px;" id="addressLine" hidden>
+      <h2>Services and meetings</h2>
+      <ul class="times" id="services"></ul>
+      <p class="address-line" id="addressLine" hidden>
         <strong data-bind="address"></strong>
-        <a class="btn btn-ghost btn-sm" style="margin-left:10px;" data-map-link hidden>Open in Maps</a>
+        <a class="btn btn-ghost btn-sm" data-map-link hidden>Open in Maps</a>
       </p>
     </div>
   </section>
 
-  <section id="about">
+  <section id="about" class="alt">
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Who We Are</p>
-        <h2>Our story</h2>
-      </div>
+      <h2>About us</h2>
       <div class="prose">
         <p data-bind="story"></p>
         <p data-bind="belief"></p>
       </div>
-      <div class="grid" style="margin-top:34px;">
-        <div class="card" data-card="vision" hidden>
-          <p class="eyebrow">Vision</p>
-          <h3>Where we are going</h3>
-          <p data-bind="vision"></p>
-        </div>
-        <div class="card" data-card="values" hidden>
-          <p class="eyebrow">Values</p>
-          <h3>What shapes us</h3>
-          <p data-bind="values"></p>
-        </div>
-      </div>
+      <dl class="facts">
+        <div data-card="vision" hidden><dt>Vision</dt><dd data-bind="vision"></dd></div>
+        <div data-card="values" hidden><dt>Values</dt><dd data-bind="values"></dd></div>
+      </dl>
     </div>
   </section>
 
   <!-- The wider church: its logo, and the men who began it. Sits between our
-       own story and our own leadership because that is the truth of it - this
+       own story and our own leadership because that is the truth of it: this
        chapter is a fraction of the church, and its founders are not the
        chapter's executive. Hidden entirely until there is a logo or a name. -->
-  <section class="alt" data-section="heritage" hidden>
+  <section data-section="heritage" hidden>
     <div class="wrap">
       <div class="church-mark">
-        <img id="churchLogo" class="church-logo" alt="" hidden>
-        <p class="eyebrow">Our Roots</p>
+        <img id="churchLogo" class="church-logo" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="" hidden>
         <h2 data-bind="churchName">The wider church</h2>
         <p class="church-blurb" data-bind="churchBlurb"></p>
       </div>
-      <h3 class="founder-heading" id="founderHeading" hidden>Among the founding fathers</h3>
+      <h3 class="founder-heading" id="founderHeading" hidden>Founders</h3>
       <div class="founder-grid" id="founders"></div>
     </div>
   </section>
 
-  <section data-section="leadership" hidden>
+  <section class="alt" data-section="leadership" hidden>
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Leadership</p>
-        <h2>Who leads the chapter</h2>
-        <p>The people you can go to — and they do mean it.</p>
-      </div>
+      <h2>Leadership</h2>
       <div class="lead-grid" id="coordinators"></div>
-      <h3 class="exec-heading" id="execHeading" hidden>The executive body</h3>
+      <h3 class="exec-heading" id="execHeading" hidden>Executives</h3>
       <div class="exec-grid" id="executives"></div>
     </div>
   </section>
 
-  <section class="alt" data-section="ministries" hidden>
+  <section data-section="ministries" hidden>
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Life Here</p>
-        <h2>What happens among us</h2>
-        <p>There is a place to belong and a place to serve. Most people find both, usually
-           in that order.</p>
-      </div>
+      <h2>What we do</h2>
       <div class="grid" id="ministries"></div>
     </div>
   </section>
 
-  <!-- Reports anyone can open. An outreach write-up, an annual review — the
+  <!-- Reports anyone can open. An outreach write-up, an annual review: the
        things a chapter is usually asked for and has to dig out of WhatsApp.
        Hidden entirely until there is one to show. -->
-  <section data-section="reports" hidden>
+  <section class="alt" data-section="reports" hidden>
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Read for Yourself</p>
-        <h2>Where we have been</h2>
-        <p>Once a year we leave campus for a week — knocking on doors, broadcasting at
-           dawn, sitting with whoever will sit with us. These are the full reports, not
-           summaries: the towns, the days, the numbers and the lessons, written down
-           exactly as they happened.</p>
-      </div>
+      <h2>Reports</h2>
       <div class="grid" id="reports"></div>
     </div>
   </section>
@@ -172,49 +155,47 @@
        and a way to ask to be added. The names come from the app via the
        scheduled copy (data/feed.json); a request goes to the app only when
        somebody presses Send. Hidden until there is something to show. -->
-  <section id="alumni" class="alt" data-section="alumni" hidden>
+  <section id="alumni" data-section="alumni" hidden>
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Once ACONSU, Always ACONSU</p>
-        <h2>Alumni we are proud of</h2>
-        <p id="alumniIntro">The family does not end at graduation. These are some of the people who sat
-           where you sit, and what they are doing now.</p>
-      </div>
+      <h2>Alumni</h2>
+      <p class="section-note" id="alumniIntro">Former members of ACONSU and what they are doing now.</p>
       <article class="spotlight" id="spotlight" hidden></article>
+      <div class="alumni-grid" id="alumniSkeleton" aria-hidden="true" hidden>
+        <div class="skeleton skel-card"></div><div class="skeleton skel-card"></div><div class="skeleton skel-card"></div>
+      </div>
       <div class="alumni-grid" id="alumniGrid"></div>
       <p class="alumni-more" id="alumniMore" hidden><button type="button" class="btn btn-ghost btn-sm" id="alumniMoreBtn"></button></p>
 
       <div class="ask" id="alumniAsk" hidden>
-        <h3>Are you ACONSU alumni?</h3>
-        <p class="ask-intro">Send us a photo, your name and a few lines about you. National looks at every request,
-           and once it is approved you appear here and in the app.</p>
+        <h3>Ask to be listed</h3>
+        <p class="ask-intro">Send a photo, your name and a few lines about you. An admin reviews every request. Once it is approved you appear here and in the app.</p>
         <form id="alumniForm" novalidate>
           <div class="field"><label for="alName">Your name</label>
-            <input type="text" id="alName" maxlength="80" autocomplete="name" required></div>
+            <input type="text" id="alName" maxlength="80" autocomplete="name" required aria-describedby="alMsg"></div>
           <div class="field"><label for="alPhoto">A photo of you</label>
-            <input type="file" id="alPhoto" accept="image/*" required>
-            <p class="hint">A clear picture of your face. Straight from your phone is fine; we make it small for you.</p>
-            <img class="ask-preview" id="alPreview" alt="" hidden></div>
+            <input type="file" id="alPhoto" accept="image/*" required aria-describedby="alPhotoHint alMsg">
+            <p class="hint" id="alPhotoHint">A clear picture of your face. A photo straight from your phone is fine; it is made smaller before it is sent.</p>
+            <img class="ask-preview" id="alPreview" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="Preview of the photo you chose" hidden></div>
           <div class="field"><label for="alAbout">A few words about you</label>
-            <textarea id="alAbout" maxlength="400" rows="4" placeholder="Where you served, what ACONSU meant to you, who you are now." required></textarea>
-            <p class="hint ask-count"><span id="alCount">0</span> / 400</p></div>
+            <textarea id="alAbout" maxlength="400" rows="4" required aria-describedby="alAboutHint alMsg"></textarea>
+            <p class="hint ask-count" id="alAboutHint"><span id="alCount">0</span> of 400 characters. Where you served, and what you do now.</p></div>
           <div class="field-row">
             <div class="field"><label for="alWork">What you do now (optional)</label>
-              <input type="text" id="alWork" maxlength="120" placeholder="Pharmacist at Korle Bu"></div>
+              <input type="text" id="alWork" maxlength="120" autocomplete="organization-title"></div>
             <div class="field"><label for="alClass">Year you finished (optional)</label>
-              <input type="number" id="alClass" min="1950" max="2100" placeholder="2019" inputmode="numeric"></div>
+              <input type="number" id="alClass" min="1950" max="2100" inputmode="numeric"></div>
           </div>
-          <div class="field"><label for="alContact">An email or phone number (optional)</label>
-            <input type="text" id="alContact" maxlength="120" autocomplete="email">
-            <p class="hint">So National can check it is really you. It is never shown to anyone.</p></div>
+          <div class="field"><label for="alContact">Email or phone number (optional)</label>
+            <input type="text" id="alContact" maxlength="120" autocomplete="email" aria-describedby="alContactHint">
+            <p class="hint" id="alContactHint">Only so an admin can check it is you. It is never shown to anyone.</p></div>
           <div class="trap" aria-hidden="true"><label>Company <input type="text" id="alCompany" tabindex="-1" autocomplete="off"></label></div>
-          <label class="consent"><input type="checkbox" id="alConsent" required>
-            <span>I am happy for my photo, name and these words to be shown publicly on this website and in the ACONSU app.</span></label>
-          <button type="submit" class="btn btn-primary" id="alSubmit">Send my request</button>
+          <label class="consent"><input type="checkbox" id="alConsent" required aria-describedby="alMsg">
+            <span>I agree that my photo, name and these words are shown publicly on this website and in the ACONSU app. I can ask for them to be removed at any time. <a href="privacy.html#alumni">How we use this</a>.</span></label>
+          <button type="submit" class="btn btn-primary" id="alSubmit">Send request</button>
           <p class="ask-msg" id="alMsg" role="status" aria-live="polite"></p>
         </form>
-        <div class="ask-done" id="alDone" hidden>
-          <h3>Thank you!</h3>
+        <div class="ask-done" id="alDone" role="status" hidden>
+          <h3>Request sent</h3>
           <p id="alDoneText"></p>
         </div>
       </div>
@@ -223,21 +204,16 @@
 
   <section data-section="verse" hidden>
     <div class="wrap">
-      <div class="verse">
+      <figure class="verse">
         <blockquote data-bind="verseText"></blockquote>
-        <cite data-bind="verseRef"></cite>
-      </div>
+        <figcaption><cite data-bind="verseRef"></cite></figcaption>
+      </figure>
     </div>
   </section>
 
   <section id="contact" class="alt">
     <div class="wrap">
-      <div class="section-head">
-        <p class="eyebrow">Reach Us</p>
-        <h2>Get in touch</h2>
-        <p>A question, a prayer request, or simply no idea where to start — whatever it is,
-           we would love to hear from you.</p>
-      </div>
+      <h2>Contact</h2>
       <ul class="contact-list" id="contactList"></ul>
       <div class="socials" id="socials"></div>
     </div>
@@ -249,14 +225,19 @@
   <div class="wrap">
     <div class="foot-row">
       <div>
-        <h4 data-bind="name">ACONSU</h4>
-        <p style="margin:0;" data-bind="fullName"></p>
-        <p style="margin:4px 0 0; font-size:0.86rem;" data-bind="institution"></p>
+        <p class="foot-name" data-bind="name">ACONSU</p>
+        <p class="foot-line" data-bind="fullName"></p>
+        <p class="foot-line" data-bind="institution"></p>
       </div>
       <div>
-        <a class="btn btn-gold btn-sm" data-app-link hidden>Open the ACONSU app</a>
+        <a class="btn btn-light btn-sm" data-app-link hidden>Open the ACONSU app</a>
       </div>
     </div>
+    <ul class="foot-links">
+      <li><a href="privacy.html">Privacy policy</a></li>
+      <li><a href="terms.html">Terms of use</a></li>
+      <li><a href="cookies.html">Cookies and storage</a></li>
+    </ul>
     <div class="foot-legal">
       <span>&copy; <span id="year"></span> <span data-bind="name"></span>. All rights reserved.</span>
       <span data-bind="location"></span>

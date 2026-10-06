@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Privacy Policy — ACONSU</title>
+<title>Privacy Policy | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -25,13 +27,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .policy { max-width: 760px; margin: 0 auto; }
   .policy h2 { margin: 34px 0 12px; font-size: 1.25rem; color: var(--brand); }
   .policy h3 { margin: 22px 0 8px; font-size: 1rem; color: var(--brand-strong); }
-  .policy p, .policy li { color: #4a3a56; line-height: 1.7; }
+  .policy p, .policy li { color: var(--ink-soft); line-height: 1.7; }
   .policy ul { margin: 10px 0 10px 20px; }
   .policy li { margin-bottom: 7px; }
   .policy .note {
     background: var(--lilac-light);
-    border-left: 3px solid var(--flame-gold);
-    padding: 14px 18px; border-radius: 0 8px 8px 0; margin: 18px 0;
+    border: 1px solid var(--line);
+    padding: 14px 18px; border-radius: var(--radius); margin: 18px 0;
   }
   .policy table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
   .policy th, .policy td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -40,53 +42,57 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="calm" data-hero-page="privacy" style="padding-bottom:40px;">
-  <div class="hero-flame"></div>
+<section class="hero hero-compact" data-art="calm" data-hero-page="privacy">
   <div class="hero-content">
-    <p class="eyebrow">Your Information</p>
-    <h1>Privacy Policy</h1>
-    <p class="lede">What we collect, why we collect it, who can see it, and how to have it removed.</p>
+    <h1>Privacy policy</h1>
   </div>
 </section>
 
 <section style="padding-top:0;">
   <div class="container policy">
 
-    <p><strong>Last updated:</strong> <span id="lastUpdated">18 September 2026</span></p>
+    <p><strong>Last updated:</strong> <span id="lastUpdated">6 October 2026</span></p>
 
     <p>
-      This policy covers the ACONSU website and the ACONSU mobile app. Both are run by
-      The Apostles' Continuation Students Union, KNUST chapter. The app is a view onto the
-      same service as the website, so everything below applies to both equally.
+      This policy covers this ACONSU app and web service, run by The Apostles' Continuation
+      Students Union and its chapters. The separate public information website has its own,
+      shorter policy because it collects almost nothing. We process personal data under the Data
+      Protection Act, 2012 (Act 843) of Ghana. Related pages:
+      <a href="/terms.html">Terms of use</a>, <a href="/cookies.html">Cookies and storage</a>,
+      <a href="/refunds.html">Giving and refunds</a>.
     </p>
 
     <div class="note">
       <strong>The short version.</strong> We collect what we need to run the union's membership
       and pastoral care, and nothing more. We do not sell your information, we do not use it for
       advertising, and we do not share it with anyone outside ACONSU except the service providers
-      listed below who help us operate. Sensitive things — prayer requests, welfare cases and
-      pastoral notes — are seen only by the specific office that handles them.
+      listed below who help us operate. Sensitive records (prayer requests, welfare cases and
+      pastoral notes) are seen only by the specific office that handles them.
     </div>
 
     <h2>Who we are</h2>
     <p>
       ACONSU-KNUST is a student union chapter. The person responsible for data in this service is
-      the Chapter Coordinator. You can reach us through the
+      the Chapter Coordinator of the chapter you joined. You can reach us through the
       <a href="/contact.html">contact page</a>, and the contact address shown there is the one
-      that reaches whoever currently holds that office.
+      that reaches whoever currently holds that office. National-level matters are handled by the
+      National Coordinator.
     </p>
 
     <h2>What we collect</h2>
 
     <h3>When you create an account</h3>
     <ul>
-      <li>Your name, email address and a password (stored only as a one-way hash — we never hold the password itself)</li>
+      <li>Your name, email address and a password (stored only as a one-way hash, we never hold the password itself)</li>
       <li>Your phone number, if you give one</li>
-      <li>A profile photo, which is required at registration so members can recognise one another</li>
+      <li>A profile photo, which is required at registration for your digital membership card and so members can recognise one another</li>
+      <li>When you agreed to the Terms and this policy, and which version of them you agreed to</li>
       <li>Your chapter, and your programme, level and hostel or residence, if you give them</li>
-      <li>Your birthday — <strong>month and day only, never the year</strong>, so your age cannot be worked out from it</li>
+      <li>Your birthday: <strong>month and day only, never the year</strong>, so your age cannot be worked out from it</li>
     </ul>
 
     <h3>As you take part</h3>
@@ -109,7 +115,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
     <h3>Technical</h3>
     <ul>
-      <li>A session cookie, so you stay signed in. It is strictly necessary — the service cannot work without it — and it is not used for tracking.</li>
+      <li>A session cookie, so you stay signed in. It is strictly necessary, the service cannot work without it, and it is not used for tracking.</li>
       <li>If you turn on notifications, a push subscription identifying your browser or device to the push service. You can turn this off at any time.</li>
       <li>Ordinary server logs, including your IP address, kept for security and to diagnose faults.</li>
     </ul>
@@ -131,7 +137,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <tr><td>Photo and membership number</td><td>Your digital membership card, and recognising members at services</td></tr>
         <tr><td>Department and attendance</td><td>Running departments and knowing who is taking part</td></tr>
         <tr><td>Prayer, testimony, welfare</td><td>Responding to what you asked us to respond to</td></tr>
-        <tr><td>Pastoral notes</td><td>Member care — knowing your situation so you are supported properly</td></tr>
+        <tr><td>Pastoral notes</td><td>Member care. Knowing your situation so you are supported properly</td></tr>
         <tr><td>Contact details</td><td>Announcements about the union's activities, by app notification, email or SMS</td></tr>
       </tbody>
     </table>
@@ -151,7 +157,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <li><strong>Department information</strong> is visible to the head of that department, not to other departments.</li>
       <li><strong>Prayer requests</strong> may be shared with the prayer team, and appear publicly on the prayer wall only if you ask for that when submitting.</li>
       <li>National officers see chapter totals and readiness figures, <strong>not</strong> individual member records.</li>
-      <li><strong>Alumni Connect</strong> is the one directory that spans chapters, and only for alumni who switched it on themselves — see below.</li>
+      <li><strong>Alumni Connect</strong> is the one directory that spans chapters, and only for alumni who switched it on themselves. See below.</li>
     </ul>
 
     <h2>Alumni Connect</h2>
@@ -162,7 +168,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </p>
     <ul>
       <li><strong>It is off unless you turn it on.</strong> Nothing about you appears there until you write your own entry and tick "List me". No account is added automatically.</li>
-      <li><strong>You write it yourself</strong> — what you do, where you work, your field, what you studied, the year you finished, your city, and anything you want to say about your work.</li>
+      <li><strong>You write it yourself</strong>. What you do, where you work, your field, what you studied, the year you finished, your city, and anything you want to say about your work.</li>
       <li><strong>Your contact details are shown only if you say so.</strong> Your email and phone number are not published just because we hold them; each has its own switch.</li>
       <li><strong>It is visible to full members of the union</strong>, from any chapter. Visitors and people still being welcomed cannot see it.</li>
       <li><strong>You can take it down at any time</strong>, from your profile, and it disappears immediately. Your Chapter Coordinator can also remove a listing belonging to your chapter.</li>
@@ -178,23 +184,36 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       one person from it is celebrated each week. You do not need an account to ask.
     </p>
     <ul>
-      <li><strong>You send it yourself</strong> — a photo, your name, a few words about you, and optionally what you do now and the year you finished. You must tick a box to say you are happy for it to be shown publicly.</li>
-      <li><strong>National approves it first.</strong> Nothing appears until a National administrator has looked at your request.</li>
-      <li><strong>An email or phone number is optional and is never shown.</strong> If you leave one, it is only so National can check that the request is really from you.</li>
+      <li><strong>You send it yourself</strong>. A photo, your name, a few words about you, and optionally what you do now and the year you finished. You must tick a box to say you are happy for it to be shown publicly.</li>
+      <li><strong>An administrator approves it first.</strong> Nothing appears until a National administrator, or the administrator of your chapter, has looked at your request.</li>
+      <li><strong>An email or phone number is optional and is never shown.</strong> If you leave one, it is only so an administrator can check that the request is really from you. Your chapter's administrator can see it for requests to their chapter.</li>
       <li><strong>Your photo is made smaller and stripped of its hidden data</strong> (such as where it was taken) when you send it. If a request is declined, the photo is deleted.</li>
       <li><strong>You can ask to be taken down at any time</strong> through the contact details on the website or in the app, and you will be removed.</li>
     </ul>
 
+    <h2>Third-party content</h2>
+    <p>
+      Some pages can show a video from YouTube or Facebook. Nothing is loaded from them until you
+      press the button on the video. Until then they do not receive your IP address or any cookie
+      from this app. After you press it, their own privacy policies apply to that video. Links to
+      WhatsApp, social media and maps are ordinary links and send nothing until you follow them.
+      Fonts and scripts are served from this app and not from Google or any other company.
+    </p>
+
     <h2>Who we share it with</h2>
     <p>We do not sell your information and we do not use it for advertising. We share it only with the providers who run the service for us:</p>
     <ul>
-      <li><strong>Render</strong> — hosting for the application</li>
-      <li><strong>MongoDB Atlas</strong> — the database where records are stored</li>
-      <li><strong>mNotify</strong> — SMS delivery, when your chapter sends a text. Only the phone number and the message are passed.</li>
-      <li><strong>An email provider</strong> — password-reset emails and notifications to the office</li>
-      <li><strong>Google and Mozilla push services</strong> — delivering notifications to your device, if you turn them on</li>
+      <li><strong>Render</strong>. Hosting for the application</li>
+      <li><strong>MongoDB Atlas</strong>. The database where records are stored</li>
+      <li><strong>mNotify</strong>: SMS delivery, when your chapter sends a text. Only the phone number and the message are passed.</li>
+      <li><strong>An email provider</strong>. Password-reset emails and notifications to the office</li>
+      <li><strong>Google and Mozilla push services</strong>. Delivering notifications to your device, if you turn them on</li>
     </ul>
-    <p>We also disclose information if the law requires it.</p>
+    <p>
+      Render and MongoDB Atlas run their servers outside Ghana, so your information can be stored
+      or processed in another country. They act only on our instructions. We also disclose
+      information if the law requires it.
+    </p>
 
     <h2>How long we keep it</h2>
     <ul>
@@ -202,6 +221,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <li>Attendance and giving records: kept as part of the chapter's own records</li>
       <li>Welfare case notes: kept while the case is open and for a reasonable period after it closes</li>
       <li>SMS and notification logs: kept so the office can see what was actually sent</li>
+      <li>Alumni wall requests: a declined request loses its photo straight away. Kept entries stay until you ask for removal</li>
       <li>Password-reset tokens: expire shortly after they are issued</li>
     </ul>
 
@@ -209,15 +229,19 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <p>You can ask us to:</p>
     <ul>
       <li>Show you what we hold about you</li>
-      <li>Correct anything that is wrong — most of it you can edit yourself on your profile</li>
+      <li>Correct anything that is wrong. Most of it you can edit yourself on your profile</li>
       <li>Delete your account and the personal information attached to it</li>
       <li>Stop sending you notifications, emails or SMS</li>
       <li>Withdraw your consent, which means closing your account</li>
     </ul>
     <p>
       Ask through the <a href="/contact.html">contact page</a> and we will respond within 30 days.
-      Some records we may need to keep even after an account is closed — financial records in
-      particular — but they will no longer be linked to an active profile.
+      Some records we may need to keep even after an account is closed, financial records in
+      particular, but they will no longer be linked to an active profile.
+    </p>
+    <p>
+      If you are not satisfied with how we handle your information, you may complain to the Data
+      Protection Commission of Ghana (dataprotection.org.gh).
     </p>
 
     <h2>Security</h2>
@@ -234,8 +258,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
     <h2>Children</h2>
     <p>
-      This service is for university students and is not directed at children under 13. If you
-      believe a child has registered, contact us and we will remove the account.
+      This service is for university students. If you are under 18, a parent or guardian must
+      agree to you using it. If you believe a child has registered without that agreement,
+      contact us and we will remove the account.
     </p>
 
     <h2>Changes</h2>
@@ -246,6 +271,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 

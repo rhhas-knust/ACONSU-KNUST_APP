@@ -167,7 +167,7 @@ const fakeModels = {
   // No chapterId, deliberately: one set of founders for the whole church.
   AlumniEntry: makeModel({ about: '', currentWork: '', classOf: '', chapterId: '', imageFileId: '', status: 'pending', via: 'app', contact: '', declineReason: '', approvedAt: null, approvedBy: '', lastSpotlightWeek: '', prevSpotlightWeek: '' }),
   AlumniSpotlight: makeModel({ weekKey: '', entryId: '', pinned: false }),
-  MonthlyTheme: makeModel({ scripture: '', blurb: '', flyerFileIds: [] }),
+  MonthlyTheme: makeModel({ scripture: '', blurb: '', flyerFileIds: [], status: 'approved', proposedByChapterId: '', proposedByName: '', declineReason: '', decidedAt: null, decidedBy: '' }),
   ChurchFounder: makeModel({ role: '', about: '', imageFileId: '', inMemoriam: false, order: 0 }),
   Form: makeModel({ chapterId: '', description: '', category: 'custom', linkedEventId: '', fields: [], isOpen: true, closesAt: '', createdBy: '' }),
   FormSubmission: makeModel({ chapterId: '', memberId: '', submitterName: '', submitterEmail: '', answers: {} }),
@@ -243,7 +243,12 @@ const fakeGridfs = {
   listFiles(query) {
     const entries = [...files.values()].filter((f) => Object.entries(query || {}).every(([k, v]) => {
       const key = k.replace('metadata.', '');
-      return k.startsWith('metadata.') ? f.metadata[key] === v : f[k] === v;
+      const have = k.startsWith('metadata.') ? (f.metadata || {})[key] : f[k];
+      // The two operators the app's own queries use; anything else is not an
+      // equality, so it never matches (which is also what makes an injected one fail).
+      if (v && typeof v === 'object' && '$nin' in v) return !v.$nin.includes(have);
+      if (v && typeof v === 'object' && '$in' in v) return v.$in.includes(have);
+      return have === v;
     }));
     return Promise.resolve(entries);
   },

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Prayer Wall — ACONSU</title>
+<title>Prayer Wall | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -23,27 +25,26 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .prayer-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
-  .prayer-card p.request-text { margin:8px 0 12px; color:var(--purple-ink); line-height:1.5; }
+  .prayer-card p.request-text { margin:8px 0 12px; color:var(--ink); line-height:1.5; }
   .prayer-card .row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
   .prayer-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
-  .pray-btn { border:2px solid var(--purple-deep); background:var(--surface); color:var(--brand); border-radius:999px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
+  .pray-btn { border:2px solid var(--purple-deep); background:var(--surface); color:var(--brand); border-radius:6px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
   .pray-btn.done { background:var(--purple-deep); color:#fff; }
-  .pray-count { font-size:0.78rem; color:#8a7595; }
-  .answered-badge { display:inline-block; background:#D9F0DE; color:#2E7D4F; font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:999px; margin-bottom:8px; }
-  .testimony-box { background:var(--lilac-light); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:0.85rem; font-style:italic; color:#5a4468; }
+  .pray-count { font-size:0.78rem; color:var(--ink-faint); }
+  .answered-badge { display:inline-block; background:var(--ok-bg); color:var(--ok-ink); font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:6px; margin-bottom:8px; }
+  .testimony-box { background:var(--lilac-light); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:0.85rem; font-style:italic; color:var(--ink-soft); }
   .mine-actions { margin-top:10px; }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="flame" data-hero-page="prayer" style="padding-bottom:48px;">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="flame" data-hero-page="prayer">
   <div class="hero-content">
-    <p class="eyebrow">You're Not Alone</p>
     <h1>Prayer Wall</h1>
-    <p class="lede">Bring whatever you're carrying. We would love to stand in prayer with you.</p>
   </div>
 </section>
 
@@ -51,7 +52,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <div class="container">
     <form class="form-card" id="prayerForm">
       <div class="field">
-        <label for="name">Name (optional — you can stay anonymous)</label>
+        <label for="name">Name (optional, you can stay anonymous)</label>
         <input type="text" id="name" placeholder="Anonymous">
       </div>
       <div class="field">
@@ -67,10 +68,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <select id="visibility">
           <option value="private">Only leaders (private)</option>
           <option value="shepherd_only">Only the Shepherding team</option>
-          <option value="public">The Prayer Wall — with my name</option>
-          <option value="anonymous">The Prayer Wall — anonymously</option>
+          <option value="public">The Prayer Wall, with my name</option>
+          <option value="anonymous">The Prayer Wall, anonymously</option>
         </select>
       </div>
+      <p class="form-notice">Only the prayer team sees a private or anonymous request. A request marked public is shown on the prayer wall. <a href="/privacy.html">Privacy policy</a>.</p>
       <button type="submit" class="btn btn-flame btn-block" id="prayerSubmitBtn">Submit Prayer Request</button>
       <div class="form-msg" id="prayerMsg"></div>
     </form>
@@ -80,12 +82,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section class="alt-bg">
   <div class="container" style="max-width:700px;">
     <div class="section-head">
-      <p class="eyebrow">Standing Together</p>
       <h2>The Prayer Wall</h2>
       <p class="lede">Requests shared publicly by the community. Tap to let someone know you're praying for them.</p>
     </div>
     <div id="prayerWallList" style="display:grid; gap:14px; margin-bottom:48px;">
-      <p class="empty-state">Loading...</p>
+      <div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
     </div>
   </div>
 </section>
@@ -93,7 +94,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section class="alt-bg">
   <div class="container" style="max-width:700px;">
     <div class="section-head">
-      <p class="eyebrow">Testimonies</p>
       <h2>Share What God Has Done</h2>
     </div>
     <form class="form-card" id="testimonyForm" style="margin-bottom:48px;">
@@ -105,11 +105,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <label for="tTestimony">Your Testimony</label>
         <textarea id="tTestimony" required></textarea>
       </div>
+      <p class="form-notice">Your testimony is shown after review. Choose whether your name appears. <a href="/privacy.html">Privacy policy</a>.</p>
       <button type="submit" class="btn btn-primary btn-block" id="testimonySubmitBtn">Share Testimony</button>
       <div class="form-msg" id="testimonyMsg"></div>
     </form>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -122,18 +125,18 @@ async function loadPrayerWall() {
   try {
     const items = await fetchJSON('/api/prayer-wall');
     if (!items.length) {
-      list.innerHTML = '<p class="empty-state">No public prayer requests right now — be the first to share one above.</p>';
+      list.innerHTML = '<p class="empty-state">No public prayer requests right now. Be the first to share one above.</p>';
       return;
     }
     list.innerHTML = items.map((p) => `
       <div class="prayer-card" data-id="${p.id}">
-        ${p.answered ? '<span class="answered-badge">🙌 Answered</span>' : ''}
+        ${p.answered ? '<span class="answered-badge">Answered</span>' : ''}
         <p class="request-text">${escapeHtml(p.request)}</p>
         <div class="row">
-          <span class="who">— ${escapeHtml(p.name || 'Anonymous')}</span>
+          <span class="who">${escapeHtml(p.name || 'Anonymous')}</span>
           <div style="display:flex; align-items:center; gap:10px;">
             <span class="pray-count">${p.prayingCount} praying</span>
-            <button type="button" class="pray-btn" data-pray="${p.id}">🙏 I'm praying</button>
+            <button type="button" class="pray-btn" data-pray="${p.id}">I'm praying</button>
           </div>
         </div>
         ${p.testimony ? `<div class="testimony-box">"${escapeHtml(p.testimony)}"</div>` : ''}
@@ -150,18 +153,18 @@ async function loadPrayerWall() {
       try {
         await fetchJSON(`/api/prayer-requests/${btn.dataset.pray}/pray`, { method: 'POST' });
         btn.classList.add('done');
-        btn.textContent = '🙏 Praying';
+        btn.textContent = 'Praying';
         showToast('They\'ll be encouraged to know you\'re praying.', 'success');
       } catch (err) { showToast(err.message || 'Could not record this.', 'error'); }
     }));
     list.querySelectorAll('[data-mark-answered]').forEach(btn => btn.addEventListener('click', async () => {
-      const testimony = prompt('Want to share how God answered this? (optional — leave blank to skip)');
+      const testimony = prompt('Want to share how God answered this? (optional, leave blank to skip)');
       try {
         await fetchJSON(`/api/prayer-requests/${btn.dataset.markAnswered}/answered`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ testimony: testimony || '' })
         });
-        showToast('Marked as answered — thank you for sharing!', 'success');
+        showToast('Marked as answered, thank you for sharing!', 'success');
         loadPrayerWall();
       } catch (err) { showToast(err.message || 'Could not update this.', 'error'); }
     }));
@@ -193,9 +196,9 @@ document.getElementById('prayerForm').addEventListener('submit', async (e) => {
         visibility: document.getElementById('visibility').value
       })
     });
-    msg.textContent = 'We received your request — the prayer team is praying with you.';
+    msg.textContent = 'We received your request. The prayer team is praying with you.';
     msg.className = 'form-msg success';
-    showToast('Prayer request received — praying with you.', 'success');
+    showToast('Prayer request received, praying with you.', 'success');
     document.getElementById('prayerForm').reset();
     loadPrayerWall();
   } catch (err) {

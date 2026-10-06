@@ -1,5 +1,5 @@
 /* ============================================================
-   Publicity Portal — everything the union says to its people.
+   Publicity Portal. Everything the union says to its people.
    In-app announcements, push alerts, SMS, scheduled sends,
    event updates, and the testimony inbox.
    ============================================================ */
@@ -29,7 +29,7 @@ function composerFields(audiences, opts) {
     <div class="field"><label>Title</label>
       <input type="text" id="cTitle" placeholder="e.g. Service moves to 9:00am this Sunday" required></div>
     <div class="field"><label>Message</label>
-      <textarea id="cBody" placeholder="Keep it short and clear — this is what lands on someone's lock screen." required></textarea>
+      <textarea id="cBody" placeholder="Keep it short and clear. This is what lands on someone's lock screen." required></textarea>
       <small class="tiny muted" id="cCounter"></small>
     </div>
     <div class="field-row">
@@ -38,7 +38,7 @@ function composerFields(audiences, opts) {
       </div>
       <div class="field"><label>Who should get it</label>
         <select id="cAudience">
-          ${audiences.map(a => `<option value="${a.value}">${escapeHtml(a.label)} — ${a.reachable} reachable by SMS</option>`).join('')}
+          ${audiences.map(a => `<option value="${a.value}">${escapeHtml(a.label)}, ${a.reachable} reachable by SMS</option>`).join('')}
         </select>
       </div>
     </div>
@@ -175,7 +175,7 @@ async function renderCompose(el) {
     <div class="portal-card">
       <form id="sendForm">
         ${composerFields(audiences)}
-        ${!smsConfigured ? '<p class="tiny muted" style="margin-bottom:14px;">SMS is not configured on the server yet — ticking it will log the send without delivering anything.</p>' : ''}
+        ${!smsConfigured ? '<p class="tiny muted" style="margin-bottom:14px;">SMS is not configured on the server yet. Ticking it will log the send without delivering anything.</p>' : ''}
         <button type="submit" class="btn btn-primary" id="sendBtn">Send Now</button>
         <div class="form-msg" id="sendMsg"></div>
       </form>
@@ -196,7 +196,7 @@ async function renderCompose(el) {
       const res = await fetchJSON('/api/publicity/notifications', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
-      setFormMsg('sendMsg', `Sent — ${res.result}`, 'success');
+      setFormMsg('sendMsg', `Sent, ${res.result}`, 'success');
       showToast('Announcement sent.', 'success');
       document.getElementById('sendForm').reset();
       wireComposer();
@@ -221,7 +221,7 @@ async function renderScheduled(el) {
     <div class="panel-head">
       <div>
         <h2>Scheduled Announcements</h2>
-        <p class="sub">Write it now, let it go out at the right moment — the night before a programme, or first thing on Sunday.</p>
+        <p class="sub">Write it now, let it go out at the right moment. The night before a programme, or first thing on Sunday.</p>
       </div>
     </div>
 
@@ -267,7 +267,7 @@ async function renderScheduled(el) {
                 <td class="tiny muted">${dateTimeLabel(i.sentAt || i.scheduledFor)}</td>
                 <td>${escapeHtml(i.title)}</td>
                 <td>${pill(i.status)}</td>
-                <td class="tiny muted">${escapeHtml(i.result || '—')}</td>
+                <td class="tiny muted">${escapeHtml(i.result || '-')}</td>
                 ${PORTAL.canEdit ? `<td class="row-actions"><button class="danger" data-remove="${i.id}">Remove</button></td>` : ''}
               </tr>
             `).join('') || emptyRow(PORTAL.canEdit ? 5 : 4, 'Nothing here yet.')}
@@ -338,9 +338,9 @@ async function renderPublicityEvents(el) {
             const statusTone = e.status === 'published' ? (upcoming ? 'green' : 'grey') : e.status === 'rejected' ? 'red' : 'amber';
             return `
               <tr>
-                <td><strong>${escapeHtml(e.title)}</strong>${e.recurring ? `<br><small class="muted">${escapeHtml(e.recurring)}</small>` : ''}${e.flyerFileId ? ' 🖼️' : ''}</td>
+                <td><strong>${escapeHtml(e.title)}</strong>${e.recurring ? `<br><small class="muted">${escapeHtml(e.recurring)}</small>` : ''}${e.flyerFileId ? ' ' : ''}</td>
                 <td>${shortDate(e.date)}<br><small class="muted">${escapeHtml(e.time || '')}</small></td>
-                <td>${escapeHtml(e.location || '—')}</td>
+                <td>${escapeHtml(e.location || '-')}</td>
                 <td>${pill(e.status === 'published' ? (upcoming ? 'upcoming' : 'past') : e.status, statusTone)}</td>
                 ${PORTAL.canEdit ? `<td class="row-actions"><button data-edit-event="${e.id}">Edit &amp; Announce</button><button data-volunteers="${e.id}">Volunteers</button></td>` : ''}
               </tr>
@@ -370,7 +370,7 @@ async function openVolunteersModal(event) {
     fetchJSON('/api/admin/members')
   ]);
   showModal(`
-    <h3>Volunteers — ${escapeHtml(event.title)}</h3>
+    <h3>Volunteers: ${escapeHtml(event.title)}</h3>
     <form id="assignForm" class="inline-form">
       <div class="field"><label>Member</label>
         <select id="volMember">${members.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select>
@@ -425,7 +425,7 @@ async function renderEventQueue(el) {
     <div class="panel-head">
       <div>
         <h2>Event Review Queue</h2>
-        <p class="sub">Events executives have submitted. Approve, then publish when the flyer (if any) is ready — nothing here is public yet.</p>
+        <p class="sub">Events executives have submitted. Approve, then publish when the flyer (if any) is ready. Nothing here is public yet.</p>
       </div>
     </div>
     <div class="table-wrap">
@@ -435,7 +435,7 @@ async function renderEventQueue(el) {
           ${queue.map(e => `
             <tr>
               <td><strong>${escapeHtml(e.title)}</strong>${e.description ? `<br><small class="muted">${escapeHtml(e.description.slice(0, 80))}</small>` : ''}</td>
-              <td>${escapeHtml(e.submittedBy || '—')}</td>
+              <td>${escapeHtml(e.submittedBy || '-')}</td>
               <td>${shortDate(e.date)} ${escapeHtml(e.time || '')}</td>
               <td class="row-actions">
                 <button data-approve="${e.id}">Approve</button>
@@ -448,7 +448,7 @@ async function renderEventQueue(el) {
     </div>
     ${PORTAL.canEdit ? `
       <div class="portal-card" style="margin-top:20px;">
-        <h3>Approved — Ready to Publish</h3>
+        <h3>Approved: Ready to Publish</h3>
         <p class="hint">Add a flyer from the Events tab first if you want one, then publish.</p>
         <div id="approvedList"><p class="empty-state">Loading...</p></div>
       </div>
@@ -470,7 +470,7 @@ async function renderEventQueue(el) {
         <tbody>
           ${approved.map(e => `
             <tr>
-              <td>${escapeHtml(e.title)}${e.flyerFileId ? ' 🖼️' : ' <small class="muted">(no flyer yet)</small>'}</td>
+              <td>${escapeHtml(e.title)}${e.flyerFileId ? ' ' : ' <small class="muted">(no flyer yet)</small>'}</td>
               <td class="row-actions"><button data-publish="${e.id}">Publish</button></td>
             </tr>
           `).join('')}
@@ -545,7 +545,7 @@ function openEventForm(event) {
       recurring: document.getElementById('evRecurring').value
     };
     if (isEdit) {
-      // Keep the registration settings the admin configured — publicity edits
+      // Keep the registration settings the admin configured - publicity edits
       // the details of an event, not whether people can sign up for it.
       payload.registrationEnabled = event.registrationEnabled;
       payload.capacity = event.capacity;
@@ -675,7 +675,7 @@ async function renderSmsLog(el) {
               <td>${escapeHtml(l.to)}</td>
               <td class="tiny">${escapeHtml((l.body || '').slice(0, 80))}${(l.body || '').length > 80 ? '…' : ''}</td>
               <td>${pill(l.status)}</td>
-              <td class="tiny muted">${escapeHtml(l.detail || '—')}</td>
+              <td class="tiny muted">${escapeHtml(l.detail || '-')}</td>
               <td class="tiny muted">${dateTimeLabel(l.createdAt)}</td>
             </tr>
           `).join('') || emptyRow(5, 'No SMS has been sent yet.')}
@@ -801,7 +801,7 @@ function openFormBuilder(form) {
 async function viewFormSubmissions(formId) {
   const { form, submissions } = await fetchJSON(`/api/admin/forms/${formId}/submissions`);
   showModal(`
-    <h3>${escapeHtml(form.title)} — Submissions (${submissions.length})</h3>
+    <h3>${escapeHtml(form.title)}: Submissions (${submissions.length})</h3>
     <div class="table-wrap">
       <table class="portal-table" style="min-width:0;">
         <thead><tr><th>Submitted By</th><th>When</th>${form.fields.map(f => `<th>${escapeHtml(f.label)}</th>`).join('')}</tr></thead>
@@ -810,7 +810,7 @@ async function viewFormSubmissions(formId) {
             <tr>
               <td>${escapeHtml(s.submitterName || 'Anonymous')}<br><small class="muted">${escapeHtml(s.submitterEmail || '')}</small></td>
               <td class="tiny muted">${dateTimeLabel(s.createdAt)}</td>
-              ${form.fields.map(f => `<td>${escapeHtml(String(s.answers[f.id] ?? '—'))}</td>`).join('')}
+              ${form.fields.map(f => `<td>${escapeHtml(String(s.answers[f.id] ?? '-'))}</td>`).join('')}
             </tr>
           `).join('') || emptyRow(2 + form.fields.length, 'No submissions yet.')}
         </tbody>
@@ -848,7 +848,7 @@ async function renderForms(el) {
                 <button data-delete="${f.id}" class="danger">Delete</button>
               </td>
             </tr>
-          `).join('') || emptyRow(5, 'No forms yet — create one to start collecting responses.')}
+          `).join('') || emptyRow(5, 'No forms yet. Create one to start collecting responses.')}
         </tbody>
       </table>
     </div>

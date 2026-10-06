@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Create Account — ACONSU</title>
+<title>Create Account | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -30,20 +32,22 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .who-opt:has(input:checked) { border-color:var(--brand); background:var(--lilac-light); }
   .who-opt input { margin-top:3px; flex:none; }
   .who-opt span { display:flex; flex-direction:column; gap:2px; }
-  .who-opt strong { font-size:0.88rem; color:var(--purple-ink); }
-  .who-opt small { font-size:0.76rem; color:#8a7595; }
+  .who-opt strong { font-size:0.95rem; color:var(--ink); }
+  .who-opt small { font-size:0.76rem; color:var(--ink-faint); }
   @media (max-width:420px){ .who-are-you { grid-template-columns:1fr; } }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section style="padding-top:64px; padding-bottom:64px;">
   <div class="container">
     <form class="form-card" id="registerForm">
       <img src="/images/logo.jpg" alt="ACONSU" style="width:56px; height:56px; border-radius:50%; margin:0 auto 14px; display:block;">
-      <h2 style="text-align:center;">Join ACONSU</h2>
+      <h1 style="text-align:center; font-size:1.8rem;">Join ACONSU</h1>
       <p style="text-align:center; color:var(--ink-soft); margin-bottom:24px;">Create your account to register for events faster and keep your profile up to date.</p>
 
       <div class="field">
@@ -56,7 +60,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <div class="field">
         <label for="profileImage">Profile Photo</label>
         <input type="file" id="profileImage" accept="image/*" required>
-        <small class="hint" style="color:var(--ink-faint);">Required — used on your digital membership card once you're accepted as a member.</small>
+        <small class="hint" style="color:var(--ink-faint);">Required. Used on your digital membership card once you're accepted as a member.</small>
         <img id="photoPreview" alt="" style="display:none; width:88px; height:88px; border-radius:50%; object-fit:cover; margin-top:10px;">
       </div>
 
@@ -70,8 +74,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       </div>
       <div class="field">
         <label for="password">Password</label>
-        <input type="password" id="password" minlength="6" required>
-        <small class="hint" style="color:var(--ink-faint);">At least 6 characters.</small>
+        <input type="password" id="password" minlength="8" autocomplete="new-password" required>
+        <small class="hint" style="color:var(--ink-faint);">At least 8 characters.</small>
       </div>
       <div class="field">
         <label for="phone">Phone Number (optional)</label>
@@ -107,22 +111,24 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <small class="hint" style="color:var(--ink-faint);">Shepherding will confirm your details and welcome you back. Once they do, you can add yourself to Alumni Connect if you would like other members to find you.</small>
       </div>
       <div class="field">
-        <label>Birthday (optional — month &amp; day only, no year, ever)</label>
+        <label>Birthday (optional, month &amp; day only, no year, ever)</label>
         <div class="field-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <select id="birthdayMonth">
+          <select id="birthdayMonth" aria-label="Birthday month">
             <option value="">Month</option>
             <option value="1">January</option><option value="2">February</option><option value="3">March</option>
             <option value="4">April</option><option value="5">May</option><option value="6">June</option>
             <option value="7">July</option><option value="8">August</option><option value="9">September</option>
             <option value="10">October</option><option value="11">November</option><option value="12">December</option>
           </select>
-          <select id="birthdayDay">
+          <select id="birthdayDay" aria-label="Birthday day">
             <option value="">Day</option>
           </select>
         </div>
-        <small class="hint" style="color:var(--ink-faint);">We'll celebrate you on the day — your birth year is never collected or stored.</small>
+        <small class="hint" style="color:var(--ink-faint);">We'll celebrate you on the day. Your birth year is never collected or stored.</small>
       </div>
-      <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong> — the Shepherding team will follow up and accept you as an official member.</p>
+      <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong>. The Shepherding team will follow up and accept you as an official member.</p>
+      <label class="consent-line"><input type="checkbox" id="agree" required>
+        <span>I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms of use</a> and have read the <a href="/privacy.html" target="_blank" rel="noopener">Privacy policy</a>. I understand that holding an account shows a religious affiliation, and I agree to it being recorded. If I am under 18, a parent or guardian agrees.</span></label>
       <button type="submit" class="btn btn-primary btn-block" id="registerBtn">Create Account</button>
       <div class="form-msg" id="registerMsg"></div>
       <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:var(--ink-soft);">
@@ -131,6 +137,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -162,10 +170,10 @@ document.querySelectorAll('input[name="memberKind"]').forEach(function (r) {
     const chapters = await fetchJSON('/api/chapters');
     chapterSelect.innerHTML = chapters.length
       ? `<option value="">Select your chapter…</option>` + chapters.map(c =>
-          `<option value="${c.id}">${escapeHtml(c.name)}${c.institution ? ' — ' + escapeHtml(c.institution) : ''}</option>`
+          `<option value="${c.id}">${escapeHtml(c.name)}${c.institution ? ': ' + escapeHtml(c.institution) : ''}</option>`
         ).join('')
       : `<option value="">No chapters available yet</option>`;
-    // Only one chapter exists in most deployments — pick it automatically so
+    // Only one chapter exists in most deployments - pick it automatically so
     // registration stays a single step until a second chapter is added.
     if (chapters.length === 1) chapterSelect.value = chapters[0].id;
     else if (getSelectedChapterId()) chapterSelect.value = getSelectedChapterId();
@@ -204,6 +212,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     formData.append('programme', document.getElementById('programme').value);
     formData.append('level', document.getElementById('level').value);
     formData.append('hostel', document.getElementById('hostel').value);
+    formData.append('consent', document.getElementById('agree').checked ? 'true' : 'false');
     const kind = document.querySelector('input[name="memberKind"]:checked');
     formData.append('memberKind', kind ? kind.value : 'student');
     formData.append('graduationYear', document.getElementById('graduationYear').value);
@@ -214,7 +223,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     // multipart boundary itself), so this call intentionally passes none.
     await fetchJSON('/api/auth/register', { method: 'POST', body: formData });
     setSelectedChapterId(document.getElementById('chapterId').value);
-    showToast('Account created — welcome to ACONSU!', 'success');
+    showToast('Account created, welcome to ACONSU!', 'success');
     window.location.href = '/profile.html';
   } catch (err) {
     msg.textContent = err.message || 'Could not create account.';

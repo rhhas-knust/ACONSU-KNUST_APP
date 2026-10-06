@@ -6,7 +6,7 @@
    officers run the chapter and get chapter-wide screens; the
    portfolio officers run one department each and get the
    department screens. lib/positions.js is the single source of
-   that grant — the server enforces it and this file draws from
+   that grant. The server enforces it and this file draws from
    the same list, so a panel can never appear that the server
    would refuse.
 
@@ -31,7 +31,7 @@ async function renderExecProfile(el) {
     <div class="panel-head">
       <div>
         <h2>My Executive Profile</h2>
-        <p class="sub">Shown publicly on the About page. Your position is set by your Chapter Coordinator — everything else here is yours to keep current.</p>
+        <p class="sub">Shown publicly on the About page. Your position is set by your Chapter Coordinator. Everything else here is yours to keep current.</p>
       </div>
     </div>
     ${position.kind === 'unknown' ? `
@@ -44,7 +44,7 @@ async function renderExecProfile(el) {
         <label>Position</label>
         <p style="margin:0; font-weight:600;">${escapeHtml(position.label || 'Not set')}</p>
         <small class="hint">${position.kind === 'officer'
-          ? 'An officer of the chapter — you answer for the chapter as a whole, so you hold no single department.'
+          ? 'An officer of the chapter. You answer for the chapter as a whole, so you hold no single department.'
           : position.kind === 'portfolio'
             ? `You run the ${escapeHtml(departmentName || 'department attached to your office')}.`
             : 'Set by your Chapter Coordinator.'}</small>
@@ -52,7 +52,7 @@ async function renderExecProfile(el) {
       ${me.needsDepartment ? `
         <div class="portal-card" style="border-color: var(--flame-gold); background:#FFF8EC;">
           <strong>No department attached yet.</strong>
-          <span class="muted"> Your office runs a department, but none has been attached — ask your Chapter Coordinator.</span>
+          <span class="muted"> Your office runs a department, but none has been attached. Ask your Chapter Coordinator.</span>
         </div>` : ''}
       <form id="execForm">
         <div class="field" style="text-align:center;">
@@ -76,7 +76,7 @@ async function renderExecProfile(el) {
         <h4 style="margin-top:22px;">Past Years</h4>
         <div class="table-wrap"><table class="portal-table" style="min-width:0;">
           <thead><tr><th>Year</th><th>Position</th><th>Department</th></tr></thead>
-          <tbody>${item.history.map(h => `<tr><td>${escapeHtml(h.year)}</td><td>${escapeHtml(h.role || '—')}</td><td>${escapeHtml(h.department || '—')}</td></tr>`).join('')}</tbody>
+          <tbody>${item.history.map(h => `<tr><td>${escapeHtml(h.year)}</td><td>${escapeHtml(h.role || '-')}</td><td>${escapeHtml(h.department || '-')}</td></tr>`).join('')}</tbody>
         </table></div>
       ` : ''}
     </div>
@@ -114,7 +114,7 @@ async function renderExecEvents(el) {
     <div class="panel-head">
       <div>
         <h2>Submit an Event</h2>
-        <p class="sub">Goes to Publicity for review — it won't appear publicly until they approve and publish it.</p>
+        <p class="sub">Goes to Publicity for review. It won't appear publicly until they approve and publish it.</p>
       </div>
     </div>
     <div class="portal-card" style="max-width:520px;">
@@ -143,7 +143,7 @@ async function renderExecEvents(el) {
                 <td>${escapeHtml(ev.title)}</td>
                 <td>${shortDate(ev.date)}</td>
                 <td>${pill(ev.status)}</td>
-                <td class="tiny muted">${escapeHtml(ev.reviewNotes || '—')}</td>
+                <td class="tiny muted">${escapeHtml(ev.reviewNotes || '-')}</td>
               </tr>
             `).join('') || emptyRow(4, 'No events submitted yet.')}
           </tbody>
@@ -178,7 +178,7 @@ async function renderExecEvents(el) {
 // ---------- my department ----------
 // Every panel below is scoped server-side to the department on this
 // executive's own roster card (see requireOwnDepartment in server.js), so
-// there is nothing here that says which department — there is only theirs.
+// there is nothing here that says which department - there is only theirs.
 // Before they've chosen one, the server says so and this shows the prompt
 // rather than an error.
 function departmentPrompt(el, message) {
@@ -203,14 +203,14 @@ async function renderExecDepartment(el) {
     <div class="panel-head">
       <div>
         <h2>${escapeHtml(d.name || 'My Department')}</h2>
-        <p class="sub">This is what visitors see on your department's page. Keep the meeting details current — they're how people find you.</p>
+        <p class="sub">This is what visitors see on your department's page. Keep the meeting details current. They're how people find you.</p>
       </div>
     </div>
 
     <div class="stat-grid">
       ${statCard('Members', data.memberCount)}
       ${statCard('Meetings Logged', data.meetingCount)}
-      ${statCard('Last Meeting', data.lastMeeting ? `${data.lastMeeting.present} present` : '—',
+      ${statCard('Last Meeting', data.lastMeeting ? `${data.lastMeeting.present} present` : '-',
         { tone: data.lastMeeting ? 'good' : '' })}
     </div>
 
@@ -277,7 +277,7 @@ async function renderExecDeptMembers(el) {
     </div>
 
     ${requests.length ? `
-      <div class="card" style="margin-bottom:18px; border-left:3px solid #E8971E;">
+      <div class="card" style="margin-bottom:18px; background:var(--warn-bg);">
         <h3 style="margin:0 0 4px; font-size:1rem;">Waiting on you</h3>
         <p class="sub" style="margin:0 0 14px;">${requests.length} ${requests.length === 1 ? 'person has' : 'people have'} asked to serve here.</p>
         <div class="table-wrap">
@@ -286,9 +286,9 @@ async function renderExecDeptMembers(el) {
             <tbody>
               ${requests.map(rq => `
                 <tr>
-                  <td><strong>${escapeHtml(rq.name || '—')}</strong></td>
-                  <td class="tiny muted">${escapeHtml([rq.level, rq.programme].filter(Boolean).join(' · ') || '—')}</td>
-                  <td class="tiny muted">${escapeHtml(rq.note || '—')}</td>
+                  <td><strong>${escapeHtml(rq.name || '-')}</strong></td>
+                  <td class="tiny muted">${escapeHtml([rq.level, rq.programme].filter(Boolean).join(' · ') || '-')}</td>
+                  <td class="tiny muted">${escapeHtml(rq.note || '-')}</td>
                   <td style="white-space:nowrap;">
                     <button class="btn btn-primary btn-sm dept-req" data-id="${escapeHtml(rq.id)}" data-decision="approved">Accept</button>
                     <button class="btn btn-outline btn-sm dept-req" data-id="${escapeHtml(rq.id)}" data-decision="declined">Decline</button>
@@ -305,9 +305,9 @@ async function renderExecDeptMembers(el) {
         <tbody>
           ${members.map(m => `
             <tr>
-              <td><strong>${escapeHtml(m.name || '—')}</strong></td>
-              <td class="tiny muted">${escapeHtml([m.level, m.programme].filter(Boolean).join(' · ') || '—')}</td>
-              <td class="tiny muted">${escapeHtml(m.phone || m.email || '—')}</td>
+              <td><strong>${escapeHtml(m.name || '-')}</strong></td>
+              <td class="tiny muted">${escapeHtml([m.level, m.programme].filter(Boolean).join(' · ') || '-')}</td>
+              <td class="tiny muted">${escapeHtml(m.phone || m.email || '-')}</td>
               <td>${pill(m.membershipStage || 'visitor')}</td>
             </tr>
           `).join('') || emptyRow(4, 'Nobody has joined this department yet.')}
@@ -348,7 +348,7 @@ async function renderExecDeptAttendance(el) {
     <div class="panel-head">
       <div>
         <h2>Department Attendance</h2>
-        <p class="sub">Open, tap whoever came, save. This is your department's own register — the chapter's service attendance is kept separately by Shepherding.</p>
+        <p class="sub">Open, tap whoever came, save. This is your department's own register. The chapter's service attendance is kept separately by Shepherding.</p>
       </div>
     </div>
 
@@ -365,7 +365,7 @@ async function renderExecDeptAttendance(el) {
           ${members.map(m => `
             <label class="choice">
               <input type="checkbox" value="${escapeHtml(m.id)}" data-attendee>
-              <span><strong>${escapeHtml(m.name || '—')}</strong></span>
+              <span><strong>${escapeHtml(m.name || '-')}</strong></span>
             </label>
           `).join('') || '<p class="hint">Nobody is in this department yet, so there is no one to mark.</p>'}
         </div>
@@ -386,9 +386,9 @@ async function renderExecDeptAttendance(el) {
             ${meetings.map(m => `
               <tr>
                 <td>${shortDate(m.date)}</td>
-                <td>${escapeHtml(m.topic || '—')}</td>
+                <td>${escapeHtml(m.topic || '-')}</td>
                 <td class="num">${(m.attendeeMemberIds || []).length}</td>
-                <td class="tiny muted">${escapeHtml(m.recordedBy || '—')}</td>
+                <td class="tiny muted">${escapeHtml(m.recordedBy || '-')}</td>
               </tr>
             `).join('') || emptyRow(4, 'No meetings logged yet.')}
           </tbody>
@@ -481,9 +481,9 @@ async function renderExecBibleStudies(el) {
         <tbody>
           ${studies.map(s => `
             <tr>
-              <td><strong>${escapeHtml(s.topic || '—')}</strong></td>
+              <td><strong>${escapeHtml(s.topic || '-')}</strong></td>
               <td>${shortDate(s.date)}</td>
-              <td class="tiny muted">${escapeHtml(s.scriptureReference || '—')}</td>
+              <td class="tiny muted">${escapeHtml(s.scriptureReference || '-')}</td>
               <td><div class="row-actions"><button data-delete-study="${s.id}" class="danger">Remove</button></div></td>
             </tr>
           `).join('') || emptyRow(4, 'No Bible studies yet.')}
@@ -556,7 +556,7 @@ async function renderExecChapterPulse(el) {
     <div class="panel-head">
       <div>
         <h2>The Chapter at a Glance</h2>
-        <p class="sub">Where the chapter stands today — membership, departments and what is coming up.</p>
+        <p class="sub">Where the chapter stands today. Membership, departments and what is coming up.</p>
       </div>
     </div>
     <div class="stat-row" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
@@ -580,7 +580,7 @@ async function renderExecChapterPulse(el) {
         <div class="table-wrap"><table class="portal-table" style="min-width:0;">
           <thead><tr><th>Date</th><th>Event</th><th>Where</th></tr></thead>
           <tbody>${d.upcomingEvents.map(e => `
-            <tr><td>${escapeHtml(e.date)}</td><td>${escapeHtml(e.title)}</td><td>${escapeHtml(e.location || '—')}</td></tr>
+            <tr><td>${escapeHtml(e.date)}</td><td>${escapeHtml(e.title)}</td><td>${escapeHtml(e.location || '-')}</td></tr>
           `).join('')}</tbody>
         </table></div>` : '<p class="empty-state">Nothing on the calendar yet.</p>'}
     </div>
@@ -605,10 +605,10 @@ async function renderExecChapterMembers(el) {
           <tbody id="memberRows">${members.map(m => `
             <tr data-search="${escapeHtml(`${m.name} ${m.department} ${m.programme}`.toLowerCase())}">
               <td>${escapeHtml(m.name || '')}</td>
-              <td>${escapeHtml(m.department || '—')}</td>
-              <td>${escapeHtml(m.level || '—')}</td>
+              <td>${escapeHtml(m.department || '-')}</td>
+              <td>${escapeHtml(m.level || '-')}</td>
               <td>${escapeHtml((m.membershipStage || '').replace(/_/g, ' '))}</td>
-              <td>${escapeHtml(m.phone || m.email || '—')}</td>
+              <td>${escapeHtml(m.phone || m.email || '-')}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">No members yet.</p>'}
     </div>
@@ -642,8 +642,8 @@ async function renderExecChapterDepartments(el) {
               <td><strong>${escapeHtml(d.name)}</strong>${d.tagline ? `<br><span class="tiny muted">${escapeHtml(d.tagline)}</span>` : ''}</td>
               <td>${d.headName ? `${escapeHtml(d.headName)}<br><span class="tiny muted">${escapeHtml(d.headRole || '')}</span>` : '<span class="muted">Vacant</span>'}</td>
               <td>${d.memberCount}</td>
-              <td>${d.reportsTo ? escapeHtml(d.reportsTo) : '<span class="muted">—</span>'}</td>
-              <td>${escapeHtml([d.meetingDay, d.meetingTime].filter(Boolean).join(', ') || '—')}</td>
+              <td>${d.reportsTo ? escapeHtml(d.reportsTo) : '<span class="muted">-</span>'}</td>
+              <td>${escapeHtml([d.meetingDay, d.meetingTime].filter(Boolean).join(', ') || '-')}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">No departments yet.</p>'}
     </div>
@@ -656,7 +656,7 @@ async function renderExecChapterAttendance(el) {
     <div class="panel-head">
       <div>
         <h2>Service Attendance</h2>
-        <p class="sub">The chapter's service registers. Taking a register stays with Shepherding — this is the record of it.</p>
+        <p class="sub">The chapter's service registers. Taking a register stays with Shepherding. This is the record of it.</p>
       </div>
     </div>
     <div class="portal-card">
@@ -666,7 +666,7 @@ async function renderExecChapterAttendance(el) {
           <tbody>${records.map(r => `
             <tr>
               <td>${escapeHtml(r.date)}</td>
-              <td>${escapeHtml(r.title || r.serviceType || '—')}</td>
+              <td>${escapeHtml(r.title || r.serviceType || '-')}</td>
               <td>${r.present}${r.total ? ` <span class="tiny muted">of ${r.total}</span>` : ''}</td>
               <td>${r.visitorCount || 0}</td>
             </tr>`).join('')}</tbody>
@@ -682,7 +682,7 @@ async function renderExecFinance(el) {
     <div class="panel-head">
       <div>
         <h2>The Books</h2>
-        <p class="sub">Read-only. Recording income and expenses stays with the Finance office — this is so you can answer for the money, not move it.</p>
+        <p class="sub">Read-only. Recording income and expenses stays with the Finance office. This is so you can answer for the money, not move it.</p>
       </div>
     </div>
     <div class="stat-row" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
@@ -723,7 +723,7 @@ async function renderExecMinutes(el) {
           <tbody>${items.map(m => `
             <tr>
               <td>${escapeHtml(m.date)}</td>
-              <td>${escapeHtml(m.title || '—')}<br><span class="tiny muted">${escapeHtml((m.body || '').slice(0, 90))}${(m.body || '').length > 90 ? '…' : ''}</span></td>
+              <td>${escapeHtml(m.title || '-')}<br><span class="tiny muted">${escapeHtml((m.body || '').slice(0, 90))}${(m.body || '').length > 90 ? '…' : ''}</span></td>
               <td>${m.status === 'adopted'
                 ? `<span class="tiny">Adopted${m.adoptedBy ? ` by ${escapeHtml(m.adoptedBy)}` : ''}</span>`
                 : '<span class="tiny muted">Draft</span>'}</td>
@@ -827,7 +827,7 @@ async function renderExecChapterAnnounce(el) {
 /* ---------- the money, and the daily verse ---------- */
 
 // Treasurer: files what was received or spent, with evidence. Never writes
-// the ledger — the filing waits for the Financial Secretary to record it.
+// the ledger - the filing waits for the Financial Secretary to record it.
 async function renderExecTreasury(el) {
   const filings = await fetchJSON('/api/executive/treasury/reports');
   const statusLabel = (f) => f.approvalStatus === 'recorded'
@@ -875,7 +875,7 @@ async function renderExecTreasury(el) {
         <div class="field"><label>Who</label><input type="text" id="tPayee" placeholder="Who paid, or who was paid"></div>
         <div class="field"><label>Description</label><textarea id="tDescription" rows="2"></textarea></div>
         <div class="field"><label>Evidence</label><input type="file" id="tReceipt" accept="image/*" required>
-          <small class="hint">A receipt, transfer screenshot or photo. Required — a filing without evidence cannot be recorded.</small>
+          <small class="hint">A receipt, transfer screenshot or photo. Required. A filing without evidence cannot be recorded.</small>
         </div>
         <button type="submit" class="btn btn-primary">File It</button>
         <div class="form-msg" id="treasuryMsg"></div>
@@ -911,7 +911,7 @@ async function renderExecTreasury(el) {
       const receipt = document.getElementById('tReceipt').files[0];
       if (receipt) fd.append('receipt', receipt);
       await fetchJSON('/api/executive/treasury/report', { method: 'POST', body: fd });
-      showToast('Filed — the Financial Secretary will record it.', 'success');
+      showToast('Filed, the Financial Secretary will record it.', 'success');
       openPanel('treasury');
     } catch (err) {
       setFormMsg('treasuryMsg', err.message || 'Could not file this.', 'error');
@@ -939,15 +939,15 @@ async function renderExecLedger(el) {
           <tbody>${awaiting.map(f => `
             <tr>
               <td>${escapeHtml(f.date)}</td>
-              <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')} · filed by ${escapeHtml(f.filedBy || '—')}${f.description ? ' · ' + escapeHtml(f.description) : ''}</span></td>
+              <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')} · filed by ${escapeHtml(f.filedBy || '-')}${f.description ? ' · ' + escapeHtml(f.description) : ''}</span></td>
               <td>${money(f.amount)}</td>
-              <td>${f.receiptFileId ? `<a href="/api/files/${escapeHtml(f.receiptFileId)}" target="_blank" rel="noopener">View</a>` : '<span class="muted">—</span>'}</td>
+              <td>${f.receiptFileId ? `<a href="/api/files/${escapeHtml(f.receiptFileId)}" target="_blank" rel="noopener">View</a>` : '<span class="muted">-</span>'}</td>
               <td><div class="row-actions">
                 <button data-record="${escapeHtml(f.id)}">Record</button>
                 <button class="danger" data-reject="${escapeHtml(f.id)}">Send back</button>
               </div></td>
             </tr>`).join('')}</tbody>
-        </table></div>` : '<p class="empty-state">Nothing waiting — the Treasurer has filed everything.</p>'}
+        </table></div>` : '<p class="empty-state">Nothing waiting. The Treasurer has filed everything.</p>'}
     </div>
     <div class="portal-card">
       <h4 style="margin-top:0;">The ledger</h4>
@@ -959,7 +959,7 @@ async function renderExecLedger(el) {
               <td>${escapeHtml(f.date)}</td>
               <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')}${f.source === 'treasury' ? ' · from the Treasurer' : ''}${f.approvalStatus === 'rejected' ? ' · sent back' : ''}</span></td>
               <td>${money(f.amount)}</td>
-              <td>${escapeHtml(f.recordedBy || '—')}</td>
+              <td>${escapeHtml(f.recordedBy || '-')}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">Nothing recorded yet.</p>'}
     </div>

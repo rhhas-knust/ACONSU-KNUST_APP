@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Read the Bible — ACONSU</title>
+<title>Read the Bible | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,14 +26,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section class="hero hero-compact" data-art="word" data-hero-page="bible">
-  <div class="hero-flame"></div>
   <div class="hero-content">
-    <p class="eyebrow">The Word</p>
     <h1>Read the Bible</h1>
-    <p class="lede">Read scripture right in the app, in the translation of your choice.</p>
   </div>
 </section>
 
@@ -93,6 +94,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <button id="imageVerseBtn">Image</button>
 </div>
 
+</main>
+
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js"></script>
@@ -105,7 +108,7 @@ let CURRENT_VERSION_LABEL = '';
 let selectedVerse = null;
 let firstRender = true;
 
-// How someone likes to read is theirs, and it should survive the next visit —
+// How someone likes to read is theirs, and it should survive the next visit -
 // including the chapter they were on, so the app opens where they left off.
 const PREF = {
   read(key, fallback) {
@@ -281,7 +284,7 @@ async function loadPassage() {
   PREF.write('chapter', chapter);
   PREF.write('translation', translation);
 
-  // A version the app is not licensed to reproduce never goes to the server —
+  // A version the app is not licensed to reproduce never goes to the server -
   // it is offered as a link to the publisher's own reader instead.
   const external = EXTERNAL_VERSIONS.find(v => v.code === translation);
   if (external) return renderExternalVersion(external, `${book} ${chapter}`);
@@ -371,7 +374,7 @@ function applyFlow(flow) {
 }
 
 // The preferences live on the reader element, which is replaced on every
-// chapter load — so they are re-applied rather than set once.
+// chapter load - so they are re-applied rather than set once.
 function syncReaderPrefs() {
   const reader = document.getElementById('reader');
   if (!reader) return;
@@ -406,7 +409,7 @@ function selectedVerseParts() {
 async function copySelectedVerse() {
   const parts = selectedVerseParts();
   if (!parts) return;
-  const line = `"${parts.text}" — ${parts.reference}`;
+  const line = `"${parts.text}" (${parts.reference})`;
   try {
     await navigator.clipboard.writeText(line);
     showToast('Verse copied.', 'success');
@@ -421,7 +424,7 @@ function shareSelectedVerse() {
   if (!parts) return;
   shareContent({
     title: parts.reference,
-    text: `"${parts.text}" — ${parts.reference}`,
+    text: `"${parts.text}" (${parts.reference})`,
     url: `${location.origin}/bible.html?book=${encodeURIComponent(document.getElementById('bookSelect').value)}&chapter=${document.getElementById('chapterSelect').value}`
   });
   clearSelection();

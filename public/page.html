@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,12 +26,12 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="calm" data-hero-page="page" style="padding-bottom:48px;">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="calm" data-hero-page="page">
   <div class="hero-content">
-    <p class="eyebrow" id="pageEyebrow">Page</p>
     <h1 id="pageTitle">Loading...</h1>
     <p class="lede" id="pageDescription"></p>
   </div>
@@ -37,7 +39,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section style="padding-top:0;">
   <div class="container" id="pageBody">
-    <p class="empty-state">Loading...</p>
+    <div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
   </div>
 </section>
 
@@ -45,6 +47,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <button class="lightbox-close" id="lightboxClose">&times;</button>
   <img id="lightboxImg" src="" alt="">
 </div>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -65,8 +69,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
   try {
     const page = await fetchJSON(`/api/pages/${encodeURIComponent(slug)}`);
-    document.title = `${page.title} — ACONSU`;
-    document.getElementById('pageEyebrow').textContent =
+    document.title = `${page.title} | ACONSU`;
+    (document.getElementById('pageEyebrow') || {}).textContent =
       page.type === 'gallery' ? 'Photo Gallery' : page.type === 'bookshelf' ? 'E-Library' : 'Page';
     document.getElementById('pageTitle').textContent = page.title;
     document.getElementById('pageDescription').textContent = page.description || '';
@@ -90,7 +94,7 @@ async function renderGallery(slug, bodyEl) {
   try {
     const files = await fetchJSON(`/api/files?category=photo&pageSlug=${encodeURIComponent(slug)}`);
     if (!files.length) {
-      bodyEl.innerHTML = '<p class="empty-state">No photos uploaded yet — check back soon.</p>';
+      bodyEl.innerHTML = '<p class="empty-state">No photos uploaded yet. Check back soon.</p>';
       return;
     }
     bodyEl.innerHTML = `<div class="gallery-grid">${files.map(f => `
@@ -119,7 +123,7 @@ async function renderBookshelf(slug, bodyEl) {
   try {
     const files = await fetchJSON(`/api/files?category=book&pageSlug=${encodeURIComponent(slug)}`);
     if (!files.length) {
-      bodyEl.innerHTML = '<p class="empty-state">No resources uploaded yet — check back soon.</p>';
+      bodyEl.innerHTML = '<p class="empty-state">No resources uploaded yet. Check back soon.</p>';
       return;
     }
     bodyEl.innerHTML = `<div class="grid">${files.map(f => `

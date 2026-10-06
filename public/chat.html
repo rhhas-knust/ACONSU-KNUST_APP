@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Community — ACONSU</title>
+<title>Community | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -23,24 +25,23 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .topic-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; }
-  .topic-card:hover { box-shadow:0 8px 20px rgba(58,27,84,0.1); }
+  .topic-card:hover { box-shadow:0 8px 20px rgba(0,0,0,0.1); }
   .chat-message { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
   .chat-message .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
-  .chat-message .when { font-size:0.74rem; color:#8a7595; }
+  .chat-message .when { font-size:0.74rem; color:var(--ink-faint); }
   .chat-message .actions { margin-top:6px; }
-  .chat-message .actions button { background:none; border:none; color:#8a7595; font-size:0.75rem; cursor:pointer; text-decoration:underline; padding:0; }
+  .chat-message .actions button { background:none; border:none; color:var(--ink-faint); font-size:0.75rem; cursor:pointer; text-decoration:underline; padding:0; }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="chat" style="padding-bottom:36px;">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="gather" data-hero-page="chat">
   <div class="hero-content">
-    <p class="eyebrow">Talk It Out</p>
     <h1>Community</h1>
-    <p class="lede">Ask questions, share opinions, discuss respectfully.</p>
   </div>
 </section>
 
@@ -48,7 +49,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <div class="container" style="max-width:700px;">
     <div id="topicListView">
       <button class="btn btn-primary btn-sm" id="newTopicBtn" style="margin-bottom:18px;">+ Start a Discussion</button>
-      <div id="topicList"><p class="empty-state">Loading...</p></div>
+      <div id="topicList"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
     </div>
     <div id="topicDetailView" style="display:none;">
       <button class="btn btn-outline btn-sm" id="backToTopicsBtn" style="margin-bottom:16px;">&larr; All Discussions</button>
@@ -61,6 +62,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -78,12 +81,12 @@ async function loadTopics() {
     list.innerHTML = topics.map(t => `
       <div class="topic-card" data-open="${t.id}">
         <div>
-          <strong>${escapeHtml(t.title)}${t.locked ? ' 🔒' : ''}</strong>
+          <strong>${escapeHtml(t.title)}${t.locked ? ' (locked)' : ''}</strong>
           <div class="tiny muted">Started by ${escapeHtml(t.createdByName || 'Someone')} · ${fmtWhen(t.lastActivity)}</div>
         </div>
         <span class="badge">${t.messageCount} repl${t.messageCount === 1 ? 'y' : 'ies'}</span>
       </div>
-    `).join('') || '<p class="empty-state">No discussions yet — start the first one!</p>';
+    `).join('') || '<p class="empty-state">No discussions yet. Start the first one!</p>';
     list.querySelectorAll('[data-open]').forEach(card => card.addEventListener('click', () => openTopic(card.dataset.open, topics.find(t => t.id === card.dataset.open).title)));
   } catch (e) {
     list.innerHTML = '<p class="empty-state">Log in to see community discussions.</p>';
@@ -100,7 +103,7 @@ async function openTopic(id, title) {
 
 async function loadMessages() {
   const list = document.getElementById('messagesList');
-  list.innerHTML = '<p class="empty-state">Loading...</p>';
+  list.innerHTML = '<div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>';
   try {
     const messages = await fetchJSON(`/api/chat/topics/${currentTopicId}/messages`);
     list.innerHTML = messages.map(m => `
@@ -110,11 +113,11 @@ async function loadMessages() {
         <div class="when">${fmtWhen(m.createdAt)}</div>
         <div class="actions"><button data-report="${m.id}">Report</button></div>
       </div>
-    `).join('') || '<p class="empty-state">No replies yet — be the first.</p>';
+    `).join('') || '<p class="empty-state">No replies yet. Be the first.</p>';
     list.querySelectorAll('[data-report]').forEach(btn => btn.addEventListener('click', async () => {
       if (!confirm('Report this message to the moderators?')) return;
       await fetchJSON(`/api/chat/messages/${btn.dataset.report}/report`, { method: 'POST' });
-      showToast('Reported — thank you for flagging this.', 'success');
+      showToast('Reported, thank you for flagging this.', 'success');
     }));
   } catch (e) {
     list.innerHTML = '<p class="empty-state">Could not load messages.</p>';

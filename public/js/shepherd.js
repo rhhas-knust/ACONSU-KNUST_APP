@@ -1,5 +1,5 @@
 /* ============================================================
-   Shepherding Portal — the pastoral side of the union.
+   Shepherding Portal. The pastoral side of the union.
    Sunday attendance, the people directory (editable here), and
    the contact messages members send in.
    ============================================================ */
@@ -14,7 +14,7 @@ const SERVICE_TYPES = [
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const personKey = (p) => (p.source === 'visitor' ? p.recordId : p.memberId);
-const birthdayLabel = (p) => (p.birthdayMonth && p.birthdayDay ? `${MONTHS[p.birthdayMonth]} ${p.birthdayDay}` : '—');
+const birthdayLabel = (p) => (p.birthdayMonth && p.birthdayDay ? `${MONTHS[p.birthdayMonth]} ${p.birthdayDay}` : '-');
 
 function avatar(person) {
   return person.imageFileId
@@ -47,7 +47,7 @@ async function renderShepOverview(el) {
 
     <div class="stat-grid">
       ${statCard('People Tracked', people.length, { foot: `${people.filter(p => p.source === 'visitor').length} visitors without accounts` })}
-      ${statCard('Last Service', lastService ? String(lastService.total) : '—', {
+      ${statCard('Last Service', lastService ? String(lastService.total) : '-', {
         tone: 'good',
         foot: lastService ? `${shortDate(lastService.date)} · ${lastService.present} on the register + ${lastService.visitorCount} walk-ins` : 'No register taken yet'
       })}
@@ -113,7 +113,7 @@ const registerState = { date: lastSundayISO(), serviceType: 'sunday', marks: {},
 
 // Quick Check-In: SCAN QR -> IDENTIFY MEMBER -> VERIFY CHAPTER -> RECORD
 // ATTENDANCE (section 13), with a manual search fallback when scanning isn't
-// available — either browser support (BarcodeDetector isn't universal yet)
+// available - either browser support (BarcodeDetector isn't universal yet)
 // or simply no camera to hand. Both paths call the same server-side
 // check-in, which is what actually verifies chapter membership.
 function wireQuickCheckIn(people) {
@@ -126,7 +126,7 @@ function wireQuickCheckIn(people) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, date: registerState.date, serviceType: registerState.serviceType })
       });
-      showFeedback(res.alreadyMarked ? `${res.member.name} was already marked present.` : `✅ ${res.member.name} marked present.`, 'success');
+      showFeedback(res.alreadyMarked ? `${res.member.name} was already marked present.` : `${res.member.name} marked present.`, 'success');
       showToast(`${res.member.name} checked in`, 'success');
     } catch (err) {
       showFeedback(err.message || `Could not check in ${label}.`, 'error');
@@ -149,7 +149,7 @@ function wireQuickCheckIn(people) {
     }));
   });
 
-  // ---- camera QR scan (feature-detected — not every browser supports it yet) ----
+  // ---- camera QR scan (feature-detected - not every browser supports it yet) ----
   const startBtn = document.getElementById('startScanBtn');
   const stopBtn = document.getElementById('stopScanBtn');
   const scanArea = document.getElementById('scanArea');
@@ -159,7 +159,7 @@ function wireQuickCheckIn(people) {
 
   if (!('BarcodeDetector' in window)) {
     startBtn.disabled = true;
-    startBtn.textContent = '📷 Scanning not supported on this browser — use search below';
+    startBtn.textContent = 'Scanning not supported on this browser. Use search below';
     return;
   }
 
@@ -186,7 +186,7 @@ function wireQuickCheckIn(people) {
           if (codes.length) {
             await checkIn({ qrToken: codes[0].rawValue }, 'this member');
           }
-        } catch (e) { /* a missed frame isn't an error — just try again next tick */ }
+        } catch (e) { /* a missed frame isn't an error - just try again next tick */ }
         busy = false;
       }, 800);
     } catch (e) {
@@ -232,15 +232,15 @@ async function renderAttendance(el) {
         </div>
         <button type="button" class="btn btn-outline btn-sm" id="loadRegisterBtn">Load</button>
       </div>
-      ${record ? `<p class="tiny muted" style="margin-top:10px;">A register already exists for this service — saving will update it. Last saved by ${escapeHtml(record.recordedBy || 'someone')}.</p>` : ''}
+      ${record ? `<p class="tiny muted" style="margin-top:10px;">A register already exists for this service. Saving will update it. Last saved by ${escapeHtml(record.recordedBy || 'someone')}.</p>` : ''}
     </div>
 
     ${PORTAL.canEdit ? `
       <div class="portal-card">
         <h3>Quick Check-In (section 13)</h3>
-        <p class="hint">Scan a member's QR code, or search by name if scanning isn't available — either instantly marks them present for the service selected above.</p>
+        <p class="hint">Scan a member's QR code, or search by name if scanning isn't available. Either instantly marks them present for the service selected above.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
-          <button type="button" class="btn btn-primary btn-sm" id="startScanBtn">📷 Scan QR Code</button>
+          <button type="button" class="btn btn-primary btn-sm" id="startScanBtn">Scan QR Code</button>
         </div>
         <div id="scanArea" style="display:none; margin-bottom:14px;">
           <video id="scanVideo" style="width:100%; max-width:360px; border-radius:12px; background:#000;" playsinline muted></video>
@@ -270,7 +270,7 @@ async function renderAttendance(el) {
         </div>
         <div class="register-list" id="registerList"></div>
         <div class="field" style="margin-top:18px;"><label>Notes about this service</label>
-          <input type="text" id="regNotes" value="${escapeHtml(record?.notes || '')}" placeholder="Optional — rain kept numbers down, guest speaker, etc.">
+          <input type="text" id="regNotes" value="${escapeHtml(record?.notes || '')}" placeholder="Optional. Rain kept numbers down, guest speaker, etc.">
         </div>
         <button type="button" class="btn btn-primary" id="saveRegisterBtn">Save Register</button>
         <div class="form-msg" id="registerMsg"></div>
@@ -281,8 +281,8 @@ async function renderAttendance(el) {
       <div class="panel-head" style="margin-bottom:14px;">
         <h3 style="margin:0;">Past Services (${services.length})</h3>
         <div class="panel-actions">
-          <a class="btn btn-outline btn-sm" href="/api/shepherd/attendance-summary.pdf" target="_blank" rel="noopener">📄 Attendance % Report (PDF)</a>
-          <a class="btn btn-outline btn-sm" href="/api/shepherd/members/report.pdf" target="_blank" rel="noopener">📄 Membership Report (PDF)</a>
+          <a class="btn btn-outline btn-sm" href="/api/shepherd/attendance-summary.pdf" target="_blank" rel="noopener">Attendance % Report (PDF)</a>
+          <a class="btn btn-outline btn-sm" href="/api/shepherd/members/report.pdf" target="_blank" rel="noopener">Membership Report (PDF)</a>
         </div>
       </div>
       <div class="table-wrap">
@@ -352,7 +352,7 @@ async function renderAttendance(el) {
       return acc;
     }, {});
     const visitors = Number(document.getElementById('regVisitors').value || 0);
-    tallyEl.textContent = `${counts.present || 0} present · ${counts.excused || 0} excused · ${counts.absent || 0} absent · ${visitors} walk-ins — ${(counts.present || 0) + visitors} in the room`;
+    tallyEl.textContent = `${counts.present || 0} present · ${counts.excused || 0} excused · ${counts.absent || 0} absent · ${visitors} walk-ins: ${(counts.present || 0) + visitors} in the room`;
   }
 
   function drawList() {
@@ -382,7 +382,7 @@ async function renderAttendance(el) {
     listEl.querySelectorAll('.mark-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         registerState.marks[btn.dataset.person] = btn.dataset.status;
-        // Only repaint this row's buttons — redrawing the whole list would
+        // Only repaint this row's buttons - redrawing the whole list would
         // lose the scroll position halfway through a congregation.
         btn.parentElement.querySelectorAll('.mark-btn').forEach(b => b.classList.toggle('on', b === btn));
         updateTally();
@@ -470,13 +470,13 @@ async function renderShepMembers(el) {
             <tr>
               <td style="display:flex; align-items:center; gap:10px;">
                 ${avatar(p)}
-                <span>${escapeHtml(p.name)}${p.source === 'visitor' ? '<br><small class="muted">visitor — no account</small>' : ''}</span>
+                <span>${escapeHtml(p.name)}${p.source === 'visitor' ? '<br><small class="muted">visitor. No account</small>' : ''}</span>
               </td>
-              <td>${escapeHtml(p.email || '—')}${p.phone ? `<br>${escapeHtml(p.phone)}` : ''}</td>
-              <td>${escapeHtml(deptName(p.department) || '—')}</td>
+              <td>${escapeHtml(p.email || '-')}${p.phone ? `<br>${escapeHtml(p.phone)}` : ''}</td>
+              <td>${escapeHtml(deptName(p.department) || '-')}</td>
               <td>${birthdayLabel(p)}</td>
               <td>${pill(p.attendanceStatus)}</td>
-              <td>${p.lastContactDate ? shortDate(p.lastContactDate) : '—'}</td>
+              <td>${p.lastContactDate ? shortDate(p.lastContactDate) : '-'}</td>
               ${PORTAL.canEdit ? `<td class="row-actions">
                 <button data-care="${personKey(p)}">Care Notes</button>
                 ${p.source === 'member' ? `<button data-details="${p.memberId}">Details</button>` : ''}
@@ -539,14 +539,14 @@ function openMemberDetailsForm(person, departments) {
       </div>
       <div class="field"><label>Department</label>
         <select id="dDepartment">
-          <option value="">— none —</option>
+          <option value="">None</option>
           ${departments.map(d => `<option value="${d.id}" ${person.department === d.id ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
         </select>
       </div>
       <div class="field-row">
         <div class="field"><label>Birthday Month</label>
           <select id="dBMonth">
-            <option value="">—</option>
+            <option value="">-</option>
             ${MONTHS.slice(1).map((m, i) => `<option value="${i + 1}" ${person.birthdayMonth === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}
           </select>
         </div>
@@ -589,12 +589,12 @@ function openMemberDetailsForm(person, departments) {
 function openCareForm(person) {
   const isVisitor = !person || person.source === 'visitor';
   showModal(`
-    <h3>${person ? `Care Notes — ${escapeHtml(person.name)}` : 'Add a Visitor'}</h3>
+    <h3>${person ? `Care Notes: ${escapeHtml(person.name)}` : 'Add a Visitor'}</h3>
     <form id="careForm">
       ${isVisitor ? `
         <div class="field"><label>Full Name</label><input type="text" id="cName" value="${escapeHtml(person?.name || '')}" required></div>
         <div class="field"><label>Phone</label><input type="tel" id="cPhone" value="${escapeHtml(person?.phone || '')}"></div>
-      ` : '<p class="tiny muted" style="margin-bottom:16px;">Name, phone and photo come from their account — edit those under “Details”.</p>'}
+      ` : '<p class="tiny muted" style="margin-bottom:16px;">Name, phone and photo come from their account. Edit those under “Details”.</p>'}
       <div class="field"><label>Address / Hall</label><input type="text" id="cAddress" value="${escapeHtml(person?.address || '')}"></div>
       <div class="field"><label>Emergency Contact</label><input type="text" id="cEmergency" value="${escapeHtml(person?.emergencyContact || '')}"></div>
       <div class="field"><label>Attendance Pattern</label>
@@ -651,7 +651,7 @@ async function openAttendanceHistory(person) {
     document.getElementById('modalContent').innerHTML = `
       <h3>${escapeHtml(person.name)}</h3>
       <div class="stat-grid" style="margin-bottom:18px;">
-        ${statCard('Attendance Rate', data.rate === null ? '—' : `${data.rate}%`, { tone: data.rate >= 70 ? 'good' : data.rate === null ? '' : 'bad' })}
+        ${statCard('Attendance Rate', data.rate === null ? '-' : `${data.rate}%`, { tone: data.rate >= 70 ? 'good' : data.rate === null ? '' : 'bad' })}
         ${statCard('Services Attended', `${data.attended} of ${data.servicesRecorded}`)}
       </div>
       <div class="table-wrap">
@@ -787,13 +787,13 @@ async function assignShepherdForm(person, stage) {
     showToast(err.message || 'Could not load the check-up team.', 'error');
     return;
   }
-  // Nobody shepherds themselves — so they are not even offered. The server
+  // Nobody shepherds themselves - so they are not even offered. The server
   // refuses it too; this is only so the choice never appears in the first place.
   const choices = team.filter(t => t.memberId !== person.memberId);
   if (!choices.length) {
     showModal(`
       <h3>No one on the check-up team yet</h3>
-      <p class="hint">A shepherd is drawn from the check-up team. Put someone on the team first — the Check-up Team tab — and they can then be assigned here.</p>
+      <p class="hint">A shepherd is drawn from the check-up team. Put someone on the team first, the Check-up Team tab, and they can then be assigned here.</p>
       <div style="display:flex; gap:10px;">
         <button type="button" class="btn btn-outline" id="cancelModalBtn">Close</button>
       </div>
@@ -804,12 +804,12 @@ async function assignShepherdForm(person, stage) {
     <h3>${reassigning ? 'Change Shepherd' : 'Assign Shepherd &amp; Activate'}</h3>
     <p class="hint">${reassigning
       ? `${escapeHtml(person.name)} is currently looked after by ${escapeHtml(person.shepherdName || 'nobody')}.`
-      : `${escapeHtml(person.name)} becomes an active member once a shepherd is assigned — their digital membership card is issued at the same time.`}</p>
+      : `${escapeHtml(person.name)} becomes an active member once a shepherd is assigned. Their digital membership card is issued at the same time.`}</p>
     <form id="assignShepherdForm">
       <div class="field"><label>Shepherd</label>
         <select id="shepherdPick" required>
           <option value="">Choose from the check-up team…</option>
-          ${choices.map(t => `<option value="${escapeHtml(t.memberId)}"${t.memberId === person.shepherdMemberId ? ' selected' : ''}>${escapeHtml(t.name)}${t.isAlumni ? ' (alumni)' : ''}${t.byOffice ? ' (Coordinator)' : ''} — looking after ${t.flockSize}</option>`).join('')}
+          ${choices.map(t => `<option value="${escapeHtml(t.memberId)}"${t.memberId === person.shepherdMemberId ? ' selected' : ''}>${escapeHtml(t.name)}${t.isAlumni ? ' (alumni)' : ''}${t.byOffice ? ' (Coordinator)' : ''}, looking after ${t.flockSize}</option>`).join('')}
         </select>
       </div>
       <div style="display:flex; gap:10px;">
@@ -838,7 +838,7 @@ async function renderShepTeam(el) {
     <div class="panel-head">
       <div>
         <h2>The Check-up Team</h2>
-        <p class="sub">The members Shepherding sends out to visit and follow up. Every shepherd is drawn from this team — nobody outside it can be assigned to anyone.</p>
+        <p class="sub">The members Shepherding sends out to visit and follow up. Every shepherd is drawn from this team. Nobody outside it can be assigned to anyone.</p>
       </div>
     </div>
 
@@ -851,7 +851,7 @@ async function renderShepTeam(el) {
     ${PORTAL.canEdit ? `
     <div class="portal-card">
       <h3>Add to the team</h3>
-      <p class="hint">A shepherd is an <strong>active</strong> member of this chapter. Alumni included — being off campus does not end it — but someone still being received is shepherded, not a shepherd. The Chapter Coordinator is on the team by virtue of the office.</p>
+      <p class="hint">A shepherd is an <strong>active</strong> member of this chapter. Alumni included, being off campus does not end it, but someone still being received is shepherded, not a shepherd. The Chapter Coordinator is on the team by virtue of the office.</p>
       <form id="addToTeamForm" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
         <div class="field" style="flex:1; min-width:220px; margin:0;">
           <label>Add a member to the team</label>
@@ -876,7 +876,7 @@ async function renderShepTeam(el) {
                 <td>${escapeHtml(t.name)}${t.isAlumni ? ' <span class="tiny muted">(alumni)</span>' : ''}${t.byOffice ? ' <span class="tiny muted">(Coordinator)</span>' : ''}</td>
                 <td>${pill(STAGE_LABELS[t.membershipStage] || t.membershipStage)}</td>
                 <td class="tiny">${t.flockSize}</td>
-                <td class="tiny muted">${t.since ? new Date(t.since).toLocaleDateString() : '—'}</td>
+                <td class="tiny muted">${t.since ? new Date(t.since).toLocaleDateString() : '-'}</td>
                 <td>${PORTAL.canEdit && !t.byOffice ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-standdown="${escapeHtml(t.memberId)}">Stand down</button>` : ''}</td>
               </tr>
             `).join('') || emptyRow(6, 'Nobody on the check-up team yet.')}
@@ -919,7 +919,7 @@ async function renderShepTeam(el) {
 
 async function renderVisitors(el) {
   const people = await fetchJSON('/api/shepherd/members');
-  // Only ACONSU accounts go through this workflow — a manually-added visitor
+  // Only ACONSU accounts go through this workflow - a manually-added visitor
   // record with no account isn't a "registration" to review yet.
   const withAccount = people.filter(p => p.source === 'member');
   const pipeline = withAccount.filter(p => ['visitor', 'under_review', 'accepted'].includes(p.membershipStage));
@@ -951,7 +951,7 @@ async function renderVisitors(el) {
               <tr>
                 <td>${avatar(p)}</td>
                 <td><strong>${escapeHtml(p.name)}</strong></td>
-                <td class="tiny muted">${escapeHtml(p.email || p.phone || '—')}</td>
+                <td class="tiny muted">${escapeHtml(p.email || p.phone || '-')}</td>
                 <td>${pill(STAGE_LABELS[p.membershipStage] || p.membershipStage)}</td>
                 <td>
                   <div class="row-actions">
@@ -978,8 +978,8 @@ async function renderVisitors(el) {
                 <td>${avatar(p)}</td>
                 <td>${escapeHtml(p.name)}</td>
                 <td>${pill(STAGE_LABELS[p.membershipStage] || p.membershipStage)}</td>
-                <td class="tiny muted">${escapeHtml(p.membershipNumber || '—')}</td>
-                <td class="tiny muted">${escapeHtml(p.shepherdName || '—')}</td>
+                <td class="tiny muted">${escapeHtml(p.membershipNumber || '-')}</td>
+                <td class="tiny muted">${escapeHtml(p.shepherdName || '-')}</td>
                 <td>
                   ${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}
                   ${PORTAL.canEdit ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-reshepherd="${escapeHtml(p.memberId)}">Change shepherd</button>` : ''}
@@ -989,7 +989,7 @@ async function renderVisitors(el) {
           </tbody>
         </table>
       </div>
-      ${active.length > 20 ? `<p class="tiny muted" style="margin-top:10px;">Showing the first 20 — see the Members tab for everyone.</p>` : ''}
+      ${active.length > 20 ? `<p class="tiny muted" style="margin-top:10px;">Showing the first 20, see the Members tab for everyone.</p>` : ''}
     </div>
 
     <div class="portal-card">
@@ -1000,7 +1000,7 @@ async function renderVisitors(el) {
           <thead><tr><th>Name</th><th>Membership No.</th><th>Shepherd</th></tr></thead>
           <tbody>
             ${alumni.slice(0, 20).map(p => `
-              <tr><td>${escapeHtml(p.name)}</td><td class="tiny muted">${escapeHtml(p.membershipNumber || '—')}</td><td class="tiny muted">${escapeHtml(p.shepherdName || '—')}</td></tr>
+              <tr><td>${escapeHtml(p.name)}</td><td class="tiny muted">${escapeHtml(p.membershipNumber || '-')}</td><td class="tiny muted">${escapeHtml(p.shepherdName || '-')}</td></tr>
             `).join('') || emptyRow(3, 'No alumni transitions yet.')}
           </tbody>
         </table>
@@ -1014,7 +1014,7 @@ async function renderVisitors(el) {
   el.querySelectorAll('[data-assign]').forEach(btn => {
     btn.addEventListener('click', () => assignShepherdForm(pipeline.find(p => p.memberId === btn.dataset.assign)));
   });
-  // Reassigning leaves the member's stage alone — only who looks after them
+  // Reassigning leaves the member's stage alone - only who looks after them
   // changes. Without this there would be no way to move a flock, and standing
   // someone down would be blocked forever.
   el.querySelectorAll('[data-reshepherd]').forEach(btn => {
@@ -1042,7 +1042,7 @@ async function renderCare(el) {
     <div class="card-split">
       <div class="portal-card">
         <h3>Welfare Referral</h3>
-        <p class="hint">Goes straight to the Welfare team — you won't see the outcome here, that stays confidential to them.</p>
+        <p class="hint">Goes straight to the Welfare team. You won't see the outcome here, that stays confidential to them.</p>
         <form id="referralForm">
           <div class="field"><label>Member</label>
             <select id="refMember" required>${memberOptions.map(p => `<option value="${p.memberId}">${escapeHtml(p.name)}</option>`).join('')}</select>
@@ -1060,7 +1060,7 @@ async function renderCare(el) {
       </div>
       <div class="portal-card">
         <h3>Log a Milestone</h3>
-        <p class="hint">Graduation, a membership anniversary, or anything else worth a shout-out — posts a celebration to the chapter.</p>
+        <p class="hint">Graduation, a membership anniversary, or anything else worth a shout-out. Posts a celebration to the chapter.</p>
         <form id="milestoneForm">
           <div class="field"><label>Member</label>
             <select id="mstMember" required>${memberOptions.map(p => `<option value="${p.memberId}">${escapeHtml(p.name)}</option>`).join('')}</select>
@@ -1084,7 +1084,7 @@ async function renderCare(el) {
         <table class="portal-table" style="min-width:0;">
           <tbody>
             ${milestones.slice(0, 10).map(m => `
-              <tr><td>${escapeHtml(m.memberName)}</td><td>${pill(m.type.replace('_', ' '))}</td><td class="tiny muted">${escapeHtml(m.note || '—')}</td></tr>
+              <tr><td>${escapeHtml(m.memberName)}</td><td>${pill(m.type.replace('_', ' '))}</td><td class="tiny muted">${escapeHtml(m.note || '-')}</td></tr>
             `).join('') || emptyRow(3, 'No milestones logged yet.')}
           </tbody>
         </table>

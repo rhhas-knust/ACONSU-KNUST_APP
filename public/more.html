@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>More — ACONSU</title>
+<title>More | ACONSU</title>
 <meta name="description" content="Everything else in the ACONSU app: departments, sermons, testimonies, giving, contact and your account.">
 <script>
 /* Set the theme before the first paint. A page that renders light and then
@@ -13,7 +13,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -25,7 +27,10 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
+<h1 class="sr-only">More</h1>
 
 <section class="more-hero">
   <div class="container">
@@ -41,6 +46,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -69,7 +76,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </a>
   ` : `
     <div class="more-account-inner">
-      <span class="more-avatar">✦</span>
+      <span class="more-avatar"></span>
       <span class="more-account-text">
         <strong>You're browsing as a guest</strong>
         <small>Sign in to track your streak, save your details and get birthday wishes.</small>
@@ -124,7 +131,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     {
       title: 'Give & Care',
       links: [
-        { href: '/give.html', label: 'Give', desc: 'Support your chapter — tithes, offerings, welfare', icon: ICON_HOME },
+        { href: '/give.html', label: 'Give', desc: 'Support your chapter. Tithes, offerings, welfare', icon: ICON_HOME },
         { href: '/welfare.html', label: 'Welfare', desc: 'Need support? Let us know, confidentially', icon: ICON_PRAYER }
       ]
     }
@@ -133,7 +140,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
   document.getElementById('moreGroups').innerHTML = groups.map(g => `
     <div class="more-group">
-      <p class="eyebrow">${escapeHtml(g.title)}</p>
+      <p class="meta">${escapeHtml(g.title)}</p>
       <div class="more-tile-grid">
         ${g.links.map(l => `
           <a href="${l.href}" class="more-tile">
@@ -149,7 +156,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
   `).join('') + `
     <div class="more-group">
-      <p class="eyebrow">Your Account</p>
       <div class="more-tile-grid">
         ${member ? `
           <a href="/profile.html" class="more-tile">

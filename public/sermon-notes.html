@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sermon Notes — ACONSU</title>
+<title>Sermon Notes | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,28 +26,31 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <style>
   .note-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:14px; }
   .note-card h4 { margin:0 0 4px; }
-  .note-card .meta { font-size:0.8rem; color:#8a7595; margin-bottom:10px; }
-  .note-card .body-text { white-space:pre-wrap; font-size:0.92rem; line-height:1.55; color:var(--purple-ink); }
+  .note-card .meta { font-size:0.8rem; color:var(--ink-faint); margin-bottom:10px; }
+  .note-card .body-text { white-space:pre-wrap; font-size:0.92rem; line-height:1.55; color:var(--ink); }
   .note-card .row-actions { margin-top:12px; display:flex; gap:8px; }
   .note-card .row-actions button { border:none; background:var(--lilac-mid); color:var(--brand-strong); padding:6px 12px; border-radius:7px; font-size:0.78rem; font-weight:700; cursor:pointer; }
-  .note-card .row-actions button.danger { background:#FBDFDA; color:#A93226; }
+  .note-card .row-actions button.danger { background:var(--bad-bg); color:var(--bad-ink); }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section style="padding-top:48px;">
   <div class="container" style="max-width:720px;">
     <div class="section-head">
-      <p class="eyebrow">Keep What You Hear</p>
       <h1>My Sermon Notes</h1>
-      <p class="lede">Private to you — save what stood out and come back to it anytime.</p>
+      <p class="lede">Private to you. Save what stood out and come back to it anytime.</p>
     </div>
     <button class="btn btn-primary" id="newNoteBtn" style="margin-bottom:24px;">+ New Sermon Note</button>
-    <div id="notesList"><p class="empty-state">Loading...</p></div>
+    <div id="notesList"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -117,7 +122,7 @@ async function loadNotes() {
   try {
     NOTES = await fetchJSON('/api/member/sermon-notes');
     if (!NOTES.length) {
-      list.innerHTML = '<p class="empty-state">No sermon notes yet — add your first one above.</p>';
+      list.innerHTML = '<p class="empty-state">No sermon notes yet. Add your first one above.</p>';
       return;
     }
     list.innerHTML = NOTES.map(n => `

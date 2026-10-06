@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Notifications — ACONSU</title>
+<title>Notifications | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,14 +26,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
-<section class="hero" data-art="calm" data-hero-page="notifications" style="padding-bottom:40px;">
-  <div class="hero-flame"></div>
+<section class="hero" data-art="calm" data-hero-page="notifications">
   <div class="hero-content">
-    <p class="eyebrow">Stay in the Loop</p>
     <h1>Notifications</h1>
-    <p class="lede">Events, sermons, birthdays and announcements from ACONSU.</p>
   </div>
 </section>
 
@@ -43,6 +44,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -56,11 +59,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     const items = await fetchJSON('/api/notifications');
     const wrap = document.getElementById('notifList');
     if (!items.length) {
-      wrap.innerHTML = '<p class="empty-state">No notifications yet — check back soon.</p>';
+      wrap.innerHTML = '<p class="empty-state">No notifications yet. Check back soon.</p>';
     } else {
       wrap.innerHTML = `<div class="card" style="padding:8px 20px;">${items.map(n => `
         <a href="${n.url || '/index.html'}" class="notif-item" style="text-decoration:none; color:inherit;">
-          <div class="notif-icon">${n.source === 'system' ? '🔔' : '📣'}</div>
+          <div class="notif-icon" aria-hidden="true"></div>
           <div>
             <strong style="display:block;">${escapeHtml(n.title)}</strong>
             <span style="color:var(--ink-soft); font-size:0.9rem;">${escapeHtml(n.body)}</span>

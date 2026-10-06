@@ -278,15 +278,17 @@ Neither of these is typed into `chapter.js`. They are written in the **app**, by
 National, and the site picks them up by itself.
 
 - **Alumni.** An alumnus sends a photo, a name and a few lines — from this page
-  or from the app. National approves it in the app (National portal → Alumni).
+  or from the app. An admin approves it in the app: National (any chapter), or the
+  chapter's own admin (their chapter's requests only, under Alumni Wall).
   Once approved they appear in the app's Alumni Connect at once, and on this page
   the next time the site refreshes.
 - **This week's alumnus.** One person is celebrated each week, the same one in the
   app and here. It changes on Monday. National can choose who, or leave it to the
   rotation, which gives everybody a turn before anyone gets a second.
-- **The month's theme**, with its prayer flyers. National sets it in the app
-  (National portal → Monthly Theme), and can write next month's ahead of time. It
-  appears on the first of the month. A month with no theme shows nothing at all.
+- **The month's theme**, with its prayer flyers. A chapter's admin sends it from the
+  app (Monthly Theme) and National approves it; National can also write it directly.
+  Next month's can be sent ahead of time, and it appears on the first of the month.
+  A month with no theme shows nothing at all.
 
 **How it gets here.** This page never asks the app while someone is looking: the
 app sleeps on free hosting and takes up to a minute to wake, and a visitor should
@@ -353,3 +355,13 @@ Open `index.html` in a browser. It works straight off the disk — no server
 needed. What you see is what gets published, with one exception: a browser will
 not read `data/feed.json` from a file on your disk, so the alumni and the theme
 only appear once the site is online. Everything else is exactly as it will be.
+
+
+## Pages, privacy and icons
+
+- `privacy.html`, `terms.html` and `cookies.html` are filled from `chapter.js` (name, location, contact email), so edit that file and they follow.
+- The site sets no cookies and loads nothing from other companies. Its Content-Security-Policy (in the `<meta>` tag at the top of
+  `index.html`) allows only this folder and one address to send the alumni request to. If you change `alumni.requestUrl` in
+  `chapter.js`, change `connect-src` in that tag to match, or the form will be blocked by the browser.
+- Fonts are in `fonts/`. The icons are `favicon.ico`, `favicon-16.png`, `favicon-32.png` and `apple-touch-icon.png`.
+- `heroImageAlt` in `chapter.js` describes the photo beside the heading for people who cannot see it.

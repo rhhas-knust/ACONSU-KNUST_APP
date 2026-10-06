@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Profile — ACONSU</title>
+<title>My Profile | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -26,7 +28,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .profile-photo img { width:100%; height:100%; object-fit:cover; }
   .profile-photo .initial { font-family: var(--font-display); font-size: 1.8rem; color: var(--brand); }
   .profile-tabs { display:flex; gap:10px; justify-content:center; margin-bottom:24px; flex-wrap:wrap; }
-  .profile-tabs button { background:none; border:2px solid var(--line); border-radius:999px; padding:8px 18px; font-weight:700; font-size:0.85rem; cursor:pointer; color:var(--purple-ink); }
+  .profile-tabs button { background:none; border:2px solid var(--line); border-radius:6px; padding:8px 18px; font-weight:700; font-size:0.85rem; cursor:pointer; color:var(--ink); }
   .profile-tabs button.active { border-color: var(--brand); background: var(--purple-deep); color: #fff; }
 
   /* ---------- redesigned profile header ---------- */
@@ -38,26 +40,28 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .profile-avatar .initial { font-family:var(--font-display); font-size:1.6rem; color:var(--brand); }
   .avatar-camera-btn { position:absolute; bottom:-2px; right:-2px; width:28px; height:28px; border-radius:50%; background:var(--purple-deep); color:#fff; border:2px solid #fff; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.85rem; }
   .quick-pills { display:flex; gap:10px; margin-bottom:22px; }
-  .quick-pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 8px; text-align:center; text-decoration:none; color:var(--purple-ink); font-size:0.78rem; font-weight:700; }
+  .quick-pill { flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 8px; text-align:center; text-decoration:none; color:var(--ink); font-size:0.78rem; font-weight:700; }
   .quick-pill .qp-icon { font-size:1.3rem; display:block; margin-bottom:4px; }
-  .streak-card { background:linear-gradient(120deg, var(--flame-gold), var(--flame-red)); border-radius:16px; padding:20px; color:#fff; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .streak-card { background:var(--purple-rich); border-radius:var(--radius); padding:20px; color:#fff; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
   .streak-card .streak-num { font-family:var(--font-display); font-size:2rem; font-weight:700; }
   .badges-section h3 { margin-bottom:14px; }
   .badges-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr)); gap:14px; margin-bottom:28px; }
   .badge-item { text-align:center; }
   .badge-circle { width:56px; height:56px; border-radius:50%; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; font-size:1.6rem; margin:0 auto 6px; opacity:0.35; filter:grayscale(1); }
-  .badge-circle.earned { opacity:1; filter:none; background:linear-gradient(135deg, var(--flame-gold), var(--flame-red)); box-shadow:0 6px 16px rgba(232,151,30,0.35); }
-  .badge-label { font-size:0.68rem; font-weight:700; color:#5a4468; line-height:1.2; }
+  .badge-circle.earned { opacity:1; filter:none; background:var(--flame-gold); color:var(--ink); }
+  .badge-label { font-size:0.68rem; font-weight:700; color:var(--ink-soft); line-height:1.2; }
 </style>
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <section style="padding-top:32px; padding-bottom:64px;">
   <div class="container" style="max-width:560px;">
     <div id="profileTopRow">
-      <p class="empty-state">Loading your profile...</p>
+      <div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
     </div>
 
     <div id="memberStanding"></div>
@@ -68,13 +72,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div id="volunteerAssignments"></div>
 
     <div class="badges-section">
-      <h3>Badges</h3>
+      <h2>Badges</h2>
       <div class="badges-grid" id="badgesGrid">
         <div class="skeleton skeleton-card" style="height:80px;"></div>
       </div>
     </div>
 
-    <h3 style="margin-bottom:14px;">Account Settings</h3>
+    <h2 style="margin-bottom:14px;">Account Settings</h2>
     <div class="profile-tabs">
       <button data-tab="details" class="active">My Details</button>
       <button data-tab="password">Change Password</button>
@@ -98,16 +102,16 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <input type="text" id="level">
       </div>
       <div class="field">
-        <label>Birthday (month &amp; day only — no year is ever stored)</label>
+        <label>Birthday (month &amp; day only, no year is ever stored)</label>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <select id="birthdayMonth">
+          <select id="birthdayMonth" aria-label="Birthday month">
             <option value="">Month</option>
             <option value="1">January</option><option value="2">February</option><option value="3">March</option>
             <option value="4">April</option><option value="5">May</option><option value="6">June</option>
             <option value="7">July</option><option value="8">August</option><option value="9">September</option>
             <option value="10">October</option><option value="11">November</option><option value="12">December</option>
           </select>
-          <select id="birthdayDay">
+          <select id="birthdayDay" aria-label="Birthday day">
             <option value="">Day</option>
           </select>
         </div>
@@ -134,7 +138,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
 
     <div class="form-card" style="margin-top:24px;">
-      <h3 style="margin-bottom:6px;">Alerts</h3>
+      <h2 style="margin-bottom:6px;">Alerts</h2>
       <p style="font-size:0.87rem; color:var(--ink-soft); margin-bottom:16px;" id="alertsStatus">Checking…</p>
       <button type="button" class="btn btn-outline btn-sm" id="alertsToggleBtn">Enable Alerts</button>
     </div>
@@ -145,6 +149,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -179,7 +185,7 @@ async function loadVolunteerAssignments() {
         <h4 style="margin:0 0 10px;">You've been asked to serve</h4>
         ${pending.map(a => `
           <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line);">
-            <span style="font-size:0.9rem;"><strong>${roleLabels[a.role] || a.role}</strong> — ${escapeHtml(a.event.title)} (${a.event.date})</span>
+            <span style="font-size:0.9rem;"><strong>${roleLabels[a.role] || a.role}</strong>: ${escapeHtml(a.event.title)} (${a.event.date})</span>
             <span style="display:flex; gap:6px; flex-shrink:0;">
               <button type="button" class="btn btn-primary btn-sm" data-vol-respond="${a.id}" data-status="confirmed">Confirm</button>
               <button type="button" class="btn btn-outline btn-sm" data-vol-respond="${a.id}" data-status="declined">Decline</button>
@@ -192,10 +198,10 @@ async function loadVolunteerAssignments() {
       await fetchJSON(`/api/member/volunteer-assignments/${btn.dataset.volRespond}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: btn.dataset.status })
       });
-      showToast(btn.dataset.status === 'confirmed' ? 'Confirmed — thank you!' : 'Marked as declined.', 'success');
+      showToast(btn.dataset.status === 'confirmed' ? 'Confirmed, thank you!' : 'Marked as declined.', 'success');
       loadVolunteerAssignments();
     }));
-  } catch (e) { /* non-critical — profile page still works without this */ }
+  } catch (e) { /* non-critical - profile page still works without this */ }
 }
 
 function renderProfileTopRow() {
@@ -211,7 +217,7 @@ function renderProfileTopRow() {
         <div class="profile-avatar">
           ${m.profileImageFileId ? `<img src="/api/files/${m.profileImageFileId}" alt="${escapeHtml(m.name)}">` : `<span class="initial">${escapeHtml((m.name || '?').charAt(0))}</span>`}
         </div>
-        <label class="avatar-camera-btn" for="profileImage" title="Change photo">📷</label>
+        <label class="avatar-camera-btn" for="profileImage" title="Change photo"></label>
       </div>
     </div>
   `;
@@ -237,7 +243,7 @@ async function renderMemberStanding() {
   // works through; this just says where the person reading it stands today.
   el.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 10px;">Where You Stand</h3>
+      <h2 style="margin:0 0 10px;">Where You Stand</h2>
       <div style="display:flex; align-items:center; gap:11px; margin-bottom:10px;">
         <span style="width:11px; height:11px; border-radius:50%; background:var(--flame-gold); flex:none;
           box-shadow:0 0 0 4px rgba(232,151,30,0.18);"></span>
@@ -254,7 +260,7 @@ async function renderMemberStanding() {
     </div>
 
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 10px;">${(d.departments || []).length > 1 ? 'Where You Serve' : 'Your Department'}</h3>
+      <h2 style="margin:0 0 10px;">${(d.departments || []).length > 1 ? 'Where You Serve' : 'Your Department'}</h2>
       ${(d.departments || []).length ? `
         ${d.departments.map(dep => `
           <div style="padding:14px 0; border-bottom:1px solid var(--line);">
@@ -300,7 +306,7 @@ async function renderMemberStanding() {
 }
 
 // What this member has signed up for. Registering worked; seeing what you had
-// signed up for did not — "My Events" went to the same events page everyone
+// signed up for did not - "My Events" went to the same events page everyone
 // else sees.
 async function renderMyEvents() {
   const el = document.getElementById('myEvents');
@@ -329,7 +335,7 @@ async function renderMyEvents() {
 
   el.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 10px;">You Are Signed Up For</h3>
+      <h2 style="margin:0 0 10px;">You Are Signed Up For</h2>
       ${upcoming.length ? upcoming.map(row).join('') : '<p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">Nothing coming up that you have registered for.</p>'}
       ${past.length ? `
         <details style="margin-top:12px;">
@@ -343,11 +349,11 @@ async function renderMyEvents() {
 function renderQuickPills() {
   document.getElementById('quickPills').innerHTML = `
     <div class="quick-pills">
-      <a href="/card.html" class="quick-pill"><span class="qp-icon">🪪</span>Membership Card</a>
-      <a href="/events.html" class="quick-pill"><span class="qp-icon">🎟️</span>My Events</a>
-      <a href="/prayer.html" class="quick-pill"><span class="qp-icon">🙏</span>Prayer Wall</a>
-      <a href="/sermon-notes.html" class="quick-pill"><span class="qp-icon">📝</span>Sermon Notes</a>
-      <a href="/departments.html" class="quick-pill"><span class="qp-icon">🤝</span>Departments</a>
+      <a href="/card.html" class="quick-pill">Membership Card</a>
+      <a href="/events.html" class="quick-pill">My Events</a>
+      <a href="/prayer.html" class="quick-pill">Prayer Wall</a>
+      <a href="/sermon-notes.html" class="quick-pill">Sermon Notes</a>
+      <a href="/departments.html" class="quick-pill">Departments</a>
     </div>
   `;
 }
@@ -470,7 +476,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
 // An alumnus's own entry in Alumni Connect. It appears only for members
 // Shepherding has marked as alumni, and nothing here is published until they
-// tick "List me" — writing the entry and publishing it are separate acts.
+// tick "List me" - writing the entry and publishing it are separate acts.
 (async () => {
   const wrap = document.getElementById('alumniListing');
   if (!wrap) return;
@@ -483,7 +489,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   const yes = (v) => v ? 'checked' : '';
   wrap.innerHTML = `
     <div class="form-card" style="margin-bottom:18px;">
-      <h3 style="margin:0 0 6px;">Your Alumni Connect listing</h3>
+      <h2 style="margin:0 0 6px;">Your Alumni Connect listing</h2>
       <p style="margin:0 0 16px; color:var(--ink-soft); font-size:0.88rem; line-height:1.55;">
         Members across every ACONSU chapter can look you up by what you do. Nothing
         below is shown to anyone until you tick <strong>List me</strong>, and you can
@@ -579,7 +585,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 })();
 
 // Alerts live here, in the member's own settings, rather than as a banner on
-// the notifications page — one place to turn them on, and it stays out of the
+// the notifications page - one place to turn them on, and it stays out of the
 // way of people who have already decided.
 (async function initAlertsToggle() {
   const status = document.getElementById('alertsStatus');
@@ -588,7 +594,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   async function refresh() {
     const subscribed = await isPushSubscribed();
     status.textContent = subscribed
-      ? "Alerts are on — you'll hear about events and announcements even when the app is closed."
+      ? "Alerts are on. You'll hear about events and announcements even when the app is closed."
       : 'Alerts are off. Turn them on to hear about events and announcements when the app is closed.';
     btn.textContent = subscribed ? 'Turn Alerts Off' : 'Enable Alerts';
     btn.onclick = async () => {

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chapter — ACONSU</title>
+<title>Chapter | ACONSU</title>
 <script>
 /* Set the theme before the first paint. A page that renders light and then
    flips to dark is worse than one that never offered dark at all. Inline and
@@ -12,7 +12,9 @@
 if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
 document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </script>
-<link rel="icon" href="/images/logo.jpg">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#5B2C82">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
@@ -24,7 +26,9 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </head>
 <body class="has-side-rail">
 
+<a class="skip-link" href="#main">Skip to content</a>
 <header id="site-header"></header>
+<main id="main" tabindex="-1">
 
 <div id="deptBanner"></div>
 
@@ -32,10 +36,12 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <div class="container" style="max-width:980px;">
     <a href="/departments.html" class="back-link">&larr; All Chapters</a>
     <div id="deptDetail">
-      <p class="empty-state">Loading chapter...</p>
+      <div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
     </div>
   </div>
 </section>
+
+</main>
 
 <footer class="site-footer" id="site-footer"></footer>
 
@@ -57,14 +63,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       ]);
       const departments = (allDepartments || []).filter(d => d.chapterId === chapterId);
       const executives = (allExecs || []).filter(e => e.chapterId === chapterId);
-      document.title = `${chapter.name} — ACONSU`;
+      document.title = `${chapter.name} | ACONSU`;
 
       if (chapter.headerImageFileId) {
         document.getElementById('deptBanner').innerHTML = `
           <div class="dept-banner">
             <img src="/api/files/${chapter.headerImageFileId}" alt="${escapeHtml(chapter.name)}">
             <div class="dept-banner-overlay">
-              <p class="eyebrow" style="color:rgba(255,255,255,0.8);">Chapter</p>
               <h1>${escapeHtml(chapter.name)}</h1>
               <p>${escapeHtml(chapter.fullName || chapter.location || '')}</p>
             </div>
@@ -74,15 +79,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
       detailEl.innerHTML = `
         ${chapter.headerImageFileId ? '' : `
-          <p class="eyebrow">Chapter</p>
           <h1>${escapeHtml(chapter.name)}</h1>
           <p style="color:var(--ink-soft); font-size:1.05rem;">${escapeHtml(chapter.fullName || chapter.institution || '')}</p>`}
         <div class="card" style="margin:28px 0;">
           <h3 style="margin-bottom:16px;">Chapter Overview</h3>
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
-            <div><div class="eyebrow">Institution</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.institution || 'Not specified')}</p></div>
-            <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.location || 'Not specified')}</p></div>
-            <div><div class="eyebrow">Address</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.address || 'Not specified')}</p></div>
+            <div><div class="field-label">Institution</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.institution || 'Not specified')}</p></div>
+            <div><div class="field-label">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.location || 'Not specified')}</p></div>
+            <div><div class="field-label">Address</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.address || 'Not specified')}</p></div>
           </div>
         </div>
 
@@ -121,13 +125,12 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       `;
     } else if (deptId) {
       const dept = await fetchJSON(`/api/departments/${deptId}`);
-      document.title = `${dept.name} — ACONSU`;
+      document.title = `${dept.name} | ACONSU`;
       if (dept.headerImageFileId) {
         document.getElementById('deptBanner').innerHTML = `
           <div class="dept-banner">
             <img src="/api/files/${dept.headerImageFileId}" alt="${escapeHtml(dept.name)}">
             <div class="dept-banner-overlay">
-              <p class="eyebrow" style="color:rgba(255,255,255,0.8);">Department</p>
               <h1>${escapeHtml(dept.name)}</h1>
               <p>${escapeHtml(dept.tagline || '')}</p>
             </div>
@@ -136,16 +139,15 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       }
       detailEl.innerHTML = `
         ${dept.headerImageFileId ? '' : `
-          <p class="eyebrow">Department</p>
           <h1>${escapeHtml(dept.name)}</h1>
           <p style="color:var(--ink-soft); font-size:1.05rem;">${escapeHtml(dept.tagline || '')}</p>`}
         <div class="card" style="margin:28px 0;">
           <h3 style="margin-bottom:16px;">Meeting Information</h3>
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
-            <div><div class="eyebrow">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
-            <div><div class="eyebrow">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
-            <div><div class="eyebrow">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
-            ${dept.leaderName ? `<div><div class="eyebrow">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leaderName)}</p>${dept.leaderRole ? `<p class="tiny muted" style="margin:2px 0 0;">${escapeHtml(dept.leaderRole)}</p>` : ''}</div>` : ''}
+            <div><div class="field-label">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
+            <div><div class="field-label">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
+            <div><div class="field-label">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
+            ${dept.leaderName ? `<div><div class="field-label">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leaderName)}</p>${dept.leaderRole ? `<p class="tiny muted" style="margin:2px 0 0;">${escapeHtml(dept.leaderRole)}</p>` : ''}</div>` : ''}
           </div>
         </div>
         <p style="color:var(--ink-soft);">${escapeHtml(dept.description)}</p>

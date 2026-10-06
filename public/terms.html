@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terms of use | ACONSU</title>
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .policy { max-width: 760px; margin: 0 auto; }
+  .policy h2 { margin: 34px 0 12px; font-size: 1.25rem; color: var(--brand); }
+  .policy h3 { margin: 22px 0 8px; font-size: 1rem; color: var(--brand-strong); }
+  .policy p, .policy li { color: var(--ink-soft); line-height: 1.7; }
+  .policy ul { margin: 10px 0 10px 20px; }
+  .policy li { margin-bottom: 7px; }
+  .policy .note {
+    background: var(--lilac-light);
+    border: 1px solid var(--line);
+    padding: 14px 18px; border-radius: var(--radius); margin: 18px 0;
+  }
+  .policy table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
+  .policy th, .policy td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .policy th { color: var(--brand); font-weight: 700; }
+</style>
+</head>
+<body class="has-side-rail">
+
+<a class="skip-link" href="#main">Skip to content</a>
+<header id="site-header"></header>
+<main id="main" tabindex="-1">
+
+<section class="hero hero-compact">
+  <div class="hero-content">
+    <h1>Terms of use</h1>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container policy">
+    <p><strong>Last updated:</strong> 6 October 2026</p>
+
+    <p>
+      These terms apply when you use the ACONSU app and web service run by The Apostles'
+      Continuation Students Union and its chapters ("ACONSU", "we"). By creating an account or
+      using the service you agree to them and to our <a href="/privacy.html">privacy policy</a>.
+      If you do not agree, please do not use it.
+    </p>
+
+    <h2>Your account</h2>
+    <ul>
+      <li>Give true details, and keep your password to yourself. You are responsible for what is done with your account.</li>
+      <li>Creating an account makes you a visitor. The Shepherding team decides when someone becomes a member.</li>
+      <li>You must be at least 18, or have a parent or guardian agree to you using the service.</li>
+      <li>You can close your account at any time by asking through the <a href="/contact.html">contact page</a>.</li>
+    </ul>
+
+    <h2>How to behave</h2>
+    <p>Chat, groups, the prayer wall, testimonies and alumni entries are shared with other people. Do not post anything that is:</p>
+    <ul>
+      <li>abusive, threatening, or aimed at hurting or embarrassing someone;</li>
+      <li>untrue about a real person, or someone else's private information;</li>
+      <li>sexual, violent, hateful or unlawful;</li>
+      <li>advertising, spam, or a link to somewhere harmful.</li>
+    </ul>
+    <p>
+      Leaders may remove content and may suspend an account that breaks these rules. Do not try
+      to get into parts of the service you have not been given, or to disrupt it.
+    </p>
+
+    <h2>What you post</h2>
+    <p>
+      You keep ownership of what you post. By posting it you allow ACONSU to show it where you
+      chose to show it (for example on the prayer wall, in a group, or on the Alumni wall) and to
+      keep it while it is needed for that. A prayer request marked private or anonymous is not
+      shown with your name. You can ask for something you posted to be removed.
+    </p>
+
+    <h2>Giving</h2>
+    <p>
+      The app does not take payments. It shows you where to send a gift and lets you log that you
+      sent it. See <a href="/refunds.html">Giving and refunds</a>.
+    </p>
+
+    <h2>Our content</h2>
+    <p>
+      The ACONSU name, logo, sermons, studies and other materials belong to ACONSU or to the
+      people who made them. You may use them for your own worship and study and share links to
+      them, but not sell them or present them as your own. Scripture text comes from the
+      translation named beside it.
+    </p>
+
+    <h2>Availability</h2>
+    <p>
+      We run this service for free on shared hosting and it may be slow, change or be unavailable
+      at times. We try to keep it correct, but we give no promise that it will always work or be
+      free of errors. To the extent the law allows, we are not responsible for loss that results
+      from using it or from content other users post.
+    </p>
+
+    <h2>Changes and law</h2>
+    <p>
+      We may change these terms. The date above shows when. If a change matters to you, we will
+      say so in the app. These terms are governed by the laws of Ghana, and the courts of Ghana
+      will hear any dispute.
+    </p>
+
+    <h2>Contact</h2>
+    <p>Use the <a href="/contact.html">contact page</a>.</p>
+
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async () => {
+  await initLayout('/terms.html');
+})();
+</script>
+</body>
+</html>
