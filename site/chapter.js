@@ -20,7 +20,7 @@ window.CHAPTER = {
   fullName: "The Apostles' Continuation Students Union",
   institution: 'Kwame Nkrumah University of Science and Technology',
   location: 'Kumasi, Ghana',
-  tagline: 'The Apostles\' Continuation Students Union at KNUST',
+  tagline: 'ACONSU!! THE APOSTLES!!!',
 
   // Shown under the name on the opening screen. One or two sentences.
   lede: 'We are a Christian fellowship of KNUST students. We hold services on Sundays and Thursdays, pray together on Tuesdays and study the Bible during the week. Everyone is welcome.',
