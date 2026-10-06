@@ -20,7 +20,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/portal.css">
 <style>
   .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0; }
-  .filter-btn { padding:6px 14px; border-radius:6px; border:1px solid var(--line); background:var(--surface); font-size:0.85rem; font-weight:600; cursor:pointer; color:var(--purple-ink); transition:all 0.15s ease; }
+  .filter-btn { padding:6px 14px; border-radius:6px; border:1px solid var(--line); background:var(--surface); font-size:0.85rem; font-weight:600; cursor:pointer; color:var(--ink); transition:all 0.15s ease; }
   .filter-btn.active, .filter-btn:hover { background:var(--purple-deep); color:#fff; border-color:var(--brand); }
   .preview-box { display:flex; align-items:center; gap:12px; margin-top:8px; padding:10px; background:#f9f6fc; border-radius:8px; border:1px dashed var(--line); }
   .preview-box img { width:60px; height:60px; object-fit:cover; border-radius:6px; }
@@ -119,7 +119,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <label for="imageFile">Cover / Flyer Photo</label>
           <input type="file" id="imageFile" accept="image/*">
           <div id="imagePreviewBox" class="preview-box" style="display:none;">
-            <img id="currentImageThumb" src="" alt="Thumbnail">
+            <img id="currentImageThumb" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="Thumbnail">
             <div>
               <span id="imageFileName" style="font-weight:600; font-size:0.85rem;">Attached image</span>
               <br><small class="muted">Upload a new file above to replace.</small>

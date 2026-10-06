@@ -42,7 +42,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="group" style="padding-bottom:32px;">
+<section class="hero" data-art="gather" data-hero-page="group">
   <div class="hero-content" id="groupHero">
     <h1>Loading...</h1>
   </div>
@@ -50,7 +50,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
-    <div id="groupBody"><p class="empty-state">Loading...</p></div>
+    <div id="groupBody"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
 </section>
 
@@ -177,7 +177,7 @@ function openEditGroupForm() {
 
 async function renderPosts(body) {
   if (!currentMember) { body.innerHTML = '<p class="empty-state">Log in and join this group to see its discussion.</p>'; return; }
-  body.innerHTML = '<p class="empty-state">Loading...</p>';
+  body.innerHTML = '<div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>';
   try {
     const posts = await fetchJSON(`/api/groups/${groupId}/posts`);
     body.innerHTML = `
@@ -219,7 +219,7 @@ async function renderPosts(body) {
 
 async function renderMeetings(body) {
   if (!currentMember) { body.innerHTML = '<p class="empty-state">Log in and join this group to see its meetings.</p>'; return; }
-  body.innerHTML = '<p class="empty-state">Loading...</p>';
+  body.innerHTML = '<div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>';
   try {
     const meetings = await fetchJSON(`/api/groups/${groupId}/meetings`);
     body.innerHTML = `

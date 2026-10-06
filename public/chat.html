@@ -25,7 +25,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .topic-card { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:10px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; }
-  .topic-card:hover { box-shadow:0 8px 20px rgba(58,27,84,0.1); }
+  .topic-card:hover { box-shadow:0 8px 20px rgba(0,0,0,0.1); }
   .chat-message { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:8px; }
   .chat-message .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
   .chat-message .when { font-size:0.74rem; color:var(--ink-faint); }
@@ -39,7 +39,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="chat" style="padding-bottom:36px;">
+<section class="hero" data-art="gather" data-hero-page="chat">
   <div class="hero-content">
     <h1>Community</h1>
   </div>
@@ -49,7 +49,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <div class="container" style="max-width:700px;">
     <div id="topicListView">
       <button class="btn btn-primary btn-sm" id="newTopicBtn" style="margin-bottom:18px;">+ Start a Discussion</button>
-      <div id="topicList"><p class="empty-state">Loading...</p></div>
+      <div id="topicList"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
     </div>
     <div id="topicDetailView" style="display:none;">
       <button class="btn btn-outline btn-sm" id="backToTopicsBtn" style="margin-bottom:16px;">&larr; All Discussions</button>
@@ -103,7 +103,7 @@ async function openTopic(id, title) {
 
 async function loadMessages() {
   const list = document.getElementById('messagesList');
-  list.innerHTML = '<p class="empty-state">Loading...</p>';
+  list.innerHTML = '<div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>';
   try {
     const messages = await fetchJSON(`/api/chat/topics/${currentTopicId}/messages`);
     list.innerHTML = messages.map(m => `

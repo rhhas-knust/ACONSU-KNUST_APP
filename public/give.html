@@ -37,7 +37,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="harvest" data-hero-page="give" style="padding-bottom:36px;">
+<section class="hero" data-art="harvest" data-hero-page="give">
   <div class="hero-content">
     <h1>Give</h1>
   </div>
@@ -45,10 +45,10 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:640px;">
-    <div id="payInfo"><p class="empty-state">Loading...</p></div>
+    <div id="payInfo"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
 
     <form class="form-card" id="giveForm" style="display:none;">
-      <h3 style="margin-bottom:6px;">Log Your Gift</h3>
+      <h2 style="margin-bottom:6px; font-size:1.2rem;">Log your gift</h2>
       <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">After sending via MoMo/bank using the details above, tell us here: Finance confirms it against the books.</p>
       <div class="field"><label for="amount">Amount (GH₵)</label><input type="number" id="amount" min="0.01" step="0.01" required></div>
       <div class="field"><label for="purpose">Purpose</label>
@@ -69,7 +69,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div class="section-head" style="margin-top:40px;">
       <h2>History</h2>
     </div>
-    <div id="giveHistory"><p class="empty-state">Loading...</p></div>
+    <div id="giveHistory"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
 </section>
 
@@ -147,7 +147,7 @@ async function loadHistory() {
         const momoName = toWelfare ? p.welfareMomoName : p.momoName;
         document.getElementById('payInfo').innerHTML = `
           <div class="pay-details">
-            <h3 style="margin-bottom:4px;">${escapeHtml(info.chapterName)}</h3>
+            <h2 style="margin-bottom:4px; font-size:1.2rem;">${escapeHtml(info.chapterName)}</h2>
             ${toWelfare
               ? `<p class="pill amber" style="margin:6px 0 12px;">Tithe goes to the Welfare account</p>`
               : ''}

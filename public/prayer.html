@@ -25,7 +25,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .prayer-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
-  .prayer-card p.request-text { margin:8px 0 12px; color:var(--purple-ink); line-height:1.5; }
+  .prayer-card p.request-text { margin:8px 0 12px; color:var(--ink); line-height:1.5; }
   .prayer-card .row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
   .prayer-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
   .pray-btn { border:2px solid var(--purple-deep); background:var(--surface); color:var(--brand); border-radius:6px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
@@ -42,7 +42,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="flame" data-hero-page="prayer" style="padding-bottom:48px;">
+<section class="hero" data-art="flame" data-hero-page="prayer">
   <div class="hero-content">
     <h1>Prayer Wall</h1>
   </div>
@@ -86,7 +86,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <p class="lede">Requests shared publicly by the community. Tap to let someone know you're praying for them.</p>
     </div>
     <div id="prayerWallList" style="display:grid; gap:14px; margin-bottom:48px;">
-      <p class="empty-state">Loading...</p>
+      <div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
     </div>
   </div>
 </section>

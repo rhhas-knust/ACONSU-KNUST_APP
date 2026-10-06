@@ -25,7 +25,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="stylesheet" href="/css/style.css">
 <style>
   .study-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px; cursor:pointer; transition:box-shadow 0.15s ease; }
-  .study-card:hover { box-shadow:0 10px 24px rgba(58,27,84,0.12); }
+  .study-card:hover { box-shadow:0 10px 24px rgba(0,0,0,0.12); }
   .study-card h3 { margin:0 0 4px; }
   .study-card .meta { font-size:0.82rem; color:var(--ink-faint); margin-bottom:8px; }
   .study-detail { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:26px; }
@@ -40,7 +40,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="word" data-hero-page="bible-study" style="padding-bottom:40px;">
+<section class="hero" data-art="word" data-hero-page="bible-study">
   <div class="hero-content">
     <h1>Bible Study</h1>
   </div>
@@ -49,7 +49,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
     <div id="studyListView">
-      <div id="studyList"><p class="empty-state">Loading...</p></div>
+      <div id="studyList"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
     </div>
     <div id="studyDetailView" style="display:none;">
       <button class="btn btn-outline btn-sm" id="backToListBtn" style="margin-bottom:18px;">&larr; All Studies</button>

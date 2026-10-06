@@ -182,7 +182,7 @@ async function openPanel(key) {
   document.querySelectorAll('#portalNav button').forEach(b => b.classList.toggle('active', b.dataset.panel === key));
   document.querySelectorAll('.portal-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${key}`));
   const el = document.getElementById(`panel-${key}`);
-  el.innerHTML = '<p class="empty-state">Loading…</p>';
+  el.innerHTML = skeletonHtml();
   try {
     await panel.render(el);
   } catch (err) {

@@ -128,7 +128,7 @@ async function renderCouncilDiscussion(el) {
             ? `<button class="danger" data-remove="${escapeHtml(t.id)}">Remove</button>` : ''}
         </div>
         ${(t.replies || []).length ? `
-          <div style="border-left:3px solid var(--line); padding-left:12px;">
+          <div style="padding-left:0;">
             ${t.replies.map(r => `
               <div style="margin-bottom:12px;">
                 <div>${authorLine(r)}</div>

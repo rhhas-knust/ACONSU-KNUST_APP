@@ -366,7 +366,7 @@ async function loadPanel(name) {
 // instead of sitting on "Loading..." for good.
 async function renderChapterPanel(id, draw) {
   const el = document.getElementById(id);
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   try { await draw(el); }
   catch (e) { el.innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'Could not load this.')}</p>`; }
 }
@@ -494,7 +494,7 @@ function subscribeOverviewStream(chapterId) {
 
 async function renderOverview() {
   const el = document.getElementById('panel-overview');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   closeOverviewStream();
   // The operational dashboard is a chapter's dashboard - there is no
   // meaningful cross-chapter version of "this week's attendance", and running
@@ -572,7 +572,7 @@ const resourcePageState = {};
 
 async function renderResourcePanel(resource, fields, singular) {
   const el = document.getElementById(`panel-${resource}`);
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const items = await fetchJSON(`/api/${resource}`);
   const page = resourcePageState[resource] || 1;
   const pageItems = paginate(items, page, ROWS_PER_PAGE);
@@ -729,7 +729,7 @@ const MEMBER_BACKED_STAFF_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'sh
 
 async function renderStaffAccounts() {
   const el = document.getElementById('panel-staff');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const users = await fetchJSON('/api/admin/staff');
 
   el.innerHTML = `
@@ -1007,7 +1007,7 @@ const ROWS_PER_PAGE = 15;
 
 async function renderJoinRequests() {
   const el = document.getElementById('panel-joinRequests');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const [items, departments] = await Promise.all([
     fetchJSON('/api/admin/join-requests'),
     fetchJSON('/api/departments')
@@ -1053,7 +1053,7 @@ async function renderJoinRequests() {
 let prayerReqPage = 1;
 async function renderPrayerRequests() {
   const el = document.getElementById('panel-prayerRequests');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const items = await fetchJSON('/api/admin/prayer-requests');
   const pageItems = paginate(items, prayerReqPage, ROWS_PER_PAGE);
   el.innerHTML = `
@@ -1095,7 +1095,7 @@ async function renderPrayerRequests() {
 let testimoniesPage = 1;
 async function renderTestimonies() {
   const el = document.getElementById('panel-testimonies');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const items = await fetchJSON('/api/admin/testimonies');
   const pageItems = paginate(items, testimoniesPage, ROWS_PER_PAGE);
   el.innerHTML = `
@@ -1137,7 +1137,7 @@ async function renderTestimonies() {
 let contactMsgPage = 1;
 async function renderContactMessages() {
   const el = document.getElementById('panel-contactMessages');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const items = await fetchJSON('/api/admin/contact-messages');
   const pageItems = paginate(items, contactMsgPage, ROWS_PER_PAGE);
   el.innerHTML = `
@@ -1167,7 +1167,7 @@ async function renderContactMessages() {
 let notifHistoryPage = 1;
 async function renderNotifications() {
   const el = document.getElementById('panel-notifications');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const items = await fetchJSON('/api/notifications');
 
   el.innerHTML = `
@@ -1244,7 +1244,7 @@ async function renderNotifications() {
 // ---------- Bible Study (section 16) ----------
 async function renderBibleStudies() {
   const el = document.getElementById('panel-bibleStudies');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const studies = await fetchJSON('/api/bible-studies');
 
   el.innerHTML = `
@@ -1323,7 +1323,7 @@ const GROUP_TYPE_LABELS = { bible_study: 'Bible Study', prayer: 'Prayer', fellow
 
 async function renderGroupsAdmin() {
   const el = document.getElementById('panel-groups');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const [groups, members] = await Promise.all([fetchJSON('/api/groups'), fetchJSON('/api/admin/members')]);
 
   el.innerHTML = `
@@ -1419,7 +1419,7 @@ const WELFARE_STATUS_LABELS = { submitted: 'Submitted', under_review: 'Under Rev
 
 async function renderWelfareAdmin() {
   const el = document.getElementById('panel-welfare');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   try {
     const items = await fetchJSON('/api/welfare/requests');
     el.innerHTML = `
@@ -1483,7 +1483,7 @@ async function renderWelfareAdmin() {
 // ---------- Community Chat moderation (section 19) ----------
 async function renderChatModeration() {
   const el = document.getElementById('panel-chatModeration');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   let topics;
   try { topics = await fetchJSON('/api/chat/topics'); }
   catch (e) {
@@ -1551,7 +1551,7 @@ const MEMBERS_PER_PAGE = 15;
 
 async function renderMembers() {
   const el = document.getElementById('panel-members');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const members = await fetchJSON('/api/admin/members');
   const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const bday = (m) => m.birthdayMonth && m.birthdayDay ? `${monthNames[m.birthdayMonth]} ${m.birthdayDay}` : '-';
@@ -1659,7 +1659,7 @@ function openMemberEditForm(member) {
 
 async function renderExecutives() {
   const el = document.getElementById('panel-executives');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const [execs, applications, positionList, departments] = await Promise.all([
     fetchJSON('/api/executives'),
     fetchJSON('/api/admin/executive-applications').catch(() => []),
@@ -2014,7 +2014,7 @@ const MEDIA_PER_PAGE = 12;
 let MEDIA_PLACEMENTS = { placements: [], departments: [], pages: [] };
 async function renderMediaLibrary() {
   const el = document.getElementById('panel-media');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const [files, pages, placementData] = await Promise.all([
     fetchJSON('/api/files'),
     fetchJSON('/api/pages'),
@@ -2053,7 +2053,7 @@ async function renderMediaLibrary() {
           <small class="hint">The heading sits on top of the picture, so this is what keeps it readable.</small>
         </div>
 
-        <div id="placementExplain" style="background:var(--lilac-light); border-left:3px solid var(--flame-gold); border-radius:8px; padding:12px 14px; font-size:0.85rem; color:var(--purple-rich); margin-bottom:18px;"></div>
+        <div id="placementExplain" style="background:var(--lilac-light); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:0.85rem; color:var(--purple-rich); margin-bottom:18px;"></div>
 
         <div class="field-row">
           <div class="field">
@@ -2399,7 +2399,7 @@ async function viewFormSubmissions(formId) {
 
 async function renderFormsAdmin() {
   const el = document.getElementById('panel-forms');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   try {
     const forms = await fetchJSON('/api/admin/forms');
     el.innerHTML = `
@@ -2493,7 +2493,7 @@ async function renderReportsPanel() {
 
 async function renderSettings() {
   const el = document.getElementById('panel-settings');
-  el.innerHTML = '<p class="empty-state">Loading...</p>';
+  el.innerHTML = skeletonHtml();
   const settings = await fetchJSON('/api/settings?global=1');
   CURRENT_SETTINGS = settings;
   const fields = [
@@ -2550,7 +2550,7 @@ async function renderSettings() {
 // ---------- Chapter-Scoped Site Settings (Phase 1) ----------
 async function renderChapterSettings() {
   const el = document.getElementById('panel-chapterSettings');
-  el.innerHTML = '<p class="empty-state">Loading Chapter Settings...</p>';
+  el.innerHTML = skeletonHtml();
   try {
     const [data, smsSetup] = await Promise.all([
       fetchJSON('/api/admin/chapter-settings'),

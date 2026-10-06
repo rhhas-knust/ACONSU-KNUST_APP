@@ -30,7 +30,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="calm" data-hero-page="page" style="padding-bottom:48px;">
+<section class="hero" data-art="calm" data-hero-page="page">
   <div class="hero-content">
     <h1 id="pageTitle">Loading...</h1>
     <p class="lede" id="pageDescription"></p>
@@ -39,7 +39,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section style="padding-top:0;">
   <div class="container" id="pageBody">
-    <p class="empty-state">Loading...</p>
+    <div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>
   </div>
 </section>
 

@@ -27,7 +27,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .note-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin-bottom:14px; }
   .note-card h4 { margin:0 0 4px; }
   .note-card .meta { font-size:0.8rem; color:var(--ink-faint); margin-bottom:10px; }
-  .note-card .body-text { white-space:pre-wrap; font-size:0.92rem; line-height:1.55; color:var(--purple-ink); }
+  .note-card .body-text { white-space:pre-wrap; font-size:0.92rem; line-height:1.55; color:var(--ink); }
   .note-card .row-actions { margin-top:12px; display:flex; gap:8px; }
   .note-card .row-actions button { border:none; background:var(--lilac-mid); color:var(--brand-strong); padding:6px 12px; border-radius:7px; font-size:0.78rem; font-weight:700; cursor:pointer; }
   .note-card .row-actions button.danger { background:var(--bad-bg); color:var(--bad-ink); }
@@ -46,7 +46,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <p class="lede">Private to you. Save what stood out and come back to it anytime.</p>
     </div>
     <button class="btn btn-primary" id="newNoteBtn" style="margin-bottom:24px;">+ New Sermon Note</button>
-    <div id="notesList"><p class="empty-state">Loading...</p></div>
+    <div id="notesList"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
 </section>
 

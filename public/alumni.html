@@ -66,7 +66,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .ask .preview { width:96px; height:96px; border-radius:50%; object-fit:cover; margin-top:10px; display:block; border:2px solid var(--line); }
   .ask-done { text-align:center; padding:28px 18px; }
   .ask-done h3 { margin-bottom:8px; }
-  .locked { background:var(--lilac-light); border-left:3px solid var(--flame-gold); border-radius:0 10px 10px 0; padding:18px 20px; }
+  .locked { background:var(--lilac-light); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; }
   .locked p { margin:0; color:var(--ink-soft); line-height:1.6; font-size:0.9rem; }
 </style>
 </head>
@@ -76,7 +76,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="alumni" style="padding-bottom:44px;">
+<section class="hero" data-art="gather" data-hero-page="alumni">
   <div class="hero-content">
     <h1>Alumni Connect</h1>
   </div>
@@ -117,7 +117,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <label for="alPhoto">A photo of you</label>
           <input type="file" id="alPhoto" accept="image/*" required>
           <p class="hint">A clear picture of your face. Taken straight from your phone is fine, we make it small for you.</p>
-          <img class="preview" id="alPreview" alt="" hidden>
+          <img class="preview" id="alPreview" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="" hidden>
         </div>
         <div class="field">
           <label for="alAbout">A few words about you</label>

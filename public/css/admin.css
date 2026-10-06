@@ -11,7 +11,7 @@
 
 body { background: var(--lilac-light); }
 .admin-shell { display: none; }
-.admin-topbar { background: var(--purple-rich); color: #fff; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(58,27,84,0.12); }
+.admin-topbar { background: var(--purple-rich); color: #fff; padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; box-shadow: 0 2px 10px rgba(0,0,0,0.12); }
 .admin-topbar-left { display: flex; align-items: center; gap: 14px; }
 .admin-topbar-right { display: flex; align-items: center; gap: 12px; }
 .mobile-nav-toggle, .mobile-actions-toggle { display: none; }
@@ -44,7 +44,7 @@ body { background: var(--lilac-light); }
 body.oversight-only .admin-panel :is(input, select, textarea):disabled { opacity: 0.75; cursor: default; }
 .kpi-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); margin-bottom: 18px; }
 .kpi-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer; }
-.kpi-card:hover { border-color: #d2c3de; box-shadow: 0 6px 20px rgba(58,27,84,0.08); }
+.kpi-card:hover { border-color: #d2c3de; box-shadow: 0 6px 20px rgba(0,0,0,0.08); }
 .kpi-card .kpi-label { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-faint); font-weight: 700; }
 .kpi-card .kpi-value { margin: 8px 0 6px; font-size: 1.7rem; color: var(--brand); font-weight: 800; line-height: 1.1; }
 .kpi-card .kpi-trend { font-size: 0.8rem; font-weight: 700; }

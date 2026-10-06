@@ -277,7 +277,7 @@ async function renderExecDeptMembers(el) {
     </div>
 
     ${requests.length ? `
-      <div class="card" style="margin-bottom:18px; border-left:3px solid #E8971E;">
+      <div class="card" style="margin-bottom:18px; background:var(--warn-bg);">
         <h3 style="margin:0 0 4px; font-size:1rem;">Waiting on you</h3>
         <p class="sub" style="margin:0 0 14px;">${requests.length} ${requests.length === 1 ? 'person has' : 'people have'} asked to serve here.</p>
         <div class="table-wrap">

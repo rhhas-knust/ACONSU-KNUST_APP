@@ -36,7 +36,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="flame" data-hero-page="welfare" style="padding-bottom:40px;">
+<section class="hero" data-art="flame" data-hero-page="welfare">
   <div class="hero-content">
     <h1>Welfare</h1>
     <p class="lede">Going through something? Let us know how we can help. This is kept confidential.</p>
@@ -72,12 +72,12 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div class="section-head" style="margin-top:48px;">
       <h2>What Welfare has received from you</h2>
     </div>
-    <div id="myWelfareGiving"><p class="empty-state">Loading...</p></div>
+    <div id="myWelfareGiving"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
 
     <div class="section-head" style="margin-top:48px;">
       <h2>Status</h2>
     </div>
-    <div id="myRequests"><p class="empty-state">Loading...</p></div>
+    <div id="myRequests"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
 </section>
 

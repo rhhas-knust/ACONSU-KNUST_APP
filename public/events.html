@@ -24,7 +24,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
 <style>
-  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--purple-ink); }
+  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--ink); }
   .search-focus-card { border:2px solid var(--purple-deep); box-shadow:0 10px 24px rgba(91,44,130,0.12); }
 </style>
 </head>
@@ -34,7 +34,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="events" style="padding-bottom:48px;">
+<section class="hero" data-art="gather" data-hero-page="events">
   <div class="hero-content">
     <h1>Events</h1>
     <div id="countdownWrap"></div>
@@ -50,7 +50,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <div class="pub-modal-backdrop" id="regModalBackdrop">
   <div class="pub-modal">
-    <h3 id="regModalTitle">Register</h3>
+    <h2 id="regModalTitle">Register</h2>
     <p id="regAutofillNote" style="display:none; font-size:0.85rem; color:var(--ink-soft); margin-bottom:14px;"></p>
     <form id="regForm">
       <div class="field">
@@ -135,7 +135,7 @@ function canRegister(e) {
           <div class="mon">${d.toLocaleDateString('en-US', { month: 'short' })}</div>
         </div>`}
         <div style="flex:1;">
-          <h3 style="margin-bottom:6px;">${escapeHtml(e.title)}</h3>
+          <h2 style="margin-bottom:6px; font-size:1.2rem;">${escapeHtml(e.title)}</h2>
           <p style="font-size:0.9rem; color:var(--ink-soft); margin-bottom:6px;">${formatDate(e.date)} · ${e.time}, ${escapeHtml(e.location)}</p>
           <p style="font-size:0.92rem; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(e.description || '')}</p>
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">

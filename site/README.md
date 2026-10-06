@@ -355,3 +355,13 @@ Open `index.html` in a browser. It works straight off the disk — no server
 needed. What you see is what gets published, with one exception: a browser will
 not read `data/feed.json` from a file on your disk, so the alumni and the theme
 only appear once the site is online. Everything else is exactly as it will be.
+
+
+## Pages, privacy and icons
+
+- `privacy.html`, `terms.html` and `cookies.html` are filled from `chapter.js` (name, location, contact email), so edit that file and they follow.
+- The site sets no cookies and loads nothing from other companies. Its Content-Security-Policy (in the `<meta>` tag at the top of
+  `index.html`) allows only this folder and one address to send the alumni request to. If you change `alumni.requestUrl` in
+  `chapter.js`, change `connect-src` in that tag to match, or the form will be blocked by the browser.
+- Fonts are in `fonts/`. The icons are `favicon.ico`, `favicon-16.png`, `favicon-32.png` and `apple-touch-icon.png`.
+- `heroImageAlt` in `chapter.js` describes the photo beside the heading for people who cannot see it.

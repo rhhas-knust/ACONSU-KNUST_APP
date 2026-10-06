@@ -425,7 +425,7 @@ async function renderLeadershipAccounts(el) {
     ` : ''}
 
     ${unfilled.length ? `
-      <div class="portal-card" style="border-left:4px solid var(--flame-gold, #E8971E);">
+      <div class="portal-card" style="background:var(--warn-bg);">
         <h3>Offices still to fill</h3>
         <p class="hint">Your chapter runs on these. Appoint someone to each and they take the work from there.</p>
         <div class="row-actions" style="flex-wrap:wrap; gap:8px; margin-top:10px;">

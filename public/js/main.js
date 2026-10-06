@@ -1081,6 +1081,11 @@ function showToast(message, type) {
 // Content is simply there when the page is; nothing is hidden until it scrolls into view.
 function initScrollReveal() { /* intentionally empty */ }
 
+// Grey blocks where a list is still loading, so the page does not jump when it arrives.
+function skeletonHtml() {
+  return '<div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div>';
+}
+
 // A table wider than the screen scrolls sideways. A keyboard user can only
 // scroll it if it can take focus, so every scrolling table wrapper gets that, and
 // a name a screen reader can announce. Done once for tables that exist and again

@@ -38,7 +38,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="gather" data-hero-page="groups" style="padding-bottom:40px;">
+<section class="hero" data-art="gather" data-hero-page="groups">
   <div class="hero-content">
     <h1>Groups</h1>
   </div>
@@ -47,7 +47,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section style="padding-top:0;">
   <div class="container" style="max-width:760px;">
     <div class="group-type-filter" id="typeFilter"></div>
-    <div id="groupList"><p class="empty-state">Loading...</p></div>
+    <div id="groupList"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
 </section>
 

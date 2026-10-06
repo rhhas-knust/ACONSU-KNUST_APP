@@ -46,7 +46,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   .bar button.leave { background:#A93226; border-color:#A93226; }
   .call-head { padding:12px 16px; padding-top:calc(12px + env(safe-area-inset-top, 0px)); color:#EFE6F6; display:flex; justify-content:space-between; align-items:center; gap:12px; font-size:0.85rem; }
   .call-head strong { font-family:var(--font-display); font-size:1rem; }
-  .warn { background:rgba(232,151,30,0.14); border-left:3px solid var(--flame-gold); padding:14px 16px; border-radius:0 10px 10px 0; margin-bottom:20px; }
+  .warn { background:rgba(232,151,30,0.14); border:1px solid var(--line); padding:14px 16px; border-radius:var(--radius); margin-bottom:20px; }
   .warn p { margin:0; font-size:0.87rem; color:var(--ink-soft); line-height:1.6; }
 </style>
 </head>
@@ -56,7 +56,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <header id="site-header"></header>
 <main id="main" tabindex="-1">
 
-<section class="hero" data-art="voice" data-hero-page="meet" style="padding-bottom:40px;">
+<section class="hero" data-art="voice" data-hero-page="meet">
   <div class="hero-content">
     <h1>ACONSU Rooms</h1>
     <p class="lede">Small meetings, in the app. Nothing to install, and no link to a service outside the union.</p>
