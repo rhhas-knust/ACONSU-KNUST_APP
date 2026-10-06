@@ -366,6 +366,33 @@ footer a { color: #E9DDF3; }
 .foot-legal { border-top: 1px solid #4A3A5A; margin-top: 18px; padding-top: 16px; font-size: 0.92rem; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .app-watermark { padding-top: 12px; font-size: 0.85rem; color: #C2B0D2; }
 
+/* ---------- movement ---------- */
+/* Only opacity and transform move, nothing lasts longer than 360ms, and everything
+   eases out. The opening plays once, with no script. Later sections wait for
+   motion.js, which adds .reveal only to things that are below the fold. */
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.hero h1 { animation: rise 320ms ease-out both; }
+.hero .lede { animation: rise 320ms ease-out 60ms both; }
+.hero-cta { animation: rise 320ms ease-out 120ms both; }
+.hero-photo { animation: fade 360ms ease-out 80ms both; }
+
+.js .reveal { opacity: 0; transform: translateY(12px); transition: opacity 280ms ease-out, transform 280ms ease-out; transition-delay: calc(var(--i, 0) * 45ms); }
+.js .reveal.in { opacity: 1; transform: none; }
+
+.card, .lead-card, .exec-card, .founder-card, .alumnus { transition: transform 150ms ease-out, border-color 150ms ease-out; }
+.card-photo { transition: transform 300ms ease-out; }
+@media (hover: hover) and (pointer: fine) {
+  .card:hover, .lead-card:hover, .exec-card:hover, .founder-card:hover, .alumnus:hover { transform: translateY(-2px); border-color: var(--brand); }
+  .card.has-photo:hover .card-photo { transform: scale(1.03); }
+  .times li { transition: background-color 150ms ease-out; }
+  .times li:hover { background: var(--surface-2); }
+}
+.top { transition: border-color 150ms ease-out, box-shadow 150ms ease-out; }
+.top.is-scrolled { box-shadow: 0 1px 0 var(--border), 0 6px 14px rgba(0, 0, 0, 0.06); }
+.top nav a[aria-current="true"]:not(.btn) { color: var(--brand); box-shadow: inset 0 -2px 0 var(--brand); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
 /* ---------- loading ---------- */
 /* A grey block where something is still arriving, so the page does not jump
    when it does. Opacity only, and still when the reader asked for less motion. */
@@ -387,6 +414,10 @@ footer a { color: #E9DDF3; }
 .legal-wrap { overflow-x: auto; }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Gentler, not gone: a quick fade still tells you something arrived. */
+  .hero h1, .hero .lede, .hero-cta, .hero-photo { animation: fade 150ms ease-out both; animation-delay: 0s; }
+  .js .reveal { transform: none; transition: opacity 150ms ease-out; transition-delay: 0s; }
+  .card:hover, .lead-card:hover, .exec-card:hover, .founder-card:hover, .alumnus:hover, .card.has-photo:hover .card-photo { transform: none; }
   .btn:active, .socials a:active { transform: none; }
   .skeleton, .is-loading { animation: none; }
   .btn, .socials a, .report-card { transition-duration: 1ms; }
