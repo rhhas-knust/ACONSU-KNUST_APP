@@ -5405,8 +5405,21 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     const withEmoji = userFacing.filter(f => emoji.test(read(f)));
     check('no emoji stands in for an icon', withEmoji.length === 0, withEmoji);
     check('no page carries a decorative label above its heading', !userFacing.some(f => /class="eyebrow/.test(read(f))), null);
-    check('nothing fades or floats in as it scrolls into view',
-      !/IntersectionObserver/.test(read('public/js/main.js')) && !/IntersectionObserver/.test(read('site/site.js')), null);
+    check('the app has nothing that fades or floats in as it scrolls into view', !/IntersectionObserver/.test(read('public/js/main.js')), null);
+    {
+      const motionJs = read('site/motion.js'), siteCss = read('site/styles.css'), siteHtml = read('site/index.html');
+      check('the website eases sections in once, with a script it can do without',
+        /IntersectionObserver/.test(motionJs) && /<script src="motion\.js"><\/script>/.test(siteHtml), null);
+      check('and nothing is hidden in the page itself: the hidden state is added by the script only',
+        !/class="[^"]*\breveal\b/.test(siteHtml) && /\.js \.reveal \{ opacity: 0;/.test(siteCss), null);
+      check('what is already on screen when the page opens is left alone', /Already on screen when the page opened/.test(motionJs), null);
+      const keyframes = (siteCss.match(/@keyframes [a-z-]+ \{[^@]*?\}\s*\}/g) || []).join(' ');
+      check('only opacity and transform ever move', !/(width|height|top|left|margin|padding)\s*:/.test(keyframes) && /@keyframes rise/.test(siteCss), keyframes.slice(0, 120));
+      check('none of it lasts longer than 360ms', (siteCss.match(/(?:animation|transition):[^;]*?(\d+)ms/g) || []).every(m => Math.max(...(m.match(/\d+(?=ms)/g) || [0]).map(Number)) <= 360), null);
+      check('a reader who asked for less motion gets a short fade, not movement',
+        /prefers-reduced-motion: reduce[\s\S]*\.js \.reveal \{ transform: none;/.test(siteCss), null);
+      check('the link for the section being read is marked for assistive technology too', /aria-current/.test(motionJs), null);
+    }
     check('and what moves respects a request for less motion',
       /prefers-reduced-motion: reduce/.test(read('public/css/style.css')) && /prefers-reduced-motion: reduce/.test(read('site/styles.css')), null);
     check('a button gives way slightly when pressed and only a pointer hovers',
