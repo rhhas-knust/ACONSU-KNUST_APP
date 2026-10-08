@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self' https://aconsu-knust-app.onrender.com; form-action 'self'; img-src 'self' data: blob:; base-uri 'self'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Alumni form | ACONSU KNUST</title>
+<meta name="description" content="Tell the ACONSU alumni team where you are now, and choose whether to appear on the alumni wall.">
+<meta name="theme-color" content="#5B2C82">
+<link rel="icon" href="favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="images/logo.jpg" alt="" width="40" height="40"><span data-bind="name">ACONSU</span></a>
+    <nav aria-label="Main"><a href="index.html">Back to the website</a></nav>
+  </div>
+</header>
+<main id="main" class="legal">
+<h1>Alumni form</h1>
+<p>If you were part of ACONSU, tell us where you are now. It takes about two minutes. The alumni team uses it to stay in touch and to build <strong>Alumni Connect</strong>, the directory ACONSU members use to find graduates by profession. You choose what is shown and to whom.</p>
+<p class="share-line">Know another alumnus? <button type="button" class="linklike" id="shareBtn">Share this form</button> <span id="shareNote" role="status" aria-live="polite"></span></p>
+
+<div class="ask" id="askBox">
+<form id="alumniForm" novalidate>
+  <fieldset>
+    <legend>About you</legend>
+    <div class="field"><label for="alName">Your name</label>
+      <input type="text" id="alName" maxlength="80" autocomplete="name" required aria-describedby="alMsg"></div>
+    <div class="field-row">
+      <div class="field"><label for="alClass">Year you finished (optional)</label>
+        <input type="number" id="alClass" min="1950" max="2100" inputmode="numeric"></div>
+      <div class="field"><label for="alProgramme">What you studied (optional)</label>
+        <input type="text" id="alProgramme" maxlength="120"></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Where you are now</legend>
+    <div class="field-row">
+      <div class="field"><label for="alProfession">Your work (optional)</label>
+        <input type="text" id="alProfession" maxlength="100" autocomplete="organization-title"></div>
+      <div class="field"><label for="alOrg">Where you work (optional)</label>
+        <input type="text" id="alOrg" maxlength="120" autocomplete="organization"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="alIndustry">Field or industry (optional)</label>
+        <input type="text" id="alIndustry" maxlength="80"></div>
+      <div class="field"><label for="alCity">City (optional)</label>
+        <input type="text" id="alCity" maxlength="80" autocomplete="address-level2"></div>
+    </div>
+    <div class="field"><label for="alCountry">Country (optional)</label>
+      <input type="text" id="alCountry" maxlength="60" value="Ghana" autocomplete="country-name"></div>
+    <label class="consent"><input type="checkbox" id="alMentor"><span>I am open to mentoring current students.</span></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>How to reach you</legend>
+    <p class="hint" id="alReachHint">Give an email address, a phone number, or both.</p>
+    <div class="field-row">
+      <div class="field"><label for="alEmail">Email address</label>
+        <input type="email" id="alEmail" maxlength="120" autocomplete="email" aria-describedby="alReachHint"></div>
+      <div class="field"><label for="alPhone">Phone or WhatsApp number</label>
+        <input type="tel" id="alPhone" maxlength="30" autocomplete="tel" aria-describedby="alReachHint"></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>What you agree to</legend>
+    <label class="consent"><input type="checkbox" id="alConsent" required aria-describedby="alMsg"><span>ACONSU may keep these details and use them to contact me and to build Alumni Connect. I can ask for them to be changed or removed at any time. <a href="privacy.html#alumni">How we use this</a>.</span></label>
+    <label class="consent"><input type="checkbox" id="alShare"><span>Show my work details (not my email or phone) to ACONSU members in Alumni Connect, once the alumni team has added me.</span></label>
+    <label class="consent"><input type="checkbox" id="alShowContact" disabled aria-describedby="alShowHint"><span>Also show my email or phone number to them.</span></label>
+    <p class="hint" id="alShowHint">This one needs the box above. Leave both empty and your details stay with the alumni team only.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>The public alumni wall (optional)</legend>
+    <label class="consent"><input type="checkbox" id="alWall" aria-controls="wallFields" aria-expanded="false"><span>I would also like to appear on the public Alumni wall, on this website and in the ACONSU app. An admin looks at every request first.</span></label>
+    <div id="wallFields" hidden>
+      <div class="field"><label for="alPhoto">A photo of you</label>
+        <input type="file" id="alPhoto" accept="image/*" aria-describedby="alPhotoHint alMsg">
+        <p class="hint" id="alPhotoHint">A clear picture of your face. A photo straight from your phone is fine; it is made smaller before it is sent.</p>
+        <img class="ask-preview" id="alPreview" src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt="Preview of the photo you chose" hidden></div>
+      <div class="field"><label for="alAbout">A few words about you</label>
+        <textarea id="alAbout" maxlength="400" rows="4" aria-describedby="alAboutHint alMsg"></textarea>
+        <p class="hint" id="alAboutHint"><span id="alCount">0</span> of 400 characters. These are shown publicly with your name and photo.</p></div>
+      <label class="consent"><input type="checkbox" id="alWallConsent" aria-describedby="alMsg"><span>I agree that my photo, name, work and these words are shown publicly on this website and in the ACONSU app. I can ask for them to be removed at any time.</span></label>
+    </div>
+  </fieldset>
+
+  <div class="trap" aria-hidden="true"><label>Company <input type="text" id="alCompany" tabindex="-1" autocomplete="off"></label></div>
+  <button type="submit" class="btn btn-primary" id="alSubmit">Send</button>
+  <p class="ask-msg" id="alMsg" role="status" aria-live="polite"></p>
+</form>
+<div class="ask-done" id="alDone" role="status" hidden>
+  <h2>Sent</h2>
+  <p id="alDoneText"></p>
+  <p>Know another alumnus? <button type="button" class="linklike" id="shareBtn2">Share this form</button></p>
+</div>
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <ul class="foot-links">
+      <li><a href="index.html">Back to the website</a></li>
+      <li><a href="privacy.html">Privacy policy</a></li>
+      <li><a href="terms.html">Terms of use</a></li>
+      <li><a href="cookies.html">Cookies and storage</a></li>
+    </ul>
+    <div class="foot-legal">
+      <span>&copy; <span id="year"></span> <span data-bind="name"></span>. All rights reserved.</span>
+      <span data-bind="location"></span>
+    </div>
+  </div>
+</footer>
+<script src="chapter.js"></script>
+<script src="request.js"></script>
+</body>
+</html>

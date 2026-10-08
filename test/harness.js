@@ -166,6 +166,7 @@ const fakeModels = {
   }),
   // No chapterId, deliberately: one set of founders for the whole church.
   AlumniEntry: makeModel({ about: '', currentWork: '', classOf: '', chapterId: '', imageFileId: '', status: 'pending', via: 'app', contact: '', declineReason: '', approvedAt: null, approvedBy: '', lastSpotlightWeek: '', prevSpotlightWeek: '' }),
+  AlumniDetail: makeModel({ chapterId: '', classOf: '', programme: '', profession: '', organisation: '', industry: '', city: '', country: 'Ghana', openToMentoring: false, email: '', phone: '', shareWithMembers: false, showContact: false, consentedAt: null, consentVersion: '', status: 'new', via: 'site' }),
   AlumniSpotlight: makeModel({ weekKey: '', entryId: '', pinned: false }),
   MonthlyTheme: makeModel({ scripture: '', blurb: '', flyerFileIds: [], status: 'approved', proposedByChapterId: '', proposedByName: '', declineReason: '', decidedAt: null, decidedBy: '' }),
   ChurchFounder: makeModel({ role: '', about: '', imageFileId: '', inMemoriam: false, order: 0 }),

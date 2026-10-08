@@ -15,13 +15,15 @@ const multer = require('multer');
 const rateLimit = require('express-rate-limit');
 const life = require('../lib/churchLife');
 const { processPortrait } = require('../lib/imageProcess');
-const { rejectOperatorKeys } = require('../lib/requestGuard');
+const { rejectOperatorKeys, csvSafe } = require('../lib/requestGuard');
 
 const PHOTO_LIMIT_BYTES = 8 * 1024 * 1024;   // a phone photo; it is shrunk to ~100KB on arrival
 const MAX_PENDING = 200;                     // a full queue refuses more rather than growing without bound
 const MAX_FLYERS = 6;
 const LIMITS = { name: 80, about: 400, currentWork: 120, contact: 120 };
 const ABOUT_MIN = 15;
+const MAX_DETAILS = 3000;
+const DETAILS_VERSION = '2026-10-08';   // the wording of the agreement on the form
 const LINK_RE = /(https?:\/\/|www\.)/i;
 
 // Browsers on the chapter website (GitHub Pages) may send the request form to
@@ -256,6 +258,88 @@ function registerChurchLifeRoutes(app, deps) {
     }
   });
 
+  // ---------- an alumnus shares their details, to help build Alumni Connect ----------
+  // The link that is passed around. No photo, nothing public: a record that National
+  // or the chapter's admin can read and export, and use to invite the person into
+  // Alumni Connect. Asking costs the sender one form and no account.
+  const detailsLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: Number(process.env.ALUMNI_DETAILS_LIMIT_MAX) || 10,
+    message: { error: 'Too many submissions from this device. Please try again in an hour.' },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+  const EMAIL_RE = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/;
+  const flag = (v) => String(v) === 'true';
+
+  function readDetails(body) {
+    const d = {
+      name: oneLine(body.name, 80),
+      classOf: String(body.classOf || '').replace(/[^0-9]/g, '').slice(0, 4),
+      programme: oneLine(body.programme, 120),
+      profession: oneLine(body.profession, 100),
+      organisation: oneLine(body.organisation, 120),
+      industry: oneLine(body.industry, 80),
+      city: oneLine(body.city, 80),
+      country: oneLine(body.country, 60) || 'Ghana',
+      email: oneLine(body.email, 120).toLowerCase(),
+      phone: oneLine(body.phone, 30).replace(/[^0-9+() -]/g, ''),
+      openToMentoring: flag(body.openToMentoring),
+      shareWithMembers: flag(body.shareWithMembers),
+      showContact: flag(body.showContact)
+    };
+    if (d.name.length < 2) return { error: 'Please tell us your name.' };
+    if (LINK_RE.test([d.name, d.programme, d.profession, d.organisation, d.industry, d.city, d.country].join(' '))) return { error: 'Please leave web links out.' };
+    if (d.classOf && (Number(d.classOf) < 1950 || Number(d.classOf) > life.now().getUTCFullYear() + 1)) return { error: 'That year does not look right. Leave it blank if you are not sure.' };
+    if (d.classOf.length !== 4) d.classOf = '';
+    if (d.email && !EMAIL_RE.test(d.email)) return { error: 'That email address does not look right.' };
+    if (d.phone && d.phone.replace(/[^0-9]/g, '').length < 7) return { error: 'That phone number does not look right.' };
+    // Without a way to reach them the record cannot be used to invite anyone.
+    if (!d.email && !d.phone) return { error: 'Please leave an email address or a phone number so we can reach you.' };
+    if (d.showContact && !d.shareWithMembers) d.showContact = false;   // contact is only ever shown as part of a listing
+    return { fields: d };
+  }
+
+  app.options('/api/public/alumni-details', siteCors);
+  app.post('/api/public/alumni-details', siteCors, detailsLimiter, photoUpload('photo'), async (req, res) => {
+    const thanks = (name) => ({
+      success: true,
+      message: `Thank you${name ? ', ' + name.split(' ')[0] : ''}. Your details have reached the ACONSU alumni team.`
+    });
+    try {
+      if (oneLine(req.body.company, 100)) return res.json(thanks(''));   // a bot filled the hidden field
+      if (!flag(req.body.consent)) {
+        return res.status(400).json({ error: 'Please tick the box to agree that ACONSU may keep these details and use them to contact you.' });
+      }
+      const { fields, error } = readDetails(req.body);
+      if (error) return res.status(400).json({ error });
+      const chapter = await resolveChapter(req.body.chapterId);
+      if (!chapter) return res.status(400).json({ error: 'Please choose the chapter you were part of.' });
+
+      const all = await repo.getAll('alumniDetails', {});
+      if (all.length >= MAX_DETAILS) return res.status(503).json({ error: 'We have a lot of submissions waiting at the moment. Please try again in a few days.' });
+
+      // The same person sending twice (the link is passed around) updates their
+      // record instead of making a second one. The answer is the same either way.
+      const same = all.find(d => d.chapterId === chapter.id && d.status !== 'dismissed'
+        && ((fields.email && d.email === fields.email) || (fields.phone && d.phone === fields.phone)
+          || d.name.toLowerCase() === fields.name.toLowerCase()));
+      const record = { ...fields, chapterId: chapter.id, consentedAt: new Date(), consentVersion: DETAILS_VERSION, via: String(req.body.via) === 'app' ? 'app' : 'site' };
+      if (same) await repo.patchById('alumniDetails', same.id, record);
+      else {
+        await repo.create('alumniDetails', { ...record, status: 'new' }, 'adet');
+        notifyAdminByEmail(
+          'New alumni details | ACONSU',
+          `<p><strong>${escapeHtmlForEmail(fields.name)}</strong> (${escapeHtmlForEmail(chapter.name || chapter.id)}) shared their details for Alumni Connect.</p>`
+          + '<p>Open the National portal, Alumni, to see them and invite them in.</p>'
+        );
+      }
+      res.json(thanks(fields.name));
+    } catch (e) {
+      res.status(500).json({ error: 'Could not send your details. Please try again.' });
+    }
+  });
+
   // ---------- reviewing the queue: National, and a chapter's own admin ----------
   // One set of handlers behind two doors. National reaches every chapter's
   // requests. A chapter's admin or coordinator reaches only their own chapter's,
@@ -381,6 +465,58 @@ function registerChurchLifeRoutes(app, deps) {
         await repo.removeById('alumniEntries', entry.id);
         res.json({ success: true });
       } catch (e) { res.status(500).json({ error: 'Could not remove the alumnus' }); }
+    });
+
+    // ---- what alumni sent through the shared link ----
+    // Same two doors as the wall: National sees every chapter, a chapter's admin
+    // sees their own, and a guessed id from another chapter is simply not found.
+    app.get(`${base}/details`, guard, async (req, res) => {
+      try {
+        const names = await chapterNames();
+        const items = (await repo.getAll('alumniDetails', filterOf(req))).map(d => ({ ...d, chapterName: names.get(d.chapterId) || '' }));
+        const order = { new: 0, invited: 1, added: 2, dismissed: 3 };
+        items.sort((a, b) => (order[a.status] - order[b.status]) || (new Date(b.createdAt) - new Date(a.createdAt)));
+        res.json({ counts: ['new', 'invited', 'added', 'dismissed'].reduce((o, st) => ({ ...o, [st]: items.filter(d => d.status === st).length }), {}), items });
+      } catch (e) { res.status(500).json({ error: 'Could not load the details' }); }
+    });
+
+    app.post(`${base}/details/:id/status`, guard, async (req, res) => {
+      try {
+        const status = String(req.body.status || '');
+        if (!['new', 'invited', 'added', 'dismissed'].includes(status)) return res.status(400).json({ error: 'Unknown status' });
+        const d = await repo.getById('alumniDetails', req.params.id, filterOf(req));
+        if (!d) return res.status(404).json({ error: 'Not found' });
+        res.json({ success: true, item: await repo.patchById('alumniDetails', d.id, { status }) });
+      } catch (e) { res.status(500).json({ error: 'Could not update that' }); }
+    });
+
+    app.delete(`${base}/details/:id`, guard, async (req, res) => {
+      try {
+        const d = await repo.getById('alumniDetails', req.params.id, filterOf(req));
+        if (!d) return res.status(404).json({ error: 'Not found' });
+        await repo.removeById('alumniDetails', d.id);
+        res.json({ success: true });
+      } catch (e) { res.status(500).json({ error: 'Could not remove that' }); }
+    });
+
+    // A spreadsheet to build Alumni Connect from. Every cell goes through csvSafe so
+    // a name typed as =HYPERLINK(...) is text on the treasurer's laptop, not a formula.
+    app.get(`${base}/details.csv`, guard, async (req, res) => {
+      try {
+        const names = await chapterNames();
+        const items = (await repo.getAll('alumniDetails', filterOf(req))).filter(d => d.status !== 'dismissed');
+        const cols = [
+          ['Name', d => d.name], ['Chapter', d => names.get(d.chapterId) || d.chapterId], ['Class of', d => d.classOf], ['Programme', d => d.programme],
+          ['Profession', d => d.profession], ['Organisation', d => d.organisation], ['Industry', d => d.industry], ['City', d => d.city], ['Country', d => d.country],
+          ['Open to mentoring', d => d.openToMentoring ? 'yes' : 'no'], ['Email', d => d.email], ['Phone', d => d.phone],
+          ['Agreed to be shown to members', d => d.shareWithMembers ? 'yes' : 'no'], ['Agreed to show contact', d => d.showContact ? 'yes' : 'no'],
+          ['Status', d => d.status], ['Sent', d => d.createdAt ? new Date(d.createdAt).toISOString().slice(0, 10) : '']
+        ];
+        const cell = (v) => '"' + csvSafe(v).replace(/"/g, '""') + '"';
+        const csv = '\ufeff' + [cols.map(c => cell(c[0])).join(',')].concat(items.map(d => cols.map(c => cell(c[1](d))).join(','))).join('\r\n');
+        res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="alumni-details.csv"', 'Cache-Control': 'no-store' });
+        res.send(csv);
+      } catch (e) { res.status(500).json({ error: 'Could not build the spreadsheet' }); }
     });
   }
   mountAlumniReview('/api/national/alumni', requireNational, nationalScope);

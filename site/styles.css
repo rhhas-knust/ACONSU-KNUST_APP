@@ -309,6 +309,21 @@ section { padding: 56px 0; }
 .alum-meta { color: var(--ink-faint); font-size: 0.9rem; margin: 0; }
 .alumni-more { margin: 20px 0 0; }
 
+/* The link to the alumni form: a short invitation, and a button. */
+.ask-link { max-width: 640px; margin: 36px 0 0; padding-top: 24px; border-top: 1px solid var(--border); }
+.ask-link h3 { margin-bottom: 6px; }
+.ask-link p { color: var(--ink-soft); }
+
+/* The form page */
+.ask fieldset { border: 0; padding: 0; margin: 0 0 28px; min-width: 0; }
+.ask legend { font-family: var(--font-head); font-weight: 600; font-size: 1.2rem; color: var(--heading); padding: 0; margin-bottom: 12px; }
+.ask input[type="email"], .ask input[type="tel"] { width: 100%; min-height: 44px; padding: 10px 12px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--ink-faint); border-radius: 6px; }
+.ask input:disabled + span { color: var(--ink-faint); }
+#wallFields { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.share-line { color: var(--ink-soft); }
+.linklike { background: none; border: 0; padding: 8px 2px; min-height: 44px; font: inherit; font-weight: 600; color: var(--brand); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.legal .ask { max-width: 640px; margin-top: 24px; padding-top: 0; border-top: 0; }
+
 /* "Ask to be listed" */
 .ask { max-width: 640px; margin: 40px 0 0; padding-top: 28px; border-top: 1px solid var(--border); }
 .ask-intro { color: var(--ink-soft); }

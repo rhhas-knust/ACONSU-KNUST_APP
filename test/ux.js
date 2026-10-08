@@ -80,11 +80,11 @@ async function website(browser) {
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
   const pg = await phone.newPage();
   const errs = []; pg.on('pageerror', e => errs.push(e.message)); pg.on('console', m => { if (m.type() === 'error') errs.push(m.text().slice(0, 120)); });
-  let submitted = null;
-  await pg.route(APP + '/api/public/alumni-requests', async route => {
+  const submitted = [];
+  await pg.route(APP + '/api/public/alumni-*', async route => {
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' } });
-    submitted = route.request().postData() || '';
-    return route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' }, body: JSON.stringify({ message: 'Thank you, Efua. Your request has been sent to the admins for review.' }) });
+    submitted.push({ url: route.request().url().replace(APP, ''), body: route.request().postData() || '' });
+    return route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' }, body: JSON.stringify({ success: true }) });
   });
   await pg.goto(BASE, { waitUntil: 'networkidle' });
   await pg.waitForTimeout(700);
@@ -104,11 +104,14 @@ async function website(browser) {
   check(await pg.$$eval('#alumniGrid .alumnus', a => a.length === 3), 'and the wall shows everyone');
   await (await pg.$('#alumni')).screenshot({ path: path.join(SHOTS, 'site-alumni-wall.png') });
 
+  // the home page offers a link, not a form
+  check(await pg.$eval('#alumniAsk', e => !e.hidden && !!e.querySelector('a[href="alumni-request.html"]')) && !(await pg.$('#alumniForm')), 'the home page shows a link to the alumni form and no form');
+  await pg.click('#alumniAsk a');
+  await pg.waitForURL('**/alumni-request.html');
+  await pg.waitForTimeout(400);
+  check(await pg.$eval('#wallFields', e => e.hidden), 'on the form the public wall fields are out of the way until asked for');
+
   // ---- the form by keyboard alone ----
-  await pg.evaluate(() => document.getElementById('alumniAsk').scrollIntoView());
-  await pg.focus('#alName');
-  await pg.keyboard.press('Tab'); // photo
-  await pg.keyboard.press('Tab'); // about
   await pg.focus('#alSubmit');
   await pg.keyboard.press('Enter');
   await pg.waitForTimeout(200);
@@ -117,19 +120,40 @@ async function website(browser) {
   check(/Enter your name/.test(await pg.textContent('#alMsg')), 'in words that say what to do');
   await pg.type('#alName', 'Efua Mensah');
   await pg.focus('#alSubmit'); await pg.keyboard.press('Enter'); await pg.waitForTimeout(150);
-  check(await pg.evaluate(() => document.activeElement.id === 'alPhoto'), 'then to the photo');
+  check(await pg.evaluate(() => document.activeElement.id === 'alEmail'), 'then to the way to reach them');
+  await pg.type('#alEmail', 'efua@example.com');
+  await pg.type('#alProfession', 'Pharmacist'); await pg.type('#alOrg', 'Korle Bu Teaching Hospital'); await pg.type('#alCity', 'Accra');
+  await pg.focus('#alSubmit'); await pg.keyboard.press('Enter'); await pg.waitForTimeout(150);
+  check(await pg.evaluate(() => document.activeElement.id === 'alConsent'), 'then to the agreement box');
+  await (await pg.$('#askBox')).screenshot({ path: path.join(SHOTS, 'site-alumni-form-error.png') });
+  await pg.keyboard.press('Space');
+  check(await pg.$eval('#alConsent', e => e.checked), 'the box can be ticked with the space bar');
+  check(await pg.$eval('#alShowContact', e => e.disabled), 'showing contact details is switched off until being shown is agreed to');
+  await pg.check('#alShare');
+  check(await pg.$eval('#alShowContact', e => !e.disabled), 'and becomes available once it is');
+
+  // the wall is a choice, and when chosen it asks for what it needs
+  await pg.check('#alWall');
+  check(await pg.$eval('#wallFields', e => !e.hidden) && await pg.$eval('#alWall', e => e.getAttribute('aria-expanded') === 'true'), 'ticking the wall box reveals the photo and words, and says so to a screen reader');
+  await pg.focus('#alSubmit'); await pg.keyboard.press('Enter'); await pg.waitForTimeout(150);
+  check(await pg.evaluate(() => document.activeElement.id === 'alPhoto'), 'and then asks for the photo');
   await pg.setInputFiles('#alPhoto', PHOTO);
   await pg.type('#alAbout', 'Read Pharmacy at KNUST and never missed a Sunday service.');
   await pg.focus('#alSubmit'); await pg.keyboard.press('Enter'); await pg.waitForTimeout(150);
-  check(await pg.evaluate(() => document.activeElement.id === 'alConsent'), 'then to the agreement box');
-  await (await pg.$('#alumniAsk')).screenshot({ path: path.join(SHOTS, 'site-alumni-form-error.png') });
-  await pg.keyboard.press('Space');
-  check(await pg.$eval('#alConsent', e => e.checked), 'the box can be ticked with the space bar');
+  check(await pg.evaluate(() => document.activeElement.id === 'alWallConsent'), 'and for the public agreement');
+  await pg.check('#alWallConsent');
   await pg.focus('#alSubmit'); await pg.keyboard.press('Enter');
   await pg.waitForSelector('#alDone:not([hidden])', { timeout: 8000 });
-  check(/Efua/.test(await pg.textContent('#alDoneText')), 'a confirmation replaces the form');
-  check(!!submitted && /name="consent"/.test(submitted) && /name="photo"/.test(submitted), 'and one request, with the photo and the agreement, was sent');
-  await (await pg.$('#alumniAsk')).screenshot({ path: path.join(SHOTS, 'site-alumni-form-done.png') });
+  check(/Efua/.test(await pg.textContent('#alDoneText')) && /Alumni wall/.test(await pg.textContent('#alDoneText')), 'a confirmation replaces the form and says what was sent');
+  const urls = submitted.map(x => x.url);
+  check(urls.length === 2 && urls[0] === '/api/public/alumni-details' && urls[1] === '/api/public/alumni-requests', 'details first, then the wall request', urls);
+  check(/name="consent"/.test(submitted[1].body) && /name="photo"/.test(submitted[1].body) && /name="shareWithMembers"/.test(submitted[0].body), 'with the photo and agreements in the right requests');
+  await (await pg.$('#askBox')).screenshot({ path: path.join(SHOTS, 'site-alumni-form-done.png') });
+
+  // a shared link that is for the wall opens with it chosen; the plain one does not
+  const wallLink = await phone.newPage(); await wallLink.goto(BASE + 'alumni-request.html?for=wall', { waitUntil: 'networkidle' });
+  check(await wallLink.$eval('#alWall', e => e.checked) && await wallLink.$eval('#wallFields', e => !e.hidden), '?for=wall opens the form with the wall already chosen');
+  await wallLink.close();
   check(errs.length === 0, 'no script errors on a phone', errs);
 
   // ---- sizes and reflow ----
@@ -229,6 +253,18 @@ async function app(browser) {
   await p2.click('[data-approve]');
   await p2.waitForSelector('.portal-table td:has-text("Efua Mensah")');
   check(await p2.$('.al-request') === null, 'approving moves her to the wall');
+  // what came through the shared link, for building Alumni Connect
+  const sent = await fetch(BASE + '/api/public/alumni-details', { method: 'POST', body: (() => { const fd = new FormData(); Object.entries({ name: 'Kojo Asante-Boateng', chapterId: 'aconsu-knust', classOf: '2021', programme: 'BSc Civil Engineering', profession: 'Site engineer', organisation: 'Ashanti Roads Ltd', industry: 'Construction', city: 'Kumasi', country: 'Ghana', openToMentoring: 'true', email: 'kojo@example.com', shareWithMembers: 'true', consent: 'true' }).forEach(([k, v]) => fd.append(k, v)); return fd; })() });
+  check(sent.status === 200, 'details sent through the shared link are accepted');
+  await p2.click('#portalNav button:has-text("Alumni")');
+  await p2.waitForSelector('[data-detail-status]');
+  check(/Kojo Asante-Boateng/.test(await p2.evaluate(() => [...document.querySelectorAll('.portal-table')].pop().textContent)), 'National sees them under the wall, ready to invite');
+  check(await p2.$eval('a[href$="/details.csv"]', a => /spreadsheet/.test(a.textContent)), 'with a link to download them as a spreadsheet');
+  await p2.selectOption('[data-detail-status]', 'invited');
+  await p2.waitForTimeout(400);
+  check(await p2.$eval('[data-detail-status]', e => e.value === 'invited'), 'and each can be marked as it is invited');
+  await (await p2.$('[data-detail-status]')).scrollIntoViewIfNeeded();
+  await p2.screenshot({ path: path.join(SHOTS, 'app-alumni-details.png') });
   check(errs.length === 0, 'no script errors in the app', errs);
   await phone.close(); await desk.close();
 }

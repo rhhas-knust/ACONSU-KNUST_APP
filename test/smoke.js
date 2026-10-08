@@ -23,6 +23,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   process.env.ADMIN_USERNAME = 'admin';
   process.env.ADMIN_PASSWORD = 'admin123';
   process.env.SESSION_SECRET = 'test';
+  process.env.ALUMNI_DETAILS_LIMIT_MAX = '40';
   process.env.ALUMNI_REQUEST_LIMIT_MAX = '40'; // one device sends far more than five requests across this suite
   process.env.LOGIN_RATE_LIMIT_MAX = '200'; // this suite signs far more accounts in/out per run than any real IP would in 15 minutes
   delete process.env.SHEPHERD_USERNAME;
@@ -3653,24 +3654,35 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // calls the API is a landing page that goes down when Render sleeps - which
     // is the thing it exists to avoid.
     //
-    // One exception, and it is narrow on purpose: the alumni request form sends
-    // ONE request, to the app, when somebody presses Send. Nothing is asked of
-    // the app while a page is being looked at - the alumni and the theme are
-    // copied in as a file ahead of time (site/tools/sync-feed.js).
+    // One exception, and it is narrow on purpose: the alumni form PAGE (not the
+    // home page) sends its requests to the app, only when somebody presses Send.
+    // Nothing is asked of the app while a page is being looked at - the alumni and
+    // the theme are copied in as a file ahead of time (site/tools/sync-feed.js).
     {
-      const apiRefs = (html + js).match(/\/api\/[A-Za-z0-9\/_-]*/g) || [];
-      check('the site calls the app for one thing only: sending an alumni request',
-        apiRefs.length === 1 && apiRefs[0] === '/api/public/alumni-requests', apiRefs);
+      const formJs = read('request.js');
+      const formHtml = read('alumni-request.html');
+      const apiRefs = (html + js + formHtml).match(/\/api\/[A-Za-z0-9\/_-]*/g) || [];
+      check('the home page and its script call the app for nothing at all', apiRefs.length === 0, apiRefs);
       const fetches = (js.match(/\bfetch\(([^,)]*)/g) || []).map(f => f.replace(/\bfetch\(/, '').trim());
-      check('and the only other thing it fetches is its own data file',
-        fetches.length === 2 && fetches.includes("'data/feed.json'") && fetches.some(f => /requestUrl \+ '\/api\/public\/alumni-requests'/.test(f)), fetches);
-      const submit = js.indexOf("form.addEventListener('submit'");
-      check('and that request lives inside the Send handler, so nothing is sent on load',
-        submit > 0 && js.indexOf("/api/public/alumni-requests") > submit, null);
+      check('the only thing the home page fetches is its own data file', fetches.length === 1 && fetches[0] === "'data/feed.json'", fetches);
+      const formApi = (formJs.match(/\/api\/[A-Za-z0-9\/_-]*/g) || []);
+      check('the form page sends to two places and no more: the details, and the wall request',
+        formApi.length === 2 && formApi.includes('/api/public/alumni-details') && formApi.includes('/api/public/alumni-requests'), formApi);
+      const submit = formJs.indexOf("form.addEventListener('submit'");
+      check('and every send lives inside the Send handler, so nothing is sent on load',
+        submit > 0 && formJs.lastIndexOf("post('") > submit && formJs.indexOf("post('/api") > submit, null);
+      check('the home page links to the form instead of showing it',
+        /href="alumni-request\.html"/.test(html) && !/<form/.test(html), null);
+      check('and the form page has its own Content-Security-Policy that allows only the app\'s address',
+        /connect-src 'self' https:\/\/aconsu-knust-app\.onrender\.com/.test(formHtml), null);
+      check('a link can open the form with the wall already chosen', /for=wall/.test(formJs), null);
+      check('and the form can be shared', /navigator\.share/.test(formJs) && /clipboard/.test(formJs), null);
+      check('showing contact details is only possible when being shown at all', /show2\.disabled = !share1\.checked/.test(formJs), null);
+      check('the wall photo and words are asked for only when the wall box is ticked', /if \(wantsWall\) \{/.test(formJs), null);
     }
     check('and pulls nothing out of the app folder',
-      // (The one API path has "/public/" in its name; it is the app's API, not its folder.)
-      !/\.\.\/public|\/public\//.test((html + js + css).replace('/api/public/alumni-requests', '')), null);
+      // (The API paths have "/public/" in their names; they are the app's API, not its folder.)
+      !/\.\.\/public|\/public\//.test((html + js + css + read('request.js')).replace(/\/api\/public\/alumni-(requests|details)/g, '')), null);
     check('every script it loads is its own',
       (html.match(/<script src="([^"]+)"/g) || []).every(t => !/^<script src="(https?:|\/)/.test(t)), null);
     check('so the whole thing is a folder of files with nothing to build',
@@ -4960,6 +4972,85 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       check('an operator hidden in a field of the public alumni form is refused', w.status === 400, w.data);
     }
 
+    // ---- the shared link: details to help build Alumni Connect ----
+    {
+      const dform = (f) => { const fd = new FormData(); Object.entries(f).forEach(([k, v]) => fd.append(k, v)); return fd; };
+      const send = (f, headers) => call('anon', 'POST', '/api/public/alumni-details', dform(f), true, headers);
+      const good = { name: 'Kojo Asante-Boateng', chapterId, classOf: '2021', programme: 'BSc Civil Engineering', profession: 'Site engineer', organisation: 'Ashanti Roads Ltd', industry: 'Construction', city: 'Kumasi', country: 'Ghana', openToMentoring: 'true', email: 'Kojo@Example.com', phone: '', shareWithMembers: 'true', showContact: 'false', consent: 'true', via: 'site' };
+      const count = async () => (await fakeModels.AlumniDetail.find({})).length;
+      const before = await count();
+
+      let d = await send({ ...good, consent: 'false' });
+      check('details are refused without the agreement ticked', d.status === 400 && /agree/i.test(d.data.error), d.data);
+      d = await send({ ...good, email: '', phone: '' });
+      check('and without any way to reach the person', d.status === 400 && /email address or a phone/.test(d.data.error), d.data);
+      d = await send({ ...good, email: 'not an email' });
+      check('and with an email that is not one', d.status === 400, d.data);
+      d = await send({ ...good, profession: 'see https://spam.example' });
+      check('and with a web link in the text', d.status === 400 && /links/.test(d.data.error), d.data);
+      d = await send({ ...good, 'city[$ne]': 'x' });
+      check('and with a database operator hidden in a field', d.status === 400, d.data);
+      d = await send({ ...good, chapterId: 'no-such-chapter' });
+      check('and for a chapter that does not exist', d.status === 400, d.data);
+      d = await send({ ...good, company: 'Bots Ltd' });
+      check('a bot that fills the hidden field is thanked and nothing is stored', d.status === 200 && (await count()) === before, d.data);
+      check('nothing was stored by any of those', (await count()) === before, await count());
+
+      d = await send(good);
+      const rec = (await fakeModels.AlumniDetail.find({ name: 'Kojo Asante-Boateng' }))[0];
+      check('a good submission is stored', d.status === 200 && !!rec && rec.status === 'new' && rec.profession === 'Site engineer' && rec.openToMentoring === true, d.data);
+      check('with the email in lower case, and when and what was agreed', !!rec && rec.email === 'kojo@example.com' && !!rec.consentedAt && rec.consentVersion === '2026-10-08', rec);
+      check('the thank-you uses their first name and promises nothing public', /Thank you, Kojo/.test(d.data.message) && !/wall|public/i.test(d.data.message), d.data.message);
+      d = await send({ ...good, profession: 'Senior site engineer' });
+      const again = await fakeModels.AlumniDetail.find({ name: 'Kojo Asante-Boateng' });
+      check('sending twice (the link is passed around) updates the one record', again.length === 1 && again[0].profession === 'Senior site engineer', again.length);
+      d = await send({ ...good, name: 'Ama Private', email: 'ama@example.com', shareWithMembers: 'false', showContact: 'true' });
+      const priv = (await fakeModels.AlumniDetail.find({ name: 'Ama Private' }))[0];
+      check('showing contact details without agreeing to be shown at all is ignored', !!priv && priv.shareWithMembers === false && priv.showContact === false, priv);
+
+      const pre = await fetch(BASE + '/api/public/alumni-details', { method: 'OPTIONS', headers: { Origin: SITE, 'Access-Control-Request-Method': 'POST' } });
+      check('the website may send it from its own address', pre.status === 204 && pre.headers.get('access-control-allow-origin') === SITE, pre.status);
+      const evil = await fetch(BASE + '/api/public/alumni-details', { method: 'POST', headers: { Origin: 'https://evil.example' }, body: dform({ ...good, consent: 'no' }) });
+      check('and no other site gets permission', !evil.headers.get('access-control-allow-origin'), evil.headers.get('access-control-allow-origin'));
+      check('and the public wall does not carry any of it', !JSON.stringify((await call('anon', 'GET', '/api/public/alumni')).data).includes('Ashanti Roads'), null);
+      check('nor the site feed', !JSON.stringify((await call('anon', 'GET', '/api/public/site-feed')).data).includes('kojo@example.com'), null);
+
+      // ---- reading it ----
+      await send({ ...good, name: 'Other Chapter Alumnus', chapterId: otherChapter, email: 'oc@example.com' });
+      w = await call('anon', 'GET', '/api/national/alumni/details');
+      check('strangers cannot read what was sent', w.status === 401, w.status);
+      w = await call('fin', 'GET', '/api/admin/alumni/details');
+      check('nor can another office', w.status === 401 || w.status === 403, w.status);
+      w = await call('admin', 'GET', '/api/national/alumni/details');
+      check('National sees every chapter\'s, with the contact', w.status === 200 && w.data.items.some(i => i.name === 'Kojo Asante-Boateng' && i.email === 'kojo@example.com') && w.data.items.some(i => i.chapterId === otherChapter), w.data);
+      w = await call('ovAdmin', 'GET', '/api/admin/alumni/details');
+      check('a chapter\'s admin sees their own chapter\'s and no other', w.status === 200 && w.data.items.length > 0 && w.data.items.every(i => i.chapterId === chapterId), w.data.items && w.data.items.map(i => i.chapterId));
+      const otherRec = (await fakeModels.AlumniDetail.find({ name: 'Other Chapter Alumnus' }))[0];
+      w = await call('ovAdmin', 'POST', `/api/admin/alumni/details/${otherRec.id}/status`, { status: 'added' });
+      check('an id from another chapter is simply not found', w.status === 404, w.status);
+      w = await call('ovAdmin', 'POST', `/api/admin/alumni/details/${rec.id}/status`, { status: 'invited' });
+      check('a chapter\'s admin can mark their own as invited', w.status === 200 && w.data.item.status === 'invited', w.data);
+      w = await call('ovAdmin', 'POST', `/api/admin/alumni/details/${rec.id}/status`, { status: 'whatever' });
+      check('and not to something that is not a status', w.status === 400, w.status);
+      w = await call('ovAdmin', 'DELETE', `/api/admin/alumni/details/${otherRec.id}`);
+      check('nor delete another chapter\'s', w.status === 404 && !!(await fakeModels.AlumniDetail.find({ name: 'Other Chapter Alumnus' }))[0], w.status);
+
+      // ---- the spreadsheet ----
+      await send({ ...good, name: '=SUM(1+1)*cmd', email: 'formula@example.com' });
+      const csv = await fetch(BASE + '/api/national/alumni/details.csv', { headers: { cookie: jars.admin } });
+      const text = await csv.text();
+      check('National can download a spreadsheet', csv.status === 200 && /text\/csv/.test(csv.headers.get('content-type')) && /attachment/.test(csv.headers.get('content-disposition')) && /Kojo Asante-Boateng/.test(text), csv.status);
+      check('a name that is a formula is text in it, not a formula', /"'=SUM\(1\+1\)\*cmd"/.test(text) && !/(^|,)"=SUM/.test(text), text.split('\n').find(l => /SUM/.test(l)));
+      check('it says what each person agreed to', /Agreed to be shown to members/.test(text), null);
+      w = await call('admin', 'DELETE', `/api/national/alumni/details/${rec.id}`);
+      check('National can remove a record', w.status === 200 && !(await fakeModels.AlumniDetail.find({ name: 'Kojo Asante-Boateng' }))[0], w.status);
+
+      // ---- the throttle for this form ----
+      let slowed = 0;
+      for (let i = 0; i < 80 && !slowed; i++) { const t = await send({ ...good, consent: 'false', name: 'Flood ' + i }); if (t.status === 429) slowed = i + 1; }
+      check('a device that floods the form is slowed down', slowed > 0 && slowed <= 45, slowed);
+    }
+
     // ---- last: the throttle ----
     let throttled = 0;
     for (let i = 0; i < 60 && !throttled; i++) {
@@ -5111,7 +5202,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('a missing or broken feed leaves the page standing',
       /\.catch\(function \(\) \{ return null; \}\)/.test(siteJs) && /try \{ renderTheme\(feed\.theme\); \}/.test(siteJs), null);
     check('the request form carries the chapter, a hidden trap field and the consent box',
-      /fd\.append\('chapterId', String\(A\.chapterId/.test(siteJs) && /id="alCompany"/.test(html) && /id="alConsent"/.test(html), null);
+      /fd\.append\('chapterId', chapterId\)/.test(fs.readFileSync(path.join(__dirname, '..', 'site', 'request.js'), 'utf8'))
+      && /id="alCompany"/.test(fs.readFileSync(path.join(__dirname, '..', 'site', 'alumni-request.html'), 'utf8'))
+      && /id="alConsent"/.test(fs.readFileSync(path.join(__dirname, '..', 'site', 'alumni-request.html'), 'utf8')), null);
     check('and the page shows no photo it was not given',
       /faceHtml\(spot, 'spot-face'\)/.test(siteJs), null);
 
@@ -5379,7 +5472,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     const siteIndex = read('site/index.html');
     check('and the website footer links to them', ['privacy.html', 'terms.html', 'cookies.html'].every(l => siteIndex.includes('href="' + l + '"')), null);
     check('the website says it sets no cookies and stores nothing', /sets <strong>no cookies<\/strong>/.test(read('site/cookies.html')), null);
-    check('the alumni form agreement links to the explanation of how it is used', /href="privacy\.html#alumni"/.test(siteIndex), null);
+    check('the alumni form agreement links to the explanation of how it is used', /href="privacy\.html#alumni"/.test(read('site/alumni-request.html')), null);
+    check('the form page is reachable from the home page and has the same footer links', /href="alumni-request\.html"/.test(siteIndex) && ['privacy.html', 'terms.html', 'cookies.html'].every(l => read('site/alumni-request.html').includes('href="' + l + '"')), null);
     check('the service worker keeps the new pages for offline reading',
       ['/terms.html', '/cookies.html', '/refunds.html'].every(p => read('public/sw.js').includes("'" + p + "'")), null);
 
