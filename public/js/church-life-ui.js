@@ -190,6 +190,55 @@
         act(function () { return decide(cfg, e.id, 'decline', reason); }, 'Declined');
       });
     });
+
+    var dv = document.createElement('div');
+    el.appendChild(dv);
+    try { await detailsPanel(dv, cfg); }
+    catch (err) { dv.innerHTML = '<p class="muted">The details sent through the alumni link could not be loaded.</p>'; }
+  }
+
+  // ------------------------------------- what alumni sent through the shared link
+  // Not the wall: nothing here is public. It is the list the alumni team builds
+  // Alumni Connect from, so it can be downloaded, and each person marked as they
+  // are invited and then added.
+  var DETAIL_STATUS = { new: 'New', invited: 'Invited', added: 'Added to Alumni Connect', dismissed: 'Dismissed' };
+  async function detailsPanel(el, cfg) {
+    var data = await fetchJSON(cfg.base + '/details');
+    var yes = function (v) { return v ? 'Yes' : 'No'; };
+    el.innerHTML =
+      '<h3 style="margin-top:34px;">Details for Alumni Connect (' + data.counts.new + ' new)</h3>'
+      + '<p class="hint">Sent through the shared alumni form. Nothing here is public. Use it to invite people into Alumni Connect, then mark them as you go.'
+      + ' What they agreed to is in the last column: only people who agreed to be shown may be listed for members, and their email or phone only if they said so.</p>'
+      + '<p><a class="btn btn-outline btn-sm" href="' + cfg.base + '/details.csv">Download as a spreadsheet</a></p>'
+      + '<div class="table-wrap" tabindex="0"><table class="portal-table"><thead><tr><th>Name</th><th>Work</th><th>Where</th><th>Reach them</th><th>Agreed</th><th>Status</th><th></th></tr></thead><tbody>'
+      + (data.items.length ? data.items.map(function (d) {
+          return '<tr><td><strong>' + escapeHtml(d.name) + '</strong><br><small class="muted">' + escapeHtml(d.chapterName || d.chapterId)
+            + (d.classOf ? ' · class of ' + escapeHtml(d.classOf) : '') + (d.programme ? '<br>' + escapeHtml(d.programme) : '') + '<br>' + escapeHtml(when(d.createdAt)) + '</small></td>'
+            + '<td>' + escapeHtml([d.profession, d.organisation].filter(Boolean).join(' at ')) + (d.industry ? '<br><small class="muted">' + escapeHtml(d.industry) + '</small>' : '')
+            + (d.openToMentoring ? '<br><small>Open to mentoring</small>' : '') + '</td>'
+            + '<td>' + escapeHtml([d.city, d.country].filter(Boolean).join(', ')) + '</td>'
+            + '<td>' + (d.email ? escapeHtml(d.email) : '') + (d.email && d.phone ? '<br>' : '') + (d.phone ? escapeHtml(d.phone) : '') + '</td>'
+            + '<td><small>Shown to members: ' + yes(d.shareWithMembers) + '<br>Contact shown: ' + yes(d.showContact) + '</small></td>'
+            + '<td><label class="sr-only" for="ds-' + d.id + '">Status of ' + escapeHtml(d.name) + '</label><select id="ds-' + d.id + '" data-detail-status="' + d.id + '">'
+            + Object.keys(DETAIL_STATUS).map(function (k) { return '<option value="' + k + '"' + (d.status === k ? ' selected' : '') + '>' + DETAIL_STATUS[k] + '</option>'; }).join('') + '</select></td>'
+            + '<td><button class="btn btn-outline btn-sm" data-detail-remove="' + d.id + '">Delete</button></td></tr>';
+        }).join('') : '<tr><td colspan="7" class="muted">Nothing yet. Share the alumni form link and what people send appears here.</td></tr>')
+      + '</tbody></table></div>';
+    el.querySelectorAll('[data-detail-status]').forEach(function (sel) {
+      sel.addEventListener('change', async function () {
+        try {
+          await fetchJSON(cfg.base + '/details/' + sel.dataset.detailStatus + '/status', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: sel.value }) });
+          showToast('Marked as ' + DETAIL_STATUS[sel.value].toLowerCase(), 'success');
+        } catch (err) { showToast(err.message || 'Could not do that.', 'error'); cfg.reopen(); }
+      });
+    });
+    el.querySelectorAll('[data-detail-remove]').forEach(function (b) {
+      b.addEventListener('click', async function () {
+        if (!confirm('Delete these details for good?')) return;
+        try { await fetchJSON(cfg.base + '/details/' + b.dataset.detailRemove, { method: 'DELETE' }); showToast('Deleted', 'success'); cfg.reopen(); }
+        catch (err) { showToast(err.message || 'Could not do that.', 'error'); }
+      });
+    });
   }
 
   // ------------------------------------------------- a chapter proposes a theme

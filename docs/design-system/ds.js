@@ -60,16 +60,16 @@
   // Screens, if they have been captured
   var SCREENS = [
     ['site-home-mobile.png', 'Website home on a phone'], ['site-home-desktop.png', 'Website home on a desktop'],
-    ['site-alumni-form-error.png', 'Alumni request, with an error: focus moves to the field'], ['site-alumni-form-done.png', 'Alumni request, after sending'],
+    ['site-alumni-form-error.png', 'Alumni form, with an error: focus moves to the field'], ['site-alumni-form-done.png', 'Alumni form, after sending'],
     ['site-alumni-wall.png', 'Alumni wall and this week\'s spotlight'], ['site-dark-mobile.png', 'Website in dark mode'],
-    ['app-approvals-queue.png', 'App: National approvals queue'], ['app-alumni-form-mobile.png', 'App: alumni request on a phone']
+    ['app-approvals-queue.png', 'App: National approvals queue'], ['app-alumni-details.png', 'App: details sent through the shared alumni link'], ['app-alumni-form-mobile.png', 'App: alumni request on a phone']
   ];
   var list = document.getElementById('screenList');
   SCREENS.forEach(function (s) {
     var fig = document.createElement('figure');
     var img = new Image(); img.src = 'screens/' + s[0]; img.alt = s[1];
     img.onerror = function () { fig.remove(); };
-    var cap = document.createElement('figcaption'); cap.textContent = s[1] + (/wall|queue|form|done/.test(s[0]) ? ' (sample content)' : '');
+    var cap = document.createElement('figcaption'); cap.textContent = s[1] + (/wall|queue|form|done|details/.test(s[0]) ? ' (sample content)' : '');
     fig.appendChild(img); fig.appendChild(cap); list.appendChild(fig);
   });
 })();

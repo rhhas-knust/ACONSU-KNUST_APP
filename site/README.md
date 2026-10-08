@@ -365,3 +365,22 @@ only appear once the site is online. Everything else is exactly as it will be.
   `chapter.js`, change `connect-src` in that tag to match, or the form will be blocked by the browser.
 - Fonts are in `fonts/`. The icons are `favicon.ico`, `favicon-16.png`, `favicon-32.png` and `apple-touch-icon.png`.
 - `heroImageAlt` in `chapter.js` describes the photo beside the heading for people who cannot see it.
+
+
+## The alumni form, and sharing it
+
+The home page only shows a button; the form is its own page, `alumni-request.html`, so the link can be passed around (WhatsApp, a flyer, a QR code).
+
+- `alumni-request.html` is the whole form. People send their details for the alumni team and Alumni Connect, and can also tick a box to ask for the public Alumni wall (that part asks for a photo and a few words).
+- `alumni-request.html?for=wall` opens the same form with the wall box already ticked. Use it when the link is specifically for the wall.
+- The page has a "Share this form" button that opens the phone's share sheet, or copies the link.
+- What comes in appears in the app: National portal, Alumni, "Details for Alumni Connect", with a spreadsheet download. A chapter's admin sees their own chapter's.
+
+## Using your own domain name
+
+The site works on any domain. To move it:
+
+1. Get the domain (see below). Register it in the chapter's name and with a chapter email address, not a personal one, so it survives a change of leaders.
+2. GitHub repository, Settings, Pages, Custom domain: enter it, and add the DNS records GitHub shows at the registrar (a CNAME to `rhhas-knust.github.io` for a `www` or sub-domain). Tick "Enforce HTTPS" once it is allowed.
+3. In Render, set `SITE_ORIGINS` for the app to the new address as well as the old one, separated by a comma (for example `https://aconsuknust.me,https://rhhas-knust.github.io`). Without this the browser blocks the alumni form from sending.
+4. The site's own files need no change: every link in it is relative.
