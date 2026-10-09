@@ -169,12 +169,20 @@ async function main() {
       const rel = await saveImage(id, THEME_DIR, 'images/theme');
       if (rel) { keepTheme.add(path.basename(rel)); flyers.push(rel); }
     }
+    const prayerFlyers = [];
+    for (const id of (feed.theme.prayerFlyerFileIds || []).slice(0, 6)) {
+      const rel = await saveImage(id, THEME_DIR, 'images/theme');
+      if (rel) { keepTheme.add(path.basename(rel)); prayerFlyers.push(rel); }
+    }
     out.theme = {
       month: str(feed.theme.month, 7),
       title: str(feed.theme.title, 120),
       scripture: str(feed.theme.scripture, 200),
       blurb: str(feed.theme.blurb, 1200),
-      flyers
+      flyers,
+      prayer: str(feed.theme.prayer, 4000),
+      prayerNote: str(feed.theme.prayerNote, 200),
+      prayerFlyers
     };
   }
 

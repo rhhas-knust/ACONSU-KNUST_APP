@@ -709,7 +709,7 @@ function renderAlumni(el) {
 }
 
 // ---------- The monthly theme ----------
-// One theme for the whole church per month, with its prayer flyers. National can
+// One theme for the whole church per month, with its daily meditative prayer. National can
 // write it directly. A chapter's admin can only propose one; it waits here and
 // shows nowhere until National approves it. A month with no theme shows nothing
 // at all, so keeping it current is the whole job.
@@ -736,7 +736,7 @@ async function renderTheme(el) {
     el.innerHTML = `
       <div class="panel-head"><div>
         <h2>Monthly Theme</h2>
-        <p class="sub">The church's theme for the month, with its meditative prayer flyers. It appears on the app's home page and on the chapter websites on the first of the month. A chapter's admin can send one for you to approve; you can also write it yourself, and next month's ahead of time.</p>
+        <p class="sub">The church's theme for the month, with its daily meditative prayer. It appears on the app's home page and on the chapter websites on the first of the month. A chapter's admin can send one for you to approve; you can also write it yourself, and next month's ahead of time.</p>
       </div></div>
       ${warn}
 
@@ -748,6 +748,7 @@ async function renderTheme(el) {
             <h4>${escapeHtml(x.title)}</h4>
             <p class="meta">${escapeHtml(monthName(x.month))}${x.scripture ? ' · ' + escapeHtml(x.scripture) : ''} · from ${escapeHtml(x.chapterName || 'a chapter')}${x.proposedByName ? ' (' + escapeHtml(x.proposedByName) + ')' : ''}</p>
             ${x.blurb ? `<p>${escapeHtml(x.blurb)}</p>` : ''}
+            ${x.prayer ? `<p class="cl-note">With the daily meditative prayer (${x.prayer.length} characters).</p>` : ''}
             ${liveNow ? `<p class="cl-note">Approving this replaces <strong>${escapeHtml(liveNow.title)}</strong>, which is live for ${escapeHtml(monthName(x.month))}.</p>` : ''}
             <div class="row-actions" style="margin-top:10px;">
               <button data-approve-theme="${x.id}" data-replaces="${liveNow ? escapeHtml(liveNow.title) : ''}" data-when="${escapeHtml(monthName(x.month))}">Approve</button>
@@ -762,11 +763,7 @@ async function renderTheme(el) {
         <div class="field"><label>Theme</label><input type="text" id="thTitle" maxlength="120" value="${escapeHtml(t?.title || '')}" placeholder="Walking in Newness" required></div>
         <div class="field"><label>Scripture (optional)</label><input type="text" id="thScripture" maxlength="200" value="${escapeHtml(t?.scripture || '')}" placeholder="Romans 6:4"></div>
         <div class="field"><label>A few lines (optional)</label><textarea id="thBlurb" rows="3" maxlength="1200">${escapeHtml(t?.blurb || '')}</textarea></div>
-        <div class="field"><label>Prayer flyers (optional, up to 6 pictures)</label>
-          ${t && t.flyerFileIds.length ? `<div class="flyer-keep">${t.flyerFileIds.map(id => `
-            <label><img src="/api/files/${encodeURIComponent(id)}" alt=""><input type="checkbox" data-keep="${escapeHtml(id)}" checked> keep</label>`).join('')}</div>` : ''}
-          <input type="file" id="thFlyers" accept="image/*" multiple>
-        </div>
+        ${ChurchLifeUI.themeFields(t)}
         <div style="margin-top:18px;">
           <button class="btn btn-primary">Save theme</button>
           ${t ? '<button type="button" class="btn btn-outline" id="thNew" style="margin-left:8px;">Another month</button>' : ''}
@@ -781,6 +778,7 @@ async function renderTheme(el) {
             ${[...live, ...declined].length ? [...live, ...declined].map(x => `<tr>
               <td><strong>${escapeHtml(monthName(x.month))}</strong>${x.month === data.month && x.status === 'approved' ? ' <span class="badge-soft">Now</span>' : ''}</td>
               <td>${escapeHtml(x.title)}${x.scripture ? `<br><small class="muted">${escapeHtml(x.scripture)}</small>` : ''}
+                  ${x.prayer || (x.prayerFlyerFileIds || []).length ? '<br><small class="muted">Includes the daily meditative prayer</small>' : ''}
                   ${x.status === 'declined' ? `<br><span class="cl-chip no">Declined</span>${x.declineReason ? ` <small class="muted">${escapeHtml(x.declineReason)}</small>` : ''}` : ''}</td>
               <td>${escapeHtml(x.chapterName || 'National')}</td>
               <td><div class="row-actions">
@@ -798,8 +796,7 @@ async function renderTheme(el) {
       body.append('title', document.getElementById('thTitle').value);
       body.append('scripture', document.getElementById('thScripture').value);
       body.append('blurb', document.getElementById('thBlurb').value);
-      body.append('keepFlyers', JSON.stringify([...el.querySelectorAll('[data-keep]')].filter(c => c.checked).map(c => c.dataset.keep)));
-      [...document.getElementById('thFlyers').files].forEach(f => body.append('flyers', f));
+      ChurchLifeUI.themeBody(el, body);
       const m = t ? t.month : document.getElementById('thMonth').value;
       try {
         await ChurchLifeUI.sendForm(`/api/national/themes/${encodeURIComponent(m)}`, 'PUT', body);

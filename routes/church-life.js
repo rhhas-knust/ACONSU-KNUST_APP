@@ -562,44 +562,65 @@ function registerChurchLifeRoutes(app, deps) {
   // chapter's admin can only PROPOSE one: it waits, and shows nowhere, until
   // National approves it. Once approved a chapter can no longer change it - the
   // church's theme must not move under a chapter's hand after it has gone live.
-  const flyerUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: PHOTO_LIMIT_BYTES * 2, files: MAX_FLYERS } }).array('flyers', MAX_FLYERS);
+  // Two sets of pictures can come with a theme: its own flyer(s), and the flyer(s)
+  // of the month's daily meditative prayer.
+  const flyerUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: PHOTO_LIMIT_BYTES * 2, files: MAX_FLYERS * 2 } })
+    .fields([{ name: 'flyers', maxCount: MAX_FLYERS }, { name: 'prayerFlyers', maxCount: MAX_FLYERS }]);
   const flyers = (req, res, next) => flyerUpload(req, res, (err) => err
-    ? res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A flyer is too large (16MB at most).' : `Up to ${MAX_FLYERS} flyers, images only.` })
+    ? res.status(err.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({ error: err.code === 'LIMIT_FILE_SIZE' ? 'A flyer is too large (16MB at most).' : `Up to ${MAX_FLYERS} flyers of each kind, images only.` })
     : rejectOperatorKeys(req, res, next));
+
+  // Which of a record's pictures the form still shows (they are checked against the
+  // record, so an id from somewhere else cannot be "kept"), and the new ones sent.
+  function flyerPlan(req, have, field, keepField) {
+    let keep = [];
+    try { keep = JSON.parse(req.body[keepField] || '[]'); } catch (e) { keep = []; }
+    keep = (Array.isArray(keep) ? keep : []).filter(id => have.includes(id));
+    const incoming = ((req.files && req.files[field]) || []).filter(f => String(f.mimetype).startsWith('image/'));
+    return { keep, incoming, have };
+  }
+  async function storeFlyers(plan, title) {
+    const added = [];
+    for (const f of plan.incoming) {
+      const c = await compressIfImage(f.buffer, f.mimetype);
+      added.push(String(await gridfs.uploadBuffer(c.buffer, f.originalname, {
+        category: 'monthlyTheme', contentType: c.contentType, title, chapterId: rolesLib.NATIONAL_CHAPTER_ID
+      })));
+    }
+    plan.have.filter(id => !plan.keep.includes(id)).forEach(dropFile);
+    return [...plan.keep, ...added];
+  }
 
   // Reads the form, stores the new flyers and drops the ones taken off. Returns
   // { data } for the record, or { error }.
   async function themeFromRequest(req, existing, month) {
     const title = oneLine(req.body.title, 120);
     if (!title) return { error: 'The theme needs a title.' };
-    // Flyers the form still shows are kept; the rest are removed. Anything not
-    // in the existing record cannot be "kept" - the ids are checked.
-    let keep = [];
-    try { keep = JSON.parse(req.body.keepFlyers || '[]'); } catch (e) { keep = []; }
-    const have = (existing && existing.flyerFileIds) || [];
-    keep = (Array.isArray(keep) ? keep : []).filter(id => have.includes(id));
-    const incoming = (req.files || []).filter(f => String(f.mimetype).startsWith('image/'));
-    if (keep.length + incoming.length > MAX_FLYERS) return { error: `At most ${MAX_FLYERS} flyers for a month.` };
-    const added = [];
-    for (const f of incoming) {
-      const c = await compressIfImage(f.buffer, f.mimetype);
-      added.push(String(await gridfs.uploadBuffer(c.buffer, f.originalname, {
-        category: 'monthlyTheme', contentType: c.contentType, title, chapterId: rolesLib.NATIONAL_CHAPTER_ID
-      })));
+    const themePlan = flyerPlan(req, (existing && existing.flyerFileIds) || [], 'flyers', 'keepFlyers');
+    const prayerPlan = flyerPlan(req, (existing && existing.prayerFlyerFileIds) || [], 'prayerFlyers', 'keepPrayerFlyers');
+    for (const plan of [themePlan, prayerPlan]) {
+      if (plan.keep.length + plan.incoming.length > MAX_FLYERS) return { error: `At most ${MAX_FLYERS} flyers of each kind for a month.` };
     }
-    have.filter(id => !keep.includes(id)).forEach(dropFile);
+    // The prayer keeps its line breaks: paragraphs are how it is read.
+    const multiline = (v, max) => String(v || '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, max);
+    const flyerFileIds = await storeFlyers(themePlan, title);
+    const prayerFlyerFileIds = await storeFlyers(prayerPlan, title);
     return {
       data: {
         month, title,
         scripture: oneLine(req.body.scripture, 200),
-        blurb: String(req.body.blurb || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, 1200),
-        flyerFileIds: [...keep, ...added]
+        blurb: multiline(req.body.blurb, 1200),
+        flyerFileIds,
+        prayer: multiline(req.body.prayer, 4000),
+        prayerNote: oneLine(req.body.prayerNote, 200),
+        prayerFlyerFileIds
       }
     };
   }
   const approvedFor = async (month) => (await repo.getAll('monthlyThemes', { month, status: 'approved' }))[0] || null;
   const dropTheme = async (theme) => {
     (theme.flyerFileIds || []).forEach(dropFile);
+    (theme.prayerFlyerFileIds || []).forEach(dropFile);
     await repo.removeById('monthlyThemes', theme.id);
   };
 

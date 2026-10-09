@@ -285,10 +285,12 @@ National, and the site picks them up by itself.
 - **This week's alumnus.** One person is celebrated each week, the same one in the
   app and here. It changes on Monday. National can choose who, or leave it to the
   rotation, which gives everybody a turn before anyone gets a second.
-- **The month's theme**, with its prayer flyers. A chapter's admin sends it from the
-  app (Monthly Theme) and National approves it; National can also write it directly.
-  Next month's can be sent ahead of time, and it appears on the first of the month.
-  A month with no theme shows nothing at all.
+- **The month's theme and its daily meditative prayer.** A chapter's admin sends it
+  from the app (Monthly Theme) and National approves it; National can also write it
+  directly. Next month's can be sent ahead of time, and it appears on the first of
+  the month. A month with no theme shows nothing at all. See
+  [Changing the theme and the prayer each month](#changing-the-theme-and-the-prayer-each-month)
+  just below.
 
 **How it gets here.** This page never asks the app while someone is looking: the
 app sleeps on free hosting and takes up to a minute to wake, and a visitor should
@@ -323,6 +325,62 @@ alumni: {
 > with no activity at all.** If the wall ever stops updating, open Actions and
 > re-enable *Landing site*; a push to `main` also wakes it.
 
+### Changing the theme and the prayer each month
+
+Once a month there is a theme (a title, a Bible verse, a line about it, and its
+flyer) and a daily meditative prayer (the words, when to pray it, and its flyer).
+They are one record, so they change together. There are two ways to change them.
+Use the first; keep the second for when the app is not an option.
+
+**1. In the app (the usual way).** National portal, **Monthly Theme**. Fill in:
+
+| Field | What it is |
+|---|---|
+| Month | The month it is for. Next month's can be done early; it shows on the 1st. |
+| Theme, Scripture, A few lines | "Winning Souls", "Luke 15:4-7", the line about it. |
+| Theme flyer | The picture for the theme itself. |
+| Daily meditative prayer, the words | Leave a blank line between paragraphs. |
+| When to pray it | One short line, for example "10 minutes, morning and evening". |
+| Prayer flyer | The picture of the prayer. |
+
+Save, and the app shows it on the home page at once. **The site follows by
+itself within about three hours** (or straight away from GitHub → Actions →
+Landing site → Run workflow). A chapter admin does the same under their own
+Monthly Theme; National approves it before it is shown anywhere.
+
+**2. In `chapter.js` (the code way).** The `monthly` block holds one month's
+theme and prayer. You change it once a month, then push:
+
+```js
+monthly: {
+  month: '2026-10',                       // the month it is for: year-month, numbers only
+  title: 'Winning Souls',
+  scripture: 'Luke 15:4-7',
+  blurb: 'Operation: tell someone about Christ Jesus!',
+  flyers: ['images/monthly/2026-10-theme.jpg'],
+  prayerNote: '10 minutes, morning and evening.',
+  prayer: [
+    'Father, I impact the world with Your Word.',      // one line per paragraph
+    'In Jesus\' name, Amen.',
+  ],
+  prayerFlyers: ['images/monthly/2026-10-prayer.jpg'],
+},
+```
+
+- **It only shows during its own month.** Leave October's in place in November
+  and nothing from it appears; the page does not need tidying to stay correct.
+- **The app wins.** If a theme has been saved in the app for the month, the site
+  shows that and ignores this block. So the block is a stand-in until the site's
+  next refresh, not a second thing to keep up to date.
+- **Put the pictures in `images/monthly/`**, named by month (`2026-11-theme.jpg`,
+  `2026-11-prayer.jpg`). Not in `images/theme/`: that folder is cleared and
+  refilled from the app on every refresh, and anything placed there by hand is
+  deleted.
+- Any line left out simply does not appear, and a block with no `title` shows
+  nothing. The test suite checks that every picture named here exists, so a
+  mistyped path shows up in CI (`npm test`) rather than as a broken picture on
+  the page; the publish itself only checks that `chapter.js` parses.
+
 ### Before you publish, fill in at least
 
 - `serviceTimes` — when and where you actually meet. Until this is set, the
@@ -345,7 +403,7 @@ Nothing in the other files is specific to KNUST.
 | `index.html` | The page structure. |
 | `styles.css` | ACONSU's colours and type. Follows the reader's light/dark setting. |
 | `site.js` | Fills the page from `chapter.js` and `data/feed.json`, and hides what is empty. |
-| `images/` | Your logo, and any photos you add. `images/alumni/` and `images/theme/` are filled in automatically. |
+| `images/` | Your logo, and any photos you add. `images/alumni/` and `images/theme/` are filled in automatically; the flyers you place for `chapter.js` go in `images/monthly/`. |
 | `data/feed.json` | The alumni, this week's spotlight and the month's theme. Written automatically; do not edit. |
 | `tools/` | Resizes oversized photos, and copies the alumni and theme in from the app. Both run on their own. |
 

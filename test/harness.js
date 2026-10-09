@@ -168,7 +168,7 @@ const fakeModels = {
   AlumniEntry: makeModel({ about: '', currentWork: '', classOf: '', chapterId: '', imageFileId: '', status: 'pending', via: 'app', contact: '', declineReason: '', approvedAt: null, approvedBy: '', lastSpotlightWeek: '', prevSpotlightWeek: '' }),
   AlumniDetail: makeModel({ chapterId: '', classOf: '', programme: '', profession: '', organisation: '', industry: '', city: '', country: 'Ghana', openToMentoring: false, email: '', phone: '', shareWithMembers: false, showContact: false, consentedAt: null, consentVersion: '', status: 'new', via: 'site' }),
   AlumniSpotlight: makeModel({ weekKey: '', entryId: '', pinned: false }),
-  MonthlyTheme: makeModel({ scripture: '', blurb: '', flyerFileIds: [], status: 'approved', proposedByChapterId: '', proposedByName: '', declineReason: '', decidedAt: null, decidedBy: '' }),
+  MonthlyTheme: makeModel({ scripture: '', blurb: '', flyerFileIds: [], prayer: '', prayerNote: '', prayerFlyerFileIds: [], status: 'approved', proposedByChapterId: '', proposedByName: '', declineReason: '', decidedAt: null, decidedBy: '' }),
   ChurchFounder: makeModel({ role: '', about: '', imageFileId: '', inMemoriam: false, order: 0 }),
   Form: makeModel({ chapterId: '', description: '', category: 'custom', linkedEventId: '', fields: [], isOpen: true, closesAt: '', createdBy: '' }),
   FormSubmission: makeModel({ chapterId: '', memberId: '', submitterName: '', submitterEmail: '', answers: {} }),

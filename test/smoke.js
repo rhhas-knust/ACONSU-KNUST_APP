@@ -3709,6 +3709,35 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     })();
     check('chapter.js parses and defines the chapter', !!CHAPTER && !!CHAPTER.name, null);
 
+    // ---- the month's theme and daily prayer on the site ----
+    check('a chapter can write the month\'s theme and prayer into chapter.js', !!CHAPTER.monthly && CHAPTER.monthly.title === 'Winning Souls' && Array.isArray(CHAPTER.monthly.prayer) && CHAPTER.monthly.prayer.length > 3, CHAPTER.monthly && Object.keys(CHAPTER.monthly));
+    check('with the flyers it names really there', [...(CHAPTER.monthly.flyers || []), ...(CHAPTER.monthly.prayerFlyers || [])].every(f => fs.existsSync(path.join(siteDir, f))), null);
+    check('and only during the month it names, so a stale month cannot stay up', /String\(m\.month\) !== thisMonthKey\(\)\) return null/.test(js), null);
+    check('the app\'s theme replaces it when there is one', js.indexOf('renderTheme(fallbackTheme())') > 0 && js.indexOf('renderTheme(feed.theme)') > js.indexOf('renderTheme(fallbackTheme())'), null);
+    check('the page has a place for the prayer: its note, its words behind a button, its flyer', /id="themePrayerBlock"/.test(html) && /<details id="prayerDetails">/.test(html) && /id="prayerFlyers"/.test(html), null);
+    check('the prayer is written into the page as text, never as markup', /esc\(p\)\.replace\(\/\\n\/g, '<br>'\)/.test(js), null);
+    {
+      // The renderer, run against a fake page, twice: the second call (the app's) replaces the first (chapter.js's).
+      const els = {};
+      // Every element is a stand-in that remembers what was written to it and does nothing else.
+      const stand = (target) => new Proxy(target, { get: (t, k) => (k in t ? t[k] : (k === 'style' ? { setProperty() {} } : k === 'classList' ? { add() {}, remove() {}, toggle() {} } : k === 'children' ? [] : () => stand({}))), set: (t, k, v) => { t[k] = v; return true; } });
+      const mk = (id) => (els[id] = els[id] || stand({ id, hidden: true, textContent: '', innerHTML: '', value: '', checked: false, files: [] }));
+      const sandbox = {
+        window: { CHAPTER: { name: 'X', monthly: { month: '2026-10', title: 'Winning Souls', prayer: ['One.', 'Two <b>x</b>.'], prayerFlyers: ['a.jpg'] } } },
+        document: { getElementById: mk, querySelectorAll: () => ({ forEach() {}, length: 0 }), querySelector: () => stand({ hidden: true }), createElement: () => stand({}), title: '' },
+        fetch: () => new Promise(() => {}), URL, Date, String, Array, Object, Math, JSON, navigator: {}, setTimeout, clearTimeout, console, location: { search: '' }
+      };
+      try {
+        // The script is one closed function; the test opens it at the end to reach the renderer.
+        require('vm').runInNewContext(js.replace(/\}\)\(\);\s*$/, 'window.__t = { renderTheme: renderTheme };\n})();'), sandbox);
+        sandbox.window.__t.renderTheme({ month: '2026-10', title: 'Winning Souls', prayer: 'Para one.\n\nPara <i>two</i>', prayerFlyers: [] });
+        check('the prayer renders as paragraphs with the markup escaped', /<p>Para one\.<\/p><p>Para &lt;i&gt;two&lt;\/i&gt;<\/p>/.test(els.prayerText.innerHTML), els.prayerText && els.prayerText.innerHTML);
+        check('and a theme with no prayer flyer shows none', els.prayerFlyers.hidden === true, els.prayerFlyers);
+        sandbox.window.__t.renderTheme({ month: '2026-10', title: 'Second', prayer: '', prayerFlyers: [] });
+        check('and the block hides when a later theme has no prayer', els.themePrayerBlock.hidden === true && els.themeTitle.textContent === 'Second', els.themePrayerBlock);
+      } catch (e) { check('the theme renderer runs without a browser', false, e.message); }
+    }
+
     // It used to demand every key be present, which contradicted the rule the
     // whole site rests on: anything left blank disappears. Commenting a line
     // out is a perfectly ordinary way to blank it, and doing so turned CI red
@@ -3762,7 +3791,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('anything a chapter types is escaped before it reaches the page',
       /function esc\(s\)/.test(js) && /\.replace\(\/&\/g, '&amp;'\)/.test(js), null);
     check('and outbound links cannot reach back through window.opener',
-      !/target="_blank"(?![^>]*rel=)/.test(html) && /rel="noopener"/.test(js), null);
+      !/target="_blank"(?![^>]*rel=)/.test(html) && /rel="noopener( noreferrer)?"/.test(js), null);
 
     // `.btn` sets `display`, and an author rule beats the browser's own
     // `[hidden] { display: none }`. Without this the app links stayed on
@@ -4797,6 +4826,36 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       themeForm({ title: 'Walking in Newness', keepFlyers: JSON.stringify([twoFlyers[0]]) }, [new Blob(['%PDF-1.4'], { type: 'application/pdf' })]), true);
     check('and only pictures are accepted as flyers', w.data.item.flyerFileIds.length === 1, w.data);
 
+    // ---- the month's daily meditative prayer ----
+    const prayerText = 'Father, I impact the world with Your Word.\r\n\r\n\r\n\r\nI am bold to spread Your Word. (2 Timothy 1:7)   \nIn Jesus\' name, Amen.';
+    const prayerForm = (fields, flyers, prayerFlyers) => { const fd = themeForm(fields, flyers); (prayerFlyers || []).forEach((f, i) => fd.append('prayerFlyers', f, `prayer${i}.jpg`)); return fd; };
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`,
+      prayerForm({ title: 'Walking in Newness', keepFlyers: JSON.stringify([twoFlyers[0]]), prayer: prayerText, prayerNote: 'Pray for ten minutes, morning and evening.' }, [], [flyer()]), true);
+    const withPrayer = w.data.item;
+    check('National can add the month\'s meditative prayer: its words, when to pray it, and its flyer',
+      w.status === 200 && /^Father, I impact/.test(withPrayer.prayer) && withPrayer.prayerNote === 'Pray for ten minutes, morning and evening.' && withPrayer.prayerFlyerFileIds.length === 1, w.data);
+    check('the words keep their paragraphs, and lose the stray blank lines and trailing spaces',
+      withPrayer.prayer.split('\n\n').length === 2 && !/ \n/.test(withPrayer.prayer) && !/\n\n\n/.test(withPrayer.prayer) && !/\r/.test(withPrayer.prayer), JSON.stringify(withPrayer.prayer));
+    check('the theme\'s own flyer was kept while the prayer\'s was added', withPrayer.flyerFileIds.length === 1 && withPrayer.flyerFileIds[0] === twoFlyers[0], w.data);
+    w = await call('anon', 'GET', '/api/public/theme');
+    check('anyone sees the prayer with the theme', w.data.theme.prayer === withPrayer.prayer && w.data.theme.prayerFlyerFileIds.length === 1 && w.data.theme.prayerNote.length > 5, w.data);
+    w = await call('anon', 'GET', '/api/public/site-feed');
+    check('and so does the website feed', w.data.theme.prayer === withPrayer.prayer && w.data.theme.prayerFlyerFileIds.length === 1, w.data.theme);
+    const prayerFlyerId = withPrayer.prayerFlyerFileIds[0];
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`,
+      prayerForm({ title: 'Walking in Newness', keepFlyers: JSON.stringify([twoFlyers[0]]), keepPrayerFlyers: JSON.stringify([twoFlyers[0]]), prayer: 'Changed.' }, [], []), true);
+    check('a picture belonging to the theme cannot be "kept" as a prayer flyer, and the old prayer flyer goes',
+      w.status === 200 && w.data.item.prayerFlyerFileIds.length === 0 && w.data.item.prayer === 'Changed.' && await gone(prayerFlyerId), w.data);
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`,
+      prayerForm({ title: 'Walking in Newness', keepFlyers: JSON.stringify([twoFlyers[0]]) }, [], Array.from({ length: 7 }, flyer)), true);
+    check('more than six prayer flyers is refused', w.status === 400, w.status);
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`,
+      themeForm({ title: 'Walking in Newness', keepFlyers: JSON.stringify([twoFlyers[0]]), prayer: 'x'.repeat(9000) }), true);
+    check('a prayer is limited in length', w.status === 200 && w.data.item.prayer.length === 4000, w.data.item && w.data.item.prayer.length);
+    w = await call('natOv', 'PUT', `/api/national/themes/${thisMonth}`,
+      themeForm({ title: 'Walking in Newness', keepFlyers: JSON.stringify([twoFlyers[0]]), prayer: '<script>alert(1)</script>' }), true);
+    check('and is stored as text for the page to escape, not changed', w.data.item.prayer === '<script>alert(1)</script>', w.data.item.prayer);
+
     // Next month's can be written ahead, and waits for its month.
     w = await call('natOv', 'PUT', `/api/national/themes/${nextMonth}`, themeForm({ title: 'The Year of Open Doors' }), true);
     check('next month\'s theme can be prepared in advance', w.status === 200, w.data);
@@ -5091,6 +5150,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     const mk = new FormData();
     mk.append('title', 'Walking in Newness'); mk.append('scripture', 'Romans 6:4');
     mk.append('flyers', new Blob([portrait], { type: 'image/jpeg' }), 'f.jpg');
+    mk.append('prayer', 'Father, I impact the world with Your Word.\n\nIn Jesus\' name, Amen.'); mk.append('prayerNote', 'Ten minutes, morning and evening.');
+    mk.append('prayerFlyers', new Blob([portrait], { type: 'image/jpeg' }), 'p.jpg');
     let sy = await call('natOv', 'PUT', `/api/national/themes/${life.monthKey()}`, mk, true);
     check('a theme exists for this month to be copied', sy.status === 200, sy.data);
 
@@ -5114,6 +5175,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and the month\'s theme, with its flyer saved',
       feed.theme && feed.theme.title === 'Walking in Newness' && feed.theme.scripture === 'Romans 6:4'
       && feed.theme.flyers.length === 1 && fs.existsSync(path.join(siteDir, feed.theme.flyers[0])), feed.theme);
+    check('and the month\'s prayer, its note and its flyer saved the same way',
+      feed.theme.prayer.startsWith('Father, I impact') && feed.theme.prayer.includes('\n\n') && feed.theme.prayerNote === 'Ten minutes, morning and evening.'
+      && feed.theme.prayerFlyers.length === 1 && /^images\/theme\/[A-Za-z0-9_-]+\.jpg$/.test(feed.theme.prayerFlyers[0]) && fs.existsSync(path.join(siteDir, feed.theme.prayerFlyers[0])), feed.theme);
     check('each person carries only what is shown',
       feed.alumni.every(a => Object.keys(a).sort().join() === 'about,classOf,currentWork,id,name,photo'), feed.alumni[0]);
 
