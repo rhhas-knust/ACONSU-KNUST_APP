@@ -108,7 +108,7 @@ Play will not let you publish without these.
 
 | Asset | Size | Notes |
 |---|---|---|
-| App icon | 512 × 512 PNG | 32-bit, no transparency |
+| App icon | 512 × 512 PNG | 32-bit, no transparency. Made: `design/play-store/icon-512.png` (the ACONSU logo; regenerate with `node design/app-icon/make-android-icons.js`). |
 | Feature graphic | 1024 × 500 PNG | Shown at the top of the listing. The launch artwork works well here — render it at that ratio from `design/launch-screen/continuance.html`. |
 | Phone screenshots | min 2, up to 8 | 16:9 or 9:16, min 320px on the short side |
 | Tablet screenshots | optional | Only if you declare tablet support |

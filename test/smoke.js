@@ -5611,6 +5611,72 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     }
     check('the website has an apple touch icon', fs.existsSync(path.join(root, 'site/apple-touch-icon.png')), null);
     check('every app page declares the icon set', files('public', '.html').filter(f => !/offline|404/.test(f)).every(f => /rel="icon"/.test(read(f))), null);
+
+    // ---- the Android app's icon is the ACONSU logo ----
+    {
+      const sharp = require('sharp');
+      const res = path.join(root, 'android/app/src/main/res');
+      const density = { mdpi: 1, hdpi: 1.5, xhdpi: 2, xxhdpi: 3, xxxhdpi: 4 };
+      let sizesRight = true, cornersClear = true, logoColours = true, legacyRight = true, roundClear = true;
+      for (const [d, k] of Object.entries(density)) {
+        const fg = await sharp(path.join(res, 'mipmap-' + d, 'ic_launcher_foreground.png')).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        const w = fg.info.width;
+        if (w !== 108 * k || fg.info.height !== 108 * k) sizesRight = false;
+        if (fg.data[3] !== 0) cornersClear = false;          // the picture's own corner is empty: only the middle is the logo
+        // the colour of what is drawn: the logo is purple, pink and orange; the placeholder it replaced was blue
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < fg.data.length; i += 4) {
+          if (fg.data[i + 3] > 200 && (fg.data[i] < 225 || fg.data[i + 1] < 225 || fg.data[i + 2] < 225)) { r += fg.data[i]; g += fg.data[i + 1]; b += fg.data[i + 2]; n++; }
+        }
+        if (n < w * w * 0.03 || !(r / n > g / n + 20 && b / n > g / n)) logoColours = false;
+        for (const name of ['ic_launcher', 'ic_launcher_round']) {
+          const m = await sharp(path.join(res, 'mipmap-' + d, name + '.png')).metadata();
+          if (m.width !== 48 * k || m.height !== 48 * k) legacyRight = false;
+        }
+        const round = await sharp(path.join(res, 'mipmap-' + d, 'ic_launcher_round.png')).ensureAlpha().raw().toBuffer();
+        if (round[3] !== 0) roundClear = false;              // a round icon has no corners
+      }
+      check('the Android launcher icon is drawn at the right size for every screen density', sizesRight, null);
+      check('and is the logo in the middle of an otherwise empty picture', cornersClear, null);
+      check('in the logo\'s own colours, not the blue placeholder it started with', logoColours, null);
+      check('older phones get the logo too, as a square and as a circle', legacyRight && roundClear, null);
+      const adaptive = read('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml');
+      check('a newer phone draws it over plain white, so the logo keeps its own background',
+        /@mipmap\/ic_launcher_foreground/.test(adaptive) && /#FFFFFF/i.test(read('android/app/src/main/res/values/ic_launcher_background.xml')), null);
+      check('no leftover placeholder drawables for the launcher icon',
+        !fs.existsSync(path.join(res, 'drawable-v24/ic_launcher_foreground.xml')) && !fs.existsSync(path.join(res, 'drawable/ic_launcher_background.xml')), null);
+      const play = await sharp(path.join(root, 'design/play-store/icon-512.png')).metadata();
+      check('the Play Store icon is 512 x 512 with no transparent pixels', play.width === 512 && play.height === 512 && !play.hasAlpha, JSON.stringify(play));
+    }
+
+    // ---- the how-to video ----
+    {
+      const page = read('public/how-to.html');
+      const video = path.join(root, 'public/video/how-to-aconsu.mp4');
+      const poster = (page.match(/poster="([^"]+)"/) || [])[1] || '';
+      check('there is a page that explains how to use the app, with the video on it',
+        /<video[^>]*\bcontrols\b/.test(page) && /<source src="\/video\/how-to-aconsu\.mp4" type="video\/mp4">/.test(page) && fs.existsSync(video), null);
+      check('it does not start by itself or download until it is pressed (data costs money)',
+        !/autoplay/.test(page) && /preload="none"/.test(page) && /playsinline/.test(page), null);
+      check('a still picture stands in for it, and that picture exists', poster.startsWith('/video/') && fs.existsSync(path.join(root, 'public', poster)), poster);
+      const head = fs.readFileSync(video).subarray(0, 12);
+      check('the file is a real MP4, small enough to watch on mobile data',
+        head.subarray(4, 8).toString() === 'ftyp' && fs.statSync(video).size < 6 * 1048576, fs.statSync(video).size + ' bytes');
+      check('the same steps are written out for anyone who cannot watch it, and they are in order',
+        (page.match(/<li><strong>/g) || []).length >= 8 && /<ol class="howto-steps">/.test(page), null);
+      check('the video has no sound, so the page says the words are on the screen', /no sound/.test(page), null);
+      const range = await fetch(BASE + '/video/how-to-aconsu.mp4', { headers: { range: 'bytes=0-99' } });
+      check('the app hands the video out in pieces, which is how a phone plays it',
+        range.status === 206 && /video\/mp4/.test(range.headers.get('content-type') || '') && /^bytes 0-99\//.test(range.headers.get('content-range') || ''), range.status);
+      const csp = (await fetch(BASE + '/how-to.html')).headers.get('content-security-policy') || '';
+      check('and the page is allowed to play video from the app and nowhere else', /media-src 'self'/.test(csp) && !/media-src[^;]*https?:/.test(csp), csp);
+      const sw = read('public/sw.js');
+      check('the service worker stays out of the way of video, which is played in pieces',
+        /request\.destination === 'video'/.test(sw) && /\/video\//.test(sw), null);
+      check('and the page is part of what is kept for offline use', /'\/how-to\.html'/.test(sw), null);
+      check('More links to it', /href: '\/how-to\.html'/.test(read('public/more.html')), null);
+      check('and so does the sign-up page, for somebody who is new', /href="\/how-to\.html"/.test(read('public/register.html')), null);
+    }
   }
 
   console.log(`\n${failures ? `${failures} FAILURES` : 'all checks passed'}`);

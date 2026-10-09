@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How to use the app | ACONSU</title>
+<meta name="description" content="A short video and the steps in writing: how to sign up, find events, read the Bible, send a prayer request and find your way around the ACONSU app.">
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .howto { max-width: 760px; margin: 0 auto; }
+  .howto-video video {
+    display: block; width: 100%; max-width: 360px; height: auto;
+    aspect-ratio: 780 / 1688; margin: 0 auto;
+    border-radius: var(--radius); background: var(--surface-2);
+  }
+  @media (max-width: 480px) { .howto-video { margin-left: -22px; margin-right: -22px; } }
+  .howto-note { color: var(--ink-faint); font-size: 0.95rem; text-align: center; margin: 12px auto 0; max-width: 360px; }
+  .howto-actions { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 18px; }
+  .howto h2 { margin: 40px 0 14px; font-size: 1.3rem; }
+  .howto-steps { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+  .howto-steps li {
+    counter-increment: step; position: relative;
+    padding: 0 0 22px 52px; color: var(--ink-soft); line-height: 1.65;
+  }
+  .howto-steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0;
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface-3); color: var(--brand-strong); font-weight: 700;
+  }
+  .howto-steps strong { display: block; color: var(--heading); font-size: 1.05rem; margin-bottom: 2px; }
+</style>
+</head>
+<body class="has-side-rail">
+
+<a class="skip-link" href="#main">Skip to content</a>
+<header id="site-header"></header>
+<main id="main" tabindex="-1">
+
+<section class="hero hero-compact">
+  <div class="hero-content">
+    <h1>How to use the app</h1>
+    <p>A short video, and the same steps written out.</p>
+  </div>
+</section>
+
+<section style="padding-top:0;">
+  <div class="container howto">
+
+    <div class="howto-video">
+      <video id="howtoVideo" controls playsinline preload="none" width="780" height="1688"
+             poster="/video/how-to-aconsu-poster.jpg" aria-describedby="howtoSteps">
+        <source src="/video/how-to-aconsu.mp4" type="video/mp4">
+        Your device cannot play this video here. The steps are written out below.
+      </video>
+      <p class="howto-note">About a minute and a half. The words are on the screen and there is no sound, so you can watch it anywhere.</p>
+    </div>
+
+    <div class="howto-actions">
+      <a class="btn btn-outline" href="/video/how-to-aconsu.mp4" download="how-to-use-the-aconsu-app.mp4">Download the video</a>
+      <button type="button" class="btn btn-outline" id="shareBtn" hidden>Share this page</button>
+    </div>
+
+    <h2 id="howtoSteps">The steps in writing</h2>
+    <ol class="howto-steps">
+      <li><strong>Find your way around</strong>
+        The bar at the bottom has Home, Events, Bible, Prayer and More. Tap one to go there.</li>
+      <li><strong>Join</strong>
+        Tap Log In at the top, then Sign up. Add a photo and type your name, email and a password. Say whether you are a student or an alumnus, tick the box to agree to the Terms of use and the Privacy policy, and tap Create Account. Your profile opens and you are signed in.</li>
+      <li><strong>Events</strong>
+        Events shows what is coming up. If an event asks for a sign-up, tap Register Now and confirm your details.</li>
+      <li><strong>Bible</strong>
+        Pick a book, a chapter and a version, and read. Reading on different days builds your streak.</li>
+      <li><strong>Prayer</strong>
+        Write your request and choose who sees it. &ldquo;Only leaders&rdquo; keeps it private. The Prayer Wall shows it to the community, with your name or without it.</li>
+      <li><strong>More</strong>
+        More holds the rest: departments, groups, community, giving, sermons and your account. Scroll to see all of it.</li>
+      <li><strong>Your profile</strong>
+        In More, tap your name. Your details, your streak and your badges are there. The moon at the top switches between a light and a dark screen.</li>
+      <li><strong>Help</strong>
+        The bell at the top shows announcements. If you are stuck, open More and then Contact Us, or ask your chapter leaders.</li>
+    </ol>
+
+    <p style="margin-top:12px;">Something here does not match what you see? <a href="/contact.html">Tell us</a> and we will fix it.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script>
+(async function () {
+  await initLayout('/how-to.html');
+
+  // The page's own address is what is worth sending: the video is a few
+  // megabytes, and whoever opens the link gets it from here when they press play.
+  const share = document.getElementById('shareBtn');
+  if (navigator.share) {
+    share.hidden = false;
+    share.addEventListener('click', function () {
+      navigator.share({ title: 'How to use the ACONSU app', url: location.origin + '/how-to.html' })
+        .catch(function () { /* closed without sharing */ });
+    });
+  }
+})();
+</script>
+</body>
+</html>
