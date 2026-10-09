@@ -291,8 +291,43 @@ window.CHAPTER = {
     twitter: '',
   },
 
+  // ---- this month's theme, and its daily meditative prayer ------------------
+  // THE USUAL WAY: write them in the app (National portal, Monthly Theme). A scheduled
+  // job copies them here, usually within three hours, and nobody edits this file.
+  //
+  // THIS BLOCK is for when you would rather change the website directly, or the app
+  // does not have the month yet. Once a month, replace the lines below with the new
+  // month's, and put the flyer pictures in images/monthly/.
+  //
+  //  - It only shows during the month named in `month` ("2026-10"), so last month's can
+  //    never be left on the page by mistake. In November this block simply stops showing.
+  //  - If the app already has a theme for the month, the app's is shown instead.
+  //  - Blank anything and it disappears. `prayer` is a list of paragraphs, one line each.
+  //  - Flyers: about 900px wide and under 250KB. Phone screenshots and WhatsApp
+  //    pictures are fine; they are shrunk when the site is published.
+  monthly: {
+    month: '2026-10',
+    title: 'Winning Souls',
+    scripture: 'Luke 15:4-7',
+    blurb: 'Operation: tell someone about Christ Jesus! Bring joy to heaven! We rejoice with heaven!',
+    flyers: ['images/monthly/2026-10-theme.jpg'],
+
+    prayerNote: 'Daily meditative and confession prayers. 10 minutes, both in the morning and in the evening.',
+    prayer: [
+      'Father, I impact the world with Your Word. The lost must see Christ through my actions and the testimony of my lips. Today I will speak to at least one soul and lead them to the light of Christ. There is no darkness where there is light; so there is no darkness where I stand. (John 1:5; Matthew 5:14)',
+      'I am bold to spread Your Word, for You have not given me a spirit of fear, but of power, love, and a sound mind. (2 Timothy 1:7; Acts 1:8)',
+      'One soul won brings joy in heaven, and I have decided to be the one who brings that joy. (Luke 15:7; Proverbs 11:30)',
+      'I have made up my mind to fulfil the Father\'s will. I will always commit to the Great Commission. (John 6:38; Matthew 28:19-20)',
+      'I will not be selfish with the love I received from the Father; I seek the joy of heaven, which is more precious than anything else. (Matthew 13:44; Psalm 16:11)',
+      'He who sits in heaven shall laugh, I sit with Him in heaven, so I laugh. (Ephesians 2:6; Psalm 2:4) Joy comes from the Lord. I do the work of the Lord, so I am and will forever be joyful. (Nehemiah 8:10; Philippians 4:4)',
+      'Father, I pray for every lost soul. Lord Jesus, touch their hearts, that they may see the hope of Your glory. I pray that every mind the prince of this world has blinded will receive the revelation of Your Word and power. May those who have lost hope regain hope and strength. (Ephesians 1:18; 2 Corinthians 4:4; Isaiah 40:31)',
+      'In Jesus\' name, Amen.',
+    ],
+    prayerFlyers: ['images/monthly/2026-10-prayer.jpg'],
+  },
+
   // ---- alumni, and the month's theme -------------------------------------
-  // Both are written in the app, by National, and arrive on this page by
+  // The alumni wall, and the month's theme from the app, arrive on this page by
   // themselves: a scheduled job copies them in (site/tools/sync-feed.js), usually
   // within three hours. There is nothing to type here for the wall or the theme.
   // This page never asks the app while somebody is looking at it - the app

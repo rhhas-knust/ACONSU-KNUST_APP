@@ -241,6 +241,38 @@
     });
   }
 
+  // ------------------------------------- the pictures and the prayer on a theme form
+  // Shared by National's form and a chapter's proposal form, so the two cannot drift.
+  // The theme has its own flyer(s); the month's daily meditative prayer has its words
+  // (typed, so they can be read on a phone), a line on when to pray it, and its flyer(s).
+  function flyerKeep(ids, attr) {
+    return ids && ids.length ? '<div class="flyer-keep">' + ids.map(function (id) {
+      return '<label><img src="/api/files/' + encodeURIComponent(id) + '" alt=""><input type="checkbox" ' + attr + '="' + escapeHtml(id) + '" checked> keep</label>';
+    }).join('') + '</div>' : '';
+  }
+  function themeFields(t) {
+    return '<div class="field"><label for="thFlyers">Theme flyer (optional, up to 6 pictures)</label>'
+      + flyerKeep(t && t.flyerFileIds, 'data-keep')
+      + '<input type="file" id="thFlyers" accept="image/*" multiple></div>'
+      + '<div class="field"><label for="thPrayer">Daily meditative prayer, the words (optional)</label>'
+      + '<textarea id="thPrayer" rows="12" maxlength="4000" placeholder="Paste the prayer here. Leave a blank line between paragraphs.">' + escapeHtml(t && t.prayer || '') + '</textarea>'
+      + '<p class="hint">Typed words can be read on any phone, by a screen reader, and by search. The flyer below is the picture of it.</p></div>'
+      + '<div class="field"><label for="thPrayerNote">When to pray it (optional)</label>'
+      + '<input type="text" id="thPrayerNote" maxlength="200" value="' + escapeHtml(t && t.prayerNote || '') + '" placeholder="Ten minutes, morning and evening"></div>'
+      + '<div class="field"><label for="thPrayerFlyers">Prayer flyer (optional, up to 6 pictures)</label>'
+      + flyerKeep(t && t.prayerFlyerFileIds, 'data-keep-prayer')
+      + '<input type="file" id="thPrayerFlyers" accept="image/*" multiple></div>';
+  }
+  function themeBody(el, body) {
+    var kept = function (attr) { return JSON.stringify([].slice.call(el.querySelectorAll('[' + attr + ']')).filter(function (c) { return c.checked; }).map(function (c) { return c.getAttribute(attr); })); };
+    body.append('keepFlyers', kept('data-keep'));
+    [].slice.call(document.getElementById('thFlyers').files).forEach(function (f) { body.append('flyers', f); });
+    body.append('prayer', document.getElementById('thPrayer').value);
+    body.append('prayerNote', document.getElementById('thPrayerNote').value);
+    body.append('keepPrayerFlyers', kept('data-keep-prayer'));
+    [].slice.call(document.getElementById('thPrayerFlyers').files).forEach(function (f) { body.append('prayerFlyers', f); });
+  }
+
   // ------------------------------------------------- a chapter proposes a theme
   // cfg: { reopen }
   async function themeProposalPanel(el, cfg) {
@@ -256,7 +288,7 @@
       };
       el.innerHTML =
         '<div class="panel-head"><div><h2>Monthly Theme</h2>'
-        + '<p class="sub">The church has one theme a month, with its meditative prayer flyers. Send the one for an upcoming month here. It does not show anywhere until National approves it.</p></div></div>'
+        + '<p class="sub">The church has one theme a month, with its daily meditative prayer. Send the one for an upcoming month here. It does not show anywhere until National approves it.</p></div></div>'
         + (data.live.length ? '<div class="cl-card"><h3>Already approved</h3>' + data.live.map(function (x) {
             return '<p style="margin:0 0 4px;"><strong>' + escapeHtml(monthName(x.month)) + '</strong> · ' + escapeHtml(x.title) + '</p>';
           }).join('') + '<p class="cl-note">You can still send a different one for these months; National chooses.</p></div>' : '')
@@ -265,11 +297,7 @@
         + '<div class="field"><label>Theme</label><input type="text" id="thTitle" maxlength="120" value="' + escapeHtml(t && t.title || '') + '" required></div>'
         + '<div class="field"><label>Scripture (optional)</label><input type="text" id="thScripture" maxlength="200" value="' + escapeHtml(t && t.scripture || '') + '"></div>'
         + '<div class="field"><label>A few lines (optional)</label><textarea id="thBlurb" rows="3" maxlength="1200">' + escapeHtml(t && t.blurb || '') + '</textarea></div>'
-        + '<div class="field"><label>Prayer flyers (optional, up to 6 pictures)</label>'
-        + (t && t.flyerFileIds.length ? '<div class="flyer-keep">' + t.flyerFileIds.map(function (id) {
-            return '<label><img src="/api/files/' + encodeURIComponent(id) + '" alt=""><input type="checkbox" data-keep="' + escapeHtml(id) + '" checked> keep</label>';
-          }).join('') + '</div>' : '')
-        + '<input type="file" id="thFlyers" accept="image/*" multiple></div>'
+        + themeFields(t)
         + '<div style="margin-top:18px;"><button class="btn btn-primary">' + (t ? 'Send again' : 'Send for approval') + '</button>'
         + (t ? '<button type="button" class="btn btn-outline" id="thNew" style="margin-left:8px;">Cancel</button>' : '')
         + ' <span class="form-msg" id="thMsg"></span></div></form>'
@@ -291,8 +319,7 @@
         body.append('title', document.getElementById('thTitle').value);
         body.append('scripture', document.getElementById('thScripture').value);
         body.append('blurb', document.getElementById('thBlurb').value);
-        body.append('keepFlyers', JSON.stringify([].slice.call(el.querySelectorAll('[data-keep]')).filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.keep; })));
-        [].slice.call(document.getElementById('thFlyers').files).forEach(function (f) { body.append('flyers', f); });
+        themeBody(el, body);
         var m = t ? t.month : document.getElementById('thMonth').value;
         try {
           await sendForm('/api/admin/themes/' + encodeURIComponent(m), 'PUT', body);
@@ -320,5 +347,5 @@
     draw();
   }
 
-  window.ChurchLifeUI = { alumniPanel: alumniPanel, themeProposalPanel: themeProposalPanel, monthName: monthName, thumb: thumb, when: when, sendForm: sendForm, say: say, wireCancel: wireCancel };
+  window.ChurchLifeUI = { themeFields: themeFields, themeBody: themeBody, alumniPanel: alumniPanel, themeProposalPanel: themeProposalPanel, monthName: monthName, thumb: thumb, when: when, sendForm: sendForm, say: say, wireCancel: wireCancel };
 })();

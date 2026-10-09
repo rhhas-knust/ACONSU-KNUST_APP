@@ -332,23 +332,61 @@
     return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   }
 
+  // The month's theme, with its daily meditative prayer. It can come from two places:
+  // the app (copied in as data/feed.json, the usual way), or the `monthly` block in
+  // chapter.js, which is there for the weeks when nobody has put it in the app yet.
+  // The app wins when it has one. The chapter.js block only ever shows during the month
+  // it names, so last month's theme can never be left on the page by mistake.
+  function thisMonthKey() {
+    var d = new Date();
+    return d.getUTCFullYear() + '-' + (d.getUTCMonth() < 9 ? '0' : '') + (d.getUTCMonth() + 1);
+  }
+  function fallbackTheme() {
+    var m = C.monthly;
+    if (!m || !has(m.title) || String(m.month) !== thisMonthKey()) return null;
+    return {
+      month: m.month, title: m.title, scripture: m.scripture, blurb: m.blurb, flyers: m.flyers,
+      prayer: Array.isArray(m.prayer) ? m.prayer.join('\n\n') : m.prayer, prayerNote: m.prayerNote, prayerFlyers: m.prayerFlyers
+    };
+  }
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = has(value) ? value : '';
+    el.hidden = !has(value);
+  }
+  function flyerLinks(id, list, alt) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var items = (list || []).filter(has);
+    el.hidden = !items.length;
+    el.innerHTML = items.map(function (src) {
+      return '<a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer"><img src="' + esc(src) + '" alt="' + esc(alt) + '" loading="lazy"></a>';
+    }).join('');
+  }
+
+  // Safe to call again: the app's version replaces the chapter.js one without leaving a trace of it.
   function renderTheme(t) {
     if (!t || !has(t.title)) return;
     var monthText = monthLabel(t.month);
-    document.getElementById('themeMonth').textContent = monthText ? 'Theme for ' + monthText : 'Theme for this month';
-    document.getElementById('themeTitle').textContent = t.title;
-    [['themeScripture', t.scripture], ['themeBlurb', t.blurb]].forEach(function (pair) {
-      var el = document.getElementById(pair[0]);
-      if (has(pair[1])) el.textContent = pair[1]; else el.remove();
-    });
-    var fl = document.getElementById('themeFlyers');
-    var flyers = (t.flyers || []).filter(has);
-    if (flyers.length) {
-      fl.innerHTML = flyers.map(function (src) {
-        return '<a href="' + esc(src) + '" target="_blank" rel="noopener"><img src="' + esc(src)
-          + '" alt="Prayer flyer: ' + esc(t.title) + '" loading="lazy"></a>';
-      }).join('');
-    } else fl.remove();
+    setText('themeMonth', monthText ? 'Theme for ' + monthText : 'Theme for this month');
+    setText('themeTitle', t.title);
+    setText('themeScripture', t.scripture);
+    setText('themeBlurb', t.blurb);
+    flyerLinks('themeFlyers', t.flyers, 'Flyer for the theme ' + t.title);
+
+    var paras = String(t.prayer || '').split(/\n{2,}/).map(function (p) { return p.trim(); }).filter(Boolean);
+    var prayerFlyers = (t.prayerFlyers || []).filter(has);
+    var block = document.getElementById('themePrayerBlock');
+    if (block) {
+      block.hidden = !paras.length && !prayerFlyers.length;
+      setText('prayerNote', t.prayerNote);
+      var det = document.getElementById('prayerDetails');
+      det.hidden = !paras.length;
+      document.getElementById('prayerText').innerHTML = paras.map(function (p) { return '<p>' + esc(p).replace(/\n/g, '<br>') + '</p>'; }).join('');
+      flyerLinks('prayerFlyers', prayerFlyers, 'Daily meditative prayer flyer for ' + t.title);
+    }
     show(document.querySelector('[data-section="theme"]'));
   }
 
@@ -437,6 +475,9 @@
     if (cta && !cta.children.length) cta.remove();
   }
   pruneDeadLinks(false);
+
+  // This month's theme from chapter.js shows at once; the app's, if it has one, replaces it below.
+  try { renderTheme(fallbackTheme()); } catch (e) { /* hidden */ }
 
   fetch('data/feed.json', { cache: 'no-cache' })
     .then(function (r) { return r.ok ? r.json() : null; })

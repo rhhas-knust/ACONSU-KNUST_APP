@@ -71,6 +71,12 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 .theme-flyers a:last-child { margin-right:auto; }
 .theme-flyers img { height:260px; width:auto; max-width:78vw; border-radius:12px; box-shadow:0 10px 26px rgba(0,0,0,0.35); display:block; }
 
+.month-prayer { margin-top:16px; border:1px solid var(--line); border-radius:var(--radius); padding:22px 26px; background:var(--surface); }
+.month-prayer h2 { font-size:1.35rem; margin:0 0 6px; }
+.month-prayer .prayer-note { color:var(--ink-soft); margin:0 0 12px; }
+.month-prayer summary { cursor:pointer; font-weight:700; color:var(--brand); min-height:44px; display:flex; align-items:center; }
+.month-prayer .prayer-text { max-width:68ch; padding:6px 0 4px; }
+.month-prayer .prayer-text p { margin:0 0 1em; line-height:1.7; color:var(--ink); }
 .alumni-teaser { display:flex; align-items:center; gap:16px; padding:14px 18px; border-radius:16px; text-decoration:none; color:inherit;
   background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); }
 .alumni-teaser:hover { border-color:var(--brand); }
@@ -197,6 +203,12 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <p class="theme-scripture" id="themeScripture"></p>
       <p class="theme-blurb" id="themeBlurb"></p>
       <div class="theme-flyers" id="themeFlyers"></div>
+    </div>
+    <div class="month-prayer" id="themePrayer" hidden>
+      <h2>Daily meditative prayer</h2>
+      <p class="prayer-note" id="prayerNote"></p>
+      <details id="prayerDetails"><summary>Read the prayer</summary><div class="prayer-text" id="prayerText"></div></details>
+      <div class="theme-flyers" id="prayerFlyers"></div>
     </div>
   </div>
 </section>
@@ -612,9 +624,28 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       const fl = document.getElementById('themeFlyers');
       if (theme.flyerFileIds.length) {
         fl.innerHTML = theme.flyerFileIds.map(id =>
-          `<a href="/api/files/${encodeURIComponent(id)}" target="_blank" rel="noopener"><img src="/api/files/${encodeURIComponent(id)}" alt="Prayer flyer for ${escapeHtml(theme.title)}" loading="lazy"></a>`
+          `<a href="/api/files/${encodeURIComponent(id)}" target="_blank" rel="noopener"><img src="/api/files/${encodeURIComponent(id)}" alt="Flyer for the theme ${escapeHtml(theme.title)}" loading="lazy"></a>`
         ).join('');
       } else fl.remove();
+
+      // The month's daily meditative prayer: typed words to read, and the flyer it was designed as.
+      const prayerFlyers = theme.prayerFlyerFileIds || [];
+      if (theme.prayer || prayerFlyers.length) {
+        const note = document.getElementById('prayerNote');
+        if (theme.prayerNote) note.textContent = theme.prayerNote; else note.remove();
+        const det = document.getElementById('prayerDetails');
+        if (theme.prayer) {
+          document.getElementById('prayerText').innerHTML = theme.prayer.split(/\n{2,}/)
+            .map(par => '<p>' + escapeHtml(par).replace(/\n/g, '<br>') + '</p>').join('');
+        } else det.remove();
+        const pf = document.getElementById('prayerFlyers');
+        if (prayerFlyers.length) {
+          pf.innerHTML = prayerFlyers.map(id =>
+            `<a href="/api/files/${encodeURIComponent(id)}" target="_blank" rel="noopener"><img src="/api/files/${encodeURIComponent(id)}" alt="Daily meditative prayer flyer for ${escapeHtml(theme.title)}" loading="lazy"></a>`
+          ).join('');
+        } else pf.remove();
+        document.getElementById('themePrayer').hidden = false;
+      }
       document.getElementById('themeSection').style.display = 'block';
     }
   } catch (e) { /* non-critical */ }

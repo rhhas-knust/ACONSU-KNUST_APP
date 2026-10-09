@@ -282,6 +282,11 @@ section { padding: 56px 0; }
 /* Scrollable from the first one when they do not fit. */
 .theme-flyers { display: flex; gap: 14px; overflow-x: auto; padding: 18px 2px 6px; -webkit-overflow-scrolling: touch; }
 .theme-flyers a { flex: none; }
+.prayer { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border); }
+.prayer-note { color: var(--ink-soft); max-width: 60ch; }
+.prayer summary { cursor: pointer; font-weight: 600; color: var(--brand); min-height: 44px; display: flex; align-items: center; }
+.prayer-text { max-width: 66ch; padding: 6px 0 4px; }
+.prayer-text p { margin: 0 0 1em; color: var(--ink); line-height: 1.7; }
 .theme-flyers img { height: 280px; width: auto; max-width: 80vw; border-radius: 6px; border: 1px solid var(--border); }
 
 /* ---------- alumni ---------- */
