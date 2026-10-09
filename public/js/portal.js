@@ -232,17 +232,24 @@ async function initPortal(config) {
 // Fix for public/js/portal.js - Update the login form submission handler
 // Replace lines 207-231 with this:
 
+  // "Your chapter" above the username, when there is more than one to choose from.
+  const chapterPick = window.LeaderChapter
+    ? LeaderChapter.attach(document.getElementById('portalLoginForm'), 'portalUsername')
+    : Promise.resolve({ value: () => undefined });
+
   document.getElementById('portalLoginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('portalLoginBtn');
     btn.disabled = true;
     try {
+      const chapterId = (await chapterPick).value();
       const loginResponse = await fetchJSON('/api/portal/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: document.getElementById('portalUsername').value,
-          password: document.getElementById('portalPassword').value
+          password: document.getElementById('portalPassword').value,
+          ...(chapterId ? { chapterId } : {})
         })
       });
       

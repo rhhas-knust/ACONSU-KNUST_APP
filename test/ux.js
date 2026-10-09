@@ -291,6 +291,41 @@ async function app(browser) {
   for (let i = 0; i < 25; i++) { hero = (await api('GET', '/api/admin/image-placements')).heroPages || []; if (hero.some(h => h.fileId)) break; await new Promise(r => setTimeout(r, 200)); }
   const placedOn = hero.filter(h => h.fileId).map(h => h.id);
   check(placedOn.length === 1 && placedOn[0] === 'about', 'and the artwork lands on that page and not on Home', placedOn);
+  // ---- a leader chooses their chapter when signing in ----
+  const lead = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const pl = await lead.newPage(); pl.on('pageerror', e => errs.push(e.message));
+  await pl.goto(BASE + '/finance.html', { waitUntil: 'networkidle' });
+  await pl.waitForSelector('#portalLoginForm');
+  await pl.waitForTimeout(400);
+  check(await pl.$('#leaderChapter') === null, 'with one chapter, a leader signing in is not asked which');
+  await api('POST', '/api/national/chapters', { id: 'aconsu-ucc', name: 'ACONSU UCC', institution: 'Cape Coast' });
+  const fdLead = new FormData();
+  fdLead.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+  Object.entries({ name: 'Finance Officer', email: 'fin.ux@example.com', password: 'secret123', chapterId: 'aconsu-knust', consent: 'true' }).forEach(([k, v]) => fdLead.append(k, v));
+  const regLead = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fdLead })).json();
+  await api('POST', '/api/admin/staff', { username: 'fin.ux', name: 'Finance Officer', role: 'finance', password: 'password123', memberId: regLead.member.id, chapterId: 'aconsu-knust' });
+  await pl.reload({ waitUntil: 'networkidle' });
+  await pl.waitForSelector('#leaderChapter');
+  const labels = await pl.$$eval('#leaderChapter option', o => o.map(x => x.textContent.trim()));
+  check(labels.join(' | ') === 'Choose your chapter | ACONSU KNUST: KNUST | ACONSU UCC: Cape Coast | National office', 'with two, the list is the chapters that exist, then National office: ' + labels.join(' | '));
+  check(await pl.$eval('#leaderChapter', e => e.labels[0].textContent === 'Your chapter'), 'and it has a label a screen reader reads');
+  await pl.fill('#portalUsername', 'fin.ux'); await pl.fill('#portalPassword', 'password123');
+  await pl.click('#portalLoginBtn');
+  check(await pl.$eval('#leaderChapter', e => !e.validity.valid) && await pl.isVisible('#portalLoginWrap'), 'signing in without choosing a chapter is not allowed');
+  await pl.selectOption('#leaderChapter', 'aconsu-ucc');
+  await pl.click('#portalLoginBtn');
+  await pl.waitForFunction(() => /not part of the chapter you chose/.test(document.getElementById('portalLoginMsg').textContent));
+  check(await pl.isVisible('#portalLoginWrap') && !(await pl.isVisible('#portalShell')), 'choosing another chapter says so and stays on the sign-in');
+  await pl.selectOption('#leaderChapter', 'aconsu-knust');
+  await pl.click('#portalLoginBtn');
+  await pl.waitForSelector('#portalShell', { state: 'visible', timeout: 8000 });
+  check(true, 'choosing their own chapter signs in');
+  await lead.clearCookies();
+  await pl.reload({ waitUntil: 'networkidle' });
+  await pl.waitForSelector('#leaderChapter');
+  check(await pl.inputValue('#leaderChapter') === 'aconsu-knust', 'next time, the chapter they chose last is already chosen');
+  await lead.close();
+
   check(errs.length === 0, 'no script errors in the app', errs);
   await phone.close(); await desk.close(); await admCtx.close();
 }
