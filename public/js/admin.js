@@ -2096,6 +2096,12 @@ async function renderMediaLibrary() {
   // The whole point of the picker: as soon as a placement is chosen, say in plain
   // words where the image will show up - and, when it needs one, ask which
   // department or page it belongs to.
+  // Which placement the "Which one?" list was last written for. The list is only
+  // rewritten when the placement changes. Rewriting it on every call also threw
+  // away the person's choice: picking About in the list fired this function,
+  // which wrote the list again and put the choice back on its first entry (Home),
+  // so artwork went to a different page from the one they had just picked.
+  let targetListFor = null;
   function refreshPlacementUI() {
     const value = document.getElementById('uploadPlacement').value;
     const spec = placementData.placements.find(p => p.value === value);
@@ -2117,22 +2123,28 @@ async function renderMediaLibrary() {
     };
 
     if (spec.needsTarget) {
-      const list = TARGET_LISTS[spec.needsTarget] || [];
-      document.getElementById('targetLabel').textContent = TARGET_LABELS[spec.needsTarget] || 'Which one?';
-      targetSelect.innerHTML = list.length
-        ? list.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.hasHeader || t.fileId ? ' (replaces what is there now)' : ''}</option>`).join('')
-        : `<option value="">Nothing to choose yet</option>`;
+      if (targetListFor !== value) {
+        const list = TARGET_LISTS[spec.needsTarget] || [];
+        document.getElementById('targetLabel').textContent = TARGET_LABELS[spec.needsTarget] || 'Which one?';
+        targetSelect.innerHTML = list.length
+          ? list.map(t => `<option value="${t.id}">${escapeHtml(t.name)}${t.hasHeader || t.fileId ? ' (replaces what is there now)' : ''}</option>`).join('')
+          : `<option value="">Nothing to choose yet</option>`;
+        targetListFor = value;
+      }
       wrap.style.display = 'block';
     } else {
       wrap.style.display = 'none';
       targetSelect.innerHTML = '';
+      targetListFor = null;
     }
 
+    // The option's own words include "(replaces what is there now)"; the sentence
+    // below wants only the name.
     const targetName = spec.needsTarget
-      ? (targetSelect.options[targetSelect.selectedIndex] || {}).text || ''
+      ? ((targetSelect.options[targetSelect.selectedIndex] || {}).text || '').replace(' (replaces what is there now)', '')
       : '';
     const messages = {
-      'department-header': `This image becomes the banner across the top of the <strong>${escapeHtml(targetName.replace(' (replaces current header)', '') || 'selected')}</strong> department page, and appears on its card in the departments list. Landscape photos work best.`,
+      'department-header': `This image becomes the banner across the top of the <strong>${escapeHtml(targetName || 'selected')}</strong> department page, and appears on its card in the departments list. Landscape photos work best.`,
       'page-gallery': `This image is added to the <strong>${escapeHtml(targetName || 'selected')}</strong> page, where members will see it in that page's gallery.`,
       'home-header': 'This image becomes the large weekly header banner at the top of the home page. It is different from the floating decorative photo.',
       'home-floating': 'This image drifts around the hero area on the home page and department pages as a decorative photo. Only the first few uploaded are used, and they are hidden on small phones.',
@@ -2141,7 +2153,7 @@ async function renderMediaLibrary() {
     };
     if (value === 'page-hero') {
       const chosen = (placementData.heroPages || []).find(pg => pg.id === targetSelect.value);
-      const cleanName = escapeHtml((targetName || 'selected').replace(' (replaces what is there now)', ''));
+      const cleanName = escapeHtml(targetName || 'selected');
       messages['page-hero'] = `This becomes the artwork behind the heading at the top of the <strong>${cleanName}</strong> page,`
         + ` replacing its built-in background${chosen && chosen.sceneDescription ? ` (${escapeHtml(chosen.sceneDescription)})` : ''}.`
         + ' Wide landscape images work best. The heading sits on top of it.';

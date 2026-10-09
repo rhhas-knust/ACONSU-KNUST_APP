@@ -265,8 +265,34 @@ async function app(browser) {
   check(await p2.$eval('[data-detail-status]', e => e.value === 'invited'), 'and each can be marked as it is invited');
   await (await p2.$('[data-detail-status]')).scrollIntoViewIfNeeded();
   await p2.screenshot({ path: path.join(SHOTS, 'app-alumni-details.png') });
+  // ---- the admin Media Library: the page the artwork is for stays chosen ----
+  for (const name of ['Choir', 'Ushering', 'Media']) await api('POST', '/api/admin/departments', { name, tagline: 'x', meetingDay: 'Sundays', meetingTime: '9:00 AM', meetingLocation: 'Hall', chapterId: 'aconsu-knust' });
+  const admCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });   // its own sign-in, apart from National's
+  const adm = await admCtx.newPage(); adm.on('pageerror', e => errs.push(e.message));
+  await adm.goto(BASE + '/admin.html', { waitUntil: 'networkidle' });
+  await adm.fill('#username', 'admin'); await adm.fill('#password', 'admin123'); await adm.click('#loginForm button[type="submit"]');
+  await adm.click('[data-panel="media"]');
+  await adm.waitForSelector('#uploadPlacement');
+  await adm.selectOption('#uploadPlacement', 'page-hero');
+  await adm.selectOption('#uploadTarget', 'about');
+  check(await adm.inputValue('#uploadTarget') === 'about', 'in the Media Library, the page chosen for a piece of artwork stays chosen');
+  check(/About/.test(await adm.textContent('#placementExplain')), 'and the explanation names that page');
+  await adm.selectOption('#uploadPlacement', 'department-header');
+  const deptIds = await adm.$$eval('#uploadTarget option', o => o.map(x => x.value));
+  await adm.selectOption('#uploadTarget', deptIds[2]);
+  check(deptIds.length === 3 && await adm.inputValue('#uploadTarget') === deptIds[2], 'and so does the department chosen for a header');
+  check(/Media/.test(await adm.textContent('#placementExplain')) && !/replaces what is there/.test(await adm.textContent('#placementExplain')), 'and the sentence says its name without the list\'s own wording');
+  await adm.selectOption('#uploadPlacement', 'page-hero');
+  check(await adm.inputValue('#uploadTarget') === 'home', 'changing what the image is for starts the list again from its first entry');
+  await adm.selectOption('#uploadTarget', 'about');
+  await adm.setInputFiles('#uploadFile', PHOTO);
+  await adm.click('#uploadSubmitBtn');
+  let hero = [];
+  for (let i = 0; i < 25; i++) { hero = (await api('GET', '/api/admin/image-placements')).heroPages || []; if (hero.some(h => h.fileId)) break; await new Promise(r => setTimeout(r, 200)); }
+  const placedOn = hero.filter(h => h.fileId).map(h => h.id);
+  check(placedOn.length === 1 && placedOn[0] === 'about', 'and the artwork lands on that page and not on Home', placedOn);
   check(errs.length === 0, 'no script errors in the app', errs);
-  await phone.close(); await desk.close();
+  await phone.close(); await desk.close(); await admCtx.close();
 }
 
 // Screenshots are kept in the repository, so they are made small: 800px wide at most, palette PNG.
