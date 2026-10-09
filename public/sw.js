@@ -1,7 +1,7 @@
 // ACONSU service worker - enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v17';
+const CACHE_NAME = 'aconsu-v18';
 
 const APP_SHELL = [
   '/index.html',
@@ -25,6 +25,7 @@ const APP_SHELL = [
   '/sermon-notes.html',
   '/notifications.html',
   '/discover.html',
+  '/how-to.html',
   '/more.html',
   '/prayer.html',
   '/contact.html',
@@ -119,6 +120,14 @@ self.addEventListener('fetch', (event) => {
   if (PASS_THROUGH.some((p) => url.pathname.startsWith(p)) ||
       (request.headers.get('accept') || '').includes('text/event-stream')) {
     return; // no respondWith: the browser handles it as if no worker existed
+  }
+
+  // Video and audio are played in pieces: the player asks for a byte range and
+  // expects a partial answer. A worker that answers from its own cache, or
+  // stores a piece as if it were the whole file, makes the picture stall on some
+  // phones. They also run to megabytes, which is not what the cache is for.
+  if (request.destination === 'video' || request.destination === 'audio' || url.pathname.startsWith('/video/')) {
+    return;
   }
 
   // API calls: network-first, so data is always fresh when online;

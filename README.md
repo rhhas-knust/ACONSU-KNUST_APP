@@ -261,7 +261,7 @@ For an actual installable app in the App Store / Play Store, this project is pre
    npm run cap:open:ios       # requires Xcode (Mac only)
    ```
 
-From there, each IDE handles building, signing, and submitting to the Play Store / App Store — standard Capacitor/native workflow, same as any other app. The app icon and splash screen can be customized inside `android/` and `ios/` once those folders are generated (step 4) — ask me if you'd like help configuring those.
+From there, each IDE handles building, signing, and submitting to the Play Store / App Store — standard Capacitor/native workflow, same as any other app. The Android app icon is the ACONSU logo and is made by `node design/app-icon/make-android-icons.js` (see `design/app-icon/README.md`); the launch screen is described in `design/launch-screen/README.md`. The iOS icon and splash still need setting once the `ios/` folder exists.
 
 Building and submitting native apps requires tools (Android Studio, Xcode) that only run on your own computer, not in this chat — but the project is fully set up for it, so it's just running the commands above when you're ready.
 
