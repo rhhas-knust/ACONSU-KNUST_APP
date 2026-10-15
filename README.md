@@ -13,7 +13,7 @@ Official website + admin backend for **ACONSU — The Apostles' Continuation Stu
   - **Shepherding** (`/shepherding.html`) — Sunday attendance registers, member records they can edit, and the contact-message inbox.
   - **Publicity** (`/publicity.html`) — app + SMS announcements, scheduled sends, event updates, and the testimony inbox.
 - **Installable app (PWA)** with offline support, real push notifications, and a Capacitor scaffold for native iOS/Android builds.
-- **MongoDB Atlas** as the data store — real cloud database with automatic backups and replication.
+- **MongoDB Atlas** as the data store — a cloud database kept on three machines. Backups depend on the Atlas plan: **a free (M0) cluster has none**, so read [docs/operations.md](docs/operations.md) and set one up.
 - **Email notifications** (password reset, admin alerts on new join/prayer/testimony/contact submissions) and **automatic image compression** on every upload.
 - **Security hardening**: rate-limiting, secure session cookies, security headers, bcrypt-hashed passwords throughout.
 
@@ -38,14 +38,14 @@ Atlas is MongoDB's official free cloud hosting. This gets your data off the serv
 2. When prompted to create a cluster, choose the **free "M0" tier** — this costs nothing and is plenty for ACONSU's traffic.
 3. Pick any cloud provider/region (closest to your users is fine) and click **Create**.
 4. **Create a database user**: in the left sidebar, go to *Database Access* → *Add New Database User*. Choose a username and a strong password (save it somewhere safe — you'll need it in a moment).
-5. **Allow network access**: go to *Network Access* → *Add IP Address* → choose **"Allow access from anywhere"** (`0.0.0.0/0`). This is fine because access is still protected by your database username/password — Atlas itself isn't an open door.
+5. **Allow network access**: go to *Network Access* → *Add IP Address* → choose **"Allow access from anywhere"** (`0.0.0.0/0`). This is the simplest choice and the one a free host needs, because it does not give the app a fixed address. It means the database username and password are the only lock, so make the password long and random (a password manager will make one). If your host gives the app fixed outgoing addresses, list those here instead and nobody else can reach the database at all.
 6. Go back to *Database* → click **Connect** on your cluster → **Drivers** → copy the connection string. It looks like:
    ```
    mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
    ```
 7. Paste that into your `.env` file as `MONGODB_URI`, replacing `<username>` and `<password>` with the ones from step 4, and add a database name before the `?`, e.g.:
    ```
-   MONGODB_URI=mongodb+srv://acousuadmin:yourpassword@cluster0.xxxxx.mongodb.net/aconsu?retryWrites=true&w=majority
+   MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net/aconsu?retryWrites=true&w=majority
    ```
 
 ## 2. Local setup
@@ -96,6 +96,11 @@ Same as before, with one addition — set `MONGODB_URI` as an environment variab
 3. Deploy.
 
 Because content now lives in Atlas rather than local JSON files, you no longer need to worry about persistent disks or losing data on redeploy.
+
+**After deploying, check three things** (the first is the most important, and all three are explained in [docs/operations.md](docs/operations.md)):
+1. Open `/api/health`. It must say `"production": true`. If it does not, `NODE_ENV=production` is missing from the host's environment.
+2. Add a free uptime monitor on `/api/health` (every 5 minutes). It keeps a free host awake and emails you if the app goes down.
+3. Find out whether your Atlas cluster has backups. A free one does not.
 
 ## 4. A real firewall — Cloudflare (free)
 

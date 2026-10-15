@@ -39,6 +39,21 @@ honest answer is "yes, we collect that", it says so.
 |---|---|---|---|---|
 | Photos | Yes | No | **Required** | Profile photo, required at registration; shown on the membership card and to other members |
 
+## Audio (ACONSU Rooms)
+
+| Data type | Collected | Shared | Optional? | Purpose |
+|---|---|---|---|---|
+| Voice or sound recordings | Check the Play wording below | No | Optional | Live voice in an ACONSU Room. Nothing is recorded or stored by ACONSU. |
+
+Rooms carry live audio and video between the people in the room. ACONSU does not
+record it, store it or keep a copy; it is passed on as it is spoken. Play treats
+data that is only processed in memory and never kept ("ephemeral") differently
+from data that is collected, and the console's own questions decide which box
+this ticks. Read its wording when you reach this section and answer for what
+actually happens: **not stored, not recorded, not used for anything else**. The
+app asks for the microphone only when somebody joins a room, and the camera only
+when somebody scans a member's QR code or joins a room with video.
+
 ## Messages
 
 | Data type | Collected | Shared | Optional? | Purpose |

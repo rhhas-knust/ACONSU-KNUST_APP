@@ -68,6 +68,27 @@ function registerChatRoutes(app, deps) {
     } catch (e) { res.status(500).json({ error: 'Could not load messages' }); }
   });
 
+  // A member may send 10 messages a minute. The discussion is moderated and any
+  // message can be reported, but nothing stopped one person filling a topic in
+  // seconds, which moderators then had to clear by hand. Kept in this process,
+  // which is right for the one server the app runs on.
+  const CHAT_WINDOW_MS = 60 * 1000;
+  const CHAT_MAX_PER_WINDOW = 10;
+  const recentChat = new Map();
+  function chatTooFast(memberId) {
+    const now = Date.now();
+    const times = (recentChat.get(memberId) || []).filter((t) => now - t < CHAT_WINDOW_MS);
+    if (times.length >= CHAT_MAX_PER_WINDOW) { recentChat.set(memberId, times); return true; }
+    times.push(now);
+    recentChat.set(memberId, times);
+    return false;
+  }
+  // Forget people who have gone quiet, so the map does not grow for ever.
+  setInterval(() => {
+    const now = Date.now();
+    for (const [id, times] of recentChat) if (!times.some((t) => now - t < CHAT_WINDOW_MS)) recentChat.delete(id);
+  }, 5 * 60 * 1000).unref();
+
   app.post('/api/chat/topics/:id/messages', requireMember, async (req, res) => {
     try {
       const topic = await repo.getById('chatTopics', req.params.id);
@@ -76,6 +97,7 @@ function registerChatRoutes(app, deps) {
       if (!req.body.body || !req.body.body.trim()) return res.status(400).json({ error: 'A message is required' });
       const member = await repo.getById('members', req.session.memberId);
       if (member && member.chatRestricted) return res.status(403).json({ error: 'Your posting privileges have been restricted. Contact your Chapter Admin.' });
+      if (chatTooFast(req.session.memberId)) return res.status(429).json({ error: 'You are sending messages very quickly. Wait a moment, then try again.' });
       const message = await repo.create('chatMessages', { chapterId: topic.chapterId, topicId: topic.id, authorMemberId: req.session.memberId,
         authorName: member ? member.name : '', body: req.body.body.trim() }, 'msg');
       res.json({ success: true, item: message });

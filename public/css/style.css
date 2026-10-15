@@ -403,7 +403,7 @@ section { padding: 72px 24px; }
 /* The light/dark switch. Sits in the nav beside the bell, same size and
    same quiet treatment, because it is a preference and not an action. */
 .theme-toggle {
-  width: 36px; height: 36px; border-radius: 50%;
+  width: 44px; height: 44px; border-radius: 50%;
   border: 1px solid var(--border);
   background: transparent; color: var(--brand);
   display: inline-flex; align-items: center; justify-content: center;
@@ -689,7 +689,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .reader-pickers select:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(91,44,130,0.14); }
 .reader-tools { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .reader-tools .spacer { flex:1 1 auto; }
-.tool-group { display:flex; border:1.5px solid var(--line); border-radius:999px; overflow:hidden; background:var(--bg); }
+.tool-group { display:flex; border:1.5px solid var(--line); border-radius:10px; overflow:hidden; background:var(--bg); }
 .tool-btn {
   border:none; background:none; cursor:pointer; padding:7px 12px;
   font-family: var(--font-body); font-weight:700; font-size:0.8rem; color:var(--brand-strong);
@@ -735,11 +735,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .verse-action-bar {
   position:fixed; left:50%; transform:translateX(-50%);
   bottom:calc(76px + env(safe-area-inset-bottom, 0px)); z-index:340;
-  background:var(--purple-rich); color:#fff; border-radius:999px;
+  background:var(--purple-rich); color:#fff; border-radius:12px;
   padding:6px; display:flex; gap:4px; box-shadow:0 12px 30px rgba(36,21,48,0.35);
 }
 .verse-action-bar button {
-  border:none; background:none; color:#fff; cursor:pointer; border-radius:999px;
+  border:none; background:none; color:#fff; cursor:pointer; border-radius:8px;
   padding:9px 15px; font-family:var(--font-body); font-weight:700; font-size:0.82rem;
   display:flex; align-items:center; gap:6px;
 }
@@ -1021,7 +1021,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 /* ---------- notification bell + feed ---------- */
+/* The bell's picture stays 22px; the thing to press is 44px, the size a thumb needs. */
+.bell-link { width: 44px; height: 44px; justify-content: center; }
 .bell-link svg { width: 22px; height: 22px; }
+.bell-link .notif-count { top: 6px; right: 4px; }
 .notif-item { display:flex; gap:14px; padding:16px 4px; border-bottom:1px solid var(--line); }
 .notif-item:last-child { border-bottom:none; }
 .notif-icon { width:40px; height:40px; border-radius:50%; background: var(--lilac-light); display:flex; align-items:center; justify-content:center; flex:none; color:var(--brand); }

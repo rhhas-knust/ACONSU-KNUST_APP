@@ -20,8 +20,12 @@ const { Readable } = require('stream');
 let chromium;
 for (const p of ['playwright', '/opt/node22/lib/node_modules/playwright']) { try { ({ chromium } = require(p)); break; } catch (e) { /* try the next */ } }
 if (!chromium) { console.error('Playwright is not installed.'); process.exit(2); }
+// A browser Playwright installed itself is used when neither is set: that is what
+// a CI machine has. The fixed folder is where the cloud sandbox keeps its copy.
 const CHROME = process.env.PLAYWRIGHT_CHROMIUM
-  || (fs.readdirSync('/opt/pw-browsers').filter(d => /^chromium-\d+$/.test(d)).map(d => `/opt/pw-browsers/${d}/chrome-linux/chrome`)[0]);
+  || (fs.existsSync('/opt/pw-browsers')
+    ? fs.readdirSync('/opt/pw-browsers').filter(d => /^chromium-\d+$/.test(d)).map(d => `/opt/pw-browsers/${d}/chrome-linux/chrome`)[0]
+    : undefined);
 
 const ROOT = path.join(__dirname, '..');
 const SHOTS = path.join(ROOT, 'docs', 'design-system', 'screens');
@@ -325,6 +329,64 @@ async function app(browser) {
   await pl.waitForSelector('#leaderChapter');
   check(await pl.inputValue('#leaderChapter') === 'aconsu-knust', 'next time, the chapter they chose last is already chosen');
   await lead.close();
+
+  // ---- phone layout, dark mode and tap size in the app ----
+  const fdPhone = new FormData();
+  fdPhone.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+  Object.entries({ name: 'Phone Check', email: 'phone.ux@example.com', password: 'secret1234', chapterId: 'aconsu-knust', consent: 'true' }).forEach(([k, v]) => fdPhone.append(k, v));
+  await fetch(BASE + '/api/auth/register', { method: 'POST', body: fdPhone });
+  const sideways = async (ctx, path) => { const pg = await ctx.newPage(); await pg.goto(BASE + path, { waitUntil: 'networkidle' }); await pg.waitForTimeout(500); const r = await pg.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1); await pg.close(); return r; };
+  const phoneIn = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await phoneIn.request.post(BASE + '/api/auth/login', { data: { email: 'phone.ux@example.com', password: 'secret1234' } });
+  check(!(await sideways(phoneIn, '/discover.html')), 'Discover does not scroll sideways on a phone');
+  check(!(await sideways(phoneIn, '/profile.html')), 'and neither does Profile, with its four quick links');
+  const ph = await phoneIn.newPage();
+  await ph.goto(BASE + '/index.html', { waitUntil: 'networkidle' });
+  await ph.waitForSelector('#navBellLink');
+  await ph.waitForSelector('#themeToggle');
+  const targets = await ph.evaluate(() => ['#navBellLink', '#themeToggle'].map((sel) => { const r = document.querySelector(sel).getBoundingClientRect(); return [sel, Math.round(r.width), Math.round(r.height)]; }));
+  check(targets.every(([, w, h]) => w >= 44 && h >= 44), 'the bell and the light/dark switch are at least 44px to press: ' + JSON.stringify(targets));
+  await ph.goto(BASE + '/reset-password.html', { waitUntil: 'networkidle' });
+  check(await ph.$('h1') !== null, 'a reset page with a bad link still has a heading');
+  await ph.goto(BASE + '/department.html', { waitUntil: 'networkidle' });
+  await ph.waitForTimeout(400);
+  check(await ph.$('h1') !== null, 'and so does a department page with nothing chosen');
+  await ph.goto(BASE + '/departments.html', { waitUntil: 'networkidle' });
+  await ph.waitForTimeout(400);
+  check(await ph.$$eval('h3', (h) => h.length) === 0, 'Departments goes from its heading straight to its cards, with no level skipped');
+  // With two chapters, a signed-in member is not asked which; a stranger is
+  const askedMember = await ph.evaluate(() => !!document.getElementById('chapterPickList'));
+  check(!askedMember, 'with two chapters, a signed-in member is not asked to choose one');
+  await phoneIn.close();
+  const stranger = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const sp = await stranger.newPage();
+  await sp.goto(BASE + '/index.html', { waitUntil: 'networkidle' });
+  await sp.waitForSelector('#chapterPickList');
+  check(true, 'and a visitor who is not signed in still is');
+  await stranger.close();
+  const darkCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
+  const dk = await darkCtx.newPage();
+  await dk.goto(BASE + '/discover.html', { waitUntil: 'networkidle' });
+  const ratio = await dk.$eval('#searchInput', (el) => {
+    const parse = (c) => c.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const lum = ([r, g, b]) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+    const cs = getComputedStyle(el);
+    const a = lum(parse(cs.color)), b = lum(parse(cs.backgroundColor));
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  });
+  check(ratio >= 4.5, 'what is typed into the Discover search can be read in dark mode (contrast ' + ratio.toFixed(1) + ' to 1)');
+  await darkCtx.close();
+
+  // ---- a page asks for the notifications once ----
+  const nctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await nctx.addInitScript(() => { try { localStorage.setItem('aconsu_chapter_id', 'aconsu-knust'); } catch (e) { /* no storage */ } });   // two chapters exist by now; this visitor has chosen
+  const np = await nctx.newPage();
+  let notifCalls = 0;
+  np.on('request', (r) => { if (r.url().includes('/api/notifications')) notifCalls++; });
+  await np.goto(BASE + '/index.html', { waitUntil: 'networkidle' });
+  await np.waitForTimeout(500);
+  check(notifCalls === 1, 'a page asks for the notifications once, where it used to ask four times on the home page: ' + notifCalls);
+  await nctx.close();
 
   check(errs.length === 0, 'no script errors in the app', errs);
   await phone.close(); await desk.close(); await admCtx.close();

@@ -48,7 +48,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <section style="padding-top:0;">
   <div class="container">
     <div class="grid" id="deptGrid"></div>
-    <p class="tiny muted" id="deptFooterLink" style="text-align:center; margin-top:26px; color:#8d7a99; font-size:0.85rem;"></p>
+    <p class="tiny muted" id="deptFooterLink" style="text-align:center; margin-top:26px; color:var(--ink-faint); font-size:0.85rem;"></p>
   </div>
 </section>
 
@@ -85,7 +85,7 @@ function departmentCard(d) {
           : `<span class="dept-thumb-fallback" style="display:flex; align-items:center; justify-content:center; background:var(--surface-3); color:var(--brand); font-weight:800; font-size:1.75rem;">${escapeHtml((d.name || 'D').charAt(0))}</span>`}
       </a>
       <div style="padding:18px; display:flex; flex-direction:column; gap:10px; flex:1;">
-        <h3 style="margin:0;"><a href="/department.html?id=${encodeURIComponent(d.id)}" style="color:inherit; text-decoration:none;">${escapeHtml(d.name)}</a></h3>
+        <h2 style="margin:0; font-size:1.17rem;"><a href="/department.html?id=${encodeURIComponent(d.id)}" style="color:inherit; text-decoration:none;">${escapeHtml(d.name)}</a></h2>
         ${d.tagline ? `<p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">${escapeHtml(d.tagline)}</p>` : ''}
         ${meets ? `<div class="dept-meta">Meets ${escapeHtml(meets)}${d.meetingLocation ? ' &middot; ' + escapeHtml(d.meetingLocation) : ''}</div>` : ''}
         ${d.headName ? `<div class="dept-meta">Led by ${escapeHtml(d.headName)}</div>` : ''}
@@ -171,7 +171,7 @@ async function renderChapterPicker() {
       <div class="dept-thumb">
         <span class="dept-thumb-fallback" style="display:flex; align-items:center; justify-content:center; background:var(--surface-3); color:var(--brand); font-weight:800; font-size:1.75rem;">${escapeHtml((chapter.name || 'A').charAt(0))}</span>
       </div>
-      <h3>${escapeHtml(chapter.name)}</h3>
+      <h2 style="font-size:1.17rem;">${escapeHtml(chapter.name)}</h2>
       <p style="color:var(--ink-soft); font-size:0.92rem;">${escapeHtml(chapter.fullName || chapter.institution || 'Chapter community')}</p>
       <div class="dept-meta">${escapeHtml(chapter.location || chapter.institution || 'ACONSU Chapter')}</div>
     </a>
