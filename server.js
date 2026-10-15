@@ -533,14 +533,38 @@ function chapterConfidential(what) {
   };
 }
 
+// The chapter a leader says they are signing in to: a chapter's id, or
+// 'national' for the national office. It is optional. The sign-in pages ask for
+// it when there is more than one chapter to choose between; an older page, or
+// anything calling the API directly, leaves it out and the account's own
+// chapter decides, as it always has. It is checked only after the password has
+// been, so a wrong password still answers exactly as it did and the choice can
+// never be used to find out which chapter a username belongs to.
+const NATIONAL_CHOICE = 'national';
+function chosenChapter(body) {
+  const raw = body && body.chapterId;
+  if (raw === undefined || raw === null) return null;
+  const clean = String(raw).trim().slice(0, 100);
+  return clean || null;
+}
+// National officers may open any chapter, so for them the choice is a courtesy.
+// Everyone else has to choose the chapter their account belongs to.
+function fitsChosenChapter(chosen, { national, chapterId }) {
+  if (chosen === null || national) return true;
+  return chosen !== NATIONAL_CHOICE && chosen === String(chapterId || '');
+}
+const WRONG_CHAPTER = 'That account is not part of the chapter you chose. Choose your own chapter, or National office if you are a national officer.';
+
 app.post('/api/portal/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+  const chosen = chosenChapter(req.body);
   try {
     // The main env-configured admin login doubles as the bootstrap National Coordinator.
     const adminUser = process.env.ADMIN_USERNAME || 'admin';
     const adminPass = process.env.ADMIN_PASSWORD || 'changeme';
     if (safeEqual(username, adminUser) && safeEqual(password, adminPass)) {
+      // (national: any chapter may be chosen, so there is nothing to refuse)
       await freshSession(req);
       req.session.isAdmin = true;
       req.session.staff = { id: '', username: adminUser, name: 'National Administrator', role: 'nationalCoordinator', chapterId: '' };
@@ -553,6 +577,9 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     if (process.env.SHEPHERD_USERNAME
         && safeEqual(username, process.env.SHEPHERD_USERNAME)
         && safeEqual(password, process.env.SHEPHERD_PASSWORD)) {
+      if (!fitsChosenChapter(chosen, { national: false, chapterId: rolesLib.LEGACY_CHAPTER_ID })) {
+        return res.status(403).json({ error: WRONG_CHAPTER });
+      }
       await freshSession(req);
       req.session.isShepherd = true;
       // Pinned to the seed chapter - this credential predates chapters existing at all.
@@ -572,6 +599,10 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       return res.status(403).json({
         error: `Your ${user.termYear || 'executive'} term of office has ended. Your Chapter Coordinator can renew it or hand the office over.`
       });
+    }
+
+    if (!fitsChosenChapter(chosen, { national: user.role === 'nationalCoordinator', chapterId: user.chapterId })) {
+      return res.status(403).json({ error: WRONG_CHAPTER });
     }
 
     // An executive's position is stamped into the session at sign-in rather

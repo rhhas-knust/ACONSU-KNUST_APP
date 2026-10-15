@@ -5677,6 +5677,50 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       check('More links to it', /href: '\/how-to\.html'/.test(read('public/more.html')), null);
       check('and so does the sign-up page, for somebody who is new', /href="\/how-to\.html"/.test(read('public/register.html')), null);
     }
+
+    // ---- a leader chooses their chapter when signing in ----
+    {
+      const login = (body) => call('pick', 'POST', '/api/portal/login', body);
+      let x = await login({ username: 'fin.ama', password: 'password123', chapterId });
+      check('a leader who chooses their own chapter signs in', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+      x = await login({ username: 'fin.ama', password: 'password123', chapterId: 'test-chapter-2' });
+      check('one who chooses another chapter is refused, in words', x.status === 403 && /not part of the chapter you chose/.test(x.data.error || ''), x.data);
+      const me = await call('pick', 'GET', '/api/portal/me');
+      check('and the attempt does not sign them in', !(me.data && me.data.staff), me.data);
+      x = await login({ username: 'fin.ama', password: 'password123', chapterId: 'national' });
+      check('a chapter account cannot sign in as the national office', x.status === 403, x.data);
+      x = await login({ username: 'fin.ama', password: 'password123', chapterId: { $ne: '' } });
+      check('and a chapter made of query operators is turned away before anything is looked up', x.status === 400 && !(x.data && x.data.success), x.data);
+      x = await login({ username: 'fin.ama', password: 'wrong-password', chapterId: 'test-chapter-2' });
+      const wrongPassword = x;
+      x = await login({ username: 'no.such.person', password: 'wrong-password', chapterId });
+      check('a wrong password answers the same whichever chapter was chosen, so the choice cannot be used to find a username',
+        wrongPassword.status === 401 && x.status === 401 && wrongPassword.data.error === 'Invalid credentials' && x.data.error === 'Invalid credentials', [wrongPassword.data, x.data]);
+      x = await login({ username: 'fin.ama', password: 'password123' });
+      check('leaving the choice out still signs in, so nothing that already works stops working', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+      x = await login({ username: 'fin.ama', password: 'password123', chapterId: '   ' });
+      check('and so does a blank one', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+      x = await login({ username: 'admin', password: 'admin123', chapterId: 'national' });
+      check('the national administrator can choose National office', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+      x = await login({ username: 'admin', password: 'admin123', chapterId: 'test-chapter-2' });
+      check('or any chapter, which a national officer may open', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+
+      const pages = ['admin', 'chapter', 'coordinator', 'council', 'executive', 'finance', 'national', 'publicity', 'shepherding', 'welfare-portal'];
+      check('every leadership sign-in page loads the chapter step before its own script',
+        pages.every(p => { const h = read(`public/${p}.html`); const i = h.indexOf('/js/leader-chapter.js'); const j = h.search(/\/js\/(portal|admin)\.js/); return i > -1 && i < j; }), null);
+      check('the sign-in code sends the choice, in the office portals and on the admin pages',
+        /LeaderChapter\.attach/.test(read('public/js/portal.js')) && /\.\.\.\(chapterId \? \{ chapterId \} : \{\}\)/.test(read('public/js/portal.js')) &&
+        /LeaderChapter\.attach/.test(read('public/js/admin.js')) && /\.\.\.\(chapterId \? \{ chapterId \} : \{\}\)/.test(read('public/js/admin.js')), null);
+      const lc = read('public/js/leader-chapter.js');
+      check('the list comes from the chapters that exist, with no chapter named in the code', /\/api\/chapters/.test(lc) && !/KNUST|Cape Coast|UCC/i.test(lc), null);
+      check('with fewer than two chapters there is no extra step', /list\.length < 2/.test(lc), null);
+      check('the cookies page lists what is remembered', /Leadership sign-in chapter/.test(read('public/cookies.html')), null);
+    }
   }
 
   console.log(`\n${failures ? `${failures} FAILURES` : 'all checks passed'}`);
