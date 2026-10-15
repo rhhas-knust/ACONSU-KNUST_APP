@@ -3084,6 +3084,11 @@ function initCommandPalette() {
   });
 }
 
+// "Your chapter" above the username, when there is more than one to choose from.
+const chapterPick = window.LeaderChapter
+  ? LeaderChapter.attach(document.getElementById('loginForm'), 'username')
+  : Promise.resolve({ value: () => undefined });
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   // This file is shared by admin.html and chapter.html, so nothing here may
@@ -3098,12 +3103,14 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   if (btn) { btn.disabled = true; btn.textContent = 'Logging in...'; }
   setMsg('', 'form-msg');
   try {
+    const chapterId = (await chapterPick).value();
     await fetchJSON('/api/portal/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: document.getElementById('username').value,
-        password: document.getElementById('password').value
+        password: document.getElementById('password').value,
+        ...(chapterId ? { chapterId } : {})
       })
     });
     await checkAuth();

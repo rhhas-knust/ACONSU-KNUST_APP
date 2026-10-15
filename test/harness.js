@@ -9,6 +9,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o, (k, v) => v));
 function matches(doc, query) {
   return Object.entries(query || {}).every(([key, cond]) => {
     if (key === '$or') return (cond || []).some((sub) => matches(doc, sub));
+    if (key === '$and') return (cond || []).every((sub) => matches(doc, sub));
     const value = doc[key];
     if (Array.isArray(cond)) return cond.includes(value); // bare-array shorthand, used nowhere yet but cheap to support
     if (cond && typeof cond === 'object' && !(cond instanceof Date)) {
@@ -16,6 +17,7 @@ function matches(doc, query) {
       if ('$gte' in cond) return new Date(value) >= new Date(cond.$gte);
       if ('$ne' in cond) return value !== cond.$ne;
       if ('$in' in cond) return (cond.$in || []).includes(value);
+      if ('$nin' in cond) return !(cond.$nin || []).includes(value);
       if ('$exists' in cond) return cond.$exists ? value !== undefined : value === undefined;
       return true;
     }
@@ -65,7 +67,23 @@ function makeModel(defaults) {
   const result = (value) => {
     const p = Promise.resolve(value);
     p.lean = () => Promise.resolve(value);
-    p.sort = () => result(value);
+    // A real sort, not a no-op: a route that sorts in the database and then takes
+    // the first N must be exercised on the order the database would give it.
+    p.sort = (spec) => {
+      if (!Array.isArray(value) || !spec || typeof spec !== 'object') return result(value);
+      const keys = Object.entries(spec);
+      const sorted = [...value].sort((a, b) => {
+        for (const [k, dir] of keys) {
+          const x = a[k], y = b[k];
+          const xv = x instanceof Date || typeof x === 'string' ? new Date(x).getTime() || String(x) : x;
+          const yv = y instanceof Date || typeof y === 'string' ? new Date(y).getTime() || String(y) : y;
+          if (xv < yv) return -dir;
+          if (xv > yv) return dir;
+        }
+        return 0;
+      });
+      return result(sorted);
+    };
     p.limit = (n) => result(Array.isArray(value) ? value.slice(0, n) : value);
     return p;
   };
@@ -93,7 +111,15 @@ function makeModel(defaults) {
       });
       return result(copy);
     },
-    countDocuments(query) { return Promise.resolve(docs.filter(d => matches(d, query || {})).length); },
+    // Instant by default, so the suite stays fast. A test about a "count, then
+    // write" race sets countDelayMs on the model for the moment it needs: a real
+    // database answers over a network, so requests made together overlap, and
+    // an answer that arrives within the same breath hides the race entirely.
+    countDelayMs: 0,
+    countDocuments(query) {
+      const n = docs.filter(d => matches(d, query || {})).length;
+      return this.countDelayMs > 0 ? new Promise((resolve) => setTimeout(() => resolve(n), this.countDelayMs)) : Promise.resolve(n);
+    },
     create(data) {
       const doc = { _id: `oid${++counter}`, ...defaults, ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       docs.push(doc);

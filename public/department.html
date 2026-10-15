@@ -82,7 +82,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <h1>${escapeHtml(chapter.name)}</h1>
           <p style="color:var(--ink-soft); font-size:1.05rem;">${escapeHtml(chapter.fullName || chapter.institution || '')}</p>`}
         <div class="card" style="margin:28px 0;">
-          <h3 style="margin-bottom:16px;">Chapter Overview</h3>
+          <h2 style="margin-bottom:16px; font-size:1.17rem;">Chapter Overview</h2>
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
             <div><div class="field-label">Institution</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.institution || 'Not specified')}</p></div>
             <div><div class="field-label">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.location || 'Not specified')}</p></div>
@@ -91,7 +91,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         </div>
 
         <div class="card" style="margin:28px 0;">
-          <h3 style="margin-bottom:16px;">Departments</h3>
+          <h2 style="margin-bottom:16px; font-size:1.17rem;">Departments</h2>
           ${departments.length ? `<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(220px,1fr));">
             ${departments.map(d => `
               <a href="/department.html?id=${encodeURIComponent(d.id)}" class="card dept-card" style="padding:0; overflow:hidden;">
@@ -99,7 +99,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
                   ${d.headerImageFileId ? `<img src="/api/files/${d.headerImageFileId}" alt="${escapeHtml(d.name)}">` : '<span class="dept-thumb-fallback"></span>'}
                 </div>
                 <div style="padding:16px;">
-                  <h4 style="margin:0 0 8px;">${escapeHtml(d.name)}</h4>
+                  <h3 style="margin:0 0 8px; font-size:1rem;">${escapeHtml(d.name)}</h3>
                   <p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">${escapeHtml(d.tagline || '')}</p>
                 </div>
               </a>
@@ -107,14 +107,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         </div>
 
         <div class="card" style="margin:28px 0;">
-          <h3 style="margin-bottom:16px;">Executives</h3>
+          <h2 style="margin-bottom:16px; font-size:1.17rem;">Executives</h2>
           ${executives.length ? `<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(180px,1fr));">
             ${executives.map(e => `
               <div class="card exec-card" style="padding:18px;">
                 <div class="exec-photo" style="margin-bottom:12px; width:90px; height:90px;">
                   ${e.imageFileId ? `<img src="/api/files/${e.imageFileId}" alt="${escapeHtml(e.name)}">` : `<span class="initial">${escapeHtml((e.name || '?').charAt(0))}</span>`}
                 </div>
-                <h4 style="margin:0;">${escapeHtml(e.name)}</h4>
+                <h3 style="margin:0; font-size:1rem;">${escapeHtml(e.name)}</h3>
                 <div class="exec-role">${escapeHtml(e.role || '')}</div>
                 ${e.department ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem; font-weight:700;">${escapeHtml(e.department)}</p>` : ''}
                 ${e.contact && e.contact.phone ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem;"><a href="tel:${escapeHtml(e.contact.phone)}">${escapeHtml(e.contact.phone)}</a></p>` : ''}
@@ -142,7 +142,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <h1>${escapeHtml(dept.name)}</h1>
           <p style="color:var(--ink-soft); font-size:1.05rem;">${escapeHtml(dept.tagline || '')}</p>`}
         <div class="card" style="margin:28px 0;">
-          <h3 style="margin-bottom:16px;">Meeting Information</h3>
+          <h2 style="margin-bottom:16px; font-size:1.17rem;">Meeting Information</h2>
           <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(160px,1fr));">
             <div><div class="field-label">Day</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingDay || 'TBA')}</p></div>
             <div><div class="field-label">Time</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingTime || 'TBA')}</p></div>
@@ -153,7 +153,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <p style="color:var(--ink-soft);">${escapeHtml(dept.description)}</p>
       `;
     } else {
-      detailEl.innerHTML = '<p class="empty-state">No chapter or department selected.</p>';
+      detailEl.innerHTML = '<h1 class="sr-only">Department</h1><p class="empty-state">No chapter or department selected.</p>';
       return;
     }
 
@@ -171,7 +171,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       }
     } catch (e) { /* decorative only */ }
   } catch (e) {
-    detailEl.innerHTML = '<p class="empty-state">Chapter not found.</p>';
+    detailEl.innerHTML = '<h1 class="sr-only">Department</h1><p class="empty-state">Chapter not found.</p>';
   }
 })();
 </script>

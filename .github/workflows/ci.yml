@@ -39,8 +39,33 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      # Advisory: reports known vulnerabilities without blocking a deploy on
-      # something that may have no fix yet. Tighten to --audit-level=high once
-      # the current backlog is cleared.
+      # Fails on a known high or critical vulnerability. The backlog is clear
+      # (the three moderate advisories are in the Android build tooling and need
+      # a breaking upgrade), so this can now block rather than advise.
       - name: Audit
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
+
+  # The browser suite: keyboard order, tap sizes, sideways scroll, dark mode, the
+  # sign-in and upload forms, in a real Chromium. It runs on a developer's
+  # machine and in the cloud sandbox, but this job is new and has not yet run on
+  # GitHub's machines, so it reports without blocking. Once it has passed on
+  # main a few times, delete the `continue-on-error` line to make it count.
+  browser:
+    name: Browser suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright and its Chromium
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Run the browser suite
+        run: node test/ux.js

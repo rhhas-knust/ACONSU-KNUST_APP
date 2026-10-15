@@ -5645,6 +5645,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
         /@mipmap\/ic_launcher_foreground/.test(adaptive) && /#FFFFFF/i.test(read('android/app/src/main/res/values/ic_launcher_background.xml')), null);
       check('no leftover placeholder drawables for the launcher icon',
         !fs.existsSync(path.join(res, 'drawable-v24/ic_launcher_foreground.xml')) && !fs.existsSync(path.join(res, 'drawable/ic_launcher_background.xml')), null);
+      const manifest = read('android/app/src/main/AndroidManifest.xml');
+      const asksForMicrophone = files('public', '.html').some(f => /getUserMedia\([^)]*audio:\s*true/.test(read(f)));
+      check('the Android app declares the microphone, because ACONSU Rooms asks for it',
+        !asksForMicrophone || (/android\.permission\.RECORD_AUDIO/.test(manifest) && /android\.permission\.MODIFY_AUDIO_SETTINGS/.test(manifest)), null);
+      check('and the camera, which the QR scanner and Rooms ask for', /android\.permission\.CAMERA/.test(manifest), null);
+      check('a phone with no microphone can still install it', /android\.hardware\.microphone"\s+android:required="false"/.test(manifest), null);
+      check('the phone does not back the app\'s data up to the cloud on its own', /android:allowBackup="false"/.test(manifest), null);
+      check('the Play data-safety answers cover the microphone', /Voice or sound recordings/.test(read('design/play-store/DATA-SAFETY.md')), null);
       const play = await sharp(path.join(root, 'design/play-store/icon-512.png')).metadata();
       check('the Play Store icon is 512 x 512 with no transparent pixels', play.width === 512 && play.height === 512 && !play.hasAlpha, JSON.stringify(play));
     }
@@ -5676,6 +5684,224 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       check('and the page is part of what is kept for offline use', /'\/how-to\.html'/.test(sw), null);
       check('More links to it', /href: '\/how-to\.html'/.test(read('public/more.html')), null);
       check('and so does the sign-up page, for somebody who is new', /href="\/how-to\.html"/.test(read('public/register.html')), null);
+    }
+
+    // ---- a leader chooses their chapter when signing in ----
+    {
+      const login = (body) => call('pick', 'POST', '/api/portal/login', body);
+      let x = await login({ username: 'fin.ama', password: 'password123', chapterId });
+      check('a leader who chooses their own chapter signs in', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+      x = await login({ username: 'fin.ama', password: 'password123', chapterId: 'test-chapter-2' });
+      check('one who chooses another chapter is refused, in words', x.status === 403 && /not part of the chapter you chose/.test(x.data.error || ''), x.data);
+      const me = await call('pick', 'GET', '/api/portal/me');
+      check('and the attempt does not sign them in', !(me.data && me.data.staff), me.data);
+      x = await login({ username: 'fin.ama', password: 'password123', chapterId: 'national' });
+      check('a chapter account cannot sign in as the national office', x.status === 403, x.data);
+      x = await login({ username: 'fin.ama', password: 'password123', chapterId: { $ne: '' } });
+      check('and a chapter made of query operators is turned away before anything is looked up', x.status === 400 && !(x.data && x.data.success), x.data);
+      x = await login({ username: 'fin.ama', password: 'wrong-password', chapterId: 'test-chapter-2' });
+      const wrongPassword = x;
+      x = await login({ username: 'no.such.person', password: 'wrong-password', chapterId });
+      check('a wrong password answers the same whichever chapter was chosen, so the choice cannot be used to find a username',
+        wrongPassword.status === 401 && x.status === 401 && wrongPassword.data.error === 'Invalid credentials' && x.data.error === 'Invalid credentials', [wrongPassword.data, x.data]);
+      x = await login({ username: 'fin.ama', password: 'password123' });
+      check('leaving the choice out still signs in, so nothing that already works stops working', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+      x = await login({ username: 'fin.ama', password: 'password123', chapterId: '   ' });
+      check('and so does a blank one', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+      x = await login({ username: 'admin', password: 'admin123', chapterId: 'national' });
+      check('the national administrator can choose National office', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+      x = await login({ username: 'admin', password: 'admin123', chapterId: 'test-chapter-2' });
+      check('or any chapter, which a national officer may open', x.status === 200, x.data);
+      await call('pick', 'POST', '/api/portal/logout');
+
+      const pages = ['admin', 'chapter', 'coordinator', 'council', 'executive', 'finance', 'national', 'publicity', 'shepherding', 'welfare-portal'];
+      check('every leadership sign-in page loads the chapter step before its own script',
+        pages.every(p => { const h = read(`public/${p}.html`); const i = h.indexOf('/js/leader-chapter.js'); const j = h.search(/\/js\/(portal|admin)\.js/); return i > -1 && i < j; }), null);
+      check('the sign-in code sends the choice, in the office portals and on the admin pages',
+        /LeaderChapter\.attach/.test(read('public/js/portal.js')) && /\.\.\.\(chapterId \? \{ chapterId \} : \{\}\)/.test(read('public/js/portal.js')) &&
+        /LeaderChapter\.attach/.test(read('public/js/admin.js')) && /\.\.\.\(chapterId \? \{ chapterId \} : \{\}\)/.test(read('public/js/admin.js')), null);
+      const lc = read('public/js/leader-chapter.js');
+      check('the list comes from the chapters that exist, with no chapter named in the code', /\/api\/chapters/.test(lc) && !/KNUST|Cape Coast|UCC/i.test(lc), null);
+      check('with fewer than two chapters there is no extra step', /list\.length < 2/.test(lc), null);
+      check('the cookies page lists what is remembered', /Leadership sign-in chapter/.test(read('public/cookies.html')), null);
+    }
+
+    // ---- fixes from the audit of 15 October 2026 ----
+    {
+      // addresses that do not exist
+      let x = await fetch(BASE + '/no-such-page-at-all.html');
+      check('a page that is not here answers 404, with the friendly page as its body',
+        x.status === 404 && /text\/html/.test(x.headers.get('content-type') || '') && /<html/i.test(await x.text()), x.status);
+      x = await fetch(BASE + '/api/no-such-endpoint');
+      const missing = await x.json().catch(() => null);
+      check('and an API address that is not here answers 404 in JSON, not in HTML', x.status === 404 && missing && missing.error === 'Not found', x.status);
+
+      // health says whether production mode is on
+      x = await (await fetch(BASE + '/api/health')).json();
+      check('the health address says whether production mode is on, and warns when it should not be',
+        typeof x.production === 'boolean' && Array.isArray(x.warnings), x);
+
+      // compression and caching
+      x = await fetch(BASE + '/css/style.css', { headers: { 'accept-encoding': 'gzip' } });
+      check('style sheets are sent compressed to a browser that accepts it', x.headers.get('content-encoding') === 'gzip', x.headers.get('content-encoding'));
+      x = await fetch(BASE + '/fonts/source-sans-3-latin-400-normal.woff2');
+      check('fonts are kept by the browser for a year', /max-age=31536000/.test(x.headers.get('cache-control') || '') && /immutable/.test(x.headers.get('cache-control') || ''), x.headers.get('cache-control'));
+      x = await fetch(BASE + '/icons/icon-192.png');
+      check('icons are kept for a week', /max-age=604800/.test(x.headers.get('cache-control') || ''), x.headers.get('cache-control'));
+      x = await fetch(BASE + '/css/style.css');
+      check('and styles are still checked with the server on every visit, so a deploy shows at once', /max-age=0/.test(x.headers.get('cache-control') || ''), x.headers.get('cache-control'));
+      const serverSource = read('server.js');
+      check('files that need no sign-in are served before the session is read, so a font does not cost a database lookup',
+        serverSource.indexOf('app.use(express.static(') > -1 && serverSource.indexOf('app.use(express.static(') < serverSource.indexOf('app.use(session({'), null);
+      check('a live event stream is never compressed', /event-stream/.test(serverSource.slice(serverSource.indexOf('app.use(compression('), serverSource.indexOf('app.use(compression(') + 600)), null);
+      const icons = fs.readdirSync(path.join(root, 'public/icons')).filter(f => f.endsWith('.png'));
+      const heaviest = Math.max(...icons.map(f => fs.statSync(path.join(root, 'public/icons', f)).size));
+      check('no app icon or splash picture is over 150 KB', heaviest <= 150 * 1024, heaviest + ' bytes');
+
+      // notifications: the newest 40, newest first
+      for (let i = 1; i <= 45; i++) await call('admin', 'POST', '/api/admin/notifications', { title: `Bulk notice ${i}`, body: 'x' });
+      x = await call('anon', 'GET', '/api/notifications');
+      const titles = (x.data || []).map(n => n.title);
+      check('the notifications list is the newest 40, however many there are', Array.isArray(x.data) && x.data.length === 40, x.data && x.data.length);
+      check('newest first, and the oldest are not in it', titles[0] === 'Bulk notice 45' && !titles.includes('Bulk notice 1'), titles.slice(0, 3));
+
+      // chat: ten messages a minute from one member
+      const chatMember = await registerMember('Chatty Member', 'chatty@test.com');
+      await call('chatty', 'POST', '/api/auth/login', { email: 'chatty@test.com', password: 'secret123' });
+      x = await call('chatty', 'POST', '/api/chat/topics', { title: 'A busy topic' });
+      const busyTopic = x.data.item && x.data.item.id;
+      let sent = 0, lastStatus = 0;
+      for (let i = 0; i < 12; i++) { x = await call('chatty', 'POST', `/api/chat/topics/${busyTopic}/messages`, { body: `message ${i}` }); lastStatus = x.status; if (x.status === 200) sent++; }
+      check('a member can send ten chat messages in a minute and no more', sent === 10 && lastStatus === 429, { sent, lastStatus });
+      x = await call('member', 'POST', `/api/chat/topics/${busyTopic}/messages`, { body: 'someone else is not held back' }).catch(() => ({ status: 0 }));
+      check('and the limit is each member\'s own, not everyone\'s', x.status !== 429, x.status);
+
+      // the last place at an event goes to one person
+      x = await call('admin', 'POST', '/api/admin/events', { title: 'One place left', date: '2030-01-05', time: '09:00', location: 'Hall', chapterId, status: 'published', registrationEnabled: true, capacity: 1 });
+      const lastPlaceEvent = x.data.item && x.data.item.id;
+      fakeModels.EventRegistration.countDelayMs = 60;   // the database takes its time, as a real one does, so the four overlap
+      const signUps = await Promise.all([1, 2, 3, 4].map(n => call(`signup${n}`, 'POST', `/api/events/${lastPlaceEvent}/register`, { name: `Person ${n}`, email: `person${n}@test.com` })));
+      fakeModels.EventRegistration.countDelayMs = 0;
+      const taken = fakeModels.EventRegistration._docs.filter(d => d.eventId === lastPlaceEvent).length;
+      check('four people pressing Register at once on the last place: one gets it, three are told it is full',
+        signUps.filter(r => r.status === 200).length === 1 && signUps.filter(r => r.status === 400 && /fully booked/.test(r.data.error || '')).length === 3 && taken === 1,
+        { statuses: signUps.map(r => r.status), taken });
+
+      // changing a password signs out the other devices
+      await registerMember('Two Phones', 'twophones@test.com');
+      await call('phoneA', 'POST', '/api/auth/login', { email: 'twophones@test.com', password: 'secret123' });
+      await call('phoneB', 'POST', '/api/auth/login', { email: 'twophones@test.com', password: 'secret123' });
+      check('a member signed in on two devices is signed in on both',
+        !!(await call('phoneA', 'GET', '/api/auth/me')).data.member && !!(await call('phoneB', 'GET', '/api/auth/me')).data.member, null);
+      x = await call('phoneB', 'PUT', '/api/member/password', { currentPassword: 'secret123', newPassword: 'a-new-password-1' });
+      check('changing the password works', x.status === 200, x.data);
+      check('and signs out the other device', (await call('phoneA', 'GET', '/api/auth/me')).data.member === null, null);
+      check('but not the one it was changed from', !!(await call('phoneB', 'GET', '/api/auth/me')).data.member, null);
+      x = await call('phoneC', 'POST', '/api/auth/login', { email: 'twophones@test.com', password: 'a-new-password-1' });
+      check('the new password signs in a new device', x.status === 200, x.data);
+      // a reset link: the token is hashed in the account, so write the hash the link would match
+      const rawToken = 'reset-token-for-the-suite-0123456789abcdef';
+      const twoPhones = fakeModels.Member._docs.find(m => m.email === 'twophones@test.com');
+      twoPhones.resetTokenHash = require('crypto').createHash('sha256').update(rawToken).digest('hex');
+      twoPhones.resetTokenExpires = new Date(Date.now() + 3600000);
+      x = await call('anon', 'POST', '/api/auth/reset-password', { token: rawToken, email: 'twophones@test.com', newPassword: 'yet-another-pass-2' });
+      check('a password reset works', x.status === 200, x.data);
+      check('and signs out every device that was signed in before it',
+        (await call('phoneB', 'GET', '/api/auth/me')).data.member === null && (await call('phoneC', 'GET', '/api/auth/me')).data.member === null, null);
+      x = await call('phoneD', 'POST', '/api/auth/login', { email: 'twophones@test.com', password: 'yet-another-pass-2' });
+      check('and the reset password signs in afterwards', x.status === 200 && !!(await call('phoneD', 'GET', '/api/auth/me')).data.member, x.data);
+
+      // badges are drawn icons, and no emoji is left in what the server sends
+      const badgeLogin = await call('phoneD', 'GET', '/api/member/badges');
+      const iconNames = [...read('public/js/main.js').match(/const BADGE_ICONS = \{([\s\S]*?)\n\};/)[1].matchAll(/^  (\w+):/gm)].map(m => m[1]);
+      check('every profile badge names one of the app\'s own drawn icons',
+        badgeLogin.status === 200 && badgeLogin.data.badges.length === 8 && badgeLogin.data.badges.every(b => iconNames.includes(b.icon)), badgeLogin.data.badges && badgeLogin.data.badges.map(b => b.icon));
+      const emojiPattern = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}]/u;
+      const withEmoji = ['server.js', ...files('routes', '.js'), ...files('lib', '.js')].filter(f => read(f).split('\n').some(l => !l.trim().startsWith('//') && emojiPattern.test(l)));
+      check('no emoji is left in anything the server sends', withEmoji.length === 0, withEmoji);
+
+      // the backup script, run against a stand-in for mongodump
+      {
+        const { spawnSync } = require('child_process');
+        const os = require('os');
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-test-'));
+        const bin = path.join(tmp, 'bin');
+        fs.mkdirSync(bin);
+        fs.writeFileSync(path.join(bin, 'mongodump'), '#!/usr/bin/env bash\nfor a in "$@"; do case "$a" in --archive=*) f="${a#--archive=}";; esac; done\necho "pretend database" > "$f"\n', { mode: 0o755 });
+        const baseEnv = { ...process.env, PATH: bin + path.delimiter + process.env.PATH, MONGODB_URI: 'mongodb://stub/x' };
+        delete baseEnv.BACKUP_PASSPHRASE;
+        const script = path.join(root, 'scripts/backup.sh');
+        const out = path.join(tmp, 'copies');
+        let b = spawnSync('bash', [script, out], { env: baseEnv, encoding: 'utf8' });
+        const plain = fs.existsSync(out) ? fs.readdirSync(out).filter(f => /^aconsu-.*\.archive\.gz$/.test(f)) : [];
+        check('the backup script saves a copy of the database, readable only by its owner',
+          b.status === 0 && plain.length === 1 && (fs.statSync(path.join(out, plain[0])).mode & 0o077) === 0, { status: b.status, err: b.stderr });
+        const out2 = path.join(tmp, 'locked');
+        b = spawnSync('bash', [script, out2], { env: { ...baseEnv, BACKUP_PASSPHRASE: 'a test passphrase' }, encoding: 'utf8' });
+        const locked = fs.existsSync(out2) ? fs.readdirSync(out2) : [];
+        check('with a passphrase it is locked, and the unlocked file is not left behind', b.status === 0 && locked.length === 1 && locked[0].endsWith('.enc'), { status: b.status, locked, err: b.stderr });
+        const opened = locked.length ? spawnSync('openssl', ['enc', '-d', '-aes-256-cbc', '-pbkdf2', '-pass', 'env:BACKUP_PASSPHRASE', '-in', path.join(out2, locked[0])], { env: { ...process.env, BACKUP_PASSPHRASE: 'a test passphrase' }, encoding: 'utf8' }) : { stdout: '' };
+        check('and opens again with the passphrase', /pretend database/.test(opened.stdout), opened.stdout);
+        const insideRepo = path.join(root, 'a-folder-that-must-not-be-made');
+        b = spawnSync('bash', [script, insideRepo], { env: baseEnv, encoding: 'utf8' });
+        check('it refuses to save a copy inside a git repository, and leaves no folder there', b.status === 1 && /Refusing/.test(b.stderr) && !fs.existsSync(insideRepo), { status: b.status, err: b.stderr });
+        const noUri = { ...baseEnv }; delete noUri.MONGODB_URI;
+        b = spawnSync('bash', [script, out], { env: noUri, encoding: 'utf8' });
+        check('and says what to set when the connection string is missing', b.status !== 0 && /MONGODB_URI/.test(b.stderr), b.stderr);
+        if (fs.existsSync('/bin/bash')) {
+          b = spawnSync('/bin/bash', [script, out], { env: { PATH: '/nonexistent', MONGODB_URI: 'mongodb://stub/x' }, encoding: 'utf8' });
+          check('and says where to get mongodump when it is not installed', b.status === 1 && /mongodump is not installed/.test(b.stderr), b.stderr);
+        }
+        fs.rmSync(tmp, { recursive: true, force: true });
+      }
+      const ops = read('docs/operations.md');
+      const render = read('render.yaml');
+      check('the operations guide covers production mode, keeping awake, backups and restoring',
+        /\/api\/health/.test(ops) && /Keeping it awake/.test(ops) && /no backups/.test(ops) && /mongorestore/.test(ops), null);
+      check('render.yaml sets production mode, checks health, and keeps every secret out of the file',
+        /NODE_ENV[\s\S]*?value: production/.test(render) && /healthCheckPath: \/api\/health/.test(render) &&
+        ['ADMIN_PASSWORD', 'MONGODB_URI'].every(k => new RegExp(`${k}\\s*\\n\\s*sync: false`).test(render)) && !/mongodb\+srv:\/\//.test(render), null);
+      const ci = read('.github/workflows/ci.yml');
+      const pkg = JSON.parse(read('package.json'));
+      check('the app asks for Node 22, the version it is tested on, and not the end-of-life Node 20', pkg.engines && pkg.engines.node === '22.x', pkg.engines);
+      check('CI stops on a known high-severity vulnerability instead of only reporting it', /npm audit --audit-level=high\s*\n/.test(ci) && !/npm audit[^\n]*\|\| true/.test(ci), null);
+      check('and CI runs the browser suite too, reporting without blocking until it has passed on GitHub',
+        /browser:[\s\S]*?continue-on-error: true[\s\S]*?node test\/ux\.js/.test(ci), null);
+      const readme = read('README.md');
+      check('the README no longer promises backups the free plan does not give, and shows no real-looking database username',
+        !/automatic backups/.test(readme) && /free \(M0\) cluster has none/.test(readme) && !/acousuadmin/.test(readme), null);
+
+      // no duplicate-index warning on start
+      const { spawnSync } = require('child_process');
+      const loaded = spawnSync(process.execPath, ['-e', "require('./lib/models.js')"], { cwd: root, encoding: 'utf8' });
+      check('the models load without a duplicate-index warning', !/Duplicate schema index/.test(loaded.stderr || ''), (loaded.stderr || '').slice(0, 200));
+
+      // a deploy's stop signal ends the server cleanly
+      {
+        const { spawn } = require('child_process');
+        const child = spawn(process.execPath, ['-e', "require('./test/harness.js'); require('./server.js')"], {
+          cwd: root,
+          env: { ...process.env, PORT: '4398', MONGODB_URI: 'mongodb://stub/shutdown', ADMIN_PASSWORD: 'x', SESSION_SECRET: 'x', ACONSU_PROCESS_HOOKS: '1' }
+        });
+        let out = '';
+        child.stdout.on('data', (d) => { out += d; });
+        child.stderr.on('data', (d) => { out += d; });
+        const started = await new Promise((resolve) => {
+          const give = setTimeout(() => { clearInterval(poll); resolve(false); }, 15000);
+          const poll = setInterval(() => { if (/running on/.test(out)) { clearTimeout(give); clearInterval(poll); resolve(true); } }, 100);
+        });
+        child.kill('SIGTERM');
+        const code = await new Promise((resolve) => {
+          const give = setTimeout(() => { child.kill('SIGKILL'); resolve('did not exit'); }, 8000);
+          child.on('exit', (c) => { clearTimeout(give); resolve(c); });
+        });
+        check('a deploy\'s stop signal lets the server finish and leave cleanly, with a clean exit',
+          started && code === 0 && /shutting down/.test(out), { started, code, out: out.slice(-200) });
+      }
     }
   }
 

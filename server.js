@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const helmet = require('helmet');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const multer = require('multer');
@@ -75,11 +76,45 @@ if (isProd) {
   }
 }
 
+// Render sets RENDER on everything it runs. A service there without
+// NODE_ENV=production quietly loses the HTTPS-only cookie, HSTS and the refusal
+// to run on default passwords. Stopping it from starting could take a working
+// site down, so this does not: it says so loudly at start-up, and /api/health
+// reports it, so it can be seen without opening the dashboard.
+const startupWarnings = [];
+if (process.env.RENDER && !isProd) {
+  startupWarnings.push('NODE_ENV is not "production" on Render: cookies are not HTTPS-only, HSTS is off and default passwords would be accepted. Set NODE_ENV=production in the Render environment.');
+  startupWarnings.forEach((w) => console.warn('WARNING: ' + w));
+}
+
 app.use(helmet({
   contentSecurityPolicy: { useDefaults: false, directives: securityHeaders.cspDirectives(isProd) },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
 app.use(securityHeaders.permissionsPolicy);
+// Text (pages, scripts, styles, JSON) is sent compressed to browsers that ask
+// for it, which is most of what a phone on mobile data downloads. A live event
+// stream is never compressed: the compressor would hold its messages back.
+app.use(compression({
+  filter: (req, res) => {
+    // Decided by what is actually being sent, not by guessing from the address.
+    if (/event-stream/.test(String(res.getHeader('Content-Type') || '')) || /event-stream/.test(req.headers.accept || '')) return false;
+    return compression.filter(req, res);
+  }
+}));
+// Served before the session middleware on purpose: a style sheet or a font has
+// no use for who is signed in, and with the session first every one of the
+// thirty-odd files on a page cost a lookup in the database. Pages, scripts and
+// styles are checked with the server on every visit (they change when the app
+// is deployed); things that do not change are kept: fonts for a year, pictures
+// and icons for a week, the how-to video for a day.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, filePath) {
+    if (/[\\/]fonts[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    else if (/[\\/](icons|images)[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=604800, stale-while-revalidate=86400');
+    else if (/[\\/]video[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=86400');
+  }
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // {"email": {"$ne": null}} and ?category[$ne]=x are not values, they are
@@ -100,7 +135,9 @@ app.use(session({
     sameSite: 'lax'
   }
 }));
-app.use(express.static(path.join(__dirname, 'public')));
+// Straight after the session is read, before any route looks at who it is.
+app.use((req, res, next) => endRevokedMemberSession(req, res, next));
+
 
 // ---------- rate limiting ----------
 // Login: slow down brute-force password guessing.
@@ -350,6 +387,42 @@ async function loadStaffRevocations() {
   }
 }
 
+// The same for members, who now have a way to cut off other devices: changing
+// or resetting a password signs out every session that was opened before it.
+// A member session that predates the change, or has no timestamp at all (opened
+// before this existed), is treated as older and ends.
+const MEMBER_REVOCATIONS = new Map();
+
+function revokeMemberSessions(memberId) {
+  if (!memberId) return Date.now();
+  const at = Date.now();
+  const now = at;
+  MEMBER_REVOCATIONS.set(String(memberId), at);
+  MEMBER_REVOCATIONS.forEach((ts, id) => { if (now - ts > SESSION_MAX_AGE_MS) MEMBER_REVOCATIONS.delete(id); });
+  repo.patchById('members', String(memberId), { sessionsRevokedAt: new Date(at) }).catch(() => { /* held in memory for this process */ });
+  return at;
+}
+
+async function loadMemberRevocations() {
+  try {
+    const cutoff = new Date(Date.now() - SESSION_MAX_AGE_MS);
+    const members = await models.Member.find({ sessionsRevokedAt: { $gte: cutoff } }).lean();
+    members.forEach((m) => MEMBER_REVOCATIONS.set(String(m.id), new Date(m.sessionsRevokedAt).getTime()));
+  } catch (e) {
+    // Keep what is already held rather than dropping revocations.
+  }
+}
+
+// Runs on every request, before any route reads who is signed in.
+function endRevokedMemberSession(req, res, next) {
+  const s = req.session;
+  if (s && s.memberId) {
+    const at = MEMBER_REVOCATIONS.get(String(s.memberId));
+    if (at && (!s.issuedAt || s.issuedAt <= at)) { delete s.memberId; delete s.issuedAt; }
+  }
+  next();
+}
+
 function isSessionRevoked(staff) {
   if (!staff || !staff.id) return false; // env admin / shepherd logins carry no account id
   const revokedAt = STAFF_REVOCATIONS.get(String(staff.id));
@@ -533,14 +606,38 @@ function chapterConfidential(what) {
   };
 }
 
+// The chapter a leader says they are signing in to: a chapter's id, or
+// 'national' for the national office. It is optional. The sign-in pages ask for
+// it when there is more than one chapter to choose between; an older page, or
+// anything calling the API directly, leaves it out and the account's own
+// chapter decides, as it always has. It is checked only after the password has
+// been, so a wrong password still answers exactly as it did and the choice can
+// never be used to find out which chapter a username belongs to.
+const NATIONAL_CHOICE = 'national';
+function chosenChapter(body) {
+  const raw = body && body.chapterId;
+  if (raw === undefined || raw === null) return null;
+  const clean = String(raw).trim().slice(0, 100);
+  return clean || null;
+}
+// National officers may open any chapter, so for them the choice is a courtesy.
+// Everyone else has to choose the chapter their account belongs to.
+function fitsChosenChapter(chosen, { national, chapterId }) {
+  if (chosen === null || national) return true;
+  return chosen !== NATIONAL_CHOICE && chosen === String(chapterId || '');
+}
+const WRONG_CHAPTER = 'That account is not part of the chapter you chose. Choose your own chapter, or National office if you are a national officer.';
+
 app.post('/api/portal/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+  const chosen = chosenChapter(req.body);
   try {
     // The main env-configured admin login doubles as the bootstrap National Coordinator.
     const adminUser = process.env.ADMIN_USERNAME || 'admin';
     const adminPass = process.env.ADMIN_PASSWORD || 'changeme';
     if (safeEqual(username, adminUser) && safeEqual(password, adminPass)) {
+      // (national: any chapter may be chosen, so there is nothing to refuse)
       await freshSession(req);
       req.session.isAdmin = true;
       req.session.staff = { id: '', username: adminUser, name: 'National Administrator', role: 'nationalCoordinator', chapterId: '' };
@@ -553,6 +650,9 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     if (process.env.SHEPHERD_USERNAME
         && safeEqual(username, process.env.SHEPHERD_USERNAME)
         && safeEqual(password, process.env.SHEPHERD_PASSWORD)) {
+      if (!fitsChosenChapter(chosen, { national: false, chapterId: rolesLib.LEGACY_CHAPTER_ID })) {
+        return res.status(403).json({ error: WRONG_CHAPTER });
+      }
       await freshSession(req);
       req.session.isShepherd = true;
       // Pinned to the seed chapter - this credential predates chapters existing at all.
@@ -572,6 +672,10 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       return res.status(403).json({
         error: `Your ${user.termYear || 'executive'} term of office has ended. Your Chapter Coordinator can renew it or hand the office over.`
       });
+    }
+
+    if (!fitsChosenChapter(chosen, { national: user.role === 'nationalCoordinator', chapterId: user.chapterId })) {
+      return res.status(403).json({ error: WRONG_CHAPTER });
     }
 
     // An executive's position is stamped into the session at sign-in rather
@@ -940,6 +1044,7 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
     }, 'mem');
     scheduleOnboardingTasks(member).catch(() => {});
     req.session.memberId = member.id;
+    req.session.issuedAt = Date.now();
     res.json({ success: true, member: { id: member.id, name: member.name, email: member.email, chapterId: member.chapterId } });
   } catch (e) {
     res.status(500).json({ error: 'Could not create account. Please try again.' });
@@ -955,6 +1060,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     if (!member || !match) return res.status(401).json({ error: 'Invalid email or password' });
     await freshSession(req);
     req.session.memberId = member.id;
+    req.session.issuedAt = Date.now();
     res.json({ success: true, member: { id: member.id, name: member.name, email: member.email } });
   } catch (e) {
     res.status(500).json({ error: 'Could not log in. Please try again.' });
@@ -1016,6 +1122,8 @@ app.post('/api/auth/reset-password', loginLimiter, async (req, res) => {
     member.resetTokenHash = '';
     member.resetTokenExpires = null;
     await member.save();
+    // Whoever knew the old password, or held a session opened with it, is out.
+    revokeMemberSessions(member.id);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not reset password. Please try again.' });
@@ -1112,6 +1220,10 @@ app.put('/api/member/password', requireMember, async (req, res) => {
     if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
     member.passwordHash = await bcrypt.hash(newPassword, 10);
     await member.save();
+    // Every other device is signed out; this one, which has just proved it
+    // knows the password, stays in.
+    const at = revokeMemberSessions(member.id);
+    req.session.issuedAt = at + 1;
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not update password' });
@@ -1841,14 +1953,16 @@ app.get('/api/member/badges', requireMember, async (req, res) => {
     ]);
 
     const badges = [
-      { id: 'welcome', label: 'Welcome to ACONSU', icon: '👋', earned: true },
-      { id: 'streak7', label: '7-Day Streak', icon: '🔥', earned: (member.longestStreak || 0) >= 7 },
-      { id: 'streak30', label: '30-Day Streak', icon: '⚡', earned: (member.longestStreak || 0) >= 30 },
-      { id: 'reader10', label: 'Scripture Reader', icon: '📖', earned: (member.bibleChaptersRead || 0) >= 10 },
-      { id: 'reader50', label: 'Deeply Rooted', icon: '🌳', earned: (member.bibleChaptersRead || 0) >= 50 },
-      { id: 'prayer', label: 'Prayer Warrior', icon: '🙏', earned: prayerRequests >= 1 },
-      { id: 'serving', label: 'Serving Heart', icon: '❤️', earned: joinRequests >= 1 },
-      { id: 'events', label: 'Event Goer', icon: '🎉', earned: eventRegs >= 1 }
+      // `icon` is the name of one of the app's own drawn icons (see badgeIconSvg in
+      // main.js), not an emoji: an emoji looks different on every phone.
+      { id: 'welcome', label: 'Welcome to ACONSU', icon: 'welcome', earned: true },
+      { id: 'streak7', label: '7-Day Streak', icon: 'flame', earned: (member.longestStreak || 0) >= 7 },
+      { id: 'streak30', label: '30-Day Streak', icon: 'bolt', earned: (member.longestStreak || 0) >= 30 },
+      { id: 'reader10', label: 'Scripture Reader', icon: 'book', earned: (member.bibleChaptersRead || 0) >= 10 },
+      { id: 'reader50', label: 'Deeply Rooted', icon: 'sprout', earned: (member.bibleChaptersRead || 0) >= 50 },
+      { id: 'prayer', label: 'Prayer Warrior', icon: 'prayer', earned: prayerRequests >= 1 },
+      { id: 'serving', label: 'Serving Heart', icon: 'give', earned: joinRequests >= 1 },
+      { id: 'events', label: 'Event Goer', icon: 'events', earned: eventRegs >= 1 }
     ];
     res.json({
       badges,
@@ -1954,22 +2068,28 @@ app.get('/api/notifications', async (req, res) => {
     // Always include national broadcasts (blank chapterId) alongside this
     // chapter's own - a national announcement should reach every chapter.
     const filter = base.chapterId ? { $or: [{ chapterId: base.chapterId }, { chapterId: '' }] } : base;
-    const items = await repo.getAll('notifications', filter);
 
     // A department's own announcement belongs to that department. Everyone
     // else in the chapter is simply not its audience, so it is filtered out
-    // here rather than shown to people it was never addressed to.
+    // before the cut rather than shown to people it was never addressed to.
+    // Someone serving in Choir and Ushering is the audience for both, so this
+    // asks whether the notice belongs to any department they are in - reading
+    // a single field here would have shown them only their primary one.
     let ownDepartments = [];
     if (req.session && req.session.memberId) {
       const me = await repo.getById('members', req.session.memberId);
       ownDepartments = memberDepartmentIds(me);
     }
-    // Someone serving in Choir and Ushering is the audience for both, so this
-    // asks whether the notice belongs to any department they are in - reading
-    // a single field here would have shown them only their primary one.
-    const forMe = items.filter(n => !n.departmentId || ownDepartments.includes(n.departmentId));
+    const audience = { $or: [
+      { departmentId: '' }, { departmentId: null }, { departmentId: { $exists: false } },
+      ...(ownDepartments.length ? [{ departmentId: { $in: ownDepartments } }] : [])
+    ] };
 
-    res.json(forMe.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 40));
+    // The database orders them and keeps the newest 40. This is asked for on
+    // every page by everybody, so it must not read every notification there
+    // has ever been in order to show forty.
+    const items = await repo.getAll('notifications', { $and: [filter, audience] }, { sort: { createdAt: -1 }, limit: 40 });
+    res.json(items);
   } catch (e) {
     res.status(500).json({ error: 'Could not load notifications' });
   }
@@ -1993,6 +2113,8 @@ app.get('/api/health', async (req, res) => {
   res.status(ok ? 200 : 503).json({
     ok,
     service: 'aconsu',
+    production: isProd,
+    warnings: startupWarnings,
     uptimeSeconds: Math.round(process.uptime()),
     database,
     checkedAt: new Date().toISOString()
@@ -3691,6 +3813,20 @@ app.post('/api/contact', formLimiter, async (req, res) => {
   }
 });
 
+// One sign-up at a time per event. Counting the places taken and then taking one
+// are two steps, so two people pressing Register at the same moment on the last
+// place both counted one free and both got it. Queued behind each other, the
+// second sees the place gone. (Held in this process: right for the one server
+// the app runs on; a second server would need the database to do it.)
+const eventSignUpQueues = new Map();
+function inEventQueue(eventId, task) {
+  const turn = (eventSignUpQueues.get(eventId) || Promise.resolve()).catch(() => {}).then(task);
+  const tail = turn.catch(() => {});
+  eventSignUpQueues.set(eventId, tail);
+  tail.then(() => { if (eventSignUpQueues.get(eventId) === tail) eventSignUpQueues.delete(eventId); });
+  return turn;
+}
+
 app.post('/api/events/:id/register', formLimiter, async (req, res) => {
   const { name, email, phone } = req.body;
   if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
@@ -3701,17 +3837,19 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
     if (event.registrationDeadline && new Date(event.registrationDeadline) < new Date()) {
       return res.status(400).json({ error: 'Registration for this event has closed' });
     }
-    if (event.capacity > 0) {
-      const count = await models.EventRegistration.countDocuments({ eventId: event.id });
-      if (count >= event.capacity) {
-        return res.status(400).json({ error: 'This event is fully booked' });
+    const placed = await inEventQueue(event.id, async () => {
+      if (event.capacity > 0) {
+        const count = await models.EventRegistration.countDocuments({ eventId: event.id });
+        if (count >= event.capacity) return false;
       }
-    }
-    await repo.create('eventRegistrations', {
-      chapterId: event.chapterId || '', eventId: event.id, name, email, phone: phone || '',
-      // Only when they are signed in - the form stays open to anyone.
-      memberId: (req.session && req.session.memberId) || ''
-    }, 'reg');
+      await repo.create('eventRegistrations', {
+        chapterId: event.chapterId || '', eventId: event.id, name, email, phone: phone || '',
+        // Only when they are signed in - the form stays open to anyone.
+        memberId: (req.session && req.session.memberId) || ''
+      }, 'reg');
+      return true;
+    });
+    if (!placed) return res.status(400).json({ error: 'This event is fully booked' });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not complete registration. Please try again.' });
@@ -8041,12 +8179,19 @@ app.delete('/api/admin/content/:id', requireContentManager, async (req, res) => 
 });
 
 // ---------- fallback ----------
+// A page that is not here answers 404, with the friendly page as its body. It
+// used to answer 200, which told search engines and uptime monitors that every
+// mistyped address was a real page.
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) return next();
-  res.sendFile(path.join(__dirname, 'public', '404.html'), (err) => {
-    if (err) res.status(404).send('Not found');
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'), (err) => {
+    if (err && !res.headersSent) res.status(404).send('Not found');
   });
 });
+
+// An API address that does not exist answers in JSON, which is what the pages
+// that asked are going to try to read, not an HTML error page.
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
 // ---------- upload failures ----------
 // A rejected upload used to fall through to Express's default handler, which
@@ -8106,7 +8251,7 @@ async function checkBirthdaysAndNotify() {
         ? firstNames.join(', ')
         : `${firstNames.slice(0, 3).join(', ')} and ${firstNames.length - 3} more`;
       await createNotification(
-        '🎉 Happy Birthday!',
+        'Happy Birthday!',
         `Join us in celebrating ${names} today!`,
         '/index.html', 'system', chapterId
       );
@@ -8266,16 +8411,50 @@ async function refreshSoleActiveChapter() {
   }
 }
 
+// A promise nobody handled used to take the whole process down (Node's default),
+// which signs out nobody but drops every request in flight and leaves the site
+// down while the host restarts it. It is logged and the site carries on.
+// Only when this file is the program (node server.js). The test suites load it
+// inside their own process, and there a swallowed rejection would hide a broken
+// test behind a hang instead of failing it.
+const runsAsProgram = require.main === module || process.env.ACONSU_PROCESS_HOOKS === '1';
+if (runsAsProgram) {
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled promise rejection:', reason && reason.stack ? reason.stack : reason);
+  });
+}
+
 connectDB()
   // Revocations are loaded BEFORE the first request is served: sessions
   // survive a restart now, so a session revoked before the restart must not
   // get a window where it works again.
   .then(() => loadStaffRevocations())
+  .then(() => loadMemberRevocations())
   .then(() => {
-    app.listen(PORT, () => {
+    const httpServer = app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);
     });
+    // A deploy sends SIGTERM. Stop taking new requests, let the ones in flight
+    // (an upload, a page) finish, close the database, then leave. If something
+    // is holding on (a live meeting stream), leave anyway after ten seconds.
+    let leaving = false;
+    const shutDown = (signal) => {
+      if (leaving) return;
+      leaving = true;
+      console.log(`${signal} received: finishing current requests, then shutting down`);
+      const force = setTimeout(() => { console.error('Shutdown took over 10 seconds; leaving now'); process.exit(1); }, 10000);
+      force.unref();
+      httpServer.close(() => {
+        require('mongoose').connection.close().catch(() => {}).finally(() => process.exit(0));
+      });
+      if (httpServer.closeIdleConnections) httpServer.closeIdleConnections();
+    };
+    if (runsAsProgram) {
+      process.on('SIGTERM', () => shutDown('SIGTERM'));
+      process.on('SIGINT', () => shutDown('SIGINT'));
+    }
     setInterval(loadStaffRevocations, 5 * 60 * 1000);
+    setInterval(loadMemberRevocations, 5 * 60 * 1000);
     refreshSoleActiveChapter();
     setInterval(refreshSoleActiveChapter, 5 * 60 * 1000); // belt and braces against drift
     checkBirthdaysAndNotify();

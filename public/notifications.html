@@ -56,7 +56,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   markNotificationsSeen();
 
   try {
-    const items = await fetchJSON('/api/notifications');
+    const items = await fetchNotificationsShared();
     const wrap = document.getElementById('notifList');
     if (!items.length) {
       wrap.innerHTML = '<p class="empty-state">No notifications yet. Check back soon.</p>';

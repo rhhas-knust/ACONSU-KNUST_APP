@@ -200,6 +200,22 @@ const ICON_VIDEO = '<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" w
 const ICON_BOOK = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>';
 const ICON_GIVE = '<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>';
 const ICON_CHAT = '<path d="M21 11.5a8.5 8.5 0 0 1-9.5 8.4L4 21l1.3-4.2A8.5 8.5 0 1 1 21 11.5z"/>';
+// Profile badges. Each is drawn in the same line style as every other icon in the
+// app; the server names which one a badge uses.
+const BADGE_ICONS = {
+  welcome: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.6"/><path d="M15.5 14.2c2.6.4 4.5 2.4 4.5 5.8"/>',
+  flame: '<path d="M12 3c1.2 3.6 4.8 5.1 4.8 9.6A4.8 4.8 0 0 1 12 17.4a4.8 4.8 0 0 1-4.8-4.8c0-2.1 1-3.2 2.1-4.3.3 1.3 1 1.9 1.8 2.1C11.4 8.6 11 5.6 12 3Z"/>',
+  bolt: '<path d="M13 2.5 5 13.5h6l-1 8 8-11h-6l1-8Z"/>',
+  book: '<path d="M12 6.2c-2-1.5-5-2-8-1v13c3-1 6-.5 8 1 2-1.5 5-2 8-1V5.2c-3-1-6-.5-8 1Z"/><path d="M12 6.2v13"/>',
+  sprout: '<path d="M12 21v-9"/><path d="M12 12.5c0-3.7-2.6-6.2-6.8-6.2 0 3.7 2.6 6.2 6.8 6.2Z"/><path d="M12 15c0-3.1 2.3-5.6 6.2-5.6 0 3.3-2.3 5.6-6.2 5.6Z"/>',
+  prayer: '<path d="M12 21s-7-4.5-9.5-9C1 8 2.5 4.5 6 4c2-.3 4 .8 6 3 2-2.2 4-3.3 6-3 3.5.5 5 4 3.5 8-2.5 4.5-9.5 9-9.5 9Z"/>',
+  give: '<path d="M3 12h4l3 2h4.5a1.8 1.8 0 0 1 0 3.6H10"/><path d="M7 12v7h8.6l5-3.2a1.7 1.7 0 0 0-1.9-2.8L15 15.6"/><path d="M15.5 9.2c-.9-.9-1.7-1.6-1.7-2.8a1.9 1.9 0 0 1 3.4-1.2 1.9 1.9 0 0 1 3.4 1.2c0 1.2-.8 1.9-1.7 2.8L17.2 11l-1.7-1.8Z"/>',
+  events: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="m9 15.5 2 2 4-4"/>'
+};
+function badgeIconSvg(name) {
+  return svgIcon(BADGE_ICONS[name] || '<circle cx="12" cy="12" r="9"/>');
+}
+
 const ICON_INFO = '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r="0.9" fill="currentColor" stroke="none"/>';
 const ICON_MAIL = '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 6.5 9 6 9-6"/>';
 const ICON_CARD = '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>';
@@ -327,9 +343,22 @@ async function unsubscribeFromPush() {
 }
 
 // ---------- unread notification badge ----------
+// Every page asks for the notifications more than once (the bell, the More tab,
+// the home page's own card), and each ask used to be its own request. They now
+// share one for a few seconds.
+let notificationsInFlight = null;
+function fetchNotificationsShared() {
+  if (!notificationsInFlight) {
+    notificationsInFlight = fetchJSON('/api/notifications');
+    notificationsInFlight.catch(() => {});
+    setTimeout(() => { notificationsInFlight = null; }, 10000);
+  }
+  return notificationsInFlight;
+}
+
 async function getUnreadNotificationCount() {
   try {
-    const items = await fetchJSON('/api/notifications');
+    const items = await fetchNotificationsShared();
     if (!items.length) return 0;
     const lastSeen = localStorage.getItem('aconsu_last_seen_notif') || '';
     return items.filter((n) => n.createdAt > lastSeen).length;
@@ -633,7 +662,7 @@ async function toggleNotificationPanel(bell) {
   const body = panel.querySelector('.notif-panel-body');
   let items = [];
   try {
-    items = await fetchJSON('/api/notifications');
+    items = await fetchNotificationsShared();
   } catch (err) {
     body.innerHTML = '<p class="notif-empty">Could not load notifications right now.</p>';
     return;
@@ -827,7 +856,10 @@ function renderFooter(settings) {
 }
 
 async function initLayout(activePath) {
-  await ensureChapterSelected();
+  // Who is signed in comes first. It used to come second, after the chapter
+  // chooser, so the moment a second chapter existed every member opening the app
+  // on a new phone was asked "Choose your ACONSU chapter" before anything
+  // drew, and then had their answer overruled by their own account.
   let member = null;
   try {
     const authRes = await fetchJSON('/api/auth/me');
@@ -842,6 +874,8 @@ async function initLayout(activePath) {
       }
     }
   } catch (e) { /* nav still works without auth state */ }
+  // Only a visitor who is not signed in, or whose account has no chapter, is asked.
+  await ensureChapterSelected();
   let customPages = [];
   try {
     customPages = await fetchJSON('/api/pages');
