@@ -260,7 +260,7 @@ const fakeModels = {
   AttendanceRecord: makeModel({ chapterId: '', serviceType: 'sunday', title: '', marks: [], visitorCount: 0, notes: '', recordedBy: '' }),
   ScheduledNotification: makeModel({ chapterId: '', status: 'scheduled', channels: ['app'], audience: 'all', url: '/index.html', sentAt: null, result: '', createdBy: '' }),
   SmsLog: makeModel({ chapterId: '', status: 'sent', detail: '', sourceId: '' }),
-  StaffUser: makeModel({ chapterId: '', memberId: '', active: true, lastLoginAt: null, name: '', positionKey: '', endedAt: null, handedOverTo: '', handedOverFrom: '' }),
+  StaffUser: makeModel({ chapterId: '', memberId: '', active: true, lastLoginAt: null, name: '', positionKey: '', endedAt: null, handedOverTo: '', handedOverFrom: '', passwordChangedAt: null }),
   NationalReport: makeModel({ reportDate: '', region: '', continent: '', metrics: {} })
 };
 

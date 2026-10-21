@@ -1287,3 +1287,70 @@ window.addEventListener('online', () => {
 // The staff portals and the admin pages build their own top bar rather than
 // going through renderHeader, so the switch has to be picked up here too.
 document.addEventListener('DOMContentLoaded', wireThemeToggle);
+
+
+// ---------- show / hide for every password box ----------
+// A password typed on a phone is easy to get wrong, and a wrong one means a leader
+// locked out on a Sunday. Every password field, on every page, gets a Show / Hide
+// button. It is added here rather than page by page so that no sign-in form, now
+// or later, can be left without one: pages that build their forms after they load
+// (the portals' modals) are picked up as they appear.
+//
+// The password goes back to hidden when the form is sent and whenever the page is
+// put in the background, so one that was shown to check a typing mistake is not
+// left on a screen somebody walks past.
+(function () {
+  const marked = new WeakSet();
+
+  function setShown(input, button, shown) {
+    input.type = shown ? 'text' : 'password';
+    button.textContent = shown ? 'Hide' : 'Show';
+    button.setAttribute('aria-label', shown ? 'Hide password' : 'Show password');
+  }
+
+  function enhance(input) {
+    if (marked.has(input) || !input.parentNode) return;
+    marked.add(input);
+    const wrap = document.createElement('span');
+    wrap.className = 'pw-wrap';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pw-toggle';
+    wrap.appendChild(button);
+    setShown(input, button, false);
+    button.addEventListener('click', () => setShown(input, button, input.type === 'password'));
+    input.dataset.pwToggle = 'on';
+    if (input.form && !input.form.dataset.pwHide) {
+      input.form.dataset.pwHide = 'on';
+      input.form.addEventListener('submit', () => hideAll(input.form));
+    }
+  }
+
+  function hideAll(root) {
+    (root || document).querySelectorAll('.pw-wrap').forEach(wrap => {
+      const input = wrap.querySelector('input');
+      const button = wrap.querySelector('.pw-toggle');
+      if (input && button && input.type === 'text') setShown(input, button, false);
+    });
+  }
+
+  function scan() {
+    document.querySelectorAll('input[type="password"]:not([data-pw-toggle])').forEach(enhance);
+  }
+
+  function start() {
+    scan();
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; scan(); });
+    }).observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) hideAll(); });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();

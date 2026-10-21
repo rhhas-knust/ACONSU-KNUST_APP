@@ -67,6 +67,36 @@ whether it is in office, ending soon, ended or empty. Two actions:
 Officer seats are single seats: a second President cannot be seated beside the
 first, and an account that was handed over cannot be renewed to take the seat back.
 
+## My Account and passwords
+
+Every leader's portal has a **My Account** page: name, username, office,
+department, chapter, when the term ends, and when the password was last changed.
+It also has:
+
+- **Change your password.** Needs the current password. The new one must be at
+  least 8 characters (72 at most, because that is all bcrypt reads), must not be
+  one of the commonly guessed passwords, a run like `12345678`, one repeated
+  character, or contain the username, and must differ from the current one. The
+  form shows these as it is filled in; the server gives the final answer, in words.
+- **Signing out of other devices.** Changing the password does this
+  automatically and keeps the device in use signed in. There is also a button for
+  doing it without changing the password.
+- **A reminder while the password is still the starting one.** An account's
+  password starts out chosen by the Coordinator, so until its owner changes it the
+  page says so, here and on the first page of the executive portal. A Coordinator
+  reset puts the reminder back.
+
+Guessing the current password is rate-limited like signing in. The administrator
+login and the legacy shepherding login live in the server's settings, are not
+accounts, and so cannot be changed from the portal.
+
+Every password box in the app, on every page (member sign-in, registration, reset,
+profile, every portal's sign-in, and the forms that open inside portals), has a
+**Show** / **Hide** button. It works from the keyboard, is at least 44px to press,
+and the password goes back to hidden when the form is sent or the page is put in
+the background. It is added by `public/js/main.js`, so a form added later cannot
+be left without one.
+
 ## What the research said
 
 The role of a Vice President in student and church bodies is consistently:
@@ -90,4 +120,6 @@ described to us and are not from those sources.
 | Key offices, hand-over, alumni desk | `routes/office-holders.js` |
 | Screens | `public/js/office-ui.js` (toolkit), `office-outline.js`, `office-budget.js`, `office-minutes.js`, `office-announce.js`, `office-bodies.js` |
 | Private minutes scans | `canOpenPrivateFile` in `server.js`, `lib/fileTypes.js` |
-| Tests | `test/offices.js` (server rules), `test/offices-ui.js` (browser) |
+| My Account and password change | `routes/account.js`, `lib/passwords.js`, `public/js/account.js` |
+| Show / Hide on password boxes | the end of `public/js/main.js`, `.pw-wrap` in `public/css/style.css` |
+| Tests | `test/offices.js`, `test/account.js` (server rules), `test/offices-ui.js`, `test/account-ui.js` (browser) |

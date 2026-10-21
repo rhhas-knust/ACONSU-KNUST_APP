@@ -902,6 +902,7 @@ initPortal({
     { key: 'forms', label: 'Forms', render: renderForms },
     { key: 'content', label: 'Media & Content', render: renderContentManagerLink },
     { key: 'testimonies', label: 'Testimonies', render: renderTestimonies },
-    { key: 'sms', label: 'SMS Log', render: renderSmsLog }
+    { key: 'sms', label: 'SMS Log', render: renderSmsLog },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });

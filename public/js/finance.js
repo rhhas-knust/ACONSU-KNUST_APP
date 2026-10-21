@@ -787,6 +787,7 @@ initPortal({
     { key: 'requests', label: 'Budget Requests', render: (el) => OfficeBudget.renderDesk(el) },
     { key: 'ledger', label: 'Ledger', render: renderLedger },
     { key: 'giving', label: 'Giving Claims', render: renderGivingQueue },
-    { key: 'reports', label: 'Reports', render: renderReports }
+    { key: 'reports', label: 'Reports', render: renderReports },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });

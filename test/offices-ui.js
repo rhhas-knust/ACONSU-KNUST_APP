@@ -128,7 +128,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await coord.waitForFunction(() => !document.querySelector('[data-approve]'));
   await pres.click('#portalNav button:text-is("Semester Outline")');
   await pres.waitForSelector('#outlineForm', { timeout: 5000 }).catch(async () => { console.log('DEBUG panel:', (await pres.locator('.portal-panel.active').textContent()).slice(0, 400)); throw new Error('no form'); });
-  check(/mentoring launch/.test(await pres.textContent('.of-notice.warn')), 'sent back with the reason, which the President sees at the top of the form');
+  check(/mentoring launch/.test(await pres.textContent('.portal-panel.active .of-notice.warn')), 'sent back with the reason, which the President sees at the top of the form');
   await pres.click('#sendOutline');
   await pres.waitForSelector('#withdrawOutline');
   await coord.click('#portalNav button:text-is("Semester Outlines")');
@@ -222,7 +222,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   check(/With the other secretary/.test(await panel(gs).textContent()), 'saved and sent to the other secretary');
   const ags = await open('ags', 'executive');
   await nav(ags, 'Minutes');
-  await ags.waitForSelector('.of-notice.warn');
+  await ags.waitForSelector('.portal-panel.active .of-notice.warn');
   check(/waiting for you/.test(await panel(ags).textContent()), 'the Assistant is told minutes are waiting for her');
   await ags.click('[data-open]');
   await ags.waitForSelector('#agree');

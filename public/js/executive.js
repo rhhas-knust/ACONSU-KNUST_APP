@@ -82,6 +82,9 @@ async function renderExecProfile(el) {
     </div>
   `;
 
+  // Still on the starting password? Say so, with a way straight to changing it.
+  PortalAccount.nudge(el);
+
   document.getElementById('execForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -1025,6 +1028,7 @@ async function renderExecDailyVerse(el) {
 // what this office may do.
 const EXEC_PANELS = [
   { key: 'profile',          label: 'My Profile',          capability: 'profile',              render: renderExecProfile },
+  { key: 'account',          label: 'My Account',          capability: 'profile',              render: (el) => PortalAccount.render(el) },
   { key: 'pulse',            label: 'Chapter Overview',    capability: 'chapter.pulse',        render: renderExecChapterPulse },
   { key: 'outline',          label: 'Semester Outline',    capability: 'outline.write',        render: (el) => OfficeOutline.renderEditor(el) },
   { key: 'outlineShared',    label: 'Semester Outline',    capability: 'outline.read',         unlessCapability: 'outline.write', render: (el) => OfficeOutline.renderShared(el) },

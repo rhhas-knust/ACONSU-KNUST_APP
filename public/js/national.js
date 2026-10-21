@@ -873,6 +873,7 @@ initPortal({
     { key: 'events', label: 'National Events', render: renderNationalEvents },
     { key: 'reports', label: 'National Reports', render: renderNationalReports },
     { key: 'features', label: 'Feature Configuration', render: renderFeatures },
-    { key: 'announcements', label: 'National Announcements', render: renderNationalAnnouncements }
+    { key: 'announcements', label: 'National Announcements', render: renderNationalAnnouncements },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });

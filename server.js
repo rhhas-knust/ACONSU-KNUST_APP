@@ -31,6 +31,7 @@ const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
+const { registerAccountRoutes } = require('./routes/account');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
@@ -5697,6 +5698,7 @@ registerOfficeHolderRoutes(app, {
   academicYearEndsAt, currentAcademicYearLabel, revokeStaffSessions, logMilestone,
   officeAppointmentProblem
 });
+registerAccountRoutes(app, { repo, models, bcrypt, rolesLib, positions, currentStaff, rememberRevocation });
 
 // ---------- chapter attendance (Secretary, Assistant Secretary, Organiser) ----------
 app.get('/api/executive/chapter/attendance', requireRole('executive'), requireCapability(CAP.ATTENDANCE_CHAPTER, async (req, res, { staff }) => {
@@ -7171,6 +7173,9 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
       role: role || existing.role,
       active: active !== undefined ? !!active : existing.active,
       passwordHash: password ? await bcrypt.hash(password, 10) : existing.passwordHash,
+      // A password someone else chose is a starting password again, until its
+      // owner changes it (see routes/account.js).
+      ...(password ? { passwordChangedAt: null } : {}),
       ...(renewTerm ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {}),
       ...(endTerm ? { termEndsAt: new Date() } : {})
     });

@@ -144,6 +144,8 @@ aconsu-app/
     smoke.js               End-to-end test of the portals (`npm test`)
     offices.js             The executive offices' workflows: outline, budgets, minutes, hand-over (`npm test`)
     offices-ui.js          The same screens in a real browser (`node test/offices-ui.js`, needs Playwright)
+    account.js             My Account and changing a password (`npm test`)
+    account-ui.js          Show / Hide on password boxes and the My Account page, in a browser (needs Playwright)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/

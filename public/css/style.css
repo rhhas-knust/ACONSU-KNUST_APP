@@ -1127,3 +1127,13 @@ body {
 
 /* The page title in a portal's top bar is for screen readers; on the purple bar it still has to be a readable colour. */
 .portal-topbar h1, .admin-topbar h1 { color: #fff; }
+
+/* ---------- show / hide on password boxes (see main.js) ---------- */
+.pw-wrap { position: relative; display: block; }
+.pw-wrap > input { padding-right: 84px; min-height: 44px; }
+.pw-toggle {
+  position: absolute; top: 0; right: 0; bottom: 0; min-width: 76px; min-height: 44px;
+  border: 1.5px solid var(--line); border-radius: 0 10px 10px 0; background: var(--lilac-light);
+  color: var(--brand-strong); font-family: var(--font-body); font-size: 0.85rem; font-weight: 700; cursor: pointer;
+}
+.pw-toggle:hover { background: var(--lilac-mid); }

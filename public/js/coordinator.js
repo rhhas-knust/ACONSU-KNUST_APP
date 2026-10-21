@@ -724,6 +724,7 @@ initPortal({
     { key: 'execMinutes', label: 'Executive Minutes', render: (el) => OfficeMinutes.renderForCoordinator(el) },
     { key: 'welfare', label: 'Welfare Purse', render: renderWelfarePurseReport },
     { key: 'approvals', label: 'Approvals', render: renderApprovals },
-    { key: 'announcements', label: 'Chapter Announcement', render: renderChapterAnnouncements }
+    { key: 'announcements', label: 'Chapter Announcement', render: renderChapterAnnouncements },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });
