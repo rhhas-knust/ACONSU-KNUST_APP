@@ -722,7 +722,7 @@ const { fakeModels } = require('./harness.js');
   const oldAccount = fakeModels.StaffUser._docs.find(a => a.id === people.pres.staffId);
   check('the outgoing account is ended and points to the successor, not deleted', !!oldAccount && oldAccount.handedOverTo === newStaffId && !!oldAccount.endedAt && new Date(oldAccount.termEndsAt) <= new Date(), oldAccount);
   r = await call('pres', 'GET', '/api/executive/outline');
-  check('the outgoing President\'s session stops at once', denied(r), r);
+  check('the outgoing President\'s session stops at once, as a signed-out one, not merely a refused one', r.status === 401, r);
   r = await call('pres', 'POST', '/api/portal/login', { username: 'exec.pres', password: 'password123' });
   check('and they cannot sign in again', denied(r), r);
   const cardAfter = fakeModels.Executive._docs.find(c => c.id === cardBefore.id);

@@ -53,10 +53,12 @@ function registerOfficeHolderRoutes(app, deps) {
 
   // ------------------------------------------------------------ key offices --
   app.get('/api/coordinator/offices', ...asCoordinator(async (req, res, { chapterId }) => {
-    const [cards, accounts] = await Promise.all([
+    const [cards, accounts, departments] = await Promise.all([
       repo.getAll('executives', { chapterId }),
-      repo.getAll('staffUsers', { chapterId, role: 'executive' })
+      repo.getAll('staffUsers', { chapterId, role: 'executive' }),
+      repo.getAll('departments', { chapterId })
     ]);
+    const departmentName = new Map(departments.map((d) => [d.id, d.name]));
     const accountById = new Map(accounts.map((a) => [a.id, a]));
     const rank = { current: 0, ending: 1, ended: 2, vacant: 3 };
 
@@ -81,6 +83,7 @@ function registerOfficeHolderRoutes(app, deps) {
           mustBeAlumnus: positions.requiresAlumnus(position),
           status,
           department: card ? card.department || '' : '',
+          departmentName: card && card.department ? (departmentName.get(card.department) || '') : '',
           cardId: card ? card.id : '',
           holder: account ? {
             staffId: account.id, name: account.name, username: account.username, memberId: account.memberId || '',
@@ -96,7 +99,10 @@ function registerOfficeHolderRoutes(app, deps) {
       || (positions.positionByKey(a.key).order - positions.positionByKey(b.key).order)
       || (rank[a.status] - rank[b.status]));
     const needsAttention = offices.filter((o) => o.status !== 'current' && (o.kind === 'officer' || o.status !== 'vacant')).length;
-    res.json({ items: offices, needsAttention, academicYear: currentAcademicYearLabel() });
+    res.json({
+      items: offices, needsAttention, academicYear: currentAcademicYearLabel(),
+      departments: departments.map((d) => ({ id: d.id, name: d.name })).sort((a, b) => String(a.name).localeCompare(String(b.name)))
+    });
   }));
 
   // ----------------------------------------------------------- hand-over --

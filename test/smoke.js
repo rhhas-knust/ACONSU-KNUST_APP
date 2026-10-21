@@ -3152,8 +3152,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     const fs = require('fs');
     const path = require('path');
     const bundles = {
-      'executive.html': ['main.js', 'portal.js', 'executive.js'],
-      'coordinator.html': ['main.js', 'portal.js', 'coordinator.js'],
+      'executive.html': ['main.js', 'portal.js', 'office-ui.js', 'office-outline.js', 'office-budget.js', 'office-minutes.js', 'office-announce.js', 'office-bodies.js', 'executive.js'],
+      'coordinator.html': ['main.js', 'portal.js', 'office-ui.js', 'office-outline.js', 'office-budget.js', 'office-minutes.js', 'office-bodies.js', 'coordinator.js'],
+      'finance.html': ['main.js', 'portal.js', 'office-ui.js', 'office-outline.js', 'office-budget.js', 'office-minutes.js', 'office-bodies.js', 'finance.js'],
       'admin.html': ['main.js', 'admin.js']
     };
     for (const [page, files] of Object.entries(bundles)) {

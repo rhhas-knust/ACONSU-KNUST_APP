@@ -142,6 +142,8 @@ aconsu-app/
   capacitor.config.json    Native app (iOS/Android) wrapper config
   test/
     smoke.js               End-to-end test of the portals (`npm test`)
+    offices.js             The executive offices' workflows: outline, budgets, minutes, hand-over (`npm test`)
+    offices-ui.js          The same screens in a real browser (`node test/offices-ui.js`, needs Playwright)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
@@ -166,6 +168,8 @@ aconsu-app/
     js/publicity.js         Publicity portal (announcements, SMS, testimonies)
     images/logo.jpg         ACONSU logo
 ```
+
+The executive offices (President, Vice President, the secretariat, Financial Secretary, Alumni President) and how an office is handed over are described in [docs/offices.md](docs/offices.md).
 
 Run `npm test` to check the portals still behave after a change — it boots the real
 app against an in-memory database and exercises every portal route, permission rule

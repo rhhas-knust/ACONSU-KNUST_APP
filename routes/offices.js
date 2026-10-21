@@ -236,12 +236,17 @@ function registerOfficeRoutes(app, deps) {
   }
 
   app.get('/api/budget/calls', budgetRoute('any', async (req, res, ctx) => {
-    const [calls, submissions] = await Promise.all([
+    const [calls, submissions, departments] = await Promise.all([
       repo.getAll('budgetCalls', { chapterId: ctx.chapterId }),
-      repo.getAll('budgetSubmissions', { chapterId: ctx.chapterId })
+      repo.getAll('budgetSubmissions', { chapterId: ctx.chapterId }),
+      departmentMap(ctx.chapterId)
     ]);
     calls.sort(newest);
-    res.json({ items: calls.map((c) => summariseCall(c, submissions)), canCall: ctx.canCall, canDecide: ctx.canDecide, defaultPeriod: currentAcademicYearLabel() });
+    res.json({
+      items: calls.map((c) => summariseCall(c, submissions)),
+      departments: [...departments.values()].map((d) => ({ id: d.id, name: d.name })).sort((a, b) => a.name.localeCompare(b.name)),
+      canCall: ctx.canCall, canDecide: ctx.canDecide, defaultPeriod: currentAcademicYearLabel()
+    });
   }));
 
   app.post('/api/budget/calls', budgetRoute('call', async (req, res, ctx) => {

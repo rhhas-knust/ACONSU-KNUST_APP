@@ -31,8 +31,25 @@ const ROLE_LABEL = APPOINTABLE_ROLES.reduce((acc, r) => { acc[r.value] = r.label
   { coordinator: 'Chapter Coordinator', nationalCoordinator: 'National Coordinator' });
 
 // ---------- dashboard ----------
-async function renderCoordinatorDashboard(el) {
-  const data = await fetchJSON('/api/coordinator/overview');
+// What the executive offices are waiting on the Coordinator for. Each lookup is
+// allowed to fail on its own: the dashboard must open even if one is unavailable.
+async function coordinatorWaitingCard() {
+  const [outlines, offices, budgets] = await Promise.all([
+    fetchJSON('/api/coordinator/outlines').catch(() => null),
+    fetchJSON('/api/coordinator/offices').catch(() => null),
+    fetchJSON('/api/budget/calls').catch(() => null)
+  ]);
+  const lines = [];
+  if (outlines && outlines.waiting) lines.push(`<li><button type="button" class="link-btn" data-go="outlines">${outlines.waiting} semester outline${outlines.waiting === 1 ? ' is' : 's are'} waiting for your approval</button></li>`);
+  if (offices && offices.needsAttention) lines.push(`<li><button type="button" class="link-btn" data-go="keyOffices">${offices.needsAttention} key office${offices.needsAttention === 1 ? '' : 's'} empty, ended or about to end</button></li>`);
+  const waitingBudgets = budgets ? budgets.items.reduce((n, c) => n + (c.counts.recommended || 0), 0) : 0;
+  if (waitingBudgets) lines.push(`<li><button type="button" class="link-btn" data-go="budgets">${waitingBudgets} department budget${waitingBudgets === 1 ? ' has' : 's have'} been reviewed by Finance and need${waitingBudgets === 1 ? 's' : ''} a decision</button></li>`);
+  if (!lines.length) return '';
+  return `<div class="portal-card"><h3>Waiting for you</h3><ul class="of-waiting">${lines.join('')}</ul></div>`;
+}
+
+async function renderCoordinatorDashboardBody(el) {
+  const [data, waitingCard] = await Promise.all([fetchJSON('/api/coordinator/overview'), coordinatorWaitingCard()]);
   const { finance, shepherding, publicity, engagement, welfare } = data;
   const budget = finance.activeBudget;
 
@@ -44,6 +61,7 @@ async function renderCoordinatorDashboard(el) {
       </div>
     </div>
 
+    ${waitingCard}
     <div class="stat-grid">
       ${statCard('Balance in Hand', money(finance.balance), {
         tone: finance.balance < 0 ? 'bad' : 'good',
@@ -688,6 +706,11 @@ async function renderWelfarePurseReport(el) {
   `;
 }
 
+async function renderCoordinatorDashboard(el) {
+  await renderCoordinatorDashboardBody(el);
+  el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.go)));
+}
+
 initPortal({
   role: 'coordinator',
   label: 'Chapter Coordinator',
@@ -695,6 +718,10 @@ initPortal({
     { key: 'dashboard', label: 'Dashboard', render: renderCoordinatorDashboard },
     { key: 'offices', label: 'Offices & Leaders', render: renderOffices },
     { key: 'accounts', label: 'Leadership Accounts', render: renderLeadershipAccounts },
+    { key: 'keyOffices', label: 'Key Offices', render: (el) => OfficeBodies.renderKeyOffices(el) },
+    { key: 'outlines', label: 'Semester Outlines', render: (el) => OfficeOutline.renderReview(el) },
+    { key: 'budgets', label: 'Budget Requests', render: (el) => OfficeBudget.renderDesk(el) },
+    { key: 'execMinutes', label: 'Executive Minutes', render: (el) => OfficeMinutes.renderForCoordinator(el) },
     { key: 'welfare', label: 'Welfare Purse', render: renderWelfarePurseReport },
     { key: 'approvals', label: 'Approvals', render: renderApprovals },
     { key: 'announcements', label: 'Chapter Announcement', render: renderChapterAnnouncements }
