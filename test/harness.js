@@ -207,7 +207,13 @@ const fakeModels = {
   GroupPost: makeModel({ chapterId: '', authorMemberId: '', authorName: '', isAnnouncement: false }),
   GroupMeeting: makeModel({ chapterId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
   DepartmentMeeting: makeModel({ chapterId: '', departmentId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
-  ExecutiveMinute: makeModel({ chapterId: '', date: '', title: '', presentExecutiveIds: [], presentNames: [], apologies: '', body: '', decisions: '', status: 'draft', adoptedBy: '', adoptedAt: null, recordedBy: '' }),
+  ExecutiveMinute: makeModel({ chapterId: '', date: '', title: '', startTime: '', endTime: '', venue: '', chair: '', presentExecutiveIds: [], presentNames: [], apologies: '', openingPrayer: '', announcements: '', items: [], actions: [], nextMeeting: '', closingPrayer: '', body: '', decisions: '', fileId: '', status: 'draft', comments: [], approvedBy: [], approvedPositions: [], sharedAt: null, adoptedBy: '', adoptedAt: null, recordedBy: '', recordedPosition: '' }),
+  SemesterOutline: makeModel({ chapterId: '', body: 'chapter', title: '', semesterLabel: '', startDate: '', endDate: '', theme: '', scripture: '', vision: '', goals: [], priorities: [], programmes: [], departmentFocus: [], needs: '', risks: '', status: 'draft', returnNote: '', version: 1, submittedAt: null, submittedBy: '', reviewedBy: '', reviewedAt: null, sharedAt: null, createdBy: '', updatedBy: '' }),
+  BudgetCall: makeModel({ chapterId: '', title: '', periodLabel: '', dueDate: '', startDate: '', endDate: '', instructions: '', departmentIds: [], status: 'open', budgetId: '', createdBy: '', closedAt: null }),
+  BudgetSubmission: makeModel({ chapterId: '', callId: '', departmentId: '', departmentName: '', lines: [], total: 0, justification: '', status: 'draft', submittedBy: '', submittedByName: '', submittedAt: null, reviewedBy: '', reviewedAt: null, reviewNote: '', recommendedTotal: 0, decidedBy: '', decidedAt: null, decisionNote: '', approvedTotal: 0, postedAt: null }),
+  AnnouncementCall: makeModel({ chapterId: '', serviceDate: '', title: '', note: '', dueDate: '', status: 'open', compiledText: '', compiledBy: '', compiledAt: null, createdBy: '' }),
+  AnnouncementItem: makeModel({ chapterId: '', callId: '', executiveId: '', staffId: '', positionKey: '', fromLabel: '', fromName: '', nothing: false, text: '', whenWhere: '', contact: '', status: 'submitted', finalText: '', order: 0 }),
+  Committee: makeModel({ chapterId: '', name: '', kind: 'committee', mandate: '', chairName: '', chairExecutiveId: '', memberNames: [], startDate: '', dueDate: '', status: 'active', progressNote: '', createdBy: '' }),
   DailyVerse: makeModel({ chapterId: '', date: '', reference: '', text: '', reflection: '', postedBy: '' }),
   CouncilPost: makeModel({ parentId: '', body: '', authorStaffId: '', authorName: '', authorRole: '', authorChapterId: '', authorChapterName: '', pinned: false }),
   ChatTopic: makeModel({ chapterId: '', createdByMemberId: '', createdByName: '', locked: false }),
@@ -254,7 +260,7 @@ const fakeModels = {
   AttendanceRecord: makeModel({ chapterId: '', serviceType: 'sunday', title: '', marks: [], visitorCount: 0, notes: '', recordedBy: '' }),
   ScheduledNotification: makeModel({ chapterId: '', status: 'scheduled', channels: ['app'], audience: 'all', url: '/index.html', sentAt: null, result: '', createdBy: '' }),
   SmsLog: makeModel({ chapterId: '', status: 'sent', detail: '', sourceId: '' }),
-  StaffUser: makeModel({ chapterId: '', memberId: '', active: true, lastLoginAt: null, name: '' }),
+  StaffUser: makeModel({ chapterId: '', memberId: '', active: true, lastLoginAt: null, name: '', positionKey: '', endedAt: null, handedOverTo: '', handedOverFrom: '' }),
   NationalReport: makeModel({ reportDate: '', region: '', continent: '', metrics: {} })
 };
 

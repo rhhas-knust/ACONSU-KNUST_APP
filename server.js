@@ -29,6 +29,8 @@ const { registerGroupRoutes } = require('./routes/groups');
 const { registerChatRoutes } = require('./routes/chat');
 const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
+const { registerOfficeRoutes } = require('./routes/offices');
+const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
@@ -2844,13 +2846,28 @@ app.get('/api/files', async (req, res) => {
 // stream a single file's actual content (image preview, book download, etc.)
 // Who may open a file that is not for the public. A refusal is "not found",
 // the same as a file that does not exist, so the id confirms nothing.
-function canOpenPrivateFile(req, meta) {
+async function canOpenPrivateFile(req, meta, fileId) {
   const category = meta && meta.category;
   const staff = currentStaff(req);
   const signedIn = !!(req.session && (req.session.memberId || req.session.isAdmin || req.session.isShepherd)) || !!staff;
   if (category === 'member-profile') return signedIn;       // a member's own photo: members and staff
   if (req.session && req.session.isAdmin) return true;      // the recovery login, as everywhere
   const role = staff && staff.role;
+  if (category === 'minutes') {
+    // A scan of the executive meeting's minutes. The two secretaries and the
+    // Chapter Coordinator may open it at any stage; every other executive of
+    // the chapter only once the minutes have been shared with them.
+    if (!staff || !meta.chapterId) return false;
+    const scope = rolesLib.getActingScope(req);
+    if (scope.isNational ? scope.chapterId !== meta.chapterId : staff.chapterId !== meta.chapterId) return false;
+    if (role === 'coordinator' || role === 'nationalCoordinator') return true;
+    if (role !== 'executive') return false;
+    const { position } = await resolveOwnPosition(req);
+    if (positions.hasCapability(position, CAP.MINUTES_KEEP)) return true;
+    if (!positions.hasCapability(position, CAP.MINUTES)) return false;
+    const minute = await repo.getById('executiveMinutes', meta.targetId || '', { chapterId: meta.chapterId });
+    return !!(minute && minute.fileId === String(fileId) && (minute.status === 'approved' || minute.status === 'adopted'));
+  }
   const allowed = category === 'receipt'
     ? ['nationalCoordinator', 'coordinator', 'chapterAdmin', 'finance', 'welfare', 'executive'].includes(role)
     : (['nationalCoordinator', 'coordinator', 'chapterAdmin', 'shepherding'].includes(role) || !!(req.session && req.session.isShepherd));
@@ -2868,7 +2885,7 @@ app.get('/api/files/:id', async (req, res) => {
     if (!file) return res.status(404).json({ error: 'File not found' });
     const meta = file.metadata || {};
     const isPrivate = fileTypes.isPrivateCategory(meta.category);
-    if (isPrivate && !canOpenPrivateFile(req, meta)) return res.status(404).json({ error: 'File not found' });
+    if (isPrivate && !(await canOpenPrivateFile(req, meta, req.params.id))) return res.status(404).json({ error: 'File not found' });
 
     // Shown in the browser only if it is the kind of file a browser shows without
     // running it. Anything else - HTML, SVG, scripts, whatever it claimed to be -
@@ -3415,6 +3432,9 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
       } else if (wantsDepartment) {
         return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
       }
+      const ownAccount = await models.StaffUser.findOne({ memberId: member.id, role: 'executive' }).lean();
+      const problem = await officeAppointmentProblem(member.chapterId, position, member, ownAccount && ownAccount.id);
+      if (problem) return res.status(409).json({ error: problem });
     }
     if (decision === 'approve') {
       // Renew in place if this member already holds the office, so a
@@ -3438,6 +3458,7 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
           username: clean, name: member.name || clean, role: 'executive',
           chapterId: member.chapterId, memberId: member.id,
           passwordHash: await bcrypt.hash(String(password), 10), active: true,
+          positionKey: position.key,
           termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
         }, 'staff');
         issuedLogin = true;
@@ -3528,6 +3549,13 @@ app.patch('/api/admin/executives/:id/position', requireChapterCoordinator, async
       }
     } else if (departmentId) {
       return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
+    }
+
+    if (card.positionKey !== position.key) {
+      const holderAccount = card.staffId ? await models.StaffUser.findOne({ id: card.staffId }).lean() : null;
+      const holderMember = holderAccount && holderAccount.memberId ? await models.Member.findOne({ id: holderAccount.memberId }).lean() : null;
+      const problem = await officeAppointmentProblem(card.chapterId, position, holderMember, card.staffId);
+      if (problem) return res.status(409).json({ error: problem });
     }
 
     // Snapshot the office they are leaving before overwriting it, so "who was
@@ -5196,6 +5224,38 @@ async function resolveOwnPosition(req) {
   return { record, position };
 }
 
+// The chapter's officers are single seats: one President, one Treasurer, and so
+// on. A seat is HELD while its roster card points at an account that is still
+// active and inside its term. This answers who holds it now, ignoring the
+// account named in `exceptStaffId` (the person being renewed or moved), so
+// refilling a seat is a hand-over rather than a second holder.
+async function currentHolderOfOffice(chapterId, position, exceptStaffId) {
+  if (!position || position.kind !== 'officer') return null;
+  const cards = await models.Executive.find({ chapterId, positionKey: position.key }).lean();
+  for (const card of cards) {
+    if (!card.staffId || card.staffId === exceptStaffId) continue;
+    const account = await models.StaffUser.findOne({ id: card.staffId, chapterId }).lean();
+    if (!account || account.active === false) continue;
+    if (account.termEndsAt && new Date(account.termEndsAt) <= new Date()) continue;
+    return { card, account };
+  }
+  return null;
+}
+
+// What stops a seat being given to the wrong person. The Alumni President is
+// elected by the alumni, so only an alumnus can hold it; and an officer seat
+// that is already held is handed over, not doubled up.
+async function officeAppointmentProblem(chapterId, position, member, exceptStaffId) {
+  if (positions.requiresAlumnus(position) && !(member && member.membershipStage === 'alumni')) {
+    return `The ${position.label} is elected by the alumni, so it can only go to a member who is an alumnus. Ask Shepherding to mark ${member && member.name ? member.name : 'them'} as alumni first.`;
+  }
+  const held = await currentHolderOfOffice(chapterId, position, exceptStaffId);
+  if (held) {
+    return `The ${position.label} seat is held by ${held.card.name || held.account.name || 'someone'} until the end of their term. Use Hand over in Key offices to pass it on, or end their term first.`;
+  }
+  return '';
+}
+
 // The single gate for every executive route. A route names the capability it
 // serves; the position grants it or the request stops here. This is the same
 // grant the portal reads to decide which panels to draw, so a panel can never
@@ -5624,50 +5684,19 @@ app.get('/api/executive/chapter/departments', requireRole('executive'), requireC
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
 }));
 
-// ---------- minutes of the executive meetings ----------
-app.get('/api/executive/minutes', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff }) => {
-  const items = await repo.getAll('executiveMinutes', { chapterId: staff.chapterId });
-  res.json(items.sort((a, b) => (a.date < b.date ? 1 : -1)));
-}));
-
-app.post('/api/executive/minutes', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff }) => {
-  const date = String(req.body.date || '').trim() || new Date().toISOString().slice(0, 10);
-  const title = cleanText(req.body.title || '');
-  const body = cleanText(req.body.body || '');
-  if (!body) return res.status(400).json({ error: 'Minutes need a body, what was discussed.' });
-  // Attendance is confined to this chapter's own executives, so a mistyped or
-  // guessed id can never put someone else in the room.
-  const execs = await repo.getAll('executives', { chapterId: staff.chapterId });
-  const byId = new Map(execs.map(e => [e.id, e]));
-  const presentExecutiveIds = Array.isArray(req.body.presentExecutiveIds)
-    ? req.body.presentExecutiveIds.filter(id => byId.has(id))
-    : [];
-  const item = await repo.create('executiveMinutes', {
-    chapterId: staff.chapterId,
-    date, title, body,
-    presentExecutiveIds,
-    presentNames: presentExecutiveIds.map(id => byId.get(id).name || ''),
-    apologies: cleanText(req.body.apologies || ''),
-    decisions: cleanText(req.body.decisions || ''),
-    status: 'draft',
-    recordedBy: actorName(req)
-  }, 'emin');
-  res.json({ success: true, item });
-}));
-
-// Adopting minutes is what turns a draft into the record, so it is kept to
-// the officers who chair the meeting rather than everyone who can write them.
-app.patch('/api/executive/minutes/:id/adopt', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff, position }) => {
-  if (!['president', 'vice_president', 'secretary'].includes(position.key)) {
-    return res.status(403).json({ error: 'Only the President, Vice President or Secretary can adopt minutes.' });
-  }
-  const existing = await repo.getById('executiveMinutes', req.params.id, { chapterId: staff.chapterId });
-  if (!existing) return res.status(404).json({ error: 'Those minutes were not found.' });
-  const item = await repo.patchById('executiveMinutes', existing.id, {
-    status: 'adopted', adoptedBy: actorName(req), adoptedAt: new Date()
-  }, { chapterId: staff.chapterId });
-  res.json({ success: true, item });
-}));
+// ---------- the executive offices' own work ----------
+// The semester outline, budget requests, the secretariat's minutes and Sunday
+// announcements, and the Vice President's committees and follow-up. They live
+// in routes/offices.js; the grants they check are in lib/positions.js.
+registerOfficeRoutes(app, {
+  repo, models, rolesLib, gridfs, upload, positions, requireRole, requireCapability,
+  hasRole, currentStaff, resolveOwnPosition, actorName, currentAcademicYearLabel
+});
+registerOfficeHolderRoutes(app, {
+  repo, models, rolesLib, positions, requireRole, requireCapability, actorName, bcrypt,
+  academicYearEndsAt, currentAcademicYearLabel, revokeStaffSessions, logMilestone,
+  officeAppointmentProblem
+});
 
 // ---------- chapter attendance (Secretary, Assistant Secretary, Organiser) ----------
 app.get('/api/executive/chapter/attendance', requireRole('executive'), requireCapability(CAP.ATTENDANCE_CHAPTER, async (req, res, { staff }) => {
@@ -7050,6 +7079,8 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     } else if (executiveDepartment) {
       return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
     }
+    const problem = await officeAppointmentProblem(chapterId, position, promotedMember);
+    if (problem) return res.status(409).json({ error: problem });
   }
   try {
     if (chapterId) {
@@ -7062,6 +7093,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     const user = await repo.create('staffUsers', {
       username: clean, name: name || clean, role, chapterId, memberId,
       passwordHash: await bcrypt.hash(password, 10), active: true,
+      ...(role === 'executive' && position ? { positionKey: position.key } : {}),
       ...(role === 'executive' ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
     }, 'staff');
     // The public roster card is created here rather than waiting for the new
@@ -7117,6 +7149,19 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
     // same account, card and history rather than starting a person over.
     const isExecutive = (role || existing.role) === 'executive';
     const renewTerm = req.body.renewTerm === true && isExecutive;
+    // An account that was handed over to a successor is the record of the last
+    // holder. Renewing it would put two people in one seat.
+    if (renewTerm) {
+      if (existing.handedOverTo) {
+        return res.status(409).json({ error: 'This office was handed over to someone else. Their account is the current one.' });
+      }
+      const card = await models.Executive.findOne({ staffId: existing.id, chapterId: existing.chapterId }).lean();
+      if (card) {
+        const heldMember = existing.memberId ? await models.Member.findOne({ id: existing.memberId }).lean() : null;
+        const problem = await officeAppointmentProblem(existing.chapterId, positions.resolvePosition(card.positionKey, card.role, !!card.department), heldMember, existing.id);
+        if (problem) return res.status(409).json({ error: problem });
+      }
+    }
     // Ending a term early: someone stepping down, or being stood down,
     // before the academic year is out.
     const endTerm = req.body.endTerm === true && isExecutive;

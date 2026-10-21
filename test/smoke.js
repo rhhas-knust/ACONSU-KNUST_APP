@@ -804,16 +804,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   r = await call('newExec', 'GET', '/api/executive/chapter/attendance');
   check('a capability the President was not granted stays shut, even to the President', r.status === 403, r.data);
 
-  // Minutes: written by those who keep them, adopted only by those who chair.
+  // Minutes are the secretariat's to write and share (the full workflow is
+  // exercised in test/offices.js). Everyone else reads only what has been shared.
   r = await call('newExec', 'POST', '/api/executive/minutes', { date: '2026-04-02', title: 'Term planning', body: 'Agreed the calendar.' });
-  check('the President records minutes of an executive meeting', r.status === 200 && r.data.item.status === 'draft', r.data);
-  const minuteId = r.data.item.id;
-  r = await call('newExec', 'POST', '/api/executive/minutes', { date: '2026-04-02', body: '' });
-  check('empty minutes are refused', r.status === 400, r.data);
-  r = await call('newExec', 'PATCH', `/api/executive/minutes/${minuteId}/adopt`);
-  check('and the President adopts them', r.status === 200 && r.data.item.status === 'adopted' && !!r.data.item.adoptedAt, r.data);
+  check('the President does not write the minutes, the secretariat does', r.status === 403, r.data);
+  r = await call('newExec', 'GET', '/api/executive/minutes');
+  check('the President reads the minutes that have been shared (none yet)', r.status === 200 && Array.isArray(r.data) && r.data.length === 0, r.data);
   r = await call('exec', 'GET', '/api/executive/minutes');
-  check('a portfolio holder cannot read the executive minutes', r.status === 403, r.data);
+  check('a portfolio holder can read shared minutes too', r.status === 200 && Array.isArray(r.data), r.data);
 
   r = await call('newExec', 'POST', '/api/executive/chapter/announcement', { title: 'Chapter meeting', body: 'Saturday, 4pm.' });
   check('the President messages the whole chapter', r.status === 200 && r.data.reached >= 1, r.data);
@@ -2067,6 +2065,13 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   presRegForm.append('password', 'secret123');
   presRegForm.append('chapterId', chapterId);
   const presMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: presRegForm })).json()).member.id;
+  // The President is a single seat, so a second President cannot be seated
+  // beside the first: it has to be handed over. The earlier one's term ends here.
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password123', memberId: presMemberId, positionKey: 'president', chapterId });
+  check('a second President cannot be seated while the first still holds the office', r.status === 409 && /seat is held/.test(r.data.error), r.data);
+  const firstPresidentCard = fakeModels.Executive._docs.find(c => c.positionKey === 'president' && c.chapterId === chapterId);
+  r = await call('admin', 'PUT', `/api/admin/staff/${firstPresidentCard.staffId}`, { endTerm: true });
+  check('the first President\'s term is ended', r.status === 200, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password123', memberId: presMemberId, positionKey: 'president', chapterId });
   check('a sitting Chapter President is appointed', r.status === 200, r.data);
   await call('pres', 'POST', '/api/portal/login', { username: 'exec.president', password: 'password123' });
