@@ -88,6 +88,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
             <div><div class="field-label">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.location || 'Not specified')}</p></div>
             <div><div class="field-label">Address</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(chapter.address || 'Not specified')}</p></div>
           </div>
+          ${mapBlockHtml({ url: chapter.mapUrl, place: chapter.mapPlace, label: chapter.location || chapter.name, fallbackQuery: chapter.address ? [chapter.location, chapter.address].filter(Boolean).join(', ') : '' })}
         </div>
 
         <div class="card" style="margin:28px 0;">
@@ -149,6 +150,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
             <div><div class="field-label">Location</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.meetingLocation || 'TBA')}</p></div>
             ${dept.leaderName ? `<div><div class="field-label">Leader</div><p style="margin:4px 0 0; font-weight:700;">${escapeHtml(dept.leaderName)}</p>${dept.leaderRole ? `<p class="tiny muted" style="margin:2px 0 0;">${escapeHtml(dept.leaderRole)}</p>` : ''}</div>` : ''}
           </div>
+          ${dept.mapUrl ? mapBlockHtml({ url: dept.mapUrl, place: dept.mapPlace, label: dept.meetingLocation || dept.name }) : ''}
         </div>
         <p style="color:var(--ink-soft);">${escapeHtml(dept.description)}</p>
       `;

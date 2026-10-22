@@ -4,6 +4,7 @@ const session = require('express-session');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
@@ -29,6 +30,13 @@ const { registerGroupRoutes } = require('./routes/groups');
 const { registerChatRoutes } = require('./routes/chat');
 const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
+const { registerOfficeRoutes } = require('./routes/offices');
+const { registerOfficeHolderRoutes } = require('./routes/office-holders');
+const { registerAccountRoutes } = require('./routes/account');
+const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
+const officeAccounts = require('./lib/officeAccounts');
+const maps = require('./lib/maps');
+const { moveGlobalSetupToChapter } = require('./lib/globalMove');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
@@ -40,14 +48,48 @@ const rawUpload = multer({
   limits: { fileSize: UPLOAD_LIMIT_BYTES }
 });
 // multer parses field names like  name[$ne]  into nested objects AFTER the
-// body parsers have run, so the operator-key check has to run again behind it.
-// Every route that takes an upload goes through here, so none can forget to.
+// body parsers have run, so the operator-key check has to run again behind it,
+// and so does everything else that reads the fields: the map-link check, and
+// the rule that a chapter's own things change only at its request (set below,
+// once routes/chapter-requests.js is registered). Every route that takes an
+// upload goes through here, so none can forget to.
+let chapterGuardAfterUpload = (req, res, next) => next();
+const afterUpload = [rejectOperatorKeys, checkMapLink, (req, res, next) => chapterGuardAfterUpload(req, res, next)];
 const upload = {
-  single: (name) => [rawUpload.single(name), rejectOperatorKeys],
-  array: (name, max) => [rawUpload.array(name, max), rejectOperatorKeys],
-  fields: (spec) => [rawUpload.fields(spec), rejectOperatorKeys],
-  none: () => [rawUpload.none(), rejectOperatorKeys]
+  single: (name) => [rawUpload.single(name), ...afterUpload],
+  array: (name, max) => [rawUpload.array(name, max), ...afterUpload],
+  fields: (spec) => [rawUpload.fields(spec), ...afterUpload],
+  none: () => [rawUpload.none(), ...afterUpload]
 };
+
+// ---------- map links ----------
+// Any save that carries a map link (a chapter's meeting place, an event, a
+// department, a group) is checked here, once, for every route: only a map
+// service's own address gets through, and what the app draws the map from is
+// worked out on the server, never taken from the request. See lib/maps.js.
+// It runs behind both body parsers, and again behind every upload (multer
+// parses those later), so no way of sending a form skips it.
+function checkMapLink(req, res, next) {
+  if (!['POST', 'PUT', 'PATCH'].includes(req.method) || !req.path.startsWith('/api/')) return next();
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return next();
+  delete body.mapPlace;
+  if (!Object.prototype.hasOwnProperty.call(body, 'mapUrl')) return next();
+  const checked = maps.cleanMapUrl(body.mapUrl);
+  if (checked.error) return res.status(400).json({ error: checked.error, field: 'mapUrl' });
+  body.mapUrl = checked.value;
+  body.mapPlace = checked.value ? maps.placeFromMapUrl(checked.value) : null;
+  if (!checked.value || body.mapPlace) return next();
+  // A short share link says nothing until it is followed. One followed before
+  // (this record saved again unchanged, or the same hall used for an event)
+  // keeps its spot; a new one is followed in the background
+  // (resolvePendingMapLinks), so a save never waits on Google.
+  return knownMapPlace(checked.value).then((place) => {
+    body.mapPlace = place;
+    if (!place) setImmediate(() => resolvePendingMapLinks().catch(() => {}));
+    next();
+  }, () => next());
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -116,7 +158,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 app.use(express.json());
+
 app.use(express.urlencoded({ extended: true }));
+app.use(checkMapLink);
 // {"email": {"$ne": null}} and ?category[$ne]=x are not values, they are
 // database operators. See lib/requestGuard.js.
 app.use(rejectOperatorKeys);
@@ -220,6 +264,11 @@ app.use((req, res, next) => {
          + "This change belongs to the chapter's own admin."
   });
 });
+
+// A chapter is its own: its look, its events, its members and its accounts.
+// The main admin may change them only while the chapter has asked. See
+// routes/chapter-requests.js. Registered here, before every route it guards.
+({ guardAfterUpload: chapterGuardAfterUpload } = registerChapterRequestRoutes(app, { repo, models, rolesLib, currentStaff, actorName }));
 
 // ---------- auth routes ----------
 // One session carries every identity this browser holds - the env admin flag,
@@ -429,9 +478,16 @@ function isSessionRevoked(staff) {
   return !!(revokedAt && (!staff.issuedAt || staff.issuedAt <= revokedAt));
 }
 
+// Signed in with a starting password (see lib/officeAccounts.js)? Then the
+// session opens only what it takes to choose a password of their own. To every
+// other route it is as if nobody were signed in, so no route has to remember to
+// check: a guessed starting password reaches nothing.
+const FIRST_PASSWORD_PATHS = new Set(['/api/portal/me', '/api/portal/account', '/api/portal/first-password', '/api/portal/logout']);
+
 function currentStaff(req) {
   const staff = (req.session && req.session.staff) || null;
   if (isTermExpired(staff) || isSessionRevoked(staff)) return null;
+  if (staff && staff.mustChangePassword && !FIRST_PASSWORD_PATHS.has(req.path)) return null;
   return staff;
 }
 
@@ -677,6 +733,13 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     if (!fitsChosenChapter(chosen, { national: user.role === 'nationalCoordinator', chapterId: user.chapterId })) {
       return res.status(403).json({ error: WRONG_CHAPTER });
     }
+    // A starting password is good for a short while only, so one nobody came
+    // to collect does not stay guessable for the rest of the year.
+    if (user.mustChangePassword && user.startingPasswordExpiresAt && new Date(user.startingPasswordExpiresAt) <= new Date()) {
+      return res.status(403).json({
+        error: 'Your starting password has expired. Ask your Chapter Coordinator to reset it, then sign in and choose your own straight away.'
+      });
+    }
 
     // An executive's position is stamped into the session at sign-in rather
     // than looked up per request: the office-portal guards are synchronous and
@@ -698,10 +761,13 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       memberId: user.memberId || '',
       positionKey,
       termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
+      // Still on the starting password: the portal shows the "choose your own"
+      // screen and nothing else until it is done (see currentStaff).
+      mustChangePassword: !!user.mustChangePassword,
       issuedAt: Date.now() // what a later revocation is measured against
     };
     models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
-    res.json({ success: true, staff: req.session.staff });
+    res.json({ success: true, staff: req.session.staff, mustChangePassword: !!user.mustChangePassword });
   } catch (e) {
     res.status(500).json({ error: 'Could not sign you in right now. Please try again.' });
   }
@@ -937,24 +1003,40 @@ function escapeHtmlForEmail(str) {
   if (!str) return '';
   return String(str).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 }
-// Fire-and-forget email to whatever address is set in Site Settings, used for
-// things the admin should know about quickly (a new join request, a contact
-// message). Never blocks or fails the request that triggered it.
-async function notifyAdminByEmail(subject, html) {
+// Where a chapter's mail goes: its own contact email, and its own office's when
+// it has set one. A chapter's messages never go to another chapter's address,
+// nor to the national one. Without a chapter, it is national business, and goes
+// to the address on the Global Settings page.
+const OFFICE_EMAIL_KEYS = { shepherdingEmail: 'shepherding', publicityEmail: 'publicity', financeEmail: 'finance', welfareEmail: 'welfare' };
+async function emailRecipients(chapterId, officeKey) {
+  if (chapterId) {
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return [];
+    const office = officeKey ? ((chapter.officeEmails || {})[OFFICE_EMAIL_KEYS[officeKey]] || '') : '';
+    return [...new Set([office, (chapter.contact || {}).email].filter(Boolean))];
+  }
+  const settings = await repo.getSettings();
+  return [...new Set([officeKey ? settings[officeKey] : '', settings.email].filter(Boolean))];
+}
+
+// Fire-and-forget email for things the admin should know about quickly (a new
+// join request, a contact message). Never blocks or fails the request that
+// triggered it.
+async function notifyAdminByEmail(subject, html, chapterId) {
   try {
-    const settings = await repo.getSettings();
-    if (!settings.email) return; // no admin email configured - nothing to send to
-    mailer.sendMail({ to: settings.email, subject, html }).catch(() => {});
+    const recipients = await emailRecipients(chapterId, '');
+    if (!recipients.length) return; // no address set - nothing to send to
+    mailer.sendMail({ to: recipients.join(','), subject, html }).catch(() => {});
   } catch (e) { /* non-critical - never let this break the original request */ }
 }
 
 // Same idea, but for mail that belongs to one particular office (shepherding,
-// finance, publicity). Falls back to the main contact address when that office
-// hasn't set its own, and de-duplicates so nobody gets the same mail twice.
-async function notifyOfficeByEmail(officeKey, subject, html) {
+// finance, publicity, welfare). Falls back to the main contact address when
+// that office hasn't set its own, and de-duplicates so nobody gets the same
+// mail twice.
+async function notifyOfficeByEmail(officeKey, subject, html, chapterId) {
   try {
-    const settings = await repo.getSettings();
-    const recipients = [...new Set([settings[officeKey], settings.email].filter(Boolean))];
+    const recipients = await emailRecipients(chapterId, officeKey);
     if (!recipients.length) return;
     mailer.sendMail({ to: recipients.join(','), subject, html }).catch(() => {});
   } catch (e) { /* non-critical */ }
@@ -2844,13 +2926,28 @@ app.get('/api/files', async (req, res) => {
 // stream a single file's actual content (image preview, book download, etc.)
 // Who may open a file that is not for the public. A refusal is "not found",
 // the same as a file that does not exist, so the id confirms nothing.
-function canOpenPrivateFile(req, meta) {
+async function canOpenPrivateFile(req, meta, fileId) {
   const category = meta && meta.category;
   const staff = currentStaff(req);
   const signedIn = !!(req.session && (req.session.memberId || req.session.isAdmin || req.session.isShepherd)) || !!staff;
   if (category === 'member-profile') return signedIn;       // a member's own photo: members and staff
   if (req.session && req.session.isAdmin) return true;      // the recovery login, as everywhere
   const role = staff && staff.role;
+  if (category === 'minutes') {
+    // A scan of the executive meeting's minutes. The two secretaries and the
+    // Chapter Coordinator may open it at any stage; every other executive of
+    // the chapter only once the minutes have been shared with them.
+    if (!staff || !meta.chapterId) return false;
+    const scope = rolesLib.getActingScope(req);
+    if (scope.isNational ? scope.chapterId !== meta.chapterId : staff.chapterId !== meta.chapterId) return false;
+    if (role === 'coordinator' || role === 'nationalCoordinator') return true;
+    if (role !== 'executive') return false;
+    const { position } = await resolveOwnPosition(req);
+    if (positions.hasCapability(position, CAP.MINUTES_KEEP)) return true;
+    if (!positions.hasCapability(position, CAP.MINUTES)) return false;
+    const minute = await repo.getById('executiveMinutes', meta.targetId || '', { chapterId: meta.chapterId });
+    return !!(minute && minute.fileId === String(fileId) && (minute.status === 'approved' || minute.status === 'adopted'));
+  }
   const allowed = category === 'receipt'
     ? ['nationalCoordinator', 'coordinator', 'chapterAdmin', 'finance', 'welfare', 'executive'].includes(role)
     : (['nationalCoordinator', 'coordinator', 'chapterAdmin', 'shepherding'].includes(role) || !!(req.session && req.session.isShepherd));
@@ -2868,7 +2965,7 @@ app.get('/api/files/:id', async (req, res) => {
     if (!file) return res.status(404).json({ error: 'File not found' });
     const meta = file.metadata || {};
     const isPrivate = fileTypes.isPrivateCategory(meta.category);
-    if (isPrivate && !canOpenPrivateFile(req, meta)) return res.status(404).json({ error: 'File not found' });
+    if (isPrivate && !(await canOpenPrivateFile(req, meta, req.params.id))) return res.status(404).json({ error: 'File not found' });
 
     // Shown in the browser only if it is the kind of file a browser shows without
     // running it. Anything else - HTML, SVG, scripts, whatever it claimed to be -
@@ -2925,71 +3022,90 @@ function sanitiseHeroArt(stored) {
   return out;
 }
 
+// What Global may tell a visitor: the national app's own name, contacts and
+// banner. The council's meeting link, the office email addresses and the record
+// of the move to ACONSU-KNUST stay on the server.
+const PUBLIC_GLOBAL_KEYS = [
+  'fellowshipName', 'fullName', 'tagline', 'verseOfTheWeek', 'address', 'email', 'phone', 'whatsapp',
+  'instagram', 'facebook', 'youtube', 'twitter', 'tiktok', 'telegram', 'spotify', 'homeHeaderImageFileId'
+];
+function publicGlobalSettings(globalSettings) {
+  const out = {};
+  PUBLIC_GLOBAL_KEYS.forEach((key) => { if (globalSettings[key] !== undefined) out[key] = globalSettings[key]; });
+  return out;
+}
+
+// A chapter's page shows that chapter's own details and nobody else's. It used
+// to fill whatever a chapter left blank from Global, which was ACONSU-KNUST's:
+// a new chapter with no phone number showed KNUST's, and with no MoMo number,
+// KNUST's. Now a blank stays blank and the page leaves that part out. Only the
+// union's own name stands in for a chapter that has not written its full name.
 function buildPublicSettings(globalSettings, chapter) {
+  const national = publicGlobalSettings(globalSettings);
   // heroArt is always an object, chapter or not, so a page never has to guard
   // against the shape of the answer before looking for its own artwork.
-  if (!chapter) return { ...globalSettings, heroArt: {} };
+  if (!chapter) return { ...national, heroArt: {} };
   const contact = chapter.contact || {};
   const payment = chapter.payment || {};
-  const globalAbout = globalSettings.about || {};
   const about = chapter.about || {};
+  const own = (v) => v || '';
   return {
-    ...globalSettings,
     chapterId: chapter.id,
     chapterName: chapter.name,
-    fellowshipName: chapter.name || globalSettings.fellowshipName,
-    fullName: chapter.fullName || globalSettings.fullName,
-    tagline: chapter.tagline || globalSettings.tagline,
-    verseOfTheWeek: chapter.verseOfTheWeek || globalSettings.verseOfTheWeek,
-    address: chapter.address || chapter.location || globalSettings.address,
-    homeHeaderImageFileId: chapter.homeHeaderImageFileId || globalSettings.homeHeaderImageFileId,
+    fellowshipName: chapter.name || national.fellowshipName || 'ACONSU',
+    fullName: chapter.fullName || national.fullName || '',
+    tagline: own(chapter.tagline),
+    verseOfTheWeek: own(chapter.verseOfTheWeek),
+    address: chapter.address || chapter.location || '',
+    homeHeaderImageFileId: own(chapter.homeHeaderImageFileId),
     // Every page already loads settings to draw its header and footer, so the
     // artwork map rides along with it rather than costing a request of its own.
     heroArt: sanitiseHeroArt(chapter.heroArt),
-    serviceTimes: chapter.serviceTimes?.length ? chapter.serviceTimes : (globalSettings.serviceTimes || []),
-    email: contact.email || globalSettings.email,
-    phone: contact.phone || globalSettings.phone,
-    whatsapp: contact.whatsapp || globalSettings.whatsapp,
-    facebook: contact.facebook || globalSettings.facebook,
-    instagram: contact.instagram || globalSettings.instagram,
-    youtube: contact.youtube || globalSettings.youtube,
-    tiktok: contact.tiktok || globalSettings.tiktok,
-    twitter: contact.twitter || globalSettings.twitter,
-    telegram: contact.telegram || globalSettings.telegram,
-    momoNumber: payment.momoNumber || globalSettings.momoNumber,
-    momoName: payment.momoName || globalSettings.momoName,
+    serviceTimes: chapter.serviceTimes || [],
+    email: own(contact.email),
+    phone: own(contact.phone),
+    whatsapp: own(contact.whatsapp),
+    facebook: own(contact.facebook),
+    instagram: own(contact.instagram),
+    youtube: own(contact.youtube),
+    tiktok: own(contact.tiktok),
+    twitter: own(contact.twitter),
+    telegram: own(contact.telegram),
+    spotify: own(contact.spotify),
+    momoNumber: own(payment.momoNumber),
+    momoName: own(payment.momoName),
     contact: {
-      email: contact.email || globalSettings.email || '',
-      phone: contact.phone || globalSettings.phone || '',
-      whatsapp: contact.whatsapp || globalSettings.whatsapp || '',
-      facebook: contact.facebook || globalSettings.facebook || '',
-      instagram: contact.instagram || globalSettings.instagram || '',
-      youtube: contact.youtube || globalSettings.youtube || '',
-      tiktok: contact.tiktok || globalSettings.tiktok || '',
-      twitter: contact.twitter || globalSettings.twitter || '',
-      telegram: contact.telegram || globalSettings.telegram || ''
+      email: own(contact.email), phone: own(contact.phone), whatsapp: own(contact.whatsapp),
+      facebook: own(contact.facebook), instagram: own(contact.instagram), youtube: own(contact.youtube),
+      tiktok: own(contact.tiktok), twitter: own(contact.twitter), telegram: own(contact.telegram), spotify: own(contact.spotify)
     },
     payment: {
-      provider: payment.provider || globalSettings.provider || '',
-      momoNumber: payment.momoNumber || globalSettings.momoNumber || '',
-      momoName: payment.momoName || globalSettings.momoName || '',
-      bankName: payment.bankName || globalSettings.bankName || '',
-      bankAccountName: payment.bankAccountName || globalSettings.bankAccountName || '',
-      bankAccountNumber: payment.bankAccountNumber || globalSettings.bankAccountNumber || '',
-      donationDestination: payment.donationDestination || globalSettings.donationDestination || '',
-      welfareDestination: payment.welfareDestination || globalSettings.welfareDestination || '',
+      provider: own(payment.provider),
+      momoNumber: own(payment.momoNumber),
+      momoName: own(payment.momoName),
+      bankName: own(payment.bankName),
+      bankAccountName: own(payment.bankAccountName),
+      bankAccountNumber: own(payment.bankAccountNumber),
+      donationDestination: own(payment.donationDestination),
+      welfareDestination: own(payment.welfareDestination),
       // Welfare collects into its own account, so its details are published
       // alongside the chapter's rather than members being told the wrong number.
-      welfareMomoNumber: payment.welfareMomoNumber || '',
-      welfareMomoName: payment.welfareMomoName || ''
+      welfareMomoNumber: own(payment.welfareMomoNumber),
+      welfareMomoName: own(payment.welfareMomoName)
     },
     about: {
-      history: about.history || globalAbout.history || '',
-      vision: about.vision || globalAbout.vision || '',
-      mission: about.mission || globalAbout.mission || '',
-      values: about.values || globalAbout.values || '',
-      leadership: about.leadership || globalAbout.leadership || ''
-    }
+      history: own(about.history),
+      vision: own(about.vision),
+      mission: own(about.mission),
+      values: own(about.values),
+      leadership: own(about.leadership),
+      firstVisit: own(about.firstVisit)
+    },
+    // Where the chapter meets (the hall), apart from the postal address, so a
+    // newcomer is told both where to go and how to find it.
+    meetingPlace: chapter.location || '',
+    mapUrl: chapter.mapUrl || '',
+    mapPlace: chapter.mapPlace || null
   };
 }
 
@@ -3002,7 +3118,7 @@ app.get('/api/settings', async (req, res) => {
     const explicitChapterId = cleanText(req.query.chapterId);
     const chapterId = explicitChapterId || await resolvePublicChapterId(req);
     if (!chapterId) {
-      return res.json(globalSettings);
+      return res.json(publicGlobalSettings(globalSettings));
     }
     const chapter = await repo.getById('chapters', chapterId);
     res.json(buildPublicSettings(globalSettings, chapter));
@@ -3164,9 +3280,12 @@ app.get('/api/verse-image', verseImageLimiter, async (req, res) => {
     let verseText = typeof req.query.verse === 'string' ? req.query.verse.slice(0, 800) : '';
     let reference = cleanText(String(typeof req.query.reference === 'string' ? req.query.reference : '')).slice(0, 80);
     if (!verseText) {
-      const settings = await repo.getSettings();
-      if (!settings.verseOfTheWeek) return res.status(400).json({ error: 'No verse configured' });
-      verseText = settings.verseOfTheWeek;
+      // The chapter's own verse; Global's only for the national app.
+      const chapterId = await resolvePublicChapterId(req);
+      const chapter = chapterId ? await repo.getById('chapters', chapterId) : null;
+      const verse = chapter ? chapter.verseOfTheWeek : (await repo.getSettings()).verseOfTheWeek;
+      if (!verse) return res.status(400).json({ error: 'No verse configured' });
+      verseText = verse;
     }
     // The client passes the reference when it knows it; otherwise split the
     // strip so the reference is set apart rather than run on from the quote.
@@ -3394,6 +3513,7 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
 
     let account = null;
     let issuedLogin = false;
+    let issued = null; // the office's own login, shown once to be passed on
     let position = null;
     if (decision === 'approve') {
       // The position is what grants capabilities, so it is settled here - by
@@ -3415,6 +3535,9 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
       } else if (wantsDepartment) {
         return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
       }
+      const ownAccount = await models.StaffUser.findOne({ memberId: member.id, role: 'executive' }).lean();
+      const problem = await officeAppointmentProblem(member.chapterId, position, member, ownAccount && ownAccount.id);
+      if (problem) return res.status(409).json({ error: problem });
     }
     if (decision === 'approve') {
       // Renew in place if this member already holds the office, so a
@@ -3426,21 +3549,29 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
           active: true, termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
         });
       } else {
-        const clean = String(username || '').toLowerCase().trim();
-        if (!clean || !password) {
+        // Left blank, the office's own login is issued (president.knust / president123).
+        const officeLogin = !username && !password
+          ? await issueOfficeLogin(member.chapterId, position, positions.requiresDepartment(position) ? String(department || '').trim() : '')
+          : null;
+        const clean = String(officeLogin ? officeLogin.username : (username || '')).toLowerCase().trim();
+        const startingPassword = officeLogin ? officeLogin.password : password;
+        if (!clean || !startingPassword) {
           return res.status(400).json({ error: 'A username and password are required to issue this executive their portal login.' });
         }
-        if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        if (String(startingPassword).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
         if (await models.StaffUser.findOne({ username: clean })) {
           return res.status(400).json({ error: 'That username is already taken' });
         }
         account = await repo.create('staffUsers', {
           username: clean, name: member.name || clean, role: 'executive',
           chapterId: member.chapterId, memberId: member.id,
-          passwordHash: await bcrypt.hash(String(password), 10), active: true,
+          passwordHash: await bcrypt.hash(String(startingPassword), 10), active: true,
+          positionKey: position.key,
+          mustChangePassword: true, startingPasswordExpiresAt: officeAccounts.startingPasswordExpiry(),
           termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
         }, 'staff');
         issuedLogin = true;
+        if (officeLogin) issued = { username: clean, password: startingPassword };
       }
 
       // The public roster card, created here rather than waiting for the
@@ -3501,7 +3632,8 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
       role: updated.executiveRole,
       department: updated.executiveDepartment,
       account: account ? { id: account.id, username: account.username, termYear: account.termYear, termEndsAt: account.termEndsAt } : null,
-      issuedLogin
+      issuedLogin,
+      issued
     }});
   } catch (e) {
     res.status(500).json({ error: 'Could not update executive application' });
@@ -3528,6 +3660,13 @@ app.patch('/api/admin/executives/:id/position', requireChapterCoordinator, async
       }
     } else if (departmentId) {
       return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
+    }
+
+    if (card.positionKey !== position.key) {
+      const holderAccount = card.staffId ? await models.StaffUser.findOne({ id: card.staffId }).lean() : null;
+      const holderMember = holderAccount && holderAccount.memberId ? await models.Member.findOne({ id: holderAccount.memberId }).lean() : null;
+      const problem = await officeAppointmentProblem(card.chapterId, position, holderMember, card.staffId);
+      if (problem) return res.status(409).json({ error: problem });
     }
 
     // Snapshot the office they are leaving before overwriting it, so "who was
@@ -3666,7 +3805,8 @@ app.post('/api/join-requests', formLimiter, async (req, res) => {
     res.json({ success: true });
     notifyAdminByEmail(
       'New Join Request | ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name)}</strong> wants to join a department.</p><p>Email: ${escapeHtmlForEmail(email)}${phone ? '<br>Phone: ' + escapeHtmlForEmail(phone) : ''}</p><p>Log in to the admin dashboard to see full details.</p>`
+      `<p><strong>${escapeHtmlForEmail(name)}</strong> wants to join a department.</p><p>Email: ${escapeHtmlForEmail(email)}${phone ? '<br>Phone: ' + escapeHtmlForEmail(phone) : ''}</p><p>Log in to the admin dashboard to see full details.</p>`,
+      chapterId
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not save your request. Please try again.' });
@@ -3697,7 +3837,8 @@ app.post('/api/prayer-requests', formLimiter, async (req, res) => {
     res.json({ success: true });
     notifyAdminByEmail(
       'New Prayer Request | ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> submitted a prayer request.</p><p>Log in to the admin dashboard to see it.</p>`
+      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> submitted a prayer request.</p><p>Log in to the admin dashboard to see it.</p>`,
+      chapterId
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not save your request. Please try again.' });
@@ -3786,7 +3927,8 @@ app.post('/api/testimonies', formLimiter, async (req, res) => {
     notifyOfficeByEmail(
       'publicityEmail',
       'New Testimony Submitted | ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> shared a testimony awaiting review.</p><p>Open the Publicity portal to publish it.</p>`
+      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> shared a testimony awaiting review.</p><p>Open the Publicity portal to publish it.</p>`,
+      chapterId
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not save your testimony. Please try again.' });
@@ -3806,7 +3948,8 @@ app.post('/api/contact', formLimiter, async (req, res) => {
     notifyOfficeByEmail(
       'shepherdingEmail',
       'New Contact Message | ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name)}</strong> (${escapeHtmlForEmail(email)}) sent a message:</p><p>${escapeHtmlForEmail(message)}</p><p>Open the Shepherding portal to reply and mark it handled.</p>`
+      `<p><strong>${escapeHtmlForEmail(name)}</strong> (${escapeHtmlForEmail(email)}) sent a message:</p><p>${escapeHtmlForEmail(message)}</p><p>Open the Shepherding portal to reply and mark it handled.</p>`,
+      chapterId
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not send your message. Please try again.' });
@@ -5196,6 +5339,62 @@ async function resolveOwnPosition(req) {
   return { record, position };
 }
 
+// The login an executive office comes with: `president.knust`, starting password
+// `president123` (lib/officeAccounts.js). An account that once held the name
+// but whose time is over (ended, handed over, disabled) is renamed out of the
+// way, so the office keeps its name and the old account stays as the record.
+async function issueOfficeLogin(chapterId, position, departmentId) {
+  const isOver = (a) => a.active === false || !!a.handedOverTo || (a.termEndsAt && new Date(a.termEndsAt) <= new Date());
+  let deptSlug = '';
+  if (departmentId) {
+    const dept = await models.Department.findOne({ id: departmentId, chapterId }).lean();
+    deptSlug = dept ? String(dept.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  }
+  const candidates = [officeAccounts.usernameFor(position.key, chapterId), ...officeAccounts.fallbackUsernames(position.key, chapterId, deptSlug)];
+  for (const username of candidates) {
+    const holder = await models.StaffUser.findOne({ username }).lean();
+    if (!holder) return { username, password: officeAccounts.startingPasswordFor(position.key) };
+    if (holder.chapterId === chapterId && holder.role === 'executive' && isOver(holder)) {
+      const stamp = String(holder.termYear || new Date().getFullYear()).replace(/[^0-9]/g, '') || 'old';
+      await repo.patchById('staffUsers', holder.id, { username: `${username}.ended.${stamp}.${String(holder.id).slice(-4)}` });
+      return { username, password: officeAccounts.startingPasswordFor(position.key) };
+    }
+  }
+  throw new Error('No free username for this office');
+}
+
+// The chapter's officers are single seats: one President, one Treasurer, and so
+// on. A seat is HELD while its roster card points at an account that is still
+// active and inside its term. This answers who holds it now, ignoring the
+// account named in `exceptStaffId` (the person being renewed or moved), so
+// refilling a seat is a hand-over rather than a second holder.
+async function currentHolderOfOffice(chapterId, position, exceptStaffId) {
+  if (!position || position.kind !== 'officer') return null;
+  const cards = await models.Executive.find({ chapterId, positionKey: position.key }).lean();
+  for (const card of cards) {
+    if (!card.staffId || card.staffId === exceptStaffId) continue;
+    const account = await models.StaffUser.findOne({ id: card.staffId, chapterId }).lean();
+    if (!account || account.active === false) continue;
+    if (account.termEndsAt && new Date(account.termEndsAt) <= new Date()) continue;
+    return { card, account };
+  }
+  return null;
+}
+
+// What stops a seat being given to the wrong person. The Alumni President is
+// elected by the alumni, so only an alumnus can hold it; and an officer seat
+// that is already held is handed over, not doubled up.
+async function officeAppointmentProblem(chapterId, position, member, exceptStaffId) {
+  if (positions.requiresAlumnus(position) && !(member && member.membershipStage === 'alumni')) {
+    return `The ${position.label} is elected by the alumni, so it can only go to a member who is an alumnus. Ask Shepherding to mark ${member && member.name ? member.name : 'them'} as alumni first.`;
+  }
+  const held = await currentHolderOfOffice(chapterId, position, exceptStaffId);
+  if (held) {
+    return `The ${position.label} seat is held by ${held.card.name || held.account.name || 'someone'} until the end of their term. Use Hand over in Key offices to pass it on, or end their term first.`;
+  }
+  return '';
+}
+
 // The single gate for every executive route. A route names the capability it
 // serves; the position grants it or the request stops here. This is the same
 // grant the portal reads to decide which panels to draw, so a panel can never
@@ -5343,6 +5542,7 @@ app.post('/api/executive/events', requireRole('executive'), requireCapability(CA
     const item = await repo.create('events', {
       chapterId: staff.chapterId,
       title, date, time: time || '', location: location || '', description: description || '',
+      mapUrl: req.body.mapUrl || '', mapPlace: req.body.mapPlace || null,
       category: category || '', videoUrl: videoUrl || '',
       status: 'submitted', submittedBy: staff.name, submittedByStaffId: staff.id
     }, 'even');
@@ -5405,6 +5605,7 @@ app.put('/api/executive/department', requireRole('executive'), requireOwnDepartm
   ['tagline', 'description', 'meetingDay', 'meetingTime', 'meetingLocation'].forEach((key) => {
     if (hasOwn(req.body, key)) next[key] = cleanText(req.body[key]);
   });
+  if (hasOwn(req.body, 'mapUrl')) { next.mapUrl = req.body.mapUrl; next.mapPlace = req.body.mapPlace; } // checked on the way in
   const updated = await repo.updateById('departments', department.id, next, { chapterId: staff.chapterId });
   res.json({ success: true, item: updated });
 }));
@@ -5624,50 +5825,20 @@ app.get('/api/executive/chapter/departments', requireRole('executive'), requireC
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))));
 }));
 
-// ---------- minutes of the executive meetings ----------
-app.get('/api/executive/minutes', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff }) => {
-  const items = await repo.getAll('executiveMinutes', { chapterId: staff.chapterId });
-  res.json(items.sort((a, b) => (a.date < b.date ? 1 : -1)));
-}));
-
-app.post('/api/executive/minutes', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff }) => {
-  const date = String(req.body.date || '').trim() || new Date().toISOString().slice(0, 10);
-  const title = cleanText(req.body.title || '');
-  const body = cleanText(req.body.body || '');
-  if (!body) return res.status(400).json({ error: 'Minutes need a body, what was discussed.' });
-  // Attendance is confined to this chapter's own executives, so a mistyped or
-  // guessed id can never put someone else in the room.
-  const execs = await repo.getAll('executives', { chapterId: staff.chapterId });
-  const byId = new Map(execs.map(e => [e.id, e]));
-  const presentExecutiveIds = Array.isArray(req.body.presentExecutiveIds)
-    ? req.body.presentExecutiveIds.filter(id => byId.has(id))
-    : [];
-  const item = await repo.create('executiveMinutes', {
-    chapterId: staff.chapterId,
-    date, title, body,
-    presentExecutiveIds,
-    presentNames: presentExecutiveIds.map(id => byId.get(id).name || ''),
-    apologies: cleanText(req.body.apologies || ''),
-    decisions: cleanText(req.body.decisions || ''),
-    status: 'draft',
-    recordedBy: actorName(req)
-  }, 'emin');
-  res.json({ success: true, item });
-}));
-
-// Adopting minutes is what turns a draft into the record, so it is kept to
-// the officers who chair the meeting rather than everyone who can write them.
-app.patch('/api/executive/minutes/:id/adopt', requireRole('executive'), requireCapability(CAP.MINUTES, async (req, res, { staff, position }) => {
-  if (!['president', 'vice_president', 'secretary'].includes(position.key)) {
-    return res.status(403).json({ error: 'Only the President, Vice President or Secretary can adopt minutes.' });
-  }
-  const existing = await repo.getById('executiveMinutes', req.params.id, { chapterId: staff.chapterId });
-  if (!existing) return res.status(404).json({ error: 'Those minutes were not found.' });
-  const item = await repo.patchById('executiveMinutes', existing.id, {
-    status: 'adopted', adoptedBy: actorName(req), adoptedAt: new Date()
-  }, { chapterId: staff.chapterId });
-  res.json({ success: true, item });
-}));
+// ---------- the executive offices' own work ----------
+// The semester outline, budget requests, the secretariat's minutes and Sunday
+// announcements, and the Vice President's committees and follow-up. They live
+// in routes/offices.js; the grants they check are in lib/positions.js.
+registerOfficeRoutes(app, {
+  repo, models, rolesLib, gridfs, upload, positions, requireRole, requireCapability,
+  hasRole, currentStaff, resolveOwnPosition, actorName, currentAcademicYearLabel
+});
+registerOfficeHolderRoutes(app, {
+  repo, models, rolesLib, positions, requireRole, requireCapability, actorName, bcrypt,
+  academicYearEndsAt, currentAcademicYearLabel, revokeStaffSessions, logMilestone,
+  officeAppointmentProblem, issueOfficeLogin, officeAccounts
+});
+registerAccountRoutes(app, { repo, models, bcrypt, rolesLib, positions, currentStaff, rememberRevocation });
 
 // ---------- chapter attendance (Secretary, Assistant Secretary, Organiser) ----------
 app.get('/api/executive/chapter/attendance', requireRole('executive'), requireCapability(CAP.ATTENDANCE_CHAPTER, async (req, res, { staff }) => {
@@ -6592,6 +6763,7 @@ app.post('/api/national/chapters', rolesLib.requireNational, async (req, res) =>
     const chapter = await repo.create('chapters', {
       id: slug, name, fullName: req.body.fullName || '', institution: institution || '',
       location: location || '', address: address || '', status: 'active',
+      mapUrl: req.body.mapUrl || '', mapPlace: req.body.mapPlace || null,
       createdBy: actorName(req)
     }, slug);
     await refreshSoleActiveChapter();
@@ -6977,12 +7149,17 @@ app.get('/api/admin/staff', requireChapterAdmin, async (req, res) => {
 });
 
 app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
-  const { username, name, role, password } = req.body;
-  if (!username || !role || !password) {
+  let { username, password } = req.body;
+  const { name, role } = req.body;
+  // An executive office comes with its own login (president.knust / president123),
+  // so for an executive the username and password may be left out and are made
+  // here, once the office and chapter are known. Every other role names its own.
+  const officeLogin = role === 'executive' && !username && !password;
+  if (!role || (!officeLogin && (!username || !password))) {
     return res.status(400).json({ error: 'Username, role and password are required' });
   }
   if (!PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!officeLogin && password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   const scope = rolesLib.getActingScope(req);
   if (NATIONAL_ONLY_ROLES.includes(role) && !scope.isNational) {
     return res.status(403).json({ error: 'Only the National Coordinator can assign this role.' });
@@ -7050,18 +7227,25 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     } else if (executiveDepartment) {
       return res.status(400).json({ error: `A ${position.label} answers for the whole chapter, so they are not attached to a department.` });
     }
+    const problem = await officeAppointmentProblem(chapterId, position, promotedMember);
+    if (problem) return res.status(409).json({ error: problem });
   }
   try {
     if (chapterId) {
       const chapter = await repo.getById('chapters', chapterId);
       if (!chapter) return res.status(400).json({ error: 'Unknown chapter' });
     }
+    if (officeLogin) ({ username, password } = await issueOfficeLogin(chapterId, position, executiveDepartment));
     const clean = String(username).toLowerCase().trim();
     const existing = await models.StaffUser.findOne({ username: clean });
     if (existing) return res.status(400).json({ error: 'That username is already taken' });
     const user = await repo.create('staffUsers', {
-      username: clean, name: name || clean, role, chapterId, memberId,
+      username: clean, name: name || (promotedMember && promotedMember.name) || clean, role, chapterId, memberId,
       passwordHash: await bcrypt.hash(password, 10), active: true,
+      ...(role === 'executive' && position ? { positionKey: position.key } : {}),
+      // Whoever is appointed chooses their own password the first time they
+      // sign in; the one they were given is somebody else's choice.
+      ...(role === 'executive' ? { mustChangePassword: true, startingPasswordExpiresAt: officeAccounts.startingPasswordExpiry() } : {}),
       ...(role === 'executive' ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
     }, 'staff');
     // The public roster card is created here rather than waiting for the new
@@ -7093,7 +7277,9 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
       });
     }
     const { passwordHash, ...safe } = user;
-    res.json({ success: true, item: safe });
+    // The office login is shown once, to be passed on. It works only until its
+    // holder has chosen their own password.
+    res.json({ success: true, item: safe, ...(officeLogin ? { issued: { username: clean, password } } : {}) });
   } catch (e) {
     res.status(500).json({ error: 'Could not create this account' });
   }
@@ -7117,6 +7303,19 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
     // same account, card and history rather than starting a person over.
     const isExecutive = (role || existing.role) === 'executive';
     const renewTerm = req.body.renewTerm === true && isExecutive;
+    // An account that was handed over to a successor is the record of the last
+    // holder. Renewing it would put two people in one seat.
+    if (renewTerm) {
+      if (existing.handedOverTo) {
+        return res.status(409).json({ error: 'This office was handed over to someone else. Their account is the current one.' });
+      }
+      const card = await models.Executive.findOne({ staffId: existing.id, chapterId: existing.chapterId }).lean();
+      if (card) {
+        const heldMember = existing.memberId ? await models.Member.findOne({ id: existing.memberId }).lean() : null;
+        const problem = await officeAppointmentProblem(existing.chapterId, positions.resolvePosition(card.positionKey, card.role, !!card.department), heldMember, existing.id);
+        if (problem) return res.status(409).json({ error: problem });
+      }
+    }
     // Ending a term early: someone stepping down, or being stood down,
     // before the academic year is out.
     const endTerm = req.body.endTerm === true && isExecutive;
@@ -7126,6 +7325,11 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
       role: role || existing.role,
       active: active !== undefined ? !!active : existing.active,
       passwordHash: password ? await bcrypt.hash(password, 10) : existing.passwordHash,
+      // A password someone else chose is a starting password again, until its
+      // owner changes it (see routes/account.js).
+      ...(password ? { passwordChangedAt: null } : {}),
+      ...(password && (role || existing.role) === 'executive'
+        ? { mustChangePassword: true, startingPasswordExpiresAt: officeAccounts.startingPasswordExpiry() } : {}),
       ...(renewTerm ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {}),
       ...(endTerm ? { termEndsAt: new Date() } : {})
     });
@@ -7564,13 +7768,17 @@ app.put('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => 
     if (hasOwn(req.body, 'institution')) next.institution = cleanText(req.body.institution);
     if (hasOwn(req.body, 'location')) next.location = cleanText(req.body.location);
     if (hasOwn(req.body, 'address')) next.address = cleanText(req.body.address);
+    if (hasOwn(req.body, 'mapUrl')) { next.mapUrl = req.body.mapUrl; next.mapPlace = req.body.mapPlace; } // checked on the way in
     if (hasOwn(req.body, 'tagline')) next.tagline = cleanText(req.body.tagline);
     if (hasOwn(req.body, 'verseOfTheWeek')) next.verseOfTheWeek = cleanText(req.body.verseOfTheWeek);
     if (hasOwn(req.body, 'serviceTimes')) next.serviceTimes = cleanStringList(req.body.serviceTimes);
     if (hasOwn(req.body, 'contact')) {
       next.contact = mergeTextFields(chapter.contact, req.body.contact, [
-        'email', 'phone', 'whatsapp', 'facebook', 'instagram', 'youtube', 'tiktok', 'twitter', 'telegram'
+        'email', 'phone', 'whatsapp', 'facebook', 'instagram', 'youtube', 'tiktok', 'twitter', 'telegram', 'spotify'
       ]);
+    }
+    if (hasOwn(req.body, 'officeEmails')) {
+      next.officeEmails = mergeTextFields(chapter.officeEmails, req.body.officeEmails, ['shepherding', 'publicity', 'finance', 'welfare']);
     }
     if (hasOwn(req.body, 'payment')) {
       next.payment = mergeTextFields(chapter.payment, req.body.payment, [
@@ -7580,7 +7788,7 @@ app.put('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => 
     }
     if (hasOwn(req.body, 'about')) {
       next.about = mergeTextFields(chapter.about, req.body.about, [
-        'history', 'vision', 'mission', 'values', 'leadership'
+        'history', 'vision', 'mission', 'values', 'leadership', 'firstVisit'
       ]);
     }
     if (!next.name) return res.status(400).json({ error: 'Chapter display name is required' });
@@ -7626,7 +7834,12 @@ app.post('/api/admin/chapter-settings/banner', requireChapterAdmin, upload.singl
 // on its Chapter record instead (edited via the National/Chapter Coordinator
 // portals), so this stays a National Coordinator action.
 app.put('/api/admin/settings', rolesLib.requireNational, async (req, res) => {
-  await repo.setSettings(req.body);
+  // Only the page's own fields. The council's meeting, the wider church and the
+  // record of the move to ACONSU-KNUST have their own homes and are never
+  // overwritten by a copy of the form sent back.
+  const next = {};
+  PUBLIC_GLOBAL_KEYS.forEach((key) => { if (hasOwn(req.body, key)) next[key] = cleanText(req.body[key]); });
+  await repo.setSettings(next);
   res.json({ success: true });
 });
 
@@ -8378,12 +8591,14 @@ async function checkRetentionAlerts() {
           notifyOfficeByEmail(
             'shepherdingEmail',
             'Retention Alert: 30+ days inactive',
-            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please follow up from the Shepherding portal.</p>`
+            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please follow up from the Shepherding portal.</p>`,
+            member.chapterId
           );
           notifyOfficeByEmail(
             'welfareEmail',
             'Welfare Attention Needed: 30+ days inactive',
-            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please coordinate care support if needed.</p>`
+            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please coordinate care support if needed.</p>`,
+            member.chapterId
           );
         } else if (open.daysAbsent !== daysAbsent) {
           await repo.updateById('retentionAlerts', open.id, { ...open, daysAbsent, lastPresentDate });
@@ -8394,6 +8609,70 @@ async function checkRetentionAlerts() {
     }
   } catch (e) {
     console.error('Retention alert check failed:', e.message);
+  }
+}
+
+// Short share links, followed in the background to the spot they point at.
+// A link that cannot be followed now (no network, Google busy) is tried again
+// on the next run, no more than once an hour.
+const MAP_RESOURCES = ['chapters', 'events', 'departments', 'groups'];
+const mapLinkTried = new Map();
+const mapPlacesFound = new Map(); // short link -> the spot it led to, this run
+async function knownMapPlace(url) {
+  if (mapPlacesFound.has(url)) return mapPlacesFound.get(url);
+  for (const resource of MAP_RESOURCES) {
+    const hit = (await repo.getAll(resource, { mapUrl: url })).find((r) => r.mapPlace);
+    if (hit) return hit.mapPlace;
+  }
+  return null;
+}
+let mapResolveRunning = false;
+async function resolvePendingMapLinks() {
+  if (mapResolveRunning || process.env.MAP_LINK_RESOLVE === 'off') return;
+  mapResolveRunning = true;
+  try {
+    for (const resource of MAP_RESOURCES) {
+      const pending = (await repo.getAll(resource, { mapPlace: null }))
+        .filter((r) => r.mapUrl && (Date.now() - (mapLinkTried.get(r.mapUrl) || 0)) > 60 * 60 * 1000)
+        .slice(0, 20);
+      for (const r of pending) {
+        mapLinkTried.set(r.mapUrl, Date.now());
+        const place = mapPlacesFound.get(r.mapUrl) || await maps.resolveMapPlace(r.mapUrl).catch(() => null);
+        if (place) mapPlacesFound.set(r.mapUrl, place);
+        // Only if the link has not been changed in the meantime.
+        if (place) await repo.patchById(resource, r.id, { mapPlace: place }, { mapUrl: r.mapUrl }).catch(() => {});
+      }
+    }
+  } finally {
+    mapResolveRunning = false;
+  }
+}
+
+// ACONSU-KNUST's meeting place is already on its website (site/chapter.js):
+// the address and the Google Maps link the website's "Open in Maps" uses. The
+// app starts from the same, filling only what the chapter has left blank, so
+// the website and the app point at the same auditorium and a chapter's own
+// later choice is never overwritten.
+async function fillLegacyChapterFromWebsite() {
+  try {
+    const chapter = await repo.getById('chapters', rolesLib.LEGACY_CHAPTER_ID);
+    if (!chapter) return;
+    const code = fs.readFileSync(path.join(__dirname, 'site', 'chapter.js'), 'utf8');
+    const sandbox = { window: {} };
+    require('vm').runInNewContext(code, sandbox, { timeout: 500 });
+    const site = sandbox.window.CHAPTER || {};
+    const patch = {};
+    const link = maps.cleanMapUrl(site.mapUrl || '');
+    if (!chapter.mapUrl && link.value) { patch.mapUrl = link.value; patch.mapPlace = maps.placeFromMapUrl(link.value); }
+    if (!chapter.address && site.address) patch.address = String(site.address).trim();
+    const firstWhere = Array.isArray(site.serviceTimes) && site.serviceTimes[0] && site.serviceTimes[0].where;
+    if (!chapter.location && firstWhere) patch.location = String(firstWhere).trim();
+    if (Object.keys(patch).length) {
+      await repo.patchById('chapters', chapter.id, patch);
+      console.log(`Filled ${Object.keys(patch).join(', ')} for ${chapter.id} from the website's chapter.js`);
+    }
+  } catch (e) {
+    console.warn('Could not read the website\'s chapter.js for the meeting place:', e.message);
   }
 }
 
@@ -8457,6 +8736,15 @@ connectDB()
     setInterval(loadMemberRevocations, 5 * 60 * 1000);
     refreshSoleActiveChapter();
     setInterval(refreshSoleActiveChapter, 5 * 60 * 1000); // belt and braces against drift
+    // What Global held was ACONSU-KNUST's: moved there once (lib/globalMove.js),
+    // then anything still blank is filled from its website.
+    moveGlobalSetupToChapter({ repo, chapterId: rolesLib.LEGACY_CHAPTER_ID })
+      .then((done) => { if (done && done.moved) console.log(`Moved Global Settings to ${done.chapterId}: ${done.moved.join(', ') || 'nothing to move'}; Global is back to its defaults`); })
+      .catch((e) => console.warn('Could not move Global Settings to the chapter:', e.message))
+      .then(() => fillLegacyChapterFromWebsite())
+      .then(() => resolvePendingMapLinks())
+      .catch(() => {});
+    setInterval(() => resolvePendingMapLinks().catch(() => {}), 60 * 60 * 1000);
     checkBirthdaysAndNotify();
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
     sendDueAnnouncements();

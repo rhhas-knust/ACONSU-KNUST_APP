@@ -101,6 +101,7 @@ function chapterForm(chapter) {
         <div class="field"><label>Location</label><input type="text" id="cLocation" value="${escapeHtml(chapter?.location || '')}" placeholder="e.g. Legon, Accra"></div>
       </div>
       <div class="field"><label>Address</label><input type="text" id="cAddress" value="${escapeHtml(chapter?.address || '')}"></div>
+      ${mapLinkFieldHtml('cMapUrl', chapter?.mapUrl, 'Map link for the meeting place (optional)')}
       <div class="field-row">
         <div class="field"><label>Contact Email</label><input type="email" id="cEmail" value="${escapeHtml(chapter?.contact?.email || '')}"></div>
         <div class="field"><label>Contact Phone</label><input type="tel" id="cPhone" value="${escapeHtml(chapter?.contact?.phone || '')}"></div>
@@ -121,6 +122,7 @@ function chapterForm(chapter) {
       institution: document.getElementById('cInstitution').value,
       location: document.getElementById('cLocation').value,
       address: document.getElementById('cAddress').value,
+      mapUrl: document.getElementById('cMapUrl').value,
       contact: { email: document.getElementById('cEmail').value, phone: document.getElementById('cPhone').value }
     };
     try {
@@ -139,6 +141,7 @@ function chapterForm(chapter) {
       openPanel('chapters');
     } catch (err) {
       setFormMsg('chapterFormMsg', err.message || 'Could not save this chapter.', 'error');
+      if (err.field === 'mapUrl') document.getElementById('cMapUrl').focus();
     }
   });
 }
@@ -444,6 +447,7 @@ function nationalEventForm(event) {
       </div>
       <div class="field"><label>Location</label>
         <input type="text" id="neLocation" value="${escapeHtml(event?.location || '')}"></div>
+      ${mapLinkFieldHtml('neMapUrl', event?.mapUrl)}
       <div class="field"><label>Description</label>
         <textarea id="neDescription" rows="3">${escapeHtml(event?.description || '')}</textarea></div>
       <div class="field checkbox-field">
@@ -473,6 +477,7 @@ function nationalEventForm(event) {
           date: document.getElementById('neDate').value,
           time: document.getElementById('neTime').value,
           location: document.getElementById('neLocation').value,
+          mapUrl: document.getElementById('neMapUrl').value,
           description: document.getElementById('neDescription').value,
           registrationEnabled: document.getElementById('neRegEnabled').checked,
           capacity: Number(document.getElementById('neCapacity').value || 0),
@@ -484,6 +489,7 @@ function nationalEventForm(event) {
       openPanel('events');
     } catch (err) {
       setFormMsg('nationalEventMsg', err.message || 'Could not save this event.', 'error');
+      if (err.field === 'mapUrl') document.getElementById('neMapUrl').focus();
     }
   });
 }
@@ -873,6 +879,7 @@ initPortal({
     { key: 'events', label: 'National Events', render: renderNationalEvents },
     { key: 'reports', label: 'National Reports', render: renderNationalReports },
     { key: 'features', label: 'Feature Configuration', render: renderFeatures },
-    { key: 'announcements', label: 'National Announcements', render: renderNationalAnnouncements }
+    { key: 'announcements', label: 'National Announcements', render: renderNationalAnnouncements },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });

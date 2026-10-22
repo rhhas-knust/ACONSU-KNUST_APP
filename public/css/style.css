@@ -1127,3 +1127,83 @@ body {
 
 /* The page title in a portal's top bar is for screen readers; on the purple bar it still has to be a readable colour. */
 .portal-topbar h1, .admin-topbar h1 { color: #fff; }
+
+/* ---------- show / hide on password boxes: the eye button (see main.js) ---------- */
+.pw-wrap { position: relative; display: block; }
+.pw-wrap > input { padding-right: 56px; min-height: 44px; }
+.pw-toggle {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 48px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  border: none; border-radius: 0 10px 10px 0; background: transparent;
+  color: var(--ink-soft); cursor: pointer;
+}
+.pw-toggle:hover { color: var(--brand); background: var(--lilac-light); }
+.pw-toggle[data-shown="true"] { color: var(--brand); }
+.pw-toggle svg { display: block; }
+
+/* ---------- a chapter asking National for help with its look (chapter-requests.js) ---------- */
+.cr-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+.cr-card > h3 { margin: 0 0 12px; }
+.cr-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--line); }
+.cr-row:first-of-type { border-top: none; }
+.cr-row p { margin: 0 0 6px; }
+.cr-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.cr-chip { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.74rem; font-weight: 800; }
+.cr-green { background: var(--ok-bg); color: var(--ok-ink); }
+.cr-grey { background: var(--mute-bg); color: var(--ink-soft); }
+.cr-notice { border: 1px solid var(--line); border-left: 5px solid var(--warn-ink); background: var(--warn-bg); color: var(--warn-ink); border-radius: 12px; padding: 12px 16px; margin: 0 0 18px; }
+.cr-notice.good { border-left-color: var(--ok-ink); background: var(--ok-bg); color: var(--ok-ink); }
+.cr-notice button { margin-left: 8px; }
+
+/* ---------- Join us: when and where, in the home hero ---------- */
+/* A first-time visitor's first question is when and where. The card sits on
+   its own surface, so it reads the same over any artwork, light or dark. */
+.join-card {
+  max-width: 460px; margin: 0 auto 1.4em; padding: 16px 20px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  text-align: left; color: var(--ink);
+}
+.join-eyebrow { margin: 0 0 6px; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand) !important; }
+.join-times { list-style: none; margin: 0 0 8px; padding: 0; }
+.join-times li { padding: 4px 0; font-weight: 600; color: var(--ink); border-bottom: 1px solid var(--line); }
+.join-times li:last-child { border-bottom: none; }
+.join-place { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; color: var(--ink-soft) !important; font-size: 0.95rem; }
+.join-place svg { width: 18px; height: 18px; flex: none; color: var(--brand); }
+.join-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; color: var(--brand); }
+.join-links { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+
+/* ---------- Plan your visit ---------- */
+.visit-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); }
+.visit-card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; }
+.visit-card h2 { font-size: 1.3rem; margin: 6px 0 10px; }
+.visit-wide { grid-column: 1 / -1; }
+.visit-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; background: var(--lilac-light); color: var(--brand); }
+.visit-icon svg { width: 22px; height: 22px; }
+.visit-times { list-style: none; margin: 0; padding: 0; }
+.visit-times li { padding: 10px 0; border-bottom: 1px solid var(--line); font-weight: 600; }
+.visit-times li:last-child { border-bottom: none; }
+.visit-place { font-weight: 700; font-size: 1.05rem; margin: 0 0 4px; }
+.visit-address { color: var(--ink-soft); margin: 0 0 14px; }
+.visit-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.visit-event { margin: 0 0 12px; }
+.visit-card p { max-width: 68ch; }
+
+/* A department with no photo yet: its initial, instead of an empty box that
+   reads as a picture that failed to load. */
+.dept-card.no-photo { flex-direction: column; }
+.dept-monogram {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 14px;
+  background: var(--lilac-light); color: var(--brand); font-family: var(--font-display); font-weight: 700; font-size: 1.5rem;
+}
+
+/* ---------- Maps: Open in Maps, and the map itself on request ---------- */
+.map-block { margin-top: 12px; }
+.map-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.map-actions svg { width: 18px; height: 18px; flex: none; }
+.map-frame { margin-top: 12px; }
+.map-frame iframe {
+  display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 420px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--surface-2);
+}
+.map-note { margin: 6px 0 0; font-size: 0.85rem; color: var(--ink-faint); }

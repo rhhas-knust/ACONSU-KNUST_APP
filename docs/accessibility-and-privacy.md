@@ -34,6 +34,7 @@ one most students will have), and a read-through of the admin panels with a keyb
 - One strictly necessary session cookie, set only after sign-in. The website sets none. See `public/cookies.html` and
   `site/cookies.html`. Because nothing needs consent, there is no cookie banner.
 - YouTube and Facebook videos load only after the person presses the button on them.
+- A Google map loads only after the person presses "Show the map here". "Open in Maps" is an ordinary link (README section 27).
 - Registration records that the person agreed to the Terms and Privacy policy, when, and which wording
   (`consentedAt`, `consentVersion`; the version lives in `server.js` as `POLICY_VERSION`). Change it when either page changes
   in a way that matters.

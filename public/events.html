@@ -138,6 +138,7 @@ function canRegister(e) {
           <h2 style="margin-bottom:6px; font-size:1.2rem;">${escapeHtml(e.title)}</h2>
           <p style="font-size:0.9rem; color:var(--ink-soft); margin-bottom:6px;">${formatDate(e.date)} · ${e.time}, ${escapeHtml(e.location)}</p>
           <p style="font-size:0.92rem; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(e.description || '')}</p>
+          ${e.mapUrl ? mapBlockHtml({ url: e.mapUrl, place: e.mapPlace, label: e.location || e.title }) : ''}
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             ${e.category ? `<span class="badge">${escapeHtml(e.category)}</span>` : ''}
             ${e.recurring ? `<span class="badge">${escapeHtml(e.recurring)}</span>` : ''}

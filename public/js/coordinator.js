@@ -31,8 +31,25 @@ const ROLE_LABEL = APPOINTABLE_ROLES.reduce((acc, r) => { acc[r.value] = r.label
   { coordinator: 'Chapter Coordinator', nationalCoordinator: 'National Coordinator' });
 
 // ---------- dashboard ----------
-async function renderCoordinatorDashboard(el) {
-  const data = await fetchJSON('/api/coordinator/overview');
+// What the executive offices are waiting on the Coordinator for. Each lookup is
+// allowed to fail on its own: the dashboard must open even if one is unavailable.
+async function coordinatorWaitingCard() {
+  const [outlines, offices, budgets] = await Promise.all([
+    fetchJSON('/api/coordinator/outlines').catch(() => null),
+    fetchJSON('/api/coordinator/offices').catch(() => null),
+    fetchJSON('/api/budget/calls').catch(() => null)
+  ]);
+  const lines = [];
+  if (outlines && outlines.waiting) lines.push(`<li><button type="button" class="link-btn" data-go="outlines">${outlines.waiting} semester outline${outlines.waiting === 1 ? ' is' : 's are'} waiting for your approval</button></li>`);
+  if (offices && offices.needsAttention) lines.push(`<li><button type="button" class="link-btn" data-go="keyOffices">${offices.needsAttention} key office${offices.needsAttention === 1 ? '' : 's'} empty, ended or about to end</button></li>`);
+  const waitingBudgets = budgets ? budgets.items.reduce((n, c) => n + (c.counts.recommended || 0), 0) : 0;
+  if (waitingBudgets) lines.push(`<li><button type="button" class="link-btn" data-go="budgets">${waitingBudgets} department budget${waitingBudgets === 1 ? ' has' : 's have'} been reviewed by Finance and need${waitingBudgets === 1 ? 's' : ''} a decision</button></li>`);
+  if (!lines.length) return '';
+  return `<div class="portal-card"><h3>Waiting for you</h3><ul class="of-waiting">${lines.join('')}</ul></div>`;
+}
+
+async function renderCoordinatorDashboardBody(el) {
+  const [data, waitingCard] = await Promise.all([fetchJSON('/api/coordinator/overview'), coordinatorWaitingCard()]);
   const { finance, shepherding, publicity, engagement, welfare } = data;
   const budget = finance.activeBudget;
 
@@ -44,6 +61,7 @@ async function renderCoordinatorDashboard(el) {
       </div>
     </div>
 
+    ${waitingCard}
     <div class="stat-grid">
       ${statCard('Balance in Hand', money(finance.balance), {
         tone: finance.balance < 0 ? 'bad' : 'good',
@@ -217,7 +235,11 @@ function staffForm(existing, preselect) {
       : 'The account is created inside your own chapter automatically.'}</p>
     <form id="staffForm">
       ${isEdit ? '' : `
-        <div class="field"><label>Username</label>
+        <div class="of-notice" id="sfOfficeLogin" role="status" hidden>
+          <strong>An executive office comes with its own login.</strong> You do not choose one: it is made for the office and the chapter, for example
+          <code>president.knust</code> with the starting password <code>president123</code>. The person appointed must choose their own password the first time they sign in.
+        </div>
+        <div class="field" id="sfUsernameWrap"><label for="sfUsername">Username</label>
           <input type="text" id="sfUsername" autocomplete="off" required>
           <small class="hint">They sign in with this. Lowercase, no spaces.</small>
         </div>`}
@@ -244,7 +266,7 @@ function staffForm(existing, preselect) {
           <label>Department</label>
           <select id="sfDepartment"><option value="">Loading departments…</option></select>
         </div>`}
-      <div class="field"><label>${isEdit ? 'New Password (optional)' : 'Password'}</label>
+      <div class="field" id="sfPasswordWrap"><label for="sfPassword">${isEdit ? 'New Password (optional)' : 'Password'}</label>
         <input type="password" id="sfPassword" minlength="8" autocomplete="new-password" ${isEdit ? '' : 'required'}>
         <small class="hint">At least 8 characters.</small>
       </div>
@@ -285,6 +307,15 @@ function staffForm(existing, preselect) {
     // Finance or Shepherding officer was refused with nothing on screen to
     // explain what was missing.
     if (positionWrap) positionWrap.hidden = !isExecutive;
+    // An executive is given the office's own login, so there is nothing to type.
+    if (!isEdit) {
+      const officeLogin = isExecutive;
+      document.getElementById('sfOfficeLogin').hidden = !officeLogin;
+      document.getElementById('sfUsernameWrap').hidden = officeLogin;
+      document.getElementById('sfPasswordWrap').hidden = officeLogin;
+      document.getElementById('sfUsername').required = !officeLogin;
+      document.getElementById('sfPassword').required = !officeLogin;
+    }
     if (memberHint) {
       memberHint.innerHTML = isExecutive
         ? `An executive is an elected member of this chapter, so the office is attached to their member record. You can appoint someone at any point in the year. Their term runs to <strong>${escapeHtml(academicYearEndLabel())}</strong>, when the whole executive body hands over together.`
@@ -335,9 +366,10 @@ function staffForm(existing, preselect) {
       name: document.getElementById('sfName').value,
       role: roleSelect.value
     };
-    if (password) payload.password = password;
+    const officeLogin = !isEdit && roleSelect.value === 'executive';
+    if (password && !officeLogin) payload.password = password;
     if (!isEdit) {
-      payload.username = document.getElementById('sfUsername').value;
+      if (!officeLogin) payload.username = document.getElementById('sfUsername').value;
       payload.memberId = memberSelect ? memberSelect.value : '';
       if (roleSelect.value === 'executive') {
         payload.positionKey = positionSelect ? positionSelect.value : '';
@@ -345,11 +377,12 @@ function staffForm(existing, preselect) {
       }
     }
     try {
-      await fetchJSON(isEdit ? `/api/admin/staff/${existing.id}` : '/api/admin/staff', {
+      const out = await fetchJSON(isEdit ? `/api/admin/staff/${existing.id}` : '/api/admin/staff', {
         method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      if (out && out.issued) return showIssuedLogin(out.item.name, out.issued, () => openPanel('accounts'));
       closeModal();
       showToast(isEdit ? 'Account updated' : 'Chapter leader appointed', 'success');
       openPanel('accounts');
@@ -357,6 +390,18 @@ function staffForm(existing, preselect) {
       setFormMsg('staffFormMsg', err.message || 'Could not save this account.', 'error');
     }
   });
+}
+
+// The office login, shown once to be passed on. It opens only the screen where
+// its holder chooses their own password, and stops working after 14 days.
+function showIssuedLogin(name, issued, done) {
+  document.getElementById('modalContent').innerHTML = `
+    <h3>${escapeHtml(name || 'They')} can now sign in</h3>
+    <p>Give them these. They sign in on the Executive Portal once with them, and must then choose their own password.</p>
+    <dl class="of-dl"><dt>Username</dt><dd><code>${escapeHtml(issued.username)}</code></dd><dt>Starting password</dt><dd><code>${escapeHtml(issued.password)}</code></dd></dl>
+    <p class="tiny muted">The starting password stops working after 14 days if it is not used. You can put it back from Key Offices.</p>
+    <div class="of-actions"><button type="button" class="btn btn-primary" id="issuedDone">Done</button></div>`;
+  document.getElementById('issuedDone').addEventListener('click', () => { closeModal(); if (done) done(); });
 }
 
 // The academic year turns over on 1 August, matching the server
@@ -688,6 +733,11 @@ async function renderWelfarePurseReport(el) {
   `;
 }
 
+async function renderCoordinatorDashboard(el) {
+  await renderCoordinatorDashboardBody(el);
+  el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.go)));
+}
+
 initPortal({
   role: 'coordinator',
   label: 'Chapter Coordinator',
@@ -695,8 +745,14 @@ initPortal({
     { key: 'dashboard', label: 'Dashboard', render: renderCoordinatorDashboard },
     { key: 'offices', label: 'Offices & Leaders', render: renderOffices },
     { key: 'accounts', label: 'Leadership Accounts', render: renderLeadershipAccounts },
+    { key: 'keyOffices', label: 'Key Offices', render: (el) => OfficeBodies.renderKeyOffices(el) },
+    { key: 'outlines', label: 'Semester Outlines', render: (el) => OfficeOutline.renderReview(el) },
+    { key: 'budgets', label: 'Budget Requests', render: (el) => OfficeBudget.renderDesk(el) },
+    { key: 'execMinutes', label: 'Executive Minutes', render: (el) => OfficeMinutes.renderForCoordinator(el) },
+    { key: 'askNational', label: 'Ask National for Help', render: (el) => ChapterRequests.renderAsk(el) },
     { key: 'welfare', label: 'Welfare Purse', render: renderWelfarePurseReport },
     { key: 'approvals', label: 'Approvals', render: renderApprovals },
-    { key: 'announcements', label: 'Chapter Announcement', render: renderChapterAnnouncements }
+    { key: 'announcements', label: 'Chapter Announcement', render: renderChapterAnnouncements },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });

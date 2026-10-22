@@ -1171,6 +1171,7 @@ initPortal({
     { key: 'attendance', label: 'Attendance', render: renderAttendance },
     { key: 'members', label: 'Members', render: renderShepMembers },
     { key: 'care', label: 'Pastoral Care', render: renderCare },
-    { key: 'messages', label: 'Messages', render: renderMessages }
+    { key: 'messages', label: 'Messages', render: renderMessages },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });

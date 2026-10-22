@@ -93,6 +93,7 @@ function renderAbout(body) {
     <div class="portal-card" style="background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:16px;">
       <p><strong>Leader:</strong> ${escapeHtml(GROUP.leaderName || 'Not yet assigned')}</p>
       ${GROUP.meetingDay ? `<p><strong>Meets:</strong> ${escapeHtml(GROUP.meetingDay)} ${escapeHtml(GROUP.meetingTime || '')} ${GROUP.meetingLocation ? 'at ' + escapeHtml(GROUP.meetingLocation) : ''}</p>` : ''}
+      ${GROUP.mapUrl ? mapBlockHtml({ url: GROUP.mapUrl, place: GROUP.mapPlace, label: GROUP.meetingLocation || GROUP.name }) : ''}
       <div style="margin-top:14px;">${joinBtn}</div>
     </div>
     ${GROUP.resources.length ? `
@@ -138,6 +139,7 @@ function openEditGroupForm() {
       <div class="field"><label>Meeting Day</label><input type="text" id="egDay" value="${escapeHtml(GROUP.meetingDay || '')}"></div>
       <div class="field"><label>Meeting Time</label><input type="text" id="egTime" value="${escapeHtml(GROUP.meetingTime || '')}"></div>
       <div class="field"><label>Meeting Location</label><input type="text" id="egLoc" value="${escapeHtml(GROUP.meetingLocation || '')}"></div>
+      ${mapLinkFieldHtml('egMap', GROUP.mapUrl)}
       <div class="field"><label>Resources (one "Title | URL" per line)</label><textarea id="egResources">${GROUP.resources.map(r => `${r.title} | ${r.url}`).join('\n')}</textarea></div>
       <div style="display:flex; gap:10px;">
         <button type="submit" class="btn btn-primary">Save</button>
@@ -162,6 +164,7 @@ function openEditGroupForm() {
           meetingDay: document.getElementById('egDay').value,
           meetingTime: document.getElementById('egTime').value,
           meetingLocation: document.getElementById('egLoc').value,
+          mapUrl: document.getElementById('egMap').value,
           resources
         })
       });
@@ -171,6 +174,7 @@ function openEditGroupForm() {
     } catch (err) {
       document.getElementById('egMsg').textContent = err.message || 'Could not save.';
       document.getElementById('egMsg').className = 'form-msg error';
+      if (err.field === 'mapUrl') document.getElementById('egMap').focus();
     }
   });
 }
@@ -232,7 +236,7 @@ async function renderMeetings(body) {
       ${meetings.map(m => `
         <div class="meeting-card">
           <strong>${shortDateSafe(m.date)}</strong>${m.topic ? `: ${escapeHtml(m.topic)}` : ''}
-          <div class="tiny muted">${escapeHtml(m.location || '')} · ${m.attendeeMemberIds.length} attended</div>
+          <div class="tiny muted">${safeMapUrl(m.mapUrl) ? `<a href="${escapeHtml(safeMapUrl(m.mapUrl))}" target="_blank" rel="noopener noreferrer">${escapeHtml(m.location || 'Map')}</a>` : escapeHtml(m.location || '')} · ${m.attendeeMemberIds.length} attended</div>
           ${m.notes ? `<p style="margin-top:6px; font-size:0.88rem;">${escapeHtml(m.notes)}</p>` : ''}
         </div>
       `).join('') || '<p class="empty-state">No meetings logged yet.</p>'}
@@ -311,6 +315,7 @@ function openLogMeetingForm(body) {
       <div class="field"><label>Date</label><input type="date" id="mDate" required></div>
       <div class="field"><label>Topic</label><input type="text" id="mTopic"></div>
       <div class="field"><label>Location</label><input type="text" id="mLocation"></div>
+      ${mapLinkFieldHtml('mMapUrl', '')}
       <div class="field"><label>Who attended?</label>
         <div>${GROUP.members.map(m => `<label style="display:block; font-size:0.85rem; margin-bottom:4px;"><input type="checkbox" value="${m.id}" class="attendeeBox" style="width:auto;"> ${escapeHtml(m.name)}</label>`).join('')}</div>
       </div>
@@ -332,7 +337,8 @@ function openLogMeetingForm(body) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date: document.getElementById('mDate').value, topic: document.getElementById('mTopic').value,
-          location: document.getElementById('mLocation').value, notes: document.getElementById('mNotes').value,
+          location: document.getElementById('mLocation').value, mapUrl: document.getElementById('mMapUrl').value,
+          notes: document.getElementById('mNotes').value,
           attendeeMemberIds
         })
       });
@@ -342,6 +348,7 @@ function openLogMeetingForm(body) {
     } catch (err) {
       document.getElementById('mMsg').textContent = err.message || 'Could not save.';
       document.getElementById('mMsg').className = 'form-msg error';
+      if (err.field === 'mapUrl') document.getElementById('mMapUrl').focus();
     }
   });
 }

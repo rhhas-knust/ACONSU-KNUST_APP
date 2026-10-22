@@ -82,6 +82,9 @@ async function renderExecProfile(el) {
     </div>
   `;
 
+  // Still on the starting password? Say so, with a way straight to changing it.
+  PortalAccount.nudge(el);
+
   document.getElementById('execForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -125,6 +128,7 @@ async function renderExecEvents(el) {
           <div class="field"><label>Time</label><input type="time" id="evTime"></div>
         </div>
         <div class="field"><label>Location</label><input type="text" id="evLocation"></div>
+        ${mapLinkFieldHtml('evMapUrl', '')}
         <div class="field"><label>Category</label><input type="text" id="evCategory" placeholder="e.g. Outreach, Retreat, Social"></div>
         <div class="field"><label>Description</label><textarea id="evDescription" rows="3"></textarea></div>
         <button type="submit" class="btn btn-primary">Submit for Review</button>
@@ -162,6 +166,7 @@ async function renderExecEvents(el) {
           date: document.getElementById('evDate').value,
           time: document.getElementById('evTime').value,
           location: document.getElementById('evLocation').value,
+          mapUrl: document.getElementById('evMapUrl').value,
           category: document.getElementById('evCategory').value,
           description: document.getElementById('evDescription').value
         })
@@ -171,6 +176,7 @@ async function renderExecEvents(el) {
       openPanel('events');
     } catch (err) {
       setFormMsg('eventSubmitMsg', err.message || 'Could not submit this event.', 'error');
+      if (err.field === 'mapUrl') document.getElementById('evMapUrl').focus();
     }
   });
 }
@@ -228,6 +234,7 @@ async function renderExecDepartment(el) {
         </div>
         <div class="field"><label>Meeting Location</label>
           <input type="text" id="dMeetingLocation" value="${escapeHtml(d.meetingLocation || '')}"></div>
+        ${mapLinkFieldHtml('dMapUrl', d.mapUrl)}
         <button type="submit" class="btn btn-primary">Save Department</button>
         <div class="form-msg" id="deptMsg"></div>
       </form>
@@ -244,13 +251,15 @@ async function renderExecDepartment(el) {
           description: document.getElementById('dDescription').value,
           meetingDay: document.getElementById('dMeetingDay').value,
           meetingTime: document.getElementById('dMeetingTime').value,
-          meetingLocation: document.getElementById('dMeetingLocation').value
+          meetingLocation: document.getElementById('dMeetingLocation').value,
+          mapUrl: document.getElementById('dMapUrl').value
         })
       });
       showToast('Department updated.', 'success');
       openPanel('department');
     } catch (err) {
       setFormMsg('deptMsg', err.message || 'Could not save your department.', 'error');
+      if (err.field === 'mapUrl') document.getElementById('dMapUrl').focus();
     }
   });
 }
@@ -705,88 +714,9 @@ async function renderExecFinance(el) {
   `;
 }
 
-async function renderExecMinutes(el) {
-  const items = await fetchJSON('/api/executive/minutes');
-  const canAdopt = ['president', 'vice_president', 'secretary'].includes(EXEC_POSITION && EXEC_POSITION.key);
-  el.innerHTML = `
-    <div class="panel-head">
-      <div>
-        <h2>Executive Minutes</h2>
-        <p class="sub">The record of what the executive body decided. Drafts become the record once adopted.</p>
-      </div>
-      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newMinuteBtn">+ New Minutes</button></div>
-    </div>
-    <div class="portal-card">
-      ${items.length ? `
-        <div class="table-wrap"><table class="portal-table">
-          <thead><tr><th>Date</th><th>Title</th><th>Status</th><th></th></tr></thead>
-          <tbody>${items.map(m => `
-            <tr>
-              <td>${escapeHtml(m.date)}</td>
-              <td>${escapeHtml(m.title || '-')}<br><span class="tiny muted">${escapeHtml((m.body || '').slice(0, 90))}${(m.body || '').length > 90 ? '…' : ''}</span></td>
-              <td>${m.status === 'adopted'
-                ? `<span class="tiny">Adopted${m.adoptedBy ? ` by ${escapeHtml(m.adoptedBy)}` : ''}</span>`
-                : '<span class="tiny muted">Draft</span>'}</td>
-              <td>${m.status !== 'adopted' && canAdopt
-                ? `<button class="btn btn-sm" data-adopt="${escapeHtml(m.id)}">Adopt</button>` : ''}</td>
-            </tr>`).join('')}</tbody>
-        </table></div>` : '<p class="empty-state">No minutes recorded yet.</p>'}
-    </div>
-  `;
-
-  document.getElementById('newMinuteBtn').addEventListener('click', () => {
-    showModal(`
-      <h3>New Minutes</h3>
-      <form id="minuteForm">
-        <div class="field-row">
-          <div class="field"><label>Date</label><input type="date" id="mDate" value="${todayISO()}" required></div>
-          <div class="field"><label>Title</label><input type="text" id="mTitle" placeholder="e.g. Term planning"></div>
-        </div>
-        <div class="field"><label>Minutes</label><textarea id="mBody" rows="6" required placeholder="What was discussed"></textarea></div>
-        <div class="field"><label>Decisions</label><textarea id="mDecisions" rows="3" placeholder="Resolutions taken"></textarea></div>
-        <div class="field"><label>Apologies</label><input type="text" id="mApologies" placeholder="Who sent apologies"></div>
-        <div style="display:flex; gap:10px; margin-top:22px;">
-          <button type="submit" class="btn btn-primary">Save as Draft</button>
-          <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
-        </div>
-        <div class="form-msg" id="minuteMsg"></div>
-      </form>
-    `);
-    const cancelMinute = document.getElementById('cancelModalBtn');
-    if (cancelMinute) cancelMinute.addEventListener('click', closeModal);
-    document.getElementById('minuteForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      try {
-        await fetchJSON('/api/executive/minutes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            date: document.getElementById('mDate').value,
-            title: document.getElementById('mTitle').value,
-            body: document.getElementById('mBody').value,
-            decisions: document.getElementById('mDecisions').value,
-            apologies: document.getElementById('mApologies').value
-          })
-        });
-        closeModal();
-        showToast('Minutes saved as a draft.', 'success');
-        openPanel('minutes');
-      } catch (err) {
-        setFormMsg('minuteMsg', err.message || 'Could not save these minutes.', 'error');
-      }
-    });
-  });
-
-  el.querySelectorAll('[data-adopt]').forEach(btn => btn.addEventListener('click', async () => {
-    try {
-      await fetchJSON(`/api/executive/minutes/${btn.dataset.adopt}/adopt`, { method: 'PATCH' });
-      showToast('Minutes adopted.', 'success');
-      openPanel('minutes');
-    } catch (err) {
-      showToast(err.message || 'Could not adopt these minutes.', 'error');
-    }
-  }));
-}
+// Minutes are the secretariat's to write and share (see office-minutes.js). Every
+// other executive reads the ones that have been shared with them.
+function renderExecMinutes(el) { return OfficeMinutes.renderShared(el); }
 
 async function renderExecChapterAnnounce(el) {
   el.innerHTML = `
@@ -1104,13 +1034,25 @@ async function renderExecDailyVerse(el) {
 // what this office may do.
 const EXEC_PANELS = [
   { key: 'profile',          label: 'My Profile',          capability: 'profile',              render: renderExecProfile },
+  { key: 'account',          label: 'My Account',          capability: 'profile',              render: (el) => PortalAccount.render(el) },
   { key: 'pulse',            label: 'Chapter Overview',    capability: 'chapter.pulse',        render: renderExecChapterPulse },
+  { key: 'outline',          label: 'Semester Outline',    capability: 'outline.write',        render: (el) => OfficeOutline.renderEditor(el) },
+  { key: 'outlineShared',    label: 'Semester Outline',    capability: 'outline.read',         unlessCapability: 'outline.write', render: (el) => OfficeOutline.renderShared(el) },
+  { key: 'alumni',           label: 'The Alumni',          capability: 'alumni.body',          render: (el) => OfficeBodies.renderAlumni(el) },
   { key: 'chapterMembers',   label: 'Chapter Members',     capability: 'chapter.members',      render: renderExecChapterMembers },
   { key: 'chapterDepts',     label: 'Departments',         capability: 'chapter.departments',  render: renderExecChapterDepartments },
-  { key: 'minutes',          label: 'Minutes',             capability: 'minutes',              render: renderExecMinutes },
+  { key: 'minutesDesk',      label: 'Minutes',             capability: 'minutes.keep',         render: (el) => OfficeMinutes.renderDesk(el, EXEC_POSITION) },
+  { key: 'minutes',          label: 'Minutes',             capability: 'minutes',              unlessCapability: 'minutes.keep', render: renderExecMinutes },
+  { key: 'announceDesk',     label: 'Sunday Announcements', capability: 'announce.collect',    render: (el) => OfficeAnnounce.renderDesk(el) },
+  { key: 'announceAnswer',   label: 'My Announcement',     capability: 'announce.submit',      render: (el) => OfficeAnnounce.renderAnswer(el) },
+  { key: 'followup',         label: 'Follow-up',           capability: 'followup',             render: (el) => OfficeBodies.renderFollowUp(el) },
+  { key: 'committees',       label: 'Committees',          capability: 'committees',           render: (el) => OfficeBodies.renderCommittees(el) },
   { key: 'chapterAttend',    label: 'Service Attendance',  capability: 'attendance.chapter',   render: renderExecChapterAttendance },
   { key: 'finance',          label: 'The Books',           capability: 'finance.summary',      render: renderExecFinance },
   { key: 'ledger',           label: 'Keep the Ledger',     capability: 'finance.ledger',       render: renderExecLedger },
+  { key: 'budgetDesk',       label: 'Budget Requests',     capability: 'budget.call',          render: (el) => OfficeBudget.renderDesk(el) },
+  { key: 'budgetDecide',     label: 'Budget Decisions',    capability: 'budget.decide',        unlessCapability: 'budget.call', render: (el) => OfficeBudget.renderDesk(el) },
+  { key: 'budgetAnswer',     label: 'Budget Requests',     capability: 'budget.submit',        render: (el) => OfficeBudget.renderAnswer(el) },
   { key: 'treasury',         label: 'Account for Money',   capability: 'treasury.report',      render: renderExecTreasury },
   { key: 'dailyVerse',       label: 'Daily Verse',         capability: 'dailyVerse',           render: renderExecDailyVerse },
   { key: 'chapterAnnounce',  label: 'Message Chapter',     capability: 'announce.chapter',     render: renderExecChapterAnnounce },
@@ -1136,7 +1078,9 @@ initPortal({
     if (me.position && me.position.label) {
       PORTAL.label = `Executive · ${me.position.label}`;
     }
-    const granted = all.filter(p => can(p.capability));
+    // `unlessCapability` hides the read-only version of a screen from anyone whose
+    // office has the full one, so an officer never sees the same section twice.
+    const granted = all.filter(p => can(p.capability) && !(p.unlessCapability && can(p.unlessCapability)));
     return granted.length ? granted : all.filter(p => p.key === 'profile');
   }
 });

@@ -19,6 +19,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
 (async () => {
   process.env.MONGODB_URI = 'mongodb://stub/aconsu_test';
+  process.env.MAP_LINK_RESOLVE = 'off'; // map links are never followed out to Google from a test
   process.env.PORT = '4321';
   process.env.ADMIN_USERNAME = 'admin';
   process.env.ADMIN_PASSWORD = 'admin123';
@@ -37,6 +38,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   async function call(jar, method, path, body, isForm, extraHeaders) {
     const headers = { ...(extraHeaders || {}) };
+    // Executive accounts start on a starting password that must be replaced at
+    // the first sign-in (see lib/officeAccounts.js). These suites exercise the
+    // accounts for other things, so that first step is taken as done here; it
+    // has its own tests in test/account.js.
+    if (method === 'POST' && path === '/api/portal/login' && body && body.username) {
+      const pending = fakeModels.StaffUser._docs.find(a => a.username === String(body.username).toLowerCase().trim());
+      if (pending) pending.mustChangePassword = false;
+    }
     if (jars[jar]) headers.cookie = jars[jar];
     let payload;
     if (body && !isForm) { headers['content-type'] = 'application/json'; payload = JSON.stringify(body); }
@@ -94,6 +103,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123', memberId: officeMemberIds[user] });
     check(`create ${role} account`, r.status === 200, r.data);
   }
+  // The test chapter now has its own Coordinator, so the chapter is its own:
+  // its look, its events, its members and its accounts. Much of this suite has
+  // the main admin set the chapter up, as a chapter would ask it to: the
+  // Coordinator asks once, for the length of the run. The rule itself is tested
+  // in test/chapter-look.js.
+  r = await call('coord', 'POST', '/api/portal/login', { username: 'coord.yaw', password: 'password123' });
+  r = await call('coord', 'POST', '/api/chapter-requests', { message: 'Please help set up our chapter.', days: 30 });
+  check('the chapter asks the main admin for help setting it up', r.status === 200, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.nomember', name: 'No Member', role: 'finance', password: 'password123' });
   check('a chapter office account cannot be created without a member behind it', r.status === 400, r.data);
   // An executive is a promoted member, so the office can't be created out of
@@ -754,7 +771,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   r = await call('admin', 'GET', '/api/admin/executive-applications');
   check('executive applications are visible to admin', r.status === 200 && Array.isArray(r.data) && r.data.some(a => a.id === memberId), r.data);
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, { decision: 'approve', scope: 'chapter' });
-  check('approving without a login to issue is refused, rather than half-provisioning', r.status === 400, r.data);
+  check('approving without naming a position is refused, rather than half-provisioning', r.status === 400, r.data);
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, {
     decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password123'
   });
@@ -766,6 +783,16 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('the approved office is recorded on the member, from the position chosen',
     r.data.item.role === 'President' && !r.data.item.department, r.data.item);
   check('approval issues the portal login in the same action', r.data.item.issuedLogin === true && !!r.data.item.account.termEndsAt, r.data.item);
+  // Left without a username and password, approval issues the office's own login.
+  {
+    const outsiderId = fakeModels.Member._docs.find(m => m.email === 'outside.dept@test.com').id;
+    await call('outsider', 'POST', '/api/member/executive-interest', { role: 'Prayer Secretary', scope: 'chapter' });
+    const ap = await call('admin', 'PATCH', `/api/admin/executive-applications/${outsiderId}`, { decision: 'approve', scope: 'chapter', positionKey: 'prayer_secretary', department: deptId });
+    check('approval with no username or password issues the office\'s own login, named for the office and the chapter',
+      ap.status === 200 && ap.data.item.issued && ap.data.item.issued.username === 'prayersecretary.testchapter' && ap.data.item.issued.password === 'prayersecretary123', ap.data);
+    const acct = fakeModels.StaffUser._docs.find(a => a.username === 'prayersecretary.testchapter');
+    check('and its holder must choose their own password at the first sign-in', !!acct && acct.mustChangePassword === true, acct);
+  }
 
   // The whole point of provisioning in one action: the approved executive can
   // sign in and already has a public roster card, with nothing done by hand.
@@ -804,16 +831,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   r = await call('newExec', 'GET', '/api/executive/chapter/attendance');
   check('a capability the President was not granted stays shut, even to the President', r.status === 403, r.data);
 
-  // Minutes: written by those who keep them, adopted only by those who chair.
+  // Minutes are the secretariat's to write and share (the full workflow is
+  // exercised in test/offices.js). Everyone else reads only what has been shared.
   r = await call('newExec', 'POST', '/api/executive/minutes', { date: '2026-04-02', title: 'Term planning', body: 'Agreed the calendar.' });
-  check('the President records minutes of an executive meeting', r.status === 200 && r.data.item.status === 'draft', r.data);
-  const minuteId = r.data.item.id;
-  r = await call('newExec', 'POST', '/api/executive/minutes', { date: '2026-04-02', body: '' });
-  check('empty minutes are refused', r.status === 400, r.data);
-  r = await call('newExec', 'PATCH', `/api/executive/minutes/${minuteId}/adopt`);
-  check('and the President adopts them', r.status === 200 && r.data.item.status === 'adopted' && !!r.data.item.adoptedAt, r.data);
+  check('the President does not write the minutes, the secretariat does', r.status === 403, r.data);
+  r = await call('newExec', 'GET', '/api/executive/minutes');
+  check('the President reads the minutes that have been shared (none yet)', r.status === 200 && Array.isArray(r.data) && r.data.length === 0, r.data);
   r = await call('exec', 'GET', '/api/executive/minutes');
-  check('a portfolio holder cannot read the executive minutes', r.status === 403, r.data);
+  check('a portfolio holder can read shared minutes too', r.status === 200 && Array.isArray(r.data), r.data);
 
   r = await call('newExec', 'POST', '/api/executive/chapter/announcement', { title: 'Chapter meeting', body: 'Saturday, 4pm.' });
   check('the President messages the whole chapter', r.status === 200 && r.data.reached >= 1, r.data);
@@ -2067,6 +2092,13 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   presRegForm.append('password', 'secret123');
   presRegForm.append('chapterId', chapterId);
   const presMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: presRegForm })).json()).member.id;
+  // The President is a single seat, so a second President cannot be seated
+  // beside the first: it has to be handed over. The earlier one's term ends here.
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password123', memberId: presMemberId, positionKey: 'president', chapterId });
+  check('a second President cannot be seated while the first still holds the office', r.status === 409 && /seat is held/.test(r.data.error), r.data);
+  const firstPresidentCard = fakeModels.Executive._docs.find(c => c.positionKey === 'president' && c.chapterId === chapterId);
+  r = await call('admin', 'PUT', `/api/admin/staff/${firstPresidentCard.staffId}`, { endTerm: true });
+  check('the first President\'s term is ended', r.status === 200, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password123', memberId: presMemberId, positionKey: 'president', chapterId });
   check('a sitting Chapter President is appointed', r.status === 200, r.data);
   await call('pres', 'POST', '/api/portal/login', { username: 'exec.president', password: 'password123' });
@@ -3147,8 +3179,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     const fs = require('fs');
     const path = require('path');
     const bundles = {
-      'executive.html': ['main.js', 'portal.js', 'executive.js'],
-      'coordinator.html': ['main.js', 'portal.js', 'coordinator.js'],
+      'executive.html': ['main.js', 'portal.js', 'account.js', 'office-ui.js', 'office-outline.js', 'office-budget.js', 'office-minutes.js', 'office-announce.js', 'office-bodies.js', 'executive.js'],
+      'coordinator.html': ['main.js', 'portal.js', 'account.js', 'office-ui.js', 'office-outline.js', 'office-budget.js', 'office-minutes.js', 'office-bodies.js', 'coordinator.js'],
+      'finance.html': ['main.js', 'portal.js', 'account.js', 'office-ui.js', 'office-outline.js', 'office-budget.js', 'office-minutes.js', 'office-bodies.js', 'finance.js'],
       'admin.html': ['main.js', 'admin.js']
     };
     for (const [page, files] of Object.entries(bundles)) {
@@ -5594,7 +5627,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       check('every page is sent with a Content-Security-Policy', csp.length > 100, csp.slice(0, 60));
       check('which allows scripts only from the app itself', /script-src 'self' 'unsafe-inline'/.test(csp) && !/script-src[^;]*https?:/.test(csp), csp);
       check('forbids plugins, and framing by other sites, and posting to other sites', /object-src 'none'/.test(csp) && /frame-ancestors 'self'/.test(csp) && /form-action 'self'/.test(csp), csp);
-      check('and lets a page frame only YouTube (no-cookie) and Facebook', /frame-src https:\/\/www\.youtube-nocookie\.com https:\/\/www\.facebook\.com(;|$)/.test(csp), csp);
+      check('and lets a page frame only YouTube (no-cookie), Facebook and Google\'s map', /frame-src https:\/\/www\.youtube-nocookie\.com https:\/\/www\.facebook\.com https:\/\/www\.google\.com https:\/\/maps\.google\.com(;|$)/.test(csp), csp);
       check('connections go back to the app only', /connect-src 'self'(;|$)/.test(csp), csp);
       const pp = res.headers.get('permissions-policy') || '';
       check('camera and microphone are for this app only and nothing else is asked for', /camera=\(self\)/.test(pp) && /microphone=\(self\)/.test(pp) && /geolocation=\(\)/.test(pp), pp);

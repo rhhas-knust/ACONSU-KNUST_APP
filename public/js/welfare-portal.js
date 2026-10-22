@@ -389,6 +389,7 @@ initPortal({
   panels: [
     { key: 'overview', label: 'Overview', render: renderWelfareOverview },
     { key: 'queue', label: 'Requests', render: renderWelfareQueue },
-    { key: 'purse', label: 'The Purse', render: renderWelfarePurse }
+    { key: 'purse', label: 'The Purse', render: renderWelfarePurse },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });

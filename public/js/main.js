@@ -16,7 +16,11 @@ async function fetchJSON(url, options) {
   try {
     const res = await fetch(url, opts);
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+    if (!res.ok) {
+      const err = new Error(data.error || 'Request failed');
+      if (data.field) err.field = data.field; // which box the problem is in, so a form can point at it
+      throw err;
+    }
     return data;
   } finally {
     done();
@@ -216,6 +220,7 @@ function badgeIconSvg(name) {
   return svgIcon(BADGE_ICONS[name] || '<circle cx="12" cy="12" r="9"/>');
 }
 
+const ICON_PIN = '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>';
 const ICON_INFO = '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r="0.9" fill="currentColor" stroke="none"/>';
 const ICON_MAIL = '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 6.5 9 6 9-6"/>';
 const ICON_CARD = '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>';
@@ -484,6 +489,7 @@ async function renderVerseOfDay(settings) {
 
 const NAV_LINKS = [
   { href: '/index.html', label: 'Home' },
+  { href: '/visit.html', label: 'Plan Your Visit' },
   { href: '/about.html', label: 'About' },
   { href: '/departments.html', label: 'Departments' },
   { href: '/events.html', label: 'Events' },
@@ -717,7 +723,11 @@ function timeAgo(iso) {
 const SIDE_NAV_GROUPS = [
   {
     title: '',
-    links: [{ href: '/index.html', label: 'Home', icon: ICON_HOME }]
+    links: [
+      { href: '/index.html', label: 'Home', icon: ICON_HOME },
+      // The first thing a newcomer looks for: when, where, what to expect.
+      { href: '/visit.html', label: 'Plan Your Visit', icon: ICON_PIN }
+    ]
   },
   {
     title: 'Gather',
@@ -828,6 +838,7 @@ function renderFooter(settings) {
         </div>
         <div>
           <p class="footer-title">Get Involved</p>
+          <a href="/visit.html">Plan your visit</a>
           <a href="/departments.html">Join a Department</a>
           <a href="/alumni.html">Alumni Connect</a>
           <a href="/prayer.html">Submit a Prayer Request</a>
@@ -842,7 +853,14 @@ function renderFooter(settings) {
         </div>
         <div>
           <p class="footer-title">Reach Us</p>
-          <span style="display:block; padding:6px 0; color:#E2D3EE; font-size:0.95rem;">${escapeHtml(s.address || 'Campus Fellowship Auditorium')}</span>
+          ${(() => {
+            // Where we meet: a link to the chapter's map when it has one, since a
+            // place is more use found than read. Nothing at all when not set.
+            const where = s.address || s.meetingPlace || '';
+            const map = safeMapUrl(s.mapUrl);
+            if (map) return `<a href="${escapeHtml(map)}" target="_blank" rel="noopener noreferrer">${escapeHtml(where || 'Find us on the map')}</a>`;
+            return where ? `<span style="display:block; padding:6px 0; color:#E2D3EE; font-size:0.95rem;">${escapeHtml(where)}</span>` : '';
+          })()}
           ${s.email ? `<a href="mailto:${s.email}">${escapeHtml(s.email)}</a>` : ''}
           ${s.phone ? `<a href="tel:${s.phone}">${escapeHtml(s.phone)}</a>` : ''}
         </div>
@@ -1287,3 +1305,162 @@ window.addEventListener('online', () => {
 // The staff portals and the admin pages build their own top bar rather than
 // going through renderHeader, so the switch has to be picked up here too.
 document.addEventListener('DOMContentLoaded', wireThemeToggle);
+
+
+// ---------- show / hide for every password box ----------
+// A password typed on a phone is easy to get wrong, and a wrong one means a leader
+// locked out on a Sunday. Every password field, on every page, gets an eye
+// button that shows or hides it. It is added here rather than page by page so that no sign-in form, now
+// or later, can be left without one: pages that build their forms after they load
+// (the portals' modals) are picked up as they appear.
+//
+// The password goes back to hidden when the form is sent and whenever the page is
+// put in the background, so one that was shown to check a typing mistake is not
+// left on a screen somebody walks past.
+(function () {
+  const marked = new WeakSet();
+
+  // An open eye offers to show the password; a crossed-out eye offers to hide it.
+  // The picture is decoration: what the button does is in its label, which a
+  // screen reader reads and a mouse shows as a tooltip.
+  const EYE = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF = '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.1A10.7 10.7 0 0 1 12 5c6.4 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.1"/><path d="M6.6 6.6C3.8 8.4 2 12 2 12s3.6 7 10 7a9.8 9.8 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M3 3l18 18"/></svg>';
+
+  function setShown(input, button, shown) {
+    input.type = shown ? 'text' : 'password';
+    button.innerHTML = shown ? EYE_OFF : EYE;
+    const label = shown ? 'Hide password' : 'Show password';
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    button.setAttribute('data-shown', shown ? 'true' : 'false');
+  }
+
+  function enhance(input) {
+    if (marked.has(input) || !input.parentNode) return;
+    marked.add(input);
+    const wrap = document.createElement('span');
+    wrap.className = 'pw-wrap';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'pw-toggle';
+    wrap.appendChild(button);
+    setShown(input, button, false);
+    button.addEventListener('click', () => setShown(input, button, input.type === 'password'));
+    input.dataset.pwToggle = 'on';
+    if (input.form && !input.form.dataset.pwHide) {
+      input.form.dataset.pwHide = 'on';
+      input.form.addEventListener('submit', () => hideAll(input.form));
+    }
+  }
+
+  function hideAll(root) {
+    (root || document).querySelectorAll('.pw-wrap').forEach(wrap => {
+      const input = wrap.querySelector('input');
+      const button = wrap.querySelector('.pw-toggle');
+      if (input && button && input.type === 'text') setShown(input, button, false);
+    });
+  }
+
+  function scan() {
+    document.querySelectorAll('input[type="password"]:not([data-pw-toggle])').forEach(enhance);
+  }
+
+  function start() {
+    scan();
+    let queued = false;
+    new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; scan(); });
+    }).observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) hideAll(); });
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+
+// ---------- maps: where to find a place ----------
+// A chapter's meeting place, an event, a department or a group can carry a map
+// link (usually the Share link from Google Maps). Wherever the place is named it
+// gets two things:
+//   "Open in Maps": the link as the chapter gave it. On a phone it opens the
+//   maps app, which is where directions are.
+//   "Show the map here": the map inside the page. It loads only when asked for,
+//   because the map comes from Google (which then sees the visit) and is heavy
+//   on a phone's data. Nothing goes to Google until the button is pressed.
+// The server has already checked the link and worked out the spot (lib/maps.js);
+// it is checked again here, so a page never links or frames anything else.
+const MAP_HOST = /^(maps\.app\.goo\.gl|goo\.gl|maps\.google\.[a-z.]{2,8}|(www\.)?google\.[a-z.]{2,8}|maps\.apple\.com|(www\.)?openstreetmap\.org|osm\.org)$/i;
+function safeMapUrl(url) {
+  try {
+    const u = new URL(String(url || ''));
+    return u.protocol === 'https:' && MAP_HOST.test(u.hostname) ? u.toString() : '';
+  } catch (e) { return ''; }
+}
+
+// What goes in the frame: Google's own embed link when the chapter pasted one,
+// otherwise the spot (or the place's name) on Google's map.
+function mapEmbedSrc(place, fallbackQuery) {
+  const p = place || {};
+  if (p.embed && /^https:\/\/(www|maps)\.google\.com\/maps\/embed\?/.test(p.embed)) return p.embed;
+  const at = (Number.isFinite(p.lat) && Number.isFinite(p.lng)) ? `${p.lat},${p.lng}`
+    : (p.query || fallbackQuery || '').trim();
+  return at ? `https://www.google.com/maps?q=${encodeURIComponent(at)}&z=17&output=embed` : '';
+}
+
+// The buttons for one place, or '' when there is nothing to show. `fallbackQuery`
+// (the place's name and address) is used only for a chapter's own meeting place,
+// which has an address to search for; a bare room name for an event could
+// find the wrong building.
+let mapBlockCount = 0;
+function mapBlockHtml({ url, place, label, fallbackQuery }) {
+  const link = safeMapUrl(url)
+    || (fallbackQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackQuery)}` : '');
+  if (!link) return '';
+  const src = mapEmbedSrc(place, fallbackQuery);
+  const id = `mapFrame${++mapBlockCount}`;
+  const name = label || 'the place';
+  return `
+    <div class="map-block">
+      <div class="map-actions">
+        <a class="btn btn-outline" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${svgIcon(ICON_PIN)}<span>Open in Maps</span></a>
+        ${src ? `<button type="button" class="btn btn-outline" data-map-src="${escapeHtml(src)}" data-map-title="${escapeHtml(`Map showing ${name}`)}" aria-expanded="false" aria-controls="${id}">Show the map here</button>` : ''}
+      </div>
+      ${src ? `<div class="map-frame" id="${id}" hidden></div>` : ''}
+    </div>`;
+}
+
+// The box for a map link, next to every place a location is typed. Plain text
+// rather than type="url", so a pasted "Embed a map" snippet is accepted too;
+// the server checks it either way.
+function mapLinkFieldHtml(id, value, label) {
+  return `<div class="field"><label for="${id}">${escapeHtml(label || 'Map link (optional)')}</label>
+    <input type="text" id="${id}" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="${escapeHtml(value || '')}" placeholder="https://maps.app.goo.gl/..." aria-describedby="${id}Hint">
+    <small class="hint" id="${id}Hint">In Google Maps, find the place, press Share, then Copy link, and paste it here. People can then open it in their maps app or see the map in the app.</small></div>`;
+}
+
+document.addEventListener('click', (e) => {
+  const button = e.target.closest && e.target.closest('[data-map-src]');
+  if (!button) return;
+  const frame = document.getElementById(button.getAttribute('aria-controls'));
+  if (!frame) return;
+  const open = button.getAttribute('aria-expanded') !== 'true';
+  if (open && !frame.querySelector('iframe')) {
+    const iframe = document.createElement('iframe');
+    iframe.src = button.dataset.mapSrc;
+    iframe.title = button.dataset.mapTitle || 'Map';
+    iframe.loading = 'lazy';
+    iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+    iframe.allowFullscreen = true;
+    const note = document.createElement('p');
+    note.className = 'map-note';
+    note.textContent = 'Map from Google Maps, shown because you asked for it.';
+    frame.append(iframe, note);
+  }
+  frame.hidden = !open;
+  button.setAttribute('aria-expanded', open ? 'true' : 'false');
+  button.textContent = open ? 'Hide the map' : 'Show the map here';
+});

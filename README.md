@@ -137,11 +137,22 @@ aconsu-app/
     sms.js                 SMS sending via mNotify + audience resolution
     mailer.js              SMTP email sending (password reset, office alerts)
     imageProcess.js        Automatic image resize/compression on upload
+    maps.js                Map links: which are accepted, and the spot each points at (section 27)
+    globalMove.js          The one-time move of Global Settings into ACONSU-KNUST (docs/offices.md)
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
   migrate-multichapter.js One-time migration to the multi-chapter model — see section 20
   capacitor.config.json    Native app (iOS/Android) wrapper config
   test/
     smoke.js               End-to-end test of the portals (`npm test`)
+    offices.js             The executive offices' workflows: outline, budgets, minutes, hand-over (`npm test`)
+    offices-ui.js          The same screens in a real browser (`node test/offices-ui.js`, needs Playwright)
+    account.js             My Account and changing a password (`npm test`)
+    account-ui.js          Show / Hide on password boxes and the My Account page, in a browser (needs Playwright)
+    chapter-look.js        A chapter's look, events, members and accounts change only when it asks (`npm test`)
+    chapter-look-ui.js     The same, in a browser (needs Playwright)
+    visit-ui.js            The home page and Plan your visit for a first-time visitor, and its map (needs Playwright)
+    maps.js                Map links: the rules, every way of saving one, following a short link (`npm test`)
+    global.js              Global Settings moved to ACONSU-KNUST once; chapters show only their own (`npm test`)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
@@ -166,6 +177,8 @@ aconsu-app/
     js/publicity.js         Publicity portal (announcements, SMS, testimonies)
     images/logo.jpg         ACONSU logo
 ```
+
+The executive offices (President, Vice President, the secretariat, Financial Secretary, Alumni President), their logins (`president.knust`, starting password `president123`, changed at the first sign-in), how an office is handed over, why the main admin changes a chapter's look, events, members and accounts only when the chapter asks, and why Global Settings are the national app's alone are described in [docs/offices.md](docs/offices.md).
 
 Run `npm test` to check the portals still behave after a change — it boots the real
 app against an in-memory database and exercises every portal route, permission rule
@@ -671,3 +684,20 @@ Phase 9 polishes the ACONSU platform into a smooth, responsive, native-feeling m
   - **Native Web Share API**: `shareContent()` provides one-tap sharing for events, sermons, scriptures, and testimonies with automatic clipboard copy fallback.
   - **Live Online / Offline Detection**: Real-time listeners automatically notify the user with non-intrusive toast indicators when connectivity drops (`📡 You are currently offline`) and resumes (`⚡ Back online!`).
 
+## 27. Map links: where to find us
+
+Wherever a place is typed (a chapter's meeting place, an event's location, where a department or a group meets, a group's meeting log) there is a **Map link** box beside it. Paste the Share link from Google Maps (find the place, press Share, then Copy link). Apple Maps and OpenStreetMap links work too, and so does Google's "Embed a map" snippet, which gives the exact pin.
+
+Wherever the place is shown, people then get:
+
+- **Open in Maps**: the link as the chapter gave it. On a phone it opens the maps app, where directions are.
+- **Show the map here**: the map inside the app. It loads only when pressed, so Google sees nothing and no data is used until someone asks for it (the privacy and cookies pages say so).
+
+ACONSU-KNUST starts from the link its website already uses (`site/chapter.js`, the "Open in Maps" for the Acci Ayeduase Auditorium), so the website and the app point at the same hall. That is filled in at start-up only where the chapter has left the box blank; a chapter's own link is never replaced.
+
+How it works (`lib/maps.js`, `checkMapLink` in `server.js`):
+
+- Every save that carries `mapUrl`, by any route, as JSON, a plain form or alongside an upload, is checked once on the server: only a map service's own `https` address is kept, anything else is refused with a reason shown beside the box.
+- The spot the app draws (`mapPlace`) is worked out on the server from the link and never taken from the request.
+- A short share link (`maps.app.goo.gl/...`) does not say where it points, so the server follows it in the background, one redirect at a time and only while every hop stays on a map service. Until then the page offers the link (and, for a chapter's meeting place, a map searched by its name and address). Set `MAP_LINK_RESOLVE=off` to stop the server following links (the tests do).
+- The page checks the link again before linking or framing it, and the content security policy lets a frame load only from Google.

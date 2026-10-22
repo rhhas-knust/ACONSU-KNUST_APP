@@ -228,6 +228,7 @@ initPortal({
   panels: [
     { key: 'discussion', label: 'Discussion', render: renderCouncilDiscussion },
     { key: 'meeting', label: 'The Meeting', render: renderCouncilMeeting },
-    { key: 'roster', label: 'Who Sits Here', render: renderCouncilRoster }
+    { key: 'roster', label: 'Who Sits Here', render: renderCouncilRoster },
+    { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });
