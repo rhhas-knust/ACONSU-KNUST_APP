@@ -32,6 +32,7 @@ const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
+const officeAccounts = require('./lib/officeAccounts');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
@@ -432,9 +433,16 @@ function isSessionRevoked(staff) {
   return !!(revokedAt && (!staff.issuedAt || staff.issuedAt <= revokedAt));
 }
 
+// Signed in with a starting password (see lib/officeAccounts.js)? Then the
+// session opens only what it takes to choose a password of their own. To every
+// other route it is as if nobody were signed in, so no route has to remember to
+// check: a guessed starting password reaches nothing.
+const FIRST_PASSWORD_PATHS = new Set(['/api/portal/me', '/api/portal/account', '/api/portal/first-password', '/api/portal/logout']);
+
 function currentStaff(req) {
   const staff = (req.session && req.session.staff) || null;
   if (isTermExpired(staff) || isSessionRevoked(staff)) return null;
+  if (staff && staff.mustChangePassword && !FIRST_PASSWORD_PATHS.has(req.path)) return null;
   return staff;
 }
 
@@ -680,6 +688,13 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     if (!fitsChosenChapter(chosen, { national: user.role === 'nationalCoordinator', chapterId: user.chapterId })) {
       return res.status(403).json({ error: WRONG_CHAPTER });
     }
+    // A starting password is good for a short while only, so one nobody came
+    // to collect does not stay guessable for the rest of the year.
+    if (user.mustChangePassword && user.startingPasswordExpiresAt && new Date(user.startingPasswordExpiresAt) <= new Date()) {
+      return res.status(403).json({
+        error: 'Your starting password has expired. Ask your Chapter Coordinator to reset it, then sign in and choose your own straight away.'
+      });
+    }
 
     // An executive's position is stamped into the session at sign-in rather
     // than looked up per request: the office-portal guards are synchronous and
@@ -701,10 +716,13 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       memberId: user.memberId || '',
       positionKey,
       termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
+      // Still on the starting password: the portal shows the "choose your own"
+      // screen and nothing else until it is done (see currentStaff).
+      mustChangePassword: !!user.mustChangePassword,
       issuedAt: Date.now() // what a later revocation is measured against
     };
     models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
-    res.json({ success: true, staff: req.session.staff });
+    res.json({ success: true, staff: req.session.staff, mustChangePassword: !!user.mustChangePassword });
   } catch (e) {
     res.status(500).json({ error: 'Could not sign you in right now. Please try again.' });
   }
@@ -3412,6 +3430,7 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
 
     let account = null;
     let issuedLogin = false;
+    let issued = null; // the office's own login, shown once to be passed on
     let position = null;
     if (decision === 'approve') {
       // The position is what grants capabilities, so it is settled here - by
@@ -3447,22 +3466,29 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
           active: true, termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
         });
       } else {
-        const clean = String(username || '').toLowerCase().trim();
-        if (!clean || !password) {
+        // Left blank, the office's own login is issued (president.knust / president123).
+        const officeLogin = !username && !password
+          ? await issueOfficeLogin(member.chapterId, position, positions.requiresDepartment(position) ? String(department || '').trim() : '')
+          : null;
+        const clean = String(officeLogin ? officeLogin.username : (username || '')).toLowerCase().trim();
+        const startingPassword = officeLogin ? officeLogin.password : password;
+        if (!clean || !startingPassword) {
           return res.status(400).json({ error: 'A username and password are required to issue this executive their portal login.' });
         }
-        if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        if (String(startingPassword).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
         if (await models.StaffUser.findOne({ username: clean })) {
           return res.status(400).json({ error: 'That username is already taken' });
         }
         account = await repo.create('staffUsers', {
           username: clean, name: member.name || clean, role: 'executive',
           chapterId: member.chapterId, memberId: member.id,
-          passwordHash: await bcrypt.hash(String(password), 10), active: true,
+          passwordHash: await bcrypt.hash(String(startingPassword), 10), active: true,
           positionKey: position.key,
+          mustChangePassword: true, startingPasswordExpiresAt: officeAccounts.startingPasswordExpiry(),
           termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
         }, 'staff');
         issuedLogin = true;
+        if (officeLogin) issued = { username: clean, password: startingPassword };
       }
 
       // The public roster card, created here rather than waiting for the
@@ -3523,7 +3549,8 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
       role: updated.executiveRole,
       department: updated.executiveDepartment,
       account: account ? { id: account.id, username: account.username, termYear: account.termYear, termEndsAt: account.termEndsAt } : null,
-      issuedLogin
+      issuedLogin,
+      issued
     }});
   } catch (e) {
     res.status(500).json({ error: 'Could not update executive application' });
@@ -5225,6 +5252,30 @@ async function resolveOwnPosition(req) {
   return { record, position };
 }
 
+// The login an executive office comes with: `president.knust`, starting password
+// `president123` (lib/officeAccounts.js). An account that once held the name
+// but whose time is over (ended, handed over, disabled) is renamed out of the
+// way, so the office keeps its name and the old account stays as the record.
+async function issueOfficeLogin(chapterId, position, departmentId) {
+  const isOver = (a) => a.active === false || !!a.handedOverTo || (a.termEndsAt && new Date(a.termEndsAt) <= new Date());
+  let deptSlug = '';
+  if (departmentId) {
+    const dept = await models.Department.findOne({ id: departmentId, chapterId }).lean();
+    deptSlug = dept ? String(dept.name || '').toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  }
+  const candidates = [officeAccounts.usernameFor(position.key, chapterId), ...officeAccounts.fallbackUsernames(position.key, chapterId, deptSlug)];
+  for (const username of candidates) {
+    const holder = await models.StaffUser.findOne({ username }).lean();
+    if (!holder) return { username, password: officeAccounts.startingPasswordFor(position.key) };
+    if (holder.chapterId === chapterId && holder.role === 'executive' && isOver(holder)) {
+      const stamp = String(holder.termYear || new Date().getFullYear()).replace(/[^0-9]/g, '') || 'old';
+      await repo.patchById('staffUsers', holder.id, { username: `${username}.ended.${stamp}.${String(holder.id).slice(-4)}` });
+      return { username, password: officeAccounts.startingPasswordFor(position.key) };
+    }
+  }
+  throw new Error('No free username for this office');
+}
+
 // The chapter's officers are single seats: one President, one Treasurer, and so
 // on. A seat is HELD while its roster card points at an account that is still
 // active and inside its term. This answers who holds it now, ignoring the
@@ -5696,7 +5747,7 @@ registerOfficeRoutes(app, {
 registerOfficeHolderRoutes(app, {
   repo, models, rolesLib, positions, requireRole, requireCapability, actorName, bcrypt,
   academicYearEndsAt, currentAcademicYearLabel, revokeStaffSessions, logMilestone,
-  officeAppointmentProblem
+  officeAppointmentProblem, issueOfficeLogin, officeAccounts
 });
 registerAccountRoutes(app, { repo, models, bcrypt, rolesLib, positions, currentStaff, rememberRevocation });
 
@@ -7008,12 +7059,17 @@ app.get('/api/admin/staff', requireChapterAdmin, async (req, res) => {
 });
 
 app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
-  const { username, name, role, password } = req.body;
-  if (!username || !role || !password) {
+  let { username, password } = req.body;
+  const { name, role } = req.body;
+  // An executive office comes with its own login (president.knust / president123),
+  // so for an executive the username and password may be left out and are made
+  // here, once the office and chapter are known. Every other role names its own.
+  const officeLogin = role === 'executive' && !username && !password;
+  if (!role || (!officeLogin && (!username || !password))) {
     return res.status(400).json({ error: 'Username, role and password are required' });
   }
   if (!PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!officeLogin && password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   const scope = rolesLib.getActingScope(req);
   if (NATIONAL_ONLY_ROLES.includes(role) && !scope.isNational) {
     return res.status(403).json({ error: 'Only the National Coordinator can assign this role.' });
@@ -7089,13 +7145,17 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
       const chapter = await repo.getById('chapters', chapterId);
       if (!chapter) return res.status(400).json({ error: 'Unknown chapter' });
     }
+    if (officeLogin) ({ username, password } = await issueOfficeLogin(chapterId, position, executiveDepartment));
     const clean = String(username).toLowerCase().trim();
     const existing = await models.StaffUser.findOne({ username: clean });
     if (existing) return res.status(400).json({ error: 'That username is already taken' });
     const user = await repo.create('staffUsers', {
-      username: clean, name: name || clean, role, chapterId, memberId,
+      username: clean, name: name || (promotedMember && promotedMember.name) || clean, role, chapterId, memberId,
       passwordHash: await bcrypt.hash(password, 10), active: true,
       ...(role === 'executive' && position ? { positionKey: position.key } : {}),
+      // Whoever is appointed chooses their own password the first time they
+      // sign in; the one they were given is somebody else's choice.
+      ...(role === 'executive' ? { mustChangePassword: true, startingPasswordExpiresAt: officeAccounts.startingPasswordExpiry() } : {}),
       ...(role === 'executive' ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {})
     }, 'staff');
     // The public roster card is created here rather than waiting for the new
@@ -7127,7 +7187,9 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
       });
     }
     const { passwordHash, ...safe } = user;
-    res.json({ success: true, item: safe });
+    // The office login is shown once, to be passed on. It works only until its
+    // holder has chosen their own password.
+    res.json({ success: true, item: safe, ...(officeLogin ? { issued: { username: clean, password } } : {}) });
   } catch (e) {
     res.status(500).json({ error: 'Could not create this account' });
   }
@@ -7176,6 +7238,8 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
       // A password someone else chose is a starting password again, until its
       // owner changes it (see routes/account.js).
       ...(password ? { passwordChangedAt: null } : {}),
+      ...(password && (role || existing.role) === 'executive'
+        ? { mustChangePassword: true, startingPasswordExpiresAt: officeAccounts.startingPasswordExpiry() } : {}),
       ...(renewTerm ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {}),
       ...(endTerm ? { termEndsAt: new Date() } : {})
     });

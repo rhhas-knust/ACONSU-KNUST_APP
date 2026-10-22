@@ -190,8 +190,79 @@ async function openPanel(key) {
   }
 }
 
+// The first sign-in with a starting password (president123 and the like). The
+// portal shows this one screen and nothing else until the person has chosen a
+// password of their own: the server would refuse everything else anyway.
+async function showFirstPassword() {
+  const wrap = document.getElementById('portalLoginWrap');
+  document.getElementById('portalShell').style.display = 'none';
+  wrap.style.display = 'flex';
+  const loginForm = document.getElementById('portalLoginForm');
+  if (loginForm) loginForm.style.display = 'none';
+  let account = {};
+  try { account = await fetchJSON('/api/portal/account'); } catch (e) { account = {}; }
+  const who = PORTAL.user || {};
+  let form = document.getElementById('firstPwForm');
+  if (!form) {
+    form = document.createElement('form');
+    form.id = 'firstPwForm';
+    form.className = 'portal-login-card';
+    form.noValidate = true;
+    wrap.appendChild(form);
+  }
+  form.innerHTML = `
+    <img class="mark" src="/images/logo.jpg" alt="ACONSU">
+    <h1>Choose your own password</h1>
+    <p class="sub">Welcome, ${escapeHtml(account.name || who.name || '')}. You signed in with the starting password${account.office ? ` for ${escapeHtml(account.office)}` : ''}. It follows a pattern others could guess, so before you go on, choose a password only you know.</p>
+    ${account.hasMemberEmail ? `
+    <div class="field">
+      <label for="fpEmail">The email on your member profile</label>
+      <input type="email" id="fpEmail" autocomplete="email" required aria-describedby="fpEmailHint">
+      <small class="hint" id="fpEmailHint">So we know it is really you who was appointed.</small>
+    </div>` : ''}
+    <div class="field">
+      <label for="fpNew">Your new password</label>
+      <input type="password" id="fpNew" autocomplete="new-password" required aria-describedby="fpNewHint">
+      <small class="hint" id="fpNewHint">At least 8 characters. A short phrase you will remember works well. Very common passwords are turned away.</small>
+    </div>
+    <div class="field">
+      <label for="fpAgain">Type it again</label>
+      <input type="password" id="fpAgain" autocomplete="new-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block">Save and continue</button>
+    <div class="form-msg" id="fpMsg" role="alert"></div>
+    <p class="tiny muted" style="text-align:center; margin-top:16px;">Not you? <button type="button" class="link-btn" id="fpSignOut">Sign out</button></p>`;
+  const msg = (text) => setFormMsg('fpMsg', text, 'error');
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const next = form.querySelector('#fpNew').value;
+    if (next !== form.querySelector('#fpAgain').value) return msg('The two passwords do not match.');
+    const button = form.querySelector('[type="submit"]');
+    button.disabled = true;
+    try {
+      const emailInput = form.querySelector('#fpEmail');
+      await fetchJSON('/api/portal/first-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput ? emailInput.value : '', newPassword: next })
+      });
+      showToast('Your password is set. Welcome.', 'success');
+      window.location.reload();
+    } catch (err) {
+      msg(err.message || 'Could not save your password.');
+      button.disabled = false;
+    }
+  };
+  form.querySelector('#fpSignOut').onclick = async () => {
+    await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
+    window.location.reload();
+  };
+  const first = form.querySelector('input');
+  if (first) first.focus();
+}
+
 async function showPortalOrLogin() {
   const allowed = await refreshPortalSession();
+  if (PORTAL.user && PORTAL.user.mustChangePassword) return showFirstPassword();
   document.getElementById('portalLoginWrap').style.display = allowed ? 'none' : 'flex';
   document.getElementById('portalShell').style.display = allowed ? 'block' : 'none';
   if (allowed) {

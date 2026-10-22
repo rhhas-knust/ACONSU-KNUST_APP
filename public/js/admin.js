@@ -1757,17 +1757,9 @@ async function renderExecutives() {
   function approveExecutiveForm(memberIdToApprove, name) {
     showModal(`
       <h3>Approve ${escapeHtml(name || 'this executive')}</h3>
-      <p class="hint">This promotes them, creates their public roster card and issues their portal login for the current academic year. Their term ends with the academic year and can be renewed.</p>
+      <p class="hint">This promotes them, creates their public roster card and issues the office's own login for the current academic year (for example <code>president.knust</code>, starting password <code>president123</code>). They choose their own password the first time they sign in. Their term ends with the academic year and can be renewed.</p>
       <form id="approveExecForm">
-        <div class="field"><label>Username</label>
-          <input type="text" id="apUsername" autocomplete="off" required>
-          <small class="hint">They sign in with this. Lowercase, no spaces.</small>
-        </div>
-        <div class="field"><label>Password</label>
-          <input type="password" id="apPassword" minlength="8" autocomplete="new-password" required>
-          <small class="hint">At least 8 characters. Share it with them directly.</small>
-        </div>
-        <div class="field"><label>Position</label>
+        <div class="field"><label for="apPosition">Position</label>
           <select id="apPosition" required>
             <option value="">Choose the position they are approved into</option>
             ${positionOptions('')}
@@ -1793,19 +1785,28 @@ async function renderExecutives() {
     document.getElementById('approveExecForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       try {
-        await fetchJSON(`/api/admin/executive-applications/${memberIdToApprove}`, {
+        const out = await fetchJSON(`/api/admin/executive-applications/${memberIdToApprove}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             decision: 'approve',
-            username: document.getElementById('apUsername').value,
-            password: document.getElementById('apPassword').value,
             positionKey: document.getElementById('apPosition').value,
             department: document.getElementById('apDepartment').value
           })
         });
-        closeModal();
-        showToast('Executive approved, login issued and roster card created.', 'success');
-        renderExecutives();
+        const issued = out && out.item && out.item.issued;
+        if (issued) {
+          document.getElementById('modalContent').innerHTML = `
+            <h3>${escapeHtml(name || 'They')} can now sign in</h3>
+            <p>Give them these. On the Executive Portal they sign in with them once, and must then choose their own password.</p>
+            <p><strong>Username:</strong> <code>${escapeHtml(issued.username)}</code><br><strong>Starting password:</strong> <code>${escapeHtml(issued.password)}</code></p>
+            <p class="hint">The starting password stops working after 14 days if it is not used.</p>
+            <div style="display:flex; gap:10px; margin-top:18px;"><button type="button" class="btn btn-primary" id="issuedDone">Done</button></div>`;
+          document.getElementById('issuedDone').addEventListener('click', () => { closeModal(); renderExecutives(); });
+        } else {
+          closeModal();
+          showToast('Executive approved. Their existing login was renewed for this year.', 'success');
+          renderExecutives();
+        }
       } catch (err) {
         setFormMsg('approveExecMsg', err.message || 'Could not approve this executive.', 'error');
       }

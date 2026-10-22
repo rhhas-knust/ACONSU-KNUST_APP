@@ -41,7 +41,15 @@ const { fakeModels } = require('./harness.js');
     if (cond) console.log(`  ok   ${label}`);
     else { failures++; console.log(`  FAIL ${label}${detail ? ` - ${JSON.stringify(detail).slice(0, 300)}` : ''}`); }
   }
-  const login = (jar, username, password) => call(jar, 'POST', '/api/portal/login', { username, password });
+  // Accounts made for the password-change checks below are taken as past their
+  // first sign-in. The first sign-in itself is tested on its own further down,
+  // on the accounts named in `firstSignIn`.
+  const firstSignIn = new Set();
+  const login = (jar, username, password) => {
+    const doc = fakeModels.StaffUser._docs.find(a => a.username === username);
+    if (doc && !firstSignIn.has(username)) doc.mustChangePassword = false;
+    return call(jar, 'POST', '/api/portal/login', { username, password });
+  };
 
   console.log('\n== setting up ==');
   await call('admin', 'POST', '/api/admin/login', { username: 'admin', password: 'admin123' });
@@ -157,6 +165,94 @@ const { fakeModels } = require('./harness.js');
   r = await login('afterReset', 'exec.pres', 'Reset-By-Coordinator-1');
   r = await call('afterReset', 'GET', '/api/portal/account');
   check('and it counts as a starting password again, until its owner changes it', r.data.usingStartingPassword === true && r.data.passwordChangedAt === null, r.data);
+
+  console.log('\n== an executive office comes with its own login ==');
+  await call('coord', 'POST', '/api/portal/login', { username: 'coord.one', password: 'Start-Pass-1' });
+  const vpMember = await member('Efua Vice');
+  r = await call('admin', 'POST', '/api/admin/staff', { role: 'executive', positionKey: 'vice_president', memberId: vpMember, chapterId: C });
+  check('appointing an executive without a username or password issues the office\'s own login',
+    r.status === 200 && r.data.issued && r.data.issued.username === 'vicepresident.knust' && r.data.issued.password === 'vicepresident123', r.data);
+  check('named after the member', r.data.item && r.data.item.name === 'Efua Vice', r.data.item);
+  const vp = fakeModels.StaffUser._docs.find(a => a.username === 'vicepresident.knust');
+  check('and it must be changed at the first sign-in, within 14 days', vp.mustChangePassword === true && new Date(vp.startingPasswordExpiresAt) > new Date(Date.now() + 13 * 86400000), vp);
+  firstSignIn.add('vicepresident.knust');
+  r = await login('vp', 'vicepresident.knust', 'vicepresident123');
+  check('the Vice President signs in with the starting password', r.status === 200 && r.data.mustChangePassword === true, r.data);
+  r = await call('vp', 'GET', '/api/portal/me');
+  check('the portal is told a password must be chosen first', r.status === 200 && r.data.staff && r.data.staff.mustChangePassword === true, r.data);
+  for (const [m, path, body] of [['GET', '/api/executive/me'], ['GET', '/api/executive/chapter/finance'], ['GET', '/api/executive/minutes'], ['POST', '/api/portal/password', { currentPassword: 'vicepresident123', newPassword: 'Any Good Phrase 1' }], ['POST', '/api/portal/sign-out-others']]) {
+    r = await call('vp', m, path, body);
+    check(`with only the starting password, ${m} ${path} stays shut`, r.status === 401, r);
+  }
+  r = await call('vp', 'GET', '/api/portal/account');
+  check('it may see its own account, to be greeted by office', r.status === 200 && r.data.office === 'Vice President' && r.data.mustChangePassword === true && r.data.hasMemberEmail === true, r.data);
+  const firstPw = (jar, email, newPassword) => call(jar, 'POST', '/api/portal/first-password', { email, newPassword });
+  r = await firstPw('vp', '', 'Steady Hands 2026');
+  check('choosing a password asks for the email on the member profile', r.status === 400 && /email/.test(r.data.error), r.data);
+  r = await firstPw('vp', 'someone.else@test.com', 'Steady Hands 2026');
+  check('and refuses someone else\'s', r.status === 400 && /not the email/.test(r.data.error), r.data);
+  const vpEmail = fakeModels.Member._docs.find(m => m.id === vpMember).email;
+  r = await firstPw('vp', vpEmail.toUpperCase(), 'vicepresident123');
+  check('the starting password cannot be kept', r.status === 400 && /starting password/.test(r.data.error), r.data);
+  r = await firstPw('vp', vpEmail, 'password123');
+  check('a very common one is turned away', r.status === 400, r.data);
+  r = await firstPw('vp', ' ' + vpEmail.toUpperCase() + ' ', 'Steady Hands 2026');
+  check('with the right email (in any case) and a good password it is saved', r.status === 200, r.data);
+  r = await call('vp', 'GET', '/api/executive/me');
+  check('and the same session now opens the portal', r.status === 200 && r.data.position.key === 'vice_president', r);
+  r = await firstPw('vp', vpEmail, 'Another Phrase 99');
+  check('the first-sign-in step cannot be used again', r.status === 400, r.data);
+  check('the starting password no longer signs in', (await login('vpOld', 'vicepresident.knust', 'vicepresident123')).status === 401);
+  check('the chosen one does, straight into the portal', (await login('vpNew', 'vicepresident.knust', 'Steady Hands 2026')).data.mustChangePassword === false);
+  const vpAfter = fakeModels.StaffUser._docs.find(a => a.username === 'vicepresident.knust');
+  check('and the account now records a password of its own', vpAfter.mustChangePassword === false && !!vpAfter.passwordChangedAt && vpAfter.startingPasswordExpiresAt === null, vpAfter);
+
+  console.log('\n== every chapter has its own office logins ==');
+  await call('admin', 'POST', '/api/national/chapters', { id: 'ucc', name: 'ACONSU-UCC', institution: 'UCC' });
+  await call('admin', 'POST', '/api/national/chapters', { id: 'aconsu-knust', name: 'ACONSU KNUST Annex', institution: 'KNUST Annex' });
+  const memberIn = async (name, chapterId) => {
+    counter += 1;
+    const fd = new FormData();
+    fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+    fd.append('name', name); fd.append('email', `acct${counter}@test.com`);
+    fd.append('password', 'secret123'); fd.append('chapterId', chapterId);
+    return (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fd })).json()).member.id;
+  };
+  r = await call('admin', 'POST', '/api/admin/staff', { role: 'executive', positionKey: 'vice_president', memberId: await memberIn('UCC Vice', 'ucc'), chapterId: 'ucc' });
+  check('another chapter\'s Vice President gets a login of their own chapter', r.status === 200 && r.data.issued.username === 'vicepresident.ucc', r.data);
+  r = await call('admin', 'POST', '/api/admin/staff', { role: 'executive', positionKey: 'vice_president', memberId: await memberIn('Annex Vice', 'aconsu-knust'), chapterId: 'aconsu-knust' });
+  check('two chapters whose short names match never share a login', r.status === 200 && r.data.issued.username !== 'vicepresident.knust' && /^vicepresident\./.test(r.data.issued.username), r.data);
+  firstSignIn.add('vicepresident.ucc');
+  r = await login('uccVp', 'vicepresident.ucc', 'vicepresident123');
+  r = await call('uccVp', 'POST', '/api/portal/first-password', { email: vpEmail, newPassword: 'Steady Hands 2026' });
+  check('nor can one chapter\'s office holder finish another\'s first sign-in with their own email', r.status === 400, r.data);
+
+  console.log('\n== an unclaimed starting password expires ==');
+  const uccVp = fakeModels.StaffUser._docs.find(a => a.username === 'vicepresident.ucc');
+  uccVp.startingPasswordExpiresAt = new Date(Date.now() - 1000).toISOString();
+  r = await login('uccLate', 'vicepresident.ucc', 'vicepresident123');
+  check('once its 14 days are up it no longer signs in, and says to ask for a reset', r.status === 403 && /expired/.test(r.data.error), r.data);
+
+  console.log('\n== the Coordinator puts the starting password back ==');
+  r = await call('coord', 'GET', '/api/coordinator/offices');
+  const vpRow = r.data.items.find(o => o.key === 'vice_president');
+  check('Key offices shows who has chosen a password and who has not', vpRow.holder.awaitingFirstSignIn === false, vpRow.holder);
+  r = await call('coord', 'POST', '/api/coordinator/offices/reset-password', { staffId: vpAfter.id });
+  check('the Coordinator resets the Vice President to the starting password', r.status === 200 && r.data.issued.username === 'vicepresident.knust' && r.data.issued.password === 'vicepresident123', r.data);
+  check('which signs out the Vice President everywhere', (await call('vpNew', 'GET', '/api/executive/me')).status === 401);
+  check('and their own password stops working', (await login('vpX', 'vicepresident.knust', 'Steady Hands 2026')).status === 401);
+  r = await login('vpBack', 'vicepresident.knust', 'vicepresident123');
+  check('the starting password works again, for choosing a new one only', r.status === 200 && r.data.mustChangePassword === true, r.data);
+  r = await call('coord', 'GET', '/api/coordinator/offices');
+  check('and Key offices shows they have not chosen one yet', r.data.items.find(o => o.key === 'vice_president').holder.awaitingFirstSignIn === true);
+  r = await call('coord', 'POST', '/api/coordinator/offices/reset-password', { staffId: uccVp.id });
+  check('a Coordinator cannot reset another chapter\'s office', r.status === 404, r.data);
+  r = await call('fin', 'POST', '/api/coordinator/offices/reset-password', { staffId: vpAfter.id });
+  check('nor can anyone but the Coordinator', r.status === 401 || r.status === 403, r);
+  r = await call('admin', 'PUT', `/api/admin/staff/${pres.id}`, { password: 'Reset-By-Coordinator-2' });
+  const presAfter = fakeModels.StaffUser._docs.find(a => a.id === pres.id);
+  check('a password set for an executive by someone else must also be changed at the next sign-in', presAfter.mustChangePassword === true, presAfter);
+  presAfter.mustChangePassword = false; // back to how the next section expects it
 
   console.log('\n== guessing the current password ==');
   let limited = null;

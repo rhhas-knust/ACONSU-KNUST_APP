@@ -29,6 +29,14 @@ const { fakeModels } = require('./harness.js');
   const jars = {};
   async function call(jar, method, path, body, isForm) {
     const headers = {};
+    // Executive accounts start on a starting password that must be replaced at
+    // the first sign-in (see lib/officeAccounts.js). These suites exercise the
+    // accounts for other things, so that first step is taken as done here; it
+    // has its own tests in test/account.js.
+    if (method === 'POST' && path === '/api/portal/login' && body && body.username) {
+      const pending = fakeModels.StaffUser._docs.find(a => a.username === String(body.username).toLowerCase().trim());
+      if (pending) pending.mustChangePassword = false;
+    }
     if (jars[jar]) headers.cookie = jars[jar];
     let payload;
     if (body && !isForm) { headers['content-type'] = 'application/json'; payload = JSON.stringify(body); } else if (body) payload = body;
@@ -754,6 +762,20 @@ const { fakeModels } = require('./harness.js');
   check('and the budget the office sent in', r.data.items[0].submission && r.data.items[0].submission.status === 'approved', r.data);
   r = await call('choir', 'GET', '/api/executive/budget-requests');
   check('while the outgoing head sees nothing', denied(r), r);
+
+  // Without a username and password, the office's own login is issued, and it
+  // passes from one holder to the next.
+  const thirdPres = await registerMember('Kojo Third President', C1);
+  r = await handover({ positionKey: 'president', memberId: thirdPres });
+  check('a hand-over with no username or password issues the office\'s own login',
+    r.status === 200 && r.data.issued && r.data.issued.username === 'president.knust' && r.data.issued.password === 'president123', r.data);
+  check('which must be changed at the first sign-in', fakeModels.StaffUser._docs.find(a => a.id === r.data.item.id).mustChangePassword === true);
+  const thirdId = r.data.item.id;
+  const fourthPres = await registerMember('Esi Fourth President', C1);
+  r = await handover({ positionKey: 'president', memberId: fourthPres });
+  check('the next hand-over gives the same office login to the next holder', r.status === 200 && r.data.issued.username === 'president.knust', r.data);
+  const archived = fakeModels.StaffUser._docs.find(a => a.id === thirdId);
+  check('and the previous holder\'s account is kept under an archived name', /^president\.knust\.ended\./.test(archived.username) && archived.handedOverTo === r.data.item.id, archived);
 
   // Filling a seat nobody holds.
   const orgMember = await registerMember('Efo Organiser', C1);

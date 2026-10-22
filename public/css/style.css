@@ -1128,12 +1128,15 @@ body {
 /* The page title in a portal's top bar is for screen readers; on the purple bar it still has to be a readable colour. */
 .portal-topbar h1, .admin-topbar h1 { color: #fff; }
 
-/* ---------- show / hide on password boxes (see main.js) ---------- */
+/* ---------- show / hide on password boxes: the eye button (see main.js) ---------- */
 .pw-wrap { position: relative; display: block; }
-.pw-wrap > input { padding-right: 84px; min-height: 44px; }
+.pw-wrap > input { padding-right: 56px; min-height: 44px; }
 .pw-toggle {
-  position: absolute; top: 0; right: 0; bottom: 0; min-width: 76px; min-height: 44px;
-  border: 1.5px solid var(--line); border-radius: 0 10px 10px 0; background: var(--lilac-light);
-  color: var(--brand-strong); font-family: var(--font-body); font-size: 0.85rem; font-weight: 700; cursor: pointer;
+  position: absolute; top: 0; right: 0; bottom: 0; width: 48px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  border: none; border-radius: 0 10px 10px 0; background: transparent;
+  color: var(--ink-soft); cursor: pointer;
 }
-.pw-toggle:hover { background: var(--lilac-mid); }
+.pw-toggle:hover { color: var(--brand); background: var(--lilac-light); }
+.pw-toggle[data-shown="true"] { color: var(--brand); }
+.pw-toggle svg { display: block; }

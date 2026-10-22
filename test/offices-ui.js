@@ -21,7 +21,7 @@ let failures = 0;
 const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') + label + (ok || detail === undefined ? '' : ' - ' + JSON.stringify(detail).slice(0, 300))); if (!ok) failures++; };
 
 (async () => {
-  require(path.join(ROOT, 'test', 'harness.js'));
+  const { fakeModels } = require(path.join(ROOT, 'test', 'harness.js'));
   Object.assign(process.env, { MONGODB_URI: 'mongodb://stub/offices-ui', PORT: '4472', ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin123', SESSION_SECRET: 't', LOGIN_RATE_LIMIT_MAX: '900' });
   require(path.join(ROOT, 'server.js'));
   await new Promise(r => setTimeout(r, 1500));
@@ -50,6 +50,8 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await staff('fs', 'Kojo FinSec', 'executive', { positionKey: 'financial_secretary' });
   await staff('choir', 'Ama Choir', 'executive', { positionKey: 'music_director', department: dept.Choir });
   const successor = await member('Kwesi Successor');
+  // These accounts are past their first sign-in; that screen has its own test in account-ui.js.
+  fakeModels.StaffUser._docs.forEach(a => { a.mustChangePassword = false; });
 
   const browser = await chromium.launch({ executablePath: CHROME });
   const errors = [];
@@ -277,12 +279,11 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await coord.waitForSelector('#hoForm');
   await coord.fill('#hoFind', 'Kwesi');
   await coord.selectOption('#hoMember', successor);
-  await coord.click('#hoMake');
-  check((await coord.inputValue('#hoPass')).length >= 8, 'a password can be made for the new holder');
-  await coord.fill('#hoUser', 'pres.kwesi');
+  check(await coord.locator('#hoForm input[type=password]').count() === 0, 'the Coordinator does not make up a username or password: the office has its own');
   await coord.click('#hoForm button[type=submit]');
   await coord.waitForSelector('#hoDone');
-  check(/pres\.kwesi/.test(await coord.textContent('#modalContent')), 'the username and password are shown once, to pass on');
+  const issuedText = await coord.textContent('#modalContent');
+  check(/president\.knust/.test(issuedText) && /president123/.test(issuedText), 'the office login (president.knust, president123) is shown once, to pass on');
   await coord.click('#hoDone');
   const stopped = await pres.evaluate(async () => (await fetch('/api/executive/outline')).status);
   check(stopped === 401, 'the old President\'s login stops at once', stopped);

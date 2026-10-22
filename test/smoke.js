@@ -37,6 +37,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   async function call(jar, method, path, body, isForm, extraHeaders) {
     const headers = { ...(extraHeaders || {}) };
+    // Executive accounts start on a starting password that must be replaced at
+    // the first sign-in (see lib/officeAccounts.js). These suites exercise the
+    // accounts for other things, so that first step is taken as done here; it
+    // has its own tests in test/account.js.
+    if (method === 'POST' && path === '/api/portal/login' && body && body.username) {
+      const pending = fakeModels.StaffUser._docs.find(a => a.username === String(body.username).toLowerCase().trim());
+      if (pending) pending.mustChangePassword = false;
+    }
     if (jars[jar]) headers.cookie = jars[jar];
     let payload;
     if (body && !isForm) { headers['content-type'] = 'application/json'; payload = JSON.stringify(body); }
@@ -754,7 +762,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   r = await call('admin', 'GET', '/api/admin/executive-applications');
   check('executive applications are visible to admin', r.status === 200 && Array.isArray(r.data) && r.data.some(a => a.id === memberId), r.data);
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, { decision: 'approve', scope: 'chapter' });
-  check('approving without a login to issue is refused, rather than half-provisioning', r.status === 400, r.data);
+  check('approving without naming a position is refused, rather than half-provisioning', r.status === 400, r.data);
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, {
     decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password123'
   });
@@ -766,6 +774,16 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('the approved office is recorded on the member, from the position chosen',
     r.data.item.role === 'President' && !r.data.item.department, r.data.item);
   check('approval issues the portal login in the same action', r.data.item.issuedLogin === true && !!r.data.item.account.termEndsAt, r.data.item);
+  // Left without a username and password, approval issues the office's own login.
+  {
+    const outsiderId = fakeModels.Member._docs.find(m => m.email === 'outside.dept@test.com').id;
+    await call('outsider', 'POST', '/api/member/executive-interest', { role: 'Prayer Secretary', scope: 'chapter' });
+    const ap = await call('admin', 'PATCH', `/api/admin/executive-applications/${outsiderId}`, { decision: 'approve', scope: 'chapter', positionKey: 'prayer_secretary', department: deptId });
+    check('approval with no username or password issues the office\'s own login, named for the office and the chapter',
+      ap.status === 200 && ap.data.item.issued && ap.data.item.issued.username === 'prayersecretary.testchapter' && ap.data.item.issued.password === 'prayersecretary123', ap.data);
+    const acct = fakeModels.StaffUser._docs.find(a => a.username === 'prayersecretary.testchapter');
+    check('and its holder must choose their own password at the first sign-in', !!acct && acct.mustChangePassword === true, acct);
+  }
 
   // The whole point of provisioning in one action: the approved executive can
   // sign in and already has a public roster card, with nothing done by hand.

@@ -148,12 +148,14 @@ window.OfficeBodies = (function () {
     current: 'In office until the end of the year.', ending: 'Their year is about to end. Renew them or hand over.',
     ended: 'Their year has ended and they can no longer sign in. Renew them or hand over.', vacant: 'Nobody holds this office yet.'
   };
-  const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.|\.$/g, '');
-  function makePassword() {
-    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
-    const bytes = new Uint32Array(12);
-    (window.crypto || window.msCrypto).getRandomValues(bytes);
-    return [...bytes].map(b => chars[b % chars.length]).join('');
+  // The office login, shown once to be passed on (president.knust / president123).
+  function issuedHtml(title, issued) {
+    return `
+      <h3>${esc(title)}</h3>
+      <p>Give them these. They sign in on the Executive Portal with them once, and must then choose their own password before anything else opens.</p>
+      <dl class="of-dl"><dt>Username</dt><dd><code>${esc(issued.username)}</code></dd><dt>Starting password</dt><dd><code>${esc(issued.password)}</code></dd></dl>
+      <p class="tiny muted">The starting password stops working after 14 days if it is not used. You can put it back from here with Reset password.</p>
+      <div class="of-actions"><button class="btn btn-primary" id="hoDone">Done</button></div>`;
   }
 
   async function renderKeyOffices(el) {
@@ -165,11 +167,12 @@ window.OfficeBodies = (function () {
       const h = o.holder;
       return `<tr>
         <td><strong>${esc(o.label)}</strong>${o.departmentName ? `<br><span class="tiny muted">${esc(o.departmentName)}</span>` : ''}</td>
-        <td>${h && h.name ? esc(h.name) : '<span class="muted">Nobody</span>'}${h && h.username ? `<br><span class="tiny muted">${esc(h.username)}</span>` : ''}</td>
+        <td>${h && h.name ? esc(h.name) : '<span class="muted">Nobody</span>'}${h && h.username ? `<br><span class="tiny muted">${esc(h.username)}</span>` : ''}${h && h.awaitingFirstSignIn ? `<br>${U.chip(h.startingPasswordExpired ? 'Starting password expired' : 'Has not chosen a password yet', h.startingPasswordExpired ? 'red' : 'amber')}` : ''}</td>
         <td>${U.statusChip('seat', o.status)}<br><span class="tiny muted">${h && h.termYear ? esc(h.termYear) : ''}${h && h.daysLeft !== null && h.daysLeft > 0 && o.status !== 'ended' ? `, ${h.daysLeft} days left` : ''}</span></td>
         <td class="tiny muted">${(o.before || []).length ? `Before: ${o.before.map(b => esc(b.name)).join(', ')}` : ''}</td>
         <td><div class="row-actions of-row-actions">
           ${h && h.staffId && o.status !== 'vacant' ? `<button data-renew="${esc(h.staffId)}">Renew</button>` : ''}
+          ${h && h.staffId && o.status !== 'vacant' && o.status !== 'ended' ? `<button data-reset="${esc(h.staffId)}" data-name="${esc(h.name)}">Reset password</button>` : ''}
           <button data-handover="${esc(o.key)}|${esc(o.cardId)}">${o.status === 'vacant' ? 'Appoint' : 'Hand over'}</button>
         </div></td>
       </tr>`;
@@ -192,6 +195,14 @@ window.OfficeBodies = (function () {
       try { await U.busy(b, () => U.send(`/api/admin/staff/${b.dataset.renew}`, 'PUT', { renewTerm: true })); showToast('Renewed for the year.', 'success'); renderKeyOffices(el); }
       catch (err) { setFormMsg('officesMsg', err.message || 'Could not renew.', 'error'); }
     }));
+    el.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm(`Put ${b.dataset.name || 'their'} password back to the office's starting password? They will have to choose a new one when they next sign in, and every device they are signed in on is signed out.`)) return;
+      try {
+        const out = await U.busy(b, () => U.send('/api/coordinator/offices/reset-password', 'POST', { staffId: b.dataset.reset }));
+        showModal(issuedHtml(`New starting password for ${b.dataset.name || 'this office'}`, out.issued));
+        document.getElementById('hoDone').addEventListener('click', () => { closeModal(); renderKeyOffices(el); });
+      } catch (err) { setFormMsg('officesMsg', err.message || 'Could not reset it.', 'error'); }
+    }));
     el.querySelectorAll('[data-handover]').forEach(b => b.addEventListener('click', () => {
       const [key, cardId] = b.dataset.handover.split('|');
       openHandover(items.find(o => o.key === key && (o.cardId || '') === cardId), data.departments || [], () => renderKeyOffices(el));
@@ -211,11 +222,7 @@ window.OfficeBodies = (function () {
       <form id="hoForm" novalidate>
         ${U.field({ id: 'hoFind', label: 'Find the member taking over', placeholder: 'Start typing a name' })}
         <div class="field"><label for="hoMember">Member</label><select id="hoMember" size="6" required></select></div>
-        <div class="field-row">
-          ${U.field({ id: 'hoUser', label: 'Their username', required: true, hint: 'They sign in with this.' })}
-          ${U.field({ id: 'hoPass', label: 'A starting password', required: true, hint: 'At least 8 characters.' })}
-        </div>
-        <button type="button" class="btn btn-outline btn-sm" id="hoMake">Make a password for me</button>
+        <p class="tiny muted">They get the office's own login: its username and a starting password are shown when you finish, to pass on. They must choose their own password the first time they sign in.</p>
         ${office.requiresDepartment && !office.department ? U.field({ id: 'hoDept', label: 'Which department', type: 'select', required: true, options: [['', 'Choose a department'], ...departments.map(d => [d.id, d.name])] }) : ''}
         <div class="of-actions">
           <button class="btn btn-primary" type="submit">${vacant ? 'Appoint' : 'Hand over'}</button>
@@ -233,29 +240,17 @@ window.OfficeBodies = (function () {
     };
     fill();
     form.querySelector('#hoFind').addEventListener('input', fill);
-    select.addEventListener('change', () => {
-      const m = pool.find(x => x.id === select.value);
-      if (m && !form.querySelector('#hoUser').value) form.querySelector('#hoUser').value = `${office.key.replace(/_/g, '-')}.${slug(m.name).split('.')[0] || 'new'}`;
-    });
-    form.querySelector('#hoMake').addEventListener('click', () => { form.querySelector('#hoPass').value = makePassword(); });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const memberId = select.value;
       if (!memberId) return setFormMsg('hoMsg', 'Choose the member taking over.', 'error');
-      const username = form.querySelector('#hoUser').value;
-      const password = form.querySelector('#hoPass').value;
       const deptField = form.querySelector('#hoDept');
       try {
         const out = await U.busy(form.querySelector('[type="submit"]'), () => U.send('/api/coordinator/offices/handover', 'POST', {
-          positionKey: office.key, cardId: office.cardId || undefined, memberId, username, password,
+          positionKey: office.key, cardId: office.cardId || undefined, memberId,
           ...(deptField ? { department: deptField.value } : {})
         }));
-        document.getElementById('modalContent').innerHTML = `
-          <h3>${esc(office.label)} is now ${esc(out.item.name)}</h3>
-          <p>Give them these. They sign in on the Executive Portal.</p>
-          <dl class="of-dl"><dt>Username</dt><dd><code>${esc(username)}</code></dd><dt>Password</dt><dd><code>${esc(password)}</code></dd></dl>
-          <p class="tiny muted">This password is shown once. If it is lost, reset it under Leadership Accounts.</p>
-          <div class="of-actions"><button class="btn btn-primary" id="hoDone">Done</button></div>`;
+        document.getElementById('modalContent').innerHTML = issuedHtml(`${office.label} is now ${out.item.name}`, out.issued);
         document.getElementById('hoDone').addEventListener('click', () => { closeModal(); done(); });
       } catch (err) { setFormMsg('hoMsg', err.message || 'Could not do that.', 'error'); }
     });

@@ -20,7 +20,7 @@ let failures = 0;
 const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') + label + (ok || detail === undefined ? '' : ' - ' + JSON.stringify(detail).slice(0, 300))); if (!ok) failures++; };
 
 (async () => {
-  require(path.join(ROOT, 'test', 'harness.js'));
+  const { fakeModels } = require(path.join(ROOT, 'test', 'harness.js'));
   Object.assign(process.env, { MONGODB_URI: 'mongodb://stub/account-ui', PORT: '4473', ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin123', SESSION_SECRET: 't', LOGIN_RATE_LIMIT_MAX: '900' });
   require(path.join(ROOT, 'server.js'));
   await new Promise(r => setTimeout(r, 1500));
@@ -43,6 +43,10 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await staff('coord', 'Chapter Coordinator', 'coordinator');
   await staff('pres', 'Yaw President', 'executive', { positionKey: 'president' });
   await staff('choir', 'Ama Choir', 'executive', { positionKey: 'music_director', department: dept });
+  // These two are past their first sign-in; the first sign-in is tested on its own below.
+  fakeModels.StaffUser._docs.forEach(a => { a.mustChangePassword = false; });
+  const treasurerMember = await member('Kwame Treasurer');
+  const issued = (await api('POST', '/api/admin/staff', { role: 'executive', positionKey: 'treasurer', memberId: treasurerMember, chapterId: C })).issued;
 
   const browser = await chromium.launch({ executablePath: CHROME });
   const errors = [];
@@ -50,17 +54,17 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   const pageOf = async (ctx, url) => { const p = await ctx.newPage(); p.on('pageerror', e => errors.push(`${url}: ${e.message}`)); await p.goto(BASE + url, { waitUntil: 'networkidle' }); return p; };
 
   // ------------------------------------------------ every page with a password box --
-  console.log('\n== Show / Hide on every page that asks for a password ==');
+  console.log('\n== the eye on every page that asks for a password ==');
   const pages = ['login', 'register', 'reset-password', 'profile', 'admin', 'chapter', 'national', 'council', 'coordinator', 'executive', 'finance', 'publicity', 'shepherding', 'welfare-portal'];
   const ctx = await context();
   for (const name of pages) {
     const p = await pageOf(ctx, `/${name}.html${name === 'reset-password' ? '?token=t&email=a%40b.com' : ''}`); // without a link's token the page shows an error instead of the form
     const info = await p.$$eval('input[type="password"], input[data-pw-toggle]', els => els.map(e => {
       const wrap = e.closest('.pw-wrap'); const btn = wrap && wrap.querySelector('.pw-toggle');
-      return { id: e.id, wrapped: !!wrap, text: btn && btn.textContent, label: btn && btn.getAttribute('aria-label'), type: e.type };
+      return { id: e.id, wrapped: !!wrap, icon: !!(btn && btn.querySelector('svg')), text: btn && btn.textContent.trim(), label: btn && btn.getAttribute('aria-label'), type: e.type };
     }));
-    check(info.length > 0 && info.every(i => i.wrapped && i.text === 'Show' && i.label === 'Show password' && i.type === 'password'),
-      `${name}.html: every password box (${info.map(i => i.id).join(', ')}) has a Show button`, info);
+    check(info.length > 0 && info.every(i => i.wrapped && i.icon && i.text === '' && i.label === 'Show password' && i.type === 'password'),
+      `${name}.html: every password box (${info.map(i => i.id).join(', ')}) has the eye button`, info);
     await p.close();
   }
 
@@ -71,7 +75,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   const toggle = login.locator('#portalLoginForm .pw-toggle');
   await toggle.click();
   check(await login.getAttribute('#portalPassword', 'type') === 'text', 'pressing Show reveals what was typed');
-  check(await toggle.textContent() === 'Hide' && await toggle.getAttribute('aria-label') === 'Hide password', 'and the button now says Hide, to a screen reader as well');
+  check(await toggle.getAttribute('aria-label') === 'Hide password' && await toggle.getAttribute('title') === 'Hide password' && await toggle.getAttribute('data-shown') === 'true', 'and the eye now offers to hide it: its label and tooltip say Hide password');
   check(await login.inputValue('#portalPassword') === 'my secret phrase', 'the text itself is untouched');
   await toggle.click();
   check(await login.getAttribute('#portalPassword', 'type') === 'password', 'pressing Hide covers it again');
@@ -120,10 +124,10 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   const ratio = await dl.evaluate(() => {
     const lum = (c) => { const [r, g, b] = c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
     const b = document.querySelector('.pw-toggle'); const cs = getComputedStyle(b);
-    const a = lum(cs.color), c = lum(cs.backgroundColor);
+    const a = lum(cs.color), c = lum(getComputedStyle(b.parentElement.querySelector('input')).backgroundColor); // the eye sits on the box itself
     return (Math.max(a, c) + 0.05) / (Math.min(a, c) + 0.05);
   });
-  check(ratio >= 4.5, 'the button reads at 4.5:1 or better in dark mode', ratio);
+  check(ratio >= 3, 'the eye stands out at 3:1 or better against its box in dark mode, as an icon must', ratio);
   await dl.screenshot({ path: path.join(SHOTS, 'login-dark.png') });
 
   // ------------------------------------------------ the My Account page ---------------
@@ -150,7 +154,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   check(unlabelled.length === 0, 'every field has a label', unlabelled);
   const tiny = await ex.$$eval('.portal-panel.active button, .portal-panel.active input', els => els.filter(e => e.offsetParent).map(e => { const r = e.getBoundingClientRect(); return [e.textContent.trim().slice(0, 20) || e.id, Math.round(r.width), Math.round(r.height)]; }).filter(([, w, h]) => h < 44 || w < 24));
   check(tiny.length === 0, 'and every button and field is at least 44px', tiny);
-  check(await ex.locator('#pwForm .pw-toggle').count() === 3, 'each of the three password boxes has a Show button');
+  check(await ex.locator('#pwForm .pw-toggle').count() === 3, 'each of the three password boxes has the eye button');
   check((await ex.locator('#pwRules').textContent()).includes('Still needed'), 'the rules list says what is still needed');
   await ex.fill('#pwCurrent', 'Start-Pass-1');
   await ex.fill('#pwNew', 'Rooted In Him 77');
@@ -208,6 +212,35 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await co.click('#portalNav button:text-is("My Account")');
   await co.waitForSelector('#pwForm');
   check(/Chapter Coordinator/.test(await co.locator('.portal-panel.active').textContent()), 'showing their own role');
+
+  // ------------------------------------------------ the first sign-in ---------------
+  console.log('\n== the first sign-in with the office\'s starting password ==');
+  check(issued && issued.username === 'treasurer.knust' && issued.password === 'treasurer123', 'the Treasurer\'s office login is treasurer.knust / treasurer123', issued);
+  const tr = await (await context({ viewport: { width: 390, height: 844 } })).newPage();
+  tr.on('pageerror', e => errors.push('treasurer: ' + e.message));
+  tr.on('dialog', d => d.accept(''));
+  await tr.goto(`${BASE}/executive.html`, { waitUntil: 'networkidle' });
+  await tr.fill('#portalUsername', issued.username); await tr.fill('#portalPassword', issued.password); await tr.click('#portalLoginBtn');
+  await tr.waitForSelector('#firstPwForm');
+  check(!(await tr.isVisible('#portalShell')) && !(await tr.isVisible('#portalLoginForm')), 'signing in with it opens only the "choose your own password" screen');
+  check(/Treasurer/.test(await tr.textContent('#firstPwForm')), 'which greets them by their office');
+  check(await tr.locator('#firstPwForm .pw-toggle').count() === 2, 'with the eye on both password boxes');
+  const trUnlabelled = await tr.$$eval('#firstPwForm input', els => els.filter(e => !(e.labels && e.labels.length)).map(e => e.id));
+  check(trUnlabelled.length === 0, 'every field labelled', trUnlabelled);
+  check(await tr.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'it fits a phone');
+  await tr.screenshot({ path: path.join(SHOTS, 'first-sign-in.png'), fullPage: true });
+  await tr.fill('#fpEmail', 'not.mine@example.com');
+  await tr.fill('#fpNew', 'Counting The Cost 9'); await tr.fill('#fpAgain', 'Counting The Cost 9');
+  await tr.click('#firstPwForm button[type=submit]');
+  await tr.waitForFunction(() => /not the email/.test(document.getElementById('fpMsg').textContent));
+  check(true, 'the wrong email is refused, with the reason');
+  const trEmail = fakeModels.Member._docs.find(m => m.id === treasurerMember).email;
+  await tr.fill('#fpEmail', trEmail);
+  await tr.click('#firstPwForm button[type=submit]');
+  await tr.waitForSelector('#portalShell', { state: 'visible', timeout: 8000 });
+  check(true, 'with the right email and a good password, the portal opens');
+  await tr.waitForSelector('#portalNav button', { state: 'attached' });
+  check((await tr.$$eval('#portalNav button', b => b.map(x => x.textContent.trim()))).includes('Account for Money'), 'as the Treasurer\'s own portal');
 
   check(errors.length === 0, 'no script errors on any page', errors);
   await browser.close();
