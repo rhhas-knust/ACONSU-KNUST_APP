@@ -103,7 +103,7 @@ function oversightLocks(panelName) {
 
 // Idempotent, so it can run on every re-render: hiding and disabling are
 // attribute changes, and the note is only added when it is missing.
-function lockForOversight(root, { note = false } = {}) {
+function lockForOversight(root, { note = false, text = '' } = {}) {
   root.querySelectorAll('button, input[type="submit"], input[type="button"]').forEach(el => {
     if (!el.matches(OVERSIGHT_READ_CONTROLS)) el.style.display = 'none';
   });
@@ -111,9 +111,74 @@ function lockForOversight(root, { note = false } = {}) {
   if (note && !root.querySelector(':scope > .oversight-note')) {
     const p = document.createElement('p');
     p.className = 'oversight-note';
-    p.textContent = 'View only. National oversees chapters. Changes here are made by the chapter’s own admin.';
+    p.textContent = text || 'View only. National oversees chapters. Changes here are made by the chapter’s own admin.';
     root.prepend(p);
   }
+}
+
+// ---------- A chapter's look is its own ----------
+// The main admin can change a chapter's site settings, artwork, media, custom
+// pages and department pages only while that chapter has asked it to (see
+// routes/chapter-requests.js, which is what actually refuses). Here the panels
+// say so, and lock, rather than offering buttons that would all be refused.
+const LOOK_PANELS = new Set(['chapterSettings', 'pages', 'media', 'departments']);
+let LOOK_STATUS = null;
+const HELPING_KEY = 'aconsu.helpingChapter';
+function helpingChapter() { try { return sessionStorage.getItem(HELPING_KEY) || ''; } catch (e) { return ''; } }
+
+function lookLocked(panelName) {
+  return ADMIN_SCOPE.role === 'admin' && !!LOOK_STATUS && LOOK_STATUS.canChangeLook === false && LOOK_PANELS.has(panelName);
+}
+
+function lookNoteText() {
+  const name = (LOOK_STATUS && LOOK_STATUS.chapterName) || 'This chapter';
+  return `${name}'s look belongs to ${name}. You can change it only when the chapter asks: their Chapter Admin or Coordinator sends a request from Ask National for Help. View only until then.`;
+}
+
+// A line at the top of each look panel while working at a chapter's request,
+// so it is clear whose look this is and why it is open.
+function markAskedPanel(panel) {
+  if (!LOOK_STATUS || LOOK_STATUS.reason !== 'asked' || panel.querySelector(':scope > .cr-notice')) return;
+  const r = LOOK_STATUS.request || {};
+  const div = document.createElement('div');
+  div.className = 'cr-notice good';
+  div.setAttribute('role', 'status');
+  div.textContent = `${LOOK_STATUS.chapterName} asked for help: "${r.message || ''}". You can change its look until ${r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'the request is closed'}.`;
+  panel.prepend(div);
+}
+
+async function initLookGuard() {
+  if (ADMIN_SCOPE.role !== 'admin') return;
+  try { LOOK_STATUS = await fetchJSON('/api/chapter-requests/status'); } catch (e) { LOOK_STATUS = null; }
+  const watch = (el, decide) => {
+    if (!el) return;
+    const run = () => decide(el);
+    new MutationObserver(run).observe(el, { childList: true, subtree: true });
+    run();
+  };
+  LOOK_PANELS.forEach(name => watch(document.getElementById(`panel-${name}`), (panel) => {
+    if (lookLocked(name)) lockForOversight(panel, { note: true, text: lookNoteText() });
+    else markAskedPanel(panel);
+  }));
+  watch(document.getElementById('modalContent'), (modal) => { if (lookLocked(CURRENT_PANEL)) lockForOversight(modal); });
+}
+
+// Working on another chapter's look, at its request, from a dashboard that
+// otherwise shows national work only. The chapter is chosen for this browser
+// tab, and only the look panels open.
+function startHelping(chapterId) {
+  try {
+    sessionStorage.setItem(HELPING_KEY, chapterId);
+    sessionStorage.setItem(HELPING_KEY + '.previous', getSelectedChapterId());
+  } catch (e) { /* the tab will simply not remember */ }
+  setSelectedChapterId(chapterId);
+  window.location.reload();
+}
+function stopHelping() {
+  let previous = '';
+  try { previous = sessionStorage.getItem(HELPING_KEY + '.previous') || ''; sessionStorage.removeItem(HELPING_KEY); sessionStorage.removeItem(HELPING_KEY + '.previous'); } catch (e) { /* nothing kept */ }
+  setSelectedChapterId(previous);
+  window.location.reload();
 }
 
 // Panels re-render themselves after every action and modals are rebuilt on
@@ -157,6 +222,15 @@ function applyNavScopeVisibility() {
     const anyVisible = Array.from(body.children).some(child => child.style.display !== 'none');
     group.style.display = anyVisible ? '' : 'none';
   });
+  if (pruned && ADMIN_SCOPE.role === 'admin' && helpingChapter()) {
+    document.querySelectorAll('#adminNav [data-scope="chapter"]').forEach(el => {
+      if (LOOK_PANELS.has(el.dataset.panel)) el.style.display = '';
+    });
+    document.querySelectorAll('#adminNav .nav-group').forEach(group => {
+      const body = group.querySelector('.nav-group-body');
+      if (body && Array.from(body.children).some(child => child.style.display !== 'none')) group.style.display = '';
+    });
+  }
   const hint = document.getElementById('adminNavScopeHint');
   if (hint) hint.hidden = !pruned;
   return pruned;
@@ -182,8 +256,23 @@ async function showAdminShell() {
   // first panel loads - otherwise both would briefly judge scope off an
   // empty chapter list and mis-render on the very first paint.
   await loadAdminChapterCount();
+  await initLookGuard();
   applyNavScopeVisibility();
   initOversightMode();
+  // Asking for help is the chapter's; seeing the requests is National's.
+  const askBtn = document.getElementById('navAskNationalBtn');
+  const inboxBtn = document.getElementById('navChapterRequestsBtn');
+  if (askBtn) askBtn.style.display = ['coordinator', 'chapterAdmin'].includes(ADMIN_SCOPE.role) ? 'flex' : 'none';
+  if (inboxBtn) inboxBtn.style.display = ADMIN_SCOPE.isNational ? 'flex' : 'none';
+  if (ADMIN_SCOPE.role === 'admin' && helpingChapter()) {
+    const main = document.getElementById('adminMain');
+    const bar = document.createElement('div');
+    bar.className = 'cr-notice good';
+    bar.setAttribute('role', 'status');
+    bar.innerHTML = `You are working on <strong>${escapeHtml((LOOK_STATUS && LOOK_STATUS.chapterName) || 'a chapter')}</strong>'s look at its request.${LOOK_STATUS && !LOOK_STATUS.canChangeLook ? ' The request has closed, so it is view only now.' : ''} <button type="button" class="btn btn-outline btn-sm" id="stopHelpingBtn">Stop</button>`;
+    if (main) main.prepend(bar);
+    document.getElementById('stopHelpingBtn').addEventListener('click', stopHelping);
+  }
 
   // Chapter badge + brand: national is its own identity; a chapter-scoped
   // account's portal identity IS its chapter, front and center.
@@ -197,6 +286,10 @@ async function showAdminShell() {
     const globBtn = document.getElementById('navGlobalSettingsBtn');
     if (natBtn) natBtn.style.display = 'flex';
     if (globBtn) globBtn.style.display = 'flex';
+    // Shown after the nav was first pruned, so their group has to be judged
+    // again: a group whose every button was hidden at that moment was hidden
+    // with them, and stayed hidden once they appeared.
+    applyNavScopeVisibility();
   } else if (ADMIN_SCOPE.chapterId) {
     fetchJSON('/api/admin/chapter-settings')
       .then(cs => {
@@ -353,6 +446,9 @@ async function loadPanel(name) {
     theme: () => renderChapterPanel('panel-theme', (el) =>
       ChurchLifeUI.themeProposalPanel(el, { reopen: () => loadPanel('theme') })),
     chapterSettings: renderChapterSettings,
+    askNational: () => renderChapterPanel('panel-askNational', (el) => ChapterRequests.renderAsk(el)),
+    chapterRequests: () => renderChapterPanel('panel-chapterRequests', (el) =>
+      ChapterRequests.renderInbox(el, { onWork: ADMIN_SCOPE.role === 'admin' && ADMIN_CHAPTERS.length > 1 ? startHelping : null })),
     settings: renderSettings
   };
   // Navigating away from the overview panel leaves nothing listening for its

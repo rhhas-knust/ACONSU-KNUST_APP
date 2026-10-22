@@ -1140,3 +1140,17 @@ body {
 .pw-toggle:hover { color: var(--brand); background: var(--lilac-light); }
 .pw-toggle[data-shown="true"] { color: var(--brand); }
 .pw-toggle svg { display: block; }
+
+/* ---------- a chapter asking National for help with its look (chapter-requests.js) ---------- */
+.cr-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+.cr-card > h3 { margin: 0 0 12px; }
+.cr-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--line); }
+.cr-row:first-of-type { border-top: none; }
+.cr-row p { margin: 0 0 6px; }
+.cr-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.cr-chip { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.74rem; font-weight: 800; }
+.cr-green { background: var(--ok-bg); color: var(--ok-ink); }
+.cr-grey { background: var(--mute-bg); color: var(--ink-soft); }
+.cr-notice { border: 1px solid var(--line); border-left: 5px solid var(--warn-ink); background: var(--warn-bg); color: var(--warn-ink); border-radius: 12px; padding: 12px 16px; margin: 0 0 18px; }
+.cr-notice.good { border-left-color: var(--ok-ink); background: var(--ok-bg); color: var(--ok-ink); }
+.cr-notice button { margin-left: 8px; }

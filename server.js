@@ -32,6 +32,7 @@ const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
+const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
 const officeAccounts = require('./lib/officeAccounts');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
@@ -224,6 +225,11 @@ app.use((req, res, next) => {
          + "This change belongs to the chapter's own admin."
   });
 });
+
+// A chapter's look (its site settings, artwork, pages and department pages) is
+// its own: the main admin may change it only while the chapter has asked. See
+// routes/chapter-requests.js. Registered here, before every route it guards.
+registerChapterRequestRoutes(app, { repo, models, rolesLib, currentStaff, actorName });
 
 // ---------- auth routes ----------
 // One session carries every identity this browser holds - the env admin flag,

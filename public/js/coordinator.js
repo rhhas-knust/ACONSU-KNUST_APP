@@ -749,6 +749,7 @@ initPortal({
     { key: 'outlines', label: 'Semester Outlines', render: (el) => OfficeOutline.renderReview(el) },
     { key: 'budgets', label: 'Budget Requests', render: (el) => OfficeBudget.renderDesk(el) },
     { key: 'execMinutes', label: 'Executive Minutes', render: (el) => OfficeMinutes.renderForCoordinator(el) },
+    { key: 'askNational', label: 'Ask National for Help', render: (el) => ChapterRequests.renderAsk(el) },
     { key: 'welfare', label: 'Welfare Purse', render: renderWelfarePurseReport },
     { key: 'approvals', label: 'Approvals', render: renderApprovals },
     { key: 'announcements', label: 'Chapter Announcement', render: renderChapterAnnouncements },

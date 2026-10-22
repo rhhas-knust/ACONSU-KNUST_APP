@@ -213,6 +213,7 @@ const fakeModels = {
   BudgetSubmission: makeModel({ chapterId: '', callId: '', departmentId: '', departmentName: '', lines: [], total: 0, justification: '', status: 'draft', submittedBy: '', submittedByName: '', submittedAt: null, reviewedBy: '', reviewedAt: null, reviewNote: '', recommendedTotal: 0, decidedBy: '', decidedAt: null, decisionNote: '', approvedTotal: 0, postedAt: null }),
   AnnouncementCall: makeModel({ chapterId: '', serviceDate: '', title: '', note: '', dueDate: '', status: 'open', compiledText: '', compiledBy: '', compiledAt: null, createdBy: '' }),
   AnnouncementItem: makeModel({ chapterId: '', callId: '', executiveId: '', staffId: '', positionKey: '', fromLabel: '', fromName: '', nothing: false, text: '', whenWhere: '', contact: '', status: 'submitted', finalText: '', order: 0 }),
+  ChapterRequest: makeModel({ chapterId: '', message: '', status: 'open', requestedBy: '', requestedByName: '', requestedByRole: '', expiresAt: null, closedAt: null, closedBy: '', closedNote: '' }),
   Committee: makeModel({ chapterId: '', name: '', kind: 'committee', mandate: '', chairName: '', chairExecutiveId: '', memberNames: [], startDate: '', dueDate: '', status: 'active', progressNote: '', createdBy: '' }),
   DailyVerse: makeModel({ chapterId: '', date: '', reference: '', text: '', reflection: '', postedBy: '' }),
   CouncilPost: makeModel({ parentId: '', body: '', authorStaffId: '', authorName: '', authorRole: '', authorChapterId: '', authorChapterName: '', pinned: false }),
