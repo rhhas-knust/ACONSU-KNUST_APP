@@ -3030,8 +3030,12 @@ function buildPublicSettings(globalSettings, chapter) {
       vision: about.vision || globalAbout.vision || '',
       mission: about.mission || globalAbout.mission || '',
       values: about.values || globalAbout.values || '',
-      leadership: about.leadership || globalAbout.leadership || ''
-    }
+      leadership: about.leadership || globalAbout.leadership || '',
+      firstVisit: about.firstVisit || globalAbout.firstVisit || ''
+    },
+    // Where the chapter meets (the hall), apart from the postal address, so a
+    // newcomer is told both where to go and how to find it.
+    meetingPlace: chapter.location || ''
   };
 }
 
@@ -7700,7 +7704,7 @@ app.put('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => 
     }
     if (hasOwn(req.body, 'about')) {
       next.about = mergeTextFields(chapter.about, req.body.about, [
-        'history', 'vision', 'mission', 'values', 'leadership'
+        'history', 'vision', 'mission', 'values', 'leadership', 'firstVisit'
       ]);
     }
     if (!next.name) return res.status(400).json({ error: 'Chapter display name is required' });

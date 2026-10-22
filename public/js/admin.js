@@ -2853,6 +2853,11 @@ async function renderChapterSettings() {
           <label>Chapter Leadership Bio</label>
           <textarea id="csLeadership" rows="3">${escapeHtml(about.leadership || '')}</textarea>
         </div>
+        <div class="field">
+          <label for="csFirstVisit">What a first-time visitor should know</label>
+          <textarea id="csFirstVisit" rows="4" aria-describedby="csFirstVisitHint">${escapeHtml(about.firstVisit || '')}</textarea>
+          <small class="hint" id="csFirstVisitHint">Shown on the Plan your visit page. For example: how long a service lasts, where to go when you arrive, who will meet you, anything to bring.</small>
+        </div>
 
         <button type="submit" class="btn btn-primary btn-block" id="saveChapterSettingsBtn" style="margin-top:20px;">Save Chapter Settings</button>
         <div class="form-msg" id="chapterSettingsMsg"></div>
@@ -2999,7 +3004,8 @@ async function renderChapterSettings() {
           mission: document.getElementById('csMission').value,
           values: document.getElementById('csValues').value,
           history: document.getElementById('csHistory').value,
-          leadership: document.getElementById('csLeadership').value
+          leadership: document.getElementById('csLeadership').value,
+          firstVisit: document.getElementById('csFirstVisit').value
         }
       };
 

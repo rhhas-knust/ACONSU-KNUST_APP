@@ -146,6 +146,9 @@ aconsu-app/
     offices-ui.js          The same screens in a real browser (`node test/offices-ui.js`, needs Playwright)
     account.js             My Account and changing a password (`npm test`)
     account-ui.js          Show / Hide on password boxes and the My Account page, in a browser (needs Playwright)
+    chapter-look.js        A chapter's look changes only when the chapter asks (`npm test`)
+    chapter-look-ui.js     The same, in a browser (needs Playwright)
+    visit-ui.js            The home page and Plan your visit for a first-time visitor (needs Playwright)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
@@ -171,7 +174,7 @@ aconsu-app/
     images/logo.jpg         ACONSU logo
 ```
 
-The executive offices (President, Vice President, the secretariat, Financial Secretary, Alumni President) and how an office is handed over are described in [docs/offices.md](docs/offices.md).
+The executive offices (President, Vice President, the secretariat, Financial Secretary, Alumni President), their logins (`president.knust`, starting password `president123`, changed at the first sign-in), how an office is handed over, and why the main admin changes a chapter's look only when the chapter asks are described in [docs/offices.md](docs/offices.md).
 
 Run `npm test` to check the portals still behave after a change — it boots the real
 app against an in-memory database and exercises every portal route, permission rule

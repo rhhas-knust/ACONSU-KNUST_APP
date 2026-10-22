@@ -216,6 +216,7 @@ function badgeIconSvg(name) {
   return svgIcon(BADGE_ICONS[name] || '<circle cx="12" cy="12" r="9"/>');
 }
 
+const ICON_PIN = '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>';
 const ICON_INFO = '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r="0.9" fill="currentColor" stroke="none"/>';
 const ICON_MAIL = '<rect x="2.5" y="5" width="19" height="14" rx="2"/><path d="m3 6.5 9 6 9-6"/>';
 const ICON_CARD = '<rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>';
@@ -484,6 +485,7 @@ async function renderVerseOfDay(settings) {
 
 const NAV_LINKS = [
   { href: '/index.html', label: 'Home' },
+  { href: '/visit.html', label: 'Plan Your Visit' },
   { href: '/about.html', label: 'About' },
   { href: '/departments.html', label: 'Departments' },
   { href: '/events.html', label: 'Events' },
@@ -717,7 +719,11 @@ function timeAgo(iso) {
 const SIDE_NAV_GROUPS = [
   {
     title: '',
-    links: [{ href: '/index.html', label: 'Home', icon: ICON_HOME }]
+    links: [
+      { href: '/index.html', label: 'Home', icon: ICON_HOME },
+      // The first thing a newcomer looks for: when, where, what to expect.
+      { href: '/visit.html', label: 'Plan Your Visit', icon: ICON_PIN }
+    ]
   },
   {
     title: 'Gather',
@@ -828,6 +834,7 @@ function renderFooter(settings) {
         </div>
         <div>
           <p class="footer-title">Get Involved</p>
+          <a href="/visit.html">Plan your visit</a>
           <a href="/departments.html">Join a Department</a>
           <a href="/alumni.html">Alumni Connect</a>
           <a href="/prayer.html">Submit a Prayer Request</a>

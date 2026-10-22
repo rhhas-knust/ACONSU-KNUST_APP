@@ -149,11 +149,15 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   <div class="hero-content">
     <h1>The Apostles' Continuation Students Union</h1>
     <p class="lede">Services, Bible study and prayer for students. Find your chapter, see what is on this week, or give and pray from your phone.</p>
+    <!-- One clear first step for a newcomer, then the two things members come
+         for most. "Chapters" used to sit here and opened Departments. -->
     <div class="hero-actions">
-      <a href="/events.html" class="btn btn-primary">Events</a>
-      <a href="/departments.html" class="btn btn-outline">Chapters</a>
-      <a href="/content.html?kind=live_service" class="btn btn-outline">Live services</a>
+      <a href="/visit.html" class="btn btn-primary">Plan your visit</a>
+      <a href="/content.html?kind=live_service" class="btn btn-outline">Watch live</a>
+      <a href="/events.html" class="btn btn-outline">Events</a>
     </div>
+    <!-- When and where, without a click: the first thing a visitor looks for. -->
+    <div id="joinUsCard"></div>
     <div id="heroSocialIcons"></div>
     <div id="countdownWrap"></div>
   </div>
@@ -253,7 +257,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </div>
     <div class="grid" id="deptPreview"></div>
     <div style="text-align:center; margin-top:32px;">
-      <a href="/departments.html" class="btn btn-outline">All chapters</a>
+      <a href="/departments.html" class="btn btn-outline">All departments</a>
     </div>
   </div>
 </section>
@@ -304,6 +308,24 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     const ledeEl = document.querySelector('#homeHero .lede');
     if (ledeEl && settings.tagline.trim()) ledeEl.textContent = settings.tagline;
   }
+  // Join us: the chapter's meeting times and place, in the hero itself, so a
+  // newcomer sees when and where before anything else. Left out entirely when
+  // the chapter has not said.
+  {
+    const times = (settings.serviceTimes || []).filter(Boolean);
+    const place = (settings.meetingPlace || settings.address || '').trim();
+    const card = document.getElementById('joinUsCard');
+    if (card && (times.length || place)) {
+      card.innerHTML = `
+        <div class="join-card">
+          <p class="join-eyebrow">Join us</p>
+          ${times.length ? `<ul class="join-times">${times.slice(0, 3).map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>` : ''}
+          ${place ? `<p class="join-place">${svgIcon(ICON_PIN)}<span>${escapeHtml(place)}</span></p>` : ''}
+          <a class="join-link" href="/visit.html">Directions and what to expect</a>
+        </div>`;
+    }
+  }
+
   // Hide the separate banner since it's now merged into hero
   const homeHeaderEl = document.getElementById('homeHeaderBanner');
   if (homeHeaderEl) homeHeaderEl.style.display = 'none';
@@ -456,21 +478,20 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       fetchJSON('/api/pages').catch(() => []),
       getUnreadNotificationCount()
     ]);
+    // Six, not eleven. Bible, Events and Prayer are already one tap away in the
+    // bottom bar and Notifications has the bell, so repeating them here only
+    // made the choice slower. Everything else is still under More.
+    void unreadCount;
     const coreTiles = [
-      { href: '/bible.html', label: 'Bible', icon: ICON_BIBLE },
-      { href: '/content.html?kind=live_service', label: 'Live Service', icon: ICON_VIDEO },
-      { href: '/events.html', label: 'Events', icon: ICON_EVENTS },
-      { href: '/groups.html', label: 'Groups', icon: ICON_USERS },
-      { href: '/bible-study.html', label: 'Bible Study', icon: ICON_BOOK },
-      { href: '/prayer.html', label: 'Prayer Wall', icon: ICON_PRAYER },
+      { href: '/content.html?kind=live_service', label: 'Watch Live', icon: ICON_VIDEO },
       { href: '/media.html', label: 'Sermons', icon: ICON_HEADPHONES },
-      { href: '/give.html', label: 'Giving', icon: ICON_GIVE },
-      { href: '/content.html?kind=ebook', label: 'E-Books', icon: ICON_BOOK }
+      { href: '/bible-study.html', label: 'Bible Study', icon: ICON_BOOK },
+      { href: '/groups.html', label: 'Groups', icon: ICON_USERS },
+      { href: '/give.html', label: 'Give', icon: ICON_GIVE },
+      member
+        ? { href: '/card.html', label: 'My Card', icon: ICON_CARD }
+        : { href: '/visit.html', label: 'Plan a Visit', icon: ICON_PIN }
     ];
-    if (member) {
-      coreTiles.push({ href: '/card.html', label: 'Digital Card', icon: ICON_CARD });
-    }
-    coreTiles.push({ href: '/notifications.html', label: 'Notifications', icon: ICON_BELL, badge: unreadCount });
 
     const customTiles = customPages.filter(p => p.showInNav).map(p => ({
       href: `/page.html?slug=${encodeURIComponent(p.slug)}`,
@@ -520,12 +541,10 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     // Departments preview (first 4)
     const deptWrap = document.getElementById('deptPreview');
     deptWrap.innerHTML = departments.slice(0, 4).map(d => `
-      <a href="/department.html?id=${d.id}" class="card dept-card">
-        <div class="dept-thumb">
-          ${d.headerImageFileId
-            ? `<img src="/api/files/${d.headerImageFileId}" alt="" loading="lazy">`
-            : '<span class="dept-thumb-fallback"></span>'}
-        </div>
+      <a href="/department.html?id=${d.id}" class="card dept-card${d.headerImageFileId ? '' : ' no-photo'}">
+        ${d.headerImageFileId
+          ? `<div class="dept-thumb"><img src="/api/files/${d.headerImageFileId}" alt="" loading="lazy"></div>`
+          : `<span class="dept-monogram" aria-hidden="true">${escapeHtml(String(d.name || '?').trim().charAt(0).toUpperCase())}</span>`}
         <h3>${escapeHtml(d.name)}</h3>
         <p style="color:var(--ink-soft); font-size:0.92rem;">${escapeHtml(d.tagline)}</p>
         <div class="dept-meta">${escapeHtml(d.meetingDay)} · ${escapeHtml(d.meetingTime)}</div>

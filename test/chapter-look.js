@@ -155,6 +155,14 @@ const { fakeModels } = require('./harness.js');
   r = await call('coord.k', 'POST', '/api/chapter-requests', { message: 'One more please.' });
   check('a chapter can have at most three open at once', r.status === 409, r.data);
 
+  console.log('\n== what a first-time visitor is told ==');
+  r = await call('coord.k', 'PUT', '/api/admin/chapter-settings', { location: 'Great Hall', address: 'KNUST Campus, Kumasi', serviceTimes: 'Sundays 8:00 AM\nWednesdays 6:30 PM', about: { firstVisit: 'Services last about two hours. Ushers at the door will help you find a seat.' } });
+  check('the chapter writes what a first-time visitor should know', r.status === 200, r.data);
+  r = await call('anon', 'GET', '/api/settings', null, K);
+  check('a visitor\'s page is given it, with the meeting times and place', r.data.about && /two hours/.test(r.data.about.firstVisit) && r.data.meetingPlace === 'Great Hall' && r.data.serviceTimes.length === 2, r.data);
+  r = await call('anon', 'GET', '/api/settings', null, { 'X-Chapter-Id': 'ucc' });
+  check('and another chapter\'s visitors are told that chapter\'s, not this one\'s', !(r.data.about && /two hours/.test(r.data.about.firstVisit || '')), r.data.about);
+
   console.log(failures ? `\n${failures} check(s) failed` : '\nall chapter-look checks passed');
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

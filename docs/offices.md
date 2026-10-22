@@ -67,6 +67,39 @@ whether it is in office, ending soon, ended or empty. Two actions:
 Officer seats are single seats: a second President cannot be seated beside the
 first, and an account that was handed over cannot be renewed to take the seat back.
 
+## Office logins
+
+Every executive office in a chapter comes with its own login, named after the
+office and the chapter:
+
+| Office | Username | Starting password |
+| --- | --- | --- |
+| President of ACONSU-KNUST | `president.knust` | `president123` |
+| Vice President | `vicepresident.knust` | `vicepresident123` |
+| Music Director | `musicdirector.knust` | `musicdirector123` |
+
+The rule is the office's name with the spaces taken out, then `.` and the
+chapter's short name; the starting password is the same name followed by `123`.
+Each chapter's logins are its own: `president.ucc` is a different account from
+`president.knust`, and neither can sign in as the other.
+
+When someone is appointed (Leadership Accounts, approving an application, or
+Key offices), the Coordinator does not make up a username or password: the
+office's login is issued and shown once, to pass on. Because the starting
+password follows a pattern anyone could guess, it is only a key to one screen:
+
+- Signing in with it opens nothing but **Choose your own password**. Every other
+  part of the portal, and every API route, treats the session as signed out.
+- To choose a password the holder also confirms the email on their member
+  profile, so that knowing the pattern is not enough to take the office over.
+- An unused starting password stops working after 14 days.
+- A Coordinator can put it back (Key offices, Reset password) when someone
+  forgets theirs. Any password set for an executive by someone else must be
+  changed at the next sign-in.
+
+On hand-over the office's login passes to the new holder and the outgoing
+account is kept, under an archived name, as the record.
+
 ## My Account and passwords
 
 Every leader's portal has a **My Account** page: name, username, office,
@@ -92,10 +125,28 @@ accounts, and so cannot be changed from the portal.
 
 Every password box in the app, on every page (member sign-in, registration, reset,
 profile, every portal's sign-in, and the forms that open inside portals), has a
-**Show** / **Hide** button. It works from the keyboard, is at least 44px to press,
+eye button that shows or hides it. It works from the keyboard, is at least 44px to press,
 and the password goes back to hidden when the form is sent or the page is put in
 the background. It is added by `public/js/main.js`, so a form added later cannot
 be left without one.
+
+## A chapter's look is its own
+
+A chapter's site settings, artwork, media library, custom pages, department
+pages and content hub belong to that chapter. The main admin (the login behind
+the admin dashboard) can change them only while the chapter has asked:
+
+1. The Chapter Admin or Chapter Coordinator opens **Ask National for Help**,
+   says what they need, and how long to keep the request open (3 to 30 days).
+2. The main admin sees it under **Chapter Requests**, works on that chapter's
+   look (and only that chapter's), and marks it done.
+3. The request closes when it is marked done, withdrawn by the chapter, or its
+   days run out, and the look panels lock again.
+
+Until then the main admin's look panels say whose look it is and are view only,
+and the server refuses the changes. A chapter with no admin of its own yet can
+still be set up. What is not the chapter's look (events, members, accounts) is
+unchanged. The rule is in `routes/chapter-requests.js`.
 
 ## What the research said
 
@@ -122,4 +173,6 @@ described to us and are not from those sources.
 | Private minutes scans | `canOpenPrivateFile` in `server.js`, `lib/fileTypes.js` |
 | My Account and password change | `routes/account.js`, `lib/passwords.js`, `public/js/account.js` |
 | Show / Hide on password boxes | the end of `public/js/main.js`, `.pw-wrap` in `public/css/style.css` |
-| Tests | `test/offices.js`, `test/account.js` (server rules), `test/offices-ui.js`, `test/account-ui.js` (browser) |
+| Office logins | `lib/officeAccounts.js`, `issueOfficeLogin` in `server.js`, the first-sign-in screen in `public/js/portal.js` |
+| A chapter's look | `routes/chapter-requests.js`, `public/js/chapter-requests.js` |
+| Tests | `test/offices.js`, `test/account.js`, `test/chapter-look.js` (server rules); `test/offices-ui.js`, `test/account-ui.js`, `test/chapter-look-ui.js`, `test/visit-ui.js` (browser) |
