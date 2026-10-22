@@ -626,7 +626,8 @@ const DEPARTMENT_FIELDS = [
   { key: 'description', label: 'Description', type: 'textarea' },
   { key: 'meetingDay', label: 'Meeting Day', type: 'text' },
   { key: 'meetingTime', label: 'Meeting Time', type: 'text' },
-  { key: 'meetingLocation', label: 'Meeting Location', type: 'text' }
+  { key: 'meetingLocation', label: 'Meeting Location', type: 'text' },
+  { key: 'mapUrl', label: 'Map link for the meeting place (optional)', type: 'maplink' }
   // No leader field: who runs a department is the executive holding it (see
   // attachDepartmentLeaders in server.js), not a name typed in here.
 ];
@@ -635,6 +636,7 @@ const EVENT_FIELDS = [
   { key: 'date', label: 'Date', type: 'date', required: true },
   { key: 'time', label: 'Time', type: 'time', required: true },
   { key: 'location', label: 'Location', type: 'text' },
+  { key: 'mapUrl', label: 'Map link for the location (optional)', type: 'maplink' },
   { key: 'description', label: 'Description', type: 'textarea' },
   { key: 'recurring', label: 'Recurring Label (optional)', type: 'text' },
   { key: 'registrationEnabled', label: 'Enable registration for this event', type: 'checkbox' },
@@ -757,6 +759,7 @@ function openResourceForm(resource, fields, singular, item) {
             <input type="checkbox" data-key="${f.key}" id="field-${f.key}" ${val ? 'checked' : ''}>
             <label for="field-${f.key}" style="margin:0;">${f.label}</label></div>`;
         }
+        if (f.type === 'maplink') return mapLinkFieldHtml(`field-${f.key}`, val, f.label);
         return `<div class="field"><label>${f.label}</label>
           <input type="${f.type}" data-key="${f.key}" value="${escapeHtml(val !== undefined ? val : '')}" ${f.required ? 'required' : ''}></div>`;
       }).join('')}
@@ -773,7 +776,7 @@ function openResourceForm(resource, fields, singular, item) {
     e.preventDefault();
     const payload = {};
     fields.forEach(f => {
-      const el = document.querySelector(`[data-key="${f.key}"]`);
+      const el = document.querySelector(`[data-key="${f.key}"]`) || document.getElementById(`field-${f.key}`);
       if (f.type === 'checkbox') {
         payload[f.key] = el.checked;
       } else if (f.type === 'number') {
@@ -797,6 +800,8 @@ function openResourceForm(resource, fields, singular, item) {
     } catch (err) {
       document.getElementById('resourceFormMsg').textContent = err.message || 'Could not save.';
       document.getElementById('resourceFormMsg').className = 'form-msg error';
+      const box = err.field && (document.querySelector(`[data-key="${err.field}"]`) || document.getElementById(`field-${err.field}`));
+      if (box) box.focus();
     }
   });
 }
@@ -1468,6 +1473,7 @@ async function renderGroupsAdmin() {
           <div class="field"><label>Meeting Time</label><input type="text" id="gTime" value="${escapeHtml(group?.meetingTime || '')}"></div>
         </div>
         <div class="field"><label>Meeting Location</label><input type="text" id="gLocation" value="${escapeHtml(group?.meetingLocation || '')}"></div>
+        ${mapLinkFieldHtml('gMapUrl', group?.mapUrl)}
         <div style="display:flex; gap:10px;">
           <button type="submit" class="btn btn-primary">Save Group</button>
           <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
@@ -1485,7 +1491,8 @@ async function renderGroupsAdmin() {
         leaderMemberId: document.getElementById('gLeader').value,
         meetingDay: document.getElementById('gDay').value,
         meetingTime: document.getElementById('gTime').value,
-        meetingLocation: document.getElementById('gLocation').value
+        meetingLocation: document.getElementById('gLocation').value,
+        mapUrl: document.getElementById('gMapUrl').value
       };
       try {
         await fetchJSON(isEdit ? `/api/admin/groups/${group.id}` : '/api/admin/groups', {
@@ -1497,6 +1504,7 @@ async function renderGroupsAdmin() {
       } catch (err) {
         document.getElementById('groupFormMsg').textContent = err.message || 'Could not save.';
         document.getElementById('groupFormMsg').className = 'form-msg error';
+        if (err.field === 'mapUrl') document.getElementById('gMapUrl').focus();
       }
     });
   }
@@ -2726,6 +2734,8 @@ async function renderChapterSettings() {
           <input type="text" id="csAddress" value="${escapeHtml(data.address || '')}">
         </div>
 
+        ${mapLinkFieldHtml('csMapUrl', data.mapUrl, 'Map link for the meeting place (optional)')}
+
         <div class="field">
           <label>Chapter Tagline / Annual Theme</label>
           <input type="text" id="csTagline" value="${escapeHtml(data.tagline || '')}" placeholder="e.g. Carrying the fire. Continuing the pattern.">
@@ -2975,6 +2985,7 @@ async function renderChapterSettings() {
         institution: document.getElementById('csInstitution').value,
         location: document.getElementById('csLocation').value,
         address: document.getElementById('csAddress').value,
+        mapUrl: document.getElementById('csMapUrl').value,
         tagline: document.getElementById('csTagline').value,
         verseOfTheWeek: document.getElementById('csVerse').value,
         serviceTimes: document.getElementById('csServiceTimes').value.split('\n').map(s => s.trim()).filter(Boolean),
@@ -3021,6 +3032,7 @@ async function renderChapterSettings() {
       } catch (err) {
         msg.textContent = err.message || 'Could not save chapter settings.';
         msg.className = 'form-msg error';
+        if (err.field === 'mapUrl') document.getElementById('csMapUrl').focus();
       } finally {
         btn.disabled = false;
         btn.textContent = 'Save Chapter Settings';

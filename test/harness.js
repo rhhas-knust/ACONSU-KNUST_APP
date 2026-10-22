@@ -12,6 +12,7 @@ function matches(doc, query) {
     if (key === '$and') return (cond || []).every((sub) => matches(doc, sub));
     const value = doc[key];
     if (Array.isArray(cond)) return cond.includes(value); // bare-array shorthand, used nowhere yet but cheap to support
+    if (cond === null) return value == null; // Mongo: { field: null } also finds a doc without the field
     if (cond && typeof cond === 'object' && !(cond instanceof Date)) {
       if ('$lte' in cond) return new Date(value) <= new Date(cond.$lte);
       if ('$gte' in cond) return new Date(value) >= new Date(cond.$gte);
@@ -162,17 +163,19 @@ function makeModel(defaults) {
 const fakeModels = {
   Chapter: makeModel({
     status: 'active', fullName: '', institution: '', location: '', address: '',
-    contact: {}, payment: {}, about: {}, coordinatorStaffId: '', coordinatorName: '', createdBy: ''
+    contact: {}, payment: {}, about: {}, coordinatorStaffId: '', coordinatorName: '', createdBy: '',
+    mapUrl: '', mapPlace: null
   }),
   FeatureFlags: makeModel({ modules: {} }),
-  Department: makeModel({ chapterId: '', headerImageFileId: '' }),
+  Department: makeModel({ chapterId: '', headerImageFileId: '', mapUrl: '', mapPlace: null }),
   DepartmentRequest: makeModel({ chapterId: '', memberId: '', departmentId: '', status: 'pending', note: '', decidedByStaffId: '', decidedByName: '', decidedAt: null }),
   AlumniProfile: makeModel({ memberId: '', chapterId: '', listed: false, profession: '', organisation: '', industry: '', programme: '', graduationYear: '', city: '', country: 'Ghana', bio: '', openToMentoring: false, showEmail: false, showPhone: false, linkedin: '' }),
   MeetingRoom: makeModel({ chapterId: '', departmentId: '', title: '', createdByName: '', createdByStaffId: '', maxParticipants: 4, open: true, closedAt: null }),
   Event: makeModel({
     chapterId: '', isNational: false, registrationEnabled: false, capacity: 0, registrationDeadline: '',
     category: '', videoUrl: '', flyerFileId: '', registrationFormId: '',
-    status: 'published', submittedBy: '', submittedByStaffId: '', reviewedBy: '', reviewNotes: ''
+    status: 'published', submittedBy: '', submittedByStaffId: '', reviewedBy: '', reviewNotes: '',
+    mapUrl: '', mapPlace: null
   }),
   Sermon: makeModel({ chapterId: '' }),
   ContentItem: makeModel({ chapterId: '', published: true, featured: false, sortOrder: 0 }),
@@ -202,10 +205,11 @@ const fakeModels = {
   SermonNote: makeModel({ chapterId: '', sermonTitle: '', preacher: '', date: '', scripture: '', notes: '', summary: '', keyLessons: '', reflections: '' }),
   Group: makeModel({
     chapterId: '', type: 'other', description: '', linkedDepartmentId: '', leaderMemberId: '', leaderName: '',
-    meetingDay: '', meetingTime: '', meetingLocation: '', memberIds: [], resources: [], createdBy: ''
+    meetingDay: '', meetingTime: '', meetingLocation: '', memberIds: [], resources: [], createdBy: '',
+    mapUrl: '', mapPlace: null
   }),
   GroupPost: makeModel({ chapterId: '', authorMemberId: '', authorName: '', isAnnouncement: false }),
-  GroupMeeting: makeModel({ chapterId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
+  GroupMeeting: makeModel({ chapterId: '', topic: '', location: '', mapUrl: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
   DepartmentMeeting: makeModel({ chapterId: '', departmentId: '', topic: '', location: '', attendeeMemberIds: [], notes: '', recordedBy: '' }),
   ExecutiveMinute: makeModel({ chapterId: '', date: '', title: '', startTime: '', endTime: '', venue: '', chair: '', presentExecutiveIds: [], presentNames: [], apologies: '', openingPrayer: '', announcements: '', items: [], actions: [], nextMeeting: '', closingPrayer: '', body: '', decisions: '', fileId: '', status: 'draft', comments: [], approvedBy: [], approvedPositions: [], sharedAt: null, adoptedBy: '', adoptedAt: null, recordedBy: '', recordedPosition: '' }),
   SemesterOutline: makeModel({ chapterId: '', body: 'chapter', title: '', semesterLabel: '', startDate: '', endDate: '', theme: '', scripture: '', vision: '', goals: [], priorities: [], programmes: [], departmentFocus: [], needs: '', risks: '', status: 'draft', returnNote: '', version: 1, submittedAt: null, submittedBy: '', reviewedBy: '', reviewedAt: null, sharedAt: null, createdBy: '', updatedBy: '' }),

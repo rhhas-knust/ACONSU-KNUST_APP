@@ -1,6 +1,7 @@
 // The first-time visitor's path, in a real browser: the home page says when and
 // where without a click, and Plan your visit answers the rest from the
-// chapter's own settings.
+// chapter's own settings, with the chapter's map link and the map itself on
+// request. Google is never reached: its frame is answered here.
 //
 //   node test/visit-ui.js
 //
@@ -22,7 +23,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
 
 (async () => {
   require(path.join(ROOT, 'test', 'harness.js'));
-  Object.assign(process.env, { MONGODB_URI: 'mongodb://stub/visit-ui', PORT: '4475', ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin123', SESSION_SECRET: 't' });
+  Object.assign(process.env, { MONGODB_URI: 'mongodb://stub/visit-ui', PORT: '4475', ADMIN_USERNAME: 'admin', ADMIN_PASSWORD: 'admin123', SESSION_SECRET: 't', MAP_LINK_RESOLVE: 'off' });
   require(path.join(ROOT, 'server.js'));
   await new Promise(r => setTimeout(r, 1500));
   const BASE = 'http://127.0.0.1:4475';
@@ -33,7 +34,16 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
 
   const browser = await chromium.launch({ executablePath: CHROME });
   const errors = [];
-  const open = async (url, opts) => { const c = await browser.newContext(opts || { viewport: { width: 390, height: 844 } }); const p = await c.newPage(); p.on('pageerror', e => errors.push(`${url}: ${e.message}`)); await p.goto(BASE + url, { waitUntil: 'networkidle' }); await p.waitForTimeout(400); return p; };
+  const framed = []; // every request a page made to Google
+  const blocked = []; // anything the content security policy refused
+  const open = async (url, opts) => {
+    const c = await browser.newContext(opts || { viewport: { width: 390, height: 844 } });
+    await c.route(/^https:\/\/(www|maps)\.google\.com\//, (r) => { framed.push(r.request().url()); r.fulfill({ status: 200, contentType: 'text/html', body: '<p>map</p>' }); });
+    const p = await c.newPage();
+    p.on('pageerror', e => errors.push(`${url}: ${e.message}`));
+    p.on('console', m => { if (/Content Security Policy/i.test(m.text())) blocked.push(m.text()); });
+    await p.goto(BASE + url, { waitUntil: 'networkidle' }); await p.waitForTimeout(400); return p;
+  };
 
   console.log('\n== before the chapter has said when and where ==');
   let p = await open('/index.html');
@@ -61,7 +71,8 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   p = await open('/visit.html');
   check(/Sundays 8:00 AM - 11:00 AM/.test(await p.textContent('#visitTimes')), 'the visit page lists the meeting times');
   check(await p.textContent('#visitPlace') === 'Great Hall' && /KNUST Campus/.test(await p.textContent('#visitAddress')), 'where, and the address that finds it');
-  check(/maps\/search/.test(await p.getAttribute('#visitDirections', 'href')) && await p.getAttribute('#visitDirections', 'rel') === 'noopener', 'with directions that open the map');
+  const searchLink = p.locator('#visitMap a', { hasText: 'Open in Maps' });
+  check(/maps\/search/.test(await searchLink.getAttribute('href')) && /noopener/.test(await searchLink.getAttribute('rel')), 'without a map link yet, Open in Maps searches for the hall and its address');
   check(/three hours/.test(await p.textContent('#visitExpect')) && await p.locator('#visitExpect p').count() === 2, 'what to expect is the chapter\'s own words, in its paragraphs');
   check(/wa\.me\/233240000000/.test(await p.getAttribute('#visitContact a.btn-primary', 'href')), 'and asking a question is one tap away on WhatsApp');
   check(/Freshers Welcome Service/.test(await p.textContent('#visitNext')), 'with what is coming up next');
@@ -85,6 +96,52 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   });
   check(contrast.length === 0, 'the Join us card reads at 4.5:1 or better in dark mode', contrast);
   await dark.screenshot({ path: path.join(SHOTS, 'home-dark.png') });
+
+  console.log('\n== with the chapter\'s map link ==');
+  const LINK = 'https://maps.google.com/?q=6.6745,-1.5716';
+  await api('PUT', '/api/admin/chapter-settings', { mapUrl: LINK });
+  await api('POST', '/api/admin/events', { title: 'Hall revival', date: '2099-11-02', time: '18:00', location: 'Great Hall', mapUrl: LINK, chapterId: 'aconsu-knust' });
+  framed.length = 0;
+  p = await open('/visit.html');
+  const mapLink = p.locator('#visitMap a', { hasText: 'Open in Maps' });
+  check(await mapLink.getAttribute('href') === LINK && await mapLink.getAttribute('target') === '_blank', 'Open in Maps is the chapter\'s own link');
+  const show = p.locator('#visitMap button', { hasText: 'Show the map here' });
+  check(await show.getAttribute('aria-expanded') === 'false' && await p.locator('#visitMap iframe').count() === 0 && framed.length === 0, 'nothing is asked of Google until the map is asked for', framed);
+  await show.click();
+  await p.waitForSelector('#visitMap iframe');
+  const frame = p.locator('#visitMap iframe');
+  check(/^https:\/\/www\.google\.com\/maps\?q=6\.6745%2C-1\.5716&z=17&output=embed$/.test(await frame.getAttribute('src')), 'pressing it shows the map of that spot in the app', await frame.getAttribute('src'));
+  check(await frame.getAttribute('title') === 'Map showing Great Hall', 'the map is named for a screen reader');
+  const toggle = p.locator('#visitMap [data-map-src]');
+  check(await toggle.getAttribute('aria-expanded') === 'true' && (await toggle.textContent()) === 'Hide the map', 'and the button now hides it');
+  await p.waitForTimeout(300);
+  check(framed.length > 0 && blocked.length === 0, 'the app\'s security policy lets the map load', { framed, blocked });
+  check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'the open map fits a phone');
+  const smallMap = await p.$$eval('#visitMap a.btn, #visitMap button', els => els.map(e => Math.round(e.getBoundingClientRect().height)).filter(h => h < 44));
+  check(smallMap.length === 0, 'its buttons are 44px to press', smallMap);
+  await p.screenshot({ path: path.join(SHOTS, 'visit-map-phone.png'), fullPage: true });
+  await toggle.click();
+  check(await p.isHidden('#visitMap .map-frame'), 'Hide the map hides it');
+  p = await open('/index.html');
+  check(await p.locator('#joinUsCard a', { hasText: 'Open in Maps' }).getAttribute('href') === LINK, 'the home page\'s Join us card opens the same map');
+  check(await p.locator(`#site-footer a[href="${LINK}"]`).count() === 1, 'and so does the address at the foot of every page');
+  p = await open('/events.html');
+  check(await p.locator('.event-card', { hasText: 'Hall revival' }).locator('.map-block button').count() === 1, 'an event with a map link offers its map too');
+
+  console.log('\n== giving the map link ==');
+  const adm = await open('/admin.html', { viewport: { width: 1280, height: 900 } });
+  await adm.fill('#username', 'admin'); await adm.fill('#password', 'admin123'); await adm.click('#loginForm button[type="submit"]');
+  await adm.waitForSelector('#adminShell', { state: 'visible' });
+  await adm.click('[data-panel="chapterSettings"]');
+  await adm.waitForSelector('#csMapUrl');
+  check(await adm.inputValue('#csMapUrl') === LINK && /Share/.test(await adm.textContent('#csMapUrlHint')), 'the chapter settings have a map link box beside the address, with how to get the link');
+  await adm.fill('#csMapUrl', 'javascript:alert(1)');
+  await adm.click('#saveChapterSettingsBtn');
+  await adm.waitForFunction(() => /Google Maps/.test(document.querySelector('#panel-chapterSettings .form-msg.error')?.textContent || ''));
+  check(await adm.evaluate(() => document.activeElement && document.activeElement.id) === 'csMapUrl', 'a link that is not a map is refused, and the box is pointed out');
+  await adm.click('[data-panel="events"]');
+  await adm.click('#addBtn-events');
+  check(await adm.locator('#field-mapUrl').count() === 1, 'an event\'s location has a map link box too');
 
   check(errors.length === 0, 'no script errors', errors);
   await browser.close();

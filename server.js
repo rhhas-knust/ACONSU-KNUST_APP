@@ -4,6 +4,7 @@ const session = require('express-session');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
@@ -34,6 +35,7 @@ const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
 const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
 const officeAccounts = require('./lib/officeAccounts');
+const maps = require('./lib/maps');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
@@ -48,11 +50,40 @@ const rawUpload = multer({
 // body parsers have run, so the operator-key check has to run again behind it.
 // Every route that takes an upload goes through here, so none can forget to.
 const upload = {
-  single: (name) => [rawUpload.single(name), rejectOperatorKeys],
-  array: (name, max) => [rawUpload.array(name, max), rejectOperatorKeys],
-  fields: (spec) => [rawUpload.fields(spec), rejectOperatorKeys],
-  none: () => [rawUpload.none(), rejectOperatorKeys]
+  single: (name) => [rawUpload.single(name), rejectOperatorKeys, checkMapLink],
+  array: (name, max) => [rawUpload.array(name, max), rejectOperatorKeys, checkMapLink],
+  fields: (spec) => [rawUpload.fields(spec), rejectOperatorKeys, checkMapLink],
+  none: () => [rawUpload.none(), rejectOperatorKeys, checkMapLink]
 };
+
+// ---------- map links ----------
+// Any save that carries a map link (a chapter's meeting place, an event, a
+// department, a group) is checked here, once, for every route: only a map
+// service's own address gets through, and what the app draws the map from is
+// worked out on the server, never taken from the request. See lib/maps.js.
+// It runs behind both body parsers, and again behind every upload (multer
+// parses those later), so no way of sending a form skips it.
+function checkMapLink(req, res, next) {
+  if (!['POST', 'PUT', 'PATCH'].includes(req.method) || !req.path.startsWith('/api/')) return next();
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return next();
+  delete body.mapPlace;
+  if (!Object.prototype.hasOwnProperty.call(body, 'mapUrl')) return next();
+  const checked = maps.cleanMapUrl(body.mapUrl);
+  if (checked.error) return res.status(400).json({ error: checked.error, field: 'mapUrl' });
+  body.mapUrl = checked.value;
+  body.mapPlace = checked.value ? maps.placeFromMapUrl(checked.value) : null;
+  if (!checked.value || body.mapPlace) return next();
+  // A short share link says nothing until it is followed. One followed before
+  // (this record saved again unchanged, or the same hall used for an event)
+  // keeps its spot; a new one is followed in the background
+  // (resolvePendingMapLinks), so a save never waits on Google.
+  return knownMapPlace(checked.value).then((place) => {
+    body.mapPlace = place;
+    if (!place) setImmediate(() => resolvePendingMapLinks().catch(() => {}));
+    next();
+  }, () => next());
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -121,7 +152,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 app.use(express.json());
+
 app.use(express.urlencoded({ extended: true }));
+app.use(checkMapLink);
 // {"email": {"$ne": null}} and ?category[$ne]=x are not values, they are
 // database operators. See lib/requestGuard.js.
 app.use(rejectOperatorKeys);
@@ -3035,7 +3068,9 @@ function buildPublicSettings(globalSettings, chapter) {
     },
     // Where the chapter meets (the hall), apart from the postal address, so a
     // newcomer is told both where to go and how to find it.
-    meetingPlace: chapter.location || ''
+    meetingPlace: chapter.location || '',
+    mapUrl: chapter.mapUrl || '',
+    mapPlace: chapter.mapPlace || null
   };
 }
 
@@ -5465,6 +5500,7 @@ app.post('/api/executive/events', requireRole('executive'), requireCapability(CA
     const item = await repo.create('events', {
       chapterId: staff.chapterId,
       title, date, time: time || '', location: location || '', description: description || '',
+      mapUrl: req.body.mapUrl || '', mapPlace: req.body.mapPlace || null,
       category: category || '', videoUrl: videoUrl || '',
       status: 'submitted', submittedBy: staff.name, submittedByStaffId: staff.id
     }, 'even');
@@ -5527,6 +5563,7 @@ app.put('/api/executive/department', requireRole('executive'), requireOwnDepartm
   ['tagline', 'description', 'meetingDay', 'meetingTime', 'meetingLocation'].forEach((key) => {
     if (hasOwn(req.body, key)) next[key] = cleanText(req.body[key]);
   });
+  if (hasOwn(req.body, 'mapUrl')) { next.mapUrl = req.body.mapUrl; next.mapPlace = req.body.mapPlace; } // checked on the way in
   const updated = await repo.updateById('departments', department.id, next, { chapterId: staff.chapterId });
   res.json({ success: true, item: updated });
 }));
@@ -6684,6 +6721,7 @@ app.post('/api/national/chapters', rolesLib.requireNational, async (req, res) =>
     const chapter = await repo.create('chapters', {
       id: slug, name, fullName: req.body.fullName || '', institution: institution || '',
       location: location || '', address: address || '', status: 'active',
+      mapUrl: req.body.mapUrl || '', mapPlace: req.body.mapPlace || null,
       createdBy: actorName(req)
     }, slug);
     await refreshSoleActiveChapter();
@@ -7688,6 +7726,7 @@ app.put('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => 
     if (hasOwn(req.body, 'institution')) next.institution = cleanText(req.body.institution);
     if (hasOwn(req.body, 'location')) next.location = cleanText(req.body.location);
     if (hasOwn(req.body, 'address')) next.address = cleanText(req.body.address);
+    if (hasOwn(req.body, 'mapUrl')) { next.mapUrl = req.body.mapUrl; next.mapPlace = req.body.mapPlace; } // checked on the way in
     if (hasOwn(req.body, 'tagline')) next.tagline = cleanText(req.body.tagline);
     if (hasOwn(req.body, 'verseOfTheWeek')) next.verseOfTheWeek = cleanText(req.body.verseOfTheWeek);
     if (hasOwn(req.body, 'serviceTimes')) next.serviceTimes = cleanStringList(req.body.serviceTimes);
@@ -8521,6 +8560,70 @@ async function checkRetentionAlerts() {
   }
 }
 
+// Short share links, followed in the background to the spot they point at.
+// A link that cannot be followed now (no network, Google busy) is tried again
+// on the next run, no more than once an hour.
+const MAP_RESOURCES = ['chapters', 'events', 'departments', 'groups'];
+const mapLinkTried = new Map();
+const mapPlacesFound = new Map(); // short link -> the spot it led to, this run
+async function knownMapPlace(url) {
+  if (mapPlacesFound.has(url)) return mapPlacesFound.get(url);
+  for (const resource of MAP_RESOURCES) {
+    const hit = (await repo.getAll(resource, { mapUrl: url })).find((r) => r.mapPlace);
+    if (hit) return hit.mapPlace;
+  }
+  return null;
+}
+let mapResolveRunning = false;
+async function resolvePendingMapLinks() {
+  if (mapResolveRunning || process.env.MAP_LINK_RESOLVE === 'off') return;
+  mapResolveRunning = true;
+  try {
+    for (const resource of MAP_RESOURCES) {
+      const pending = (await repo.getAll(resource, { mapPlace: null }))
+        .filter((r) => r.mapUrl && (Date.now() - (mapLinkTried.get(r.mapUrl) || 0)) > 60 * 60 * 1000)
+        .slice(0, 20);
+      for (const r of pending) {
+        mapLinkTried.set(r.mapUrl, Date.now());
+        const place = mapPlacesFound.get(r.mapUrl) || await maps.resolveMapPlace(r.mapUrl).catch(() => null);
+        if (place) mapPlacesFound.set(r.mapUrl, place);
+        // Only if the link has not been changed in the meantime.
+        if (place) await repo.patchById(resource, r.id, { mapPlace: place }, { mapUrl: r.mapUrl }).catch(() => {});
+      }
+    }
+  } finally {
+    mapResolveRunning = false;
+  }
+}
+
+// ACONSU-KNUST's meeting place is already on its website (site/chapter.js):
+// the address and the Google Maps link the website's "Open in Maps" uses. The
+// app starts from the same, filling only what the chapter has left blank, so
+// the website and the app point at the same auditorium and a chapter's own
+// later choice is never overwritten.
+async function fillLegacyChapterFromWebsite() {
+  try {
+    const chapter = await repo.getById('chapters', rolesLib.LEGACY_CHAPTER_ID);
+    if (!chapter) return;
+    const code = fs.readFileSync(path.join(__dirname, 'site', 'chapter.js'), 'utf8');
+    const sandbox = { window: {} };
+    require('vm').runInNewContext(code, sandbox, { timeout: 500 });
+    const site = sandbox.window.CHAPTER || {};
+    const patch = {};
+    const link = maps.cleanMapUrl(site.mapUrl || '');
+    if (!chapter.mapUrl && link.value) { patch.mapUrl = link.value; patch.mapPlace = maps.placeFromMapUrl(link.value); }
+    if (!chapter.address && site.address) patch.address = String(site.address).trim();
+    const firstWhere = Array.isArray(site.serviceTimes) && site.serviceTimes[0] && site.serviceTimes[0].where;
+    if (!chapter.location && firstWhere) patch.location = String(firstWhere).trim();
+    if (Object.keys(patch).length) {
+      await repo.patchById('chapters', chapter.id, patch);
+      console.log(`Filled ${Object.keys(patch).join(', ')} for ${chapter.id} from the website's chapter.js`);
+    }
+  } catch (e) {
+    console.warn('Could not read the website\'s chapter.js for the meeting place:', e.message);
+  }
+}
+
 // ---------- startup ----------
 // Keeps lib/roles.js's "single chapter, zero friction" shortcut honest.
 // chapterFilter() runs on nearly every request and cannot be async, so the
@@ -8581,6 +8684,8 @@ connectDB()
     setInterval(loadMemberRevocations, 5 * 60 * 1000);
     refreshSoleActiveChapter();
     setInterval(refreshSoleActiveChapter, 5 * 60 * 1000); // belt and braces against drift
+    fillLegacyChapterFromWebsite().then(() => resolvePendingMapLinks()).catch(() => {});
+    setInterval(() => resolvePendingMapLinks().catch(() => {}), 60 * 60 * 1000);
     checkBirthdaysAndNotify();
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
     sendDueAnnouncements();

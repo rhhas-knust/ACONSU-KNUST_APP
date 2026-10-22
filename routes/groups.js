@@ -51,6 +51,7 @@ function registerGroupRoutes(app, deps) {
         chapterId, name, type: ['bible_study', 'prayer', 'fellowship', 'department', 'cell', 'other'].includes(type) ? type : 'other',
         description: description || '', linkedDepartmentId: linkedDepartmentId || '', leaderMemberId: leaderMemberId || '', leaderName,
         meetingDay: meetingDay || '', meetingTime: meetingTime || '', meetingLocation: meetingLocation || '',
+        mapUrl: req.body.mapUrl || '', mapPlace: req.body.mapPlace || null, // checked on the way in (server.js)
         memberIds: leaderMemberId ? [leaderMemberId] : [], createdBy: actorName(req)
       }, 'grp');
       res.json({ success: true, item: group });
@@ -95,6 +96,7 @@ function registerGroupRoutes(app, deps) {
         ...existing, description: description !== undefined ? description : existing.description,
         meetingDay: meetingDay !== undefined ? meetingDay : existing.meetingDay, meetingTime: meetingTime !== undefined ? meetingTime : existing.meetingTime,
         meetingLocation: meetingLocation !== undefined ? meetingLocation : existing.meetingLocation,
+        ...(req.body.mapUrl !== undefined ? { mapUrl: req.body.mapUrl, mapPlace: req.body.mapPlace } : {}),
         resources: Array.isArray(resources) ? resources.filter((r) => r && r.title) : existing.resources
       });
       res.json({ success: true, item: updated });
@@ -158,9 +160,9 @@ function registerGroupRoutes(app, deps) {
       const group = await repo.getById('groups', req.params.id);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       if (!isGroupLeaderOrAbove(req, group)) return res.status(403).json({ error: 'Only the group leader can log a meeting.' });
-      const { date, topic, location, attendeeMemberIds, notes } = req.body;
+      const { date, topic, location, mapUrl, attendeeMemberIds, notes } = req.body;
       if (!date) return res.status(400).json({ error: 'A date is required' });
-      const meeting = await repo.create('groupMeetings', { chapterId: group.chapterId, groupId: group.id, date, topic: topic || '', location: location || '',
+      const meeting = await repo.create('groupMeetings', { chapterId: group.chapterId, groupId: group.id, date, topic: topic || '', location: location || '', mapUrl: mapUrl || '',
         attendeeMemberIds: Array.isArray(attendeeMemberIds) ? attendeeMemberIds.filter((id) => group.memberIds.includes(id)) : [], notes: notes || '', recordedBy: actorName(req) }, 'gmeet');
       res.json({ success: true, item: meeting });
     } catch (e) { res.status(500).json({ error: 'Could not log this meeting' }); }

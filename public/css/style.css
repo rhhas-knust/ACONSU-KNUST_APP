@@ -1170,6 +1170,7 @@ body {
 .join-place { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; color: var(--ink-soft) !important; font-size: 0.95rem; }
 .join-place svg { width: 18px; height: 18px; flex: none; color: var(--brand); }
 .join-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; color: var(--brand); }
+.join-links { display: flex; flex-wrap: wrap; gap: 4px 20px; }
 
 /* ---------- Plan your visit ---------- */
 .visit-grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); }
@@ -1195,3 +1196,14 @@ body {
   width: 52px; height: 52px; border-radius: 14px;
   background: var(--lilac-light); color: var(--brand); font-family: var(--font-display); font-weight: 700; font-size: 1.5rem;
 }
+
+/* ---------- Maps: Open in Maps, and the map itself on request ---------- */
+.map-block { margin-top: 12px; }
+.map-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.map-actions svg { width: 18px; height: 18px; flex: none; }
+.map-frame { margin-top: 12px; }
+.map-frame iframe {
+  display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 420px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--surface-2);
+}
+.map-note { margin: 6px 0 0; font-size: 0.85rem; color: var(--ink-faint); }

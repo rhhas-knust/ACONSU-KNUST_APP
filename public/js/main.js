@@ -16,7 +16,11 @@ async function fetchJSON(url, options) {
   try {
     const res = await fetch(url, opts);
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+    if (!res.ok) {
+      const err = new Error(data.error || 'Request failed');
+      if (data.field) err.field = data.field; // which box the problem is in, so a form can point at it
+      throw err;
+    }
     return data;
   } finally {
     done();
@@ -849,7 +853,14 @@ function renderFooter(settings) {
         </div>
         <div>
           <p class="footer-title">Reach Us</p>
-          <span style="display:block; padding:6px 0; color:#E2D3EE; font-size:0.95rem;">${escapeHtml(s.address || 'Campus Fellowship Auditorium')}</span>
+          ${(() => {
+            // Where we meet: a link to the chapter's map when it has one, since a
+            // place is more use found than read. Nothing at all when not set.
+            const where = s.address || s.meetingPlace || '';
+            const map = safeMapUrl(s.mapUrl);
+            if (map) return `<a href="${escapeHtml(map)}" target="_blank" rel="noopener noreferrer">${escapeHtml(where || 'Find us on the map')}</a>`;
+            return where ? `<span style="display:block; padding:6px 0; color:#E2D3EE; font-size:0.95rem;">${escapeHtml(where)}</span>` : '';
+          })()}
           ${s.email ? `<a href="mailto:${s.email}">${escapeHtml(s.email)}</a>` : ''}
           ${s.phone ? `<a href="tel:${s.phone}">${escapeHtml(s.phone)}</a>` : ''}
         </div>
@@ -1370,3 +1381,86 @@ document.addEventListener('DOMContentLoaded', wireThemeToggle);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
   else start();
 })();
+
+// ---------- maps: where to find a place ----------
+// A chapter's meeting place, an event, a department or a group can carry a map
+// link (usually the Share link from Google Maps). Wherever the place is named it
+// gets two things:
+//   "Open in Maps": the link as the chapter gave it. On a phone it opens the
+//   maps app, which is where directions are.
+//   "Show the map here": the map inside the page. It loads only when asked for,
+//   because the map comes from Google (which then sees the visit) and is heavy
+//   on a phone's data. Nothing goes to Google until the button is pressed.
+// The server has already checked the link and worked out the spot (lib/maps.js);
+// it is checked again here, so a page never links or frames anything else.
+const MAP_HOST = /^(maps\.app\.goo\.gl|goo\.gl|maps\.google\.[a-z.]{2,8}|(www\.)?google\.[a-z.]{2,8}|maps\.apple\.com|(www\.)?openstreetmap\.org|osm\.org)$/i;
+function safeMapUrl(url) {
+  try {
+    const u = new URL(String(url || ''));
+    return u.protocol === 'https:' && MAP_HOST.test(u.hostname) ? u.toString() : '';
+  } catch (e) { return ''; }
+}
+
+// What goes in the frame: Google's own embed link when the chapter pasted one,
+// otherwise the spot (or the place's name) on Google's map.
+function mapEmbedSrc(place, fallbackQuery) {
+  const p = place || {};
+  if (p.embed && /^https:\/\/(www|maps)\.google\.com\/maps\/embed\?/.test(p.embed)) return p.embed;
+  const at = (Number.isFinite(p.lat) && Number.isFinite(p.lng)) ? `${p.lat},${p.lng}`
+    : (p.query || fallbackQuery || '').trim();
+  return at ? `https://www.google.com/maps?q=${encodeURIComponent(at)}&z=17&output=embed` : '';
+}
+
+// The buttons for one place, or '' when there is nothing to show. `fallbackQuery`
+// (the place's name and address) is used only for a chapter's own meeting place,
+// which has an address to search for; a bare room name for an event could
+// find the wrong building.
+let mapBlockCount = 0;
+function mapBlockHtml({ url, place, label, fallbackQuery }) {
+  const link = safeMapUrl(url)
+    || (fallbackQuery ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fallbackQuery)}` : '');
+  if (!link) return '';
+  const src = mapEmbedSrc(place, fallbackQuery);
+  const id = `mapFrame${++mapBlockCount}`;
+  const name = label || 'the place';
+  return `
+    <div class="map-block">
+      <div class="map-actions">
+        <a class="btn btn-outline" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${svgIcon(ICON_PIN)}<span>Open in Maps</span></a>
+        ${src ? `<button type="button" class="btn btn-outline" data-map-src="${escapeHtml(src)}" data-map-title="${escapeHtml(`Map showing ${name}`)}" aria-expanded="false" aria-controls="${id}">Show the map here</button>` : ''}
+      </div>
+      ${src ? `<div class="map-frame" id="${id}" hidden></div>` : ''}
+    </div>`;
+}
+
+// The box for a map link, next to every place a location is typed. Plain text
+// rather than type="url", so a pasted "Embed a map" snippet is accepted too;
+// the server checks it either way.
+function mapLinkFieldHtml(id, value, label) {
+  return `<div class="field"><label for="${id}">${escapeHtml(label || 'Map link (optional)')}</label>
+    <input type="text" id="${id}" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="${escapeHtml(value || '')}" placeholder="https://maps.app.goo.gl/..." aria-describedby="${id}Hint">
+    <small class="hint" id="${id}Hint">In Google Maps, find the place, press Share, then Copy link, and paste it here. People can then open it in their maps app or see the map in the app.</small></div>`;
+}
+
+document.addEventListener('click', (e) => {
+  const button = e.target.closest && e.target.closest('[data-map-src]');
+  if (!button) return;
+  const frame = document.getElementById(button.getAttribute('aria-controls'));
+  if (!frame) return;
+  const open = button.getAttribute('aria-expanded') !== 'true';
+  if (open && !frame.querySelector('iframe')) {
+    const iframe = document.createElement('iframe');
+    iframe.src = button.dataset.mapSrc;
+    iframe.title = button.dataset.mapTitle || 'Map';
+    iframe.loading = 'lazy';
+    iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+    iframe.allowFullscreen = true;
+    const note = document.createElement('p');
+    note.className = 'map-note';
+    note.textContent = 'Map from Google Maps, shown because you asked for it.';
+    frame.append(iframe, note);
+  }
+  frame.hidden = !open;
+  button.setAttribute('aria-expanded', open ? 'true' : 'false');
+  button.textContent = open ? 'Hide the map' : 'Show the map here';
+});

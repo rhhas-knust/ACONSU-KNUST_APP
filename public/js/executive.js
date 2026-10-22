@@ -128,6 +128,7 @@ async function renderExecEvents(el) {
           <div class="field"><label>Time</label><input type="time" id="evTime"></div>
         </div>
         <div class="field"><label>Location</label><input type="text" id="evLocation"></div>
+        ${mapLinkFieldHtml('evMapUrl', '')}
         <div class="field"><label>Category</label><input type="text" id="evCategory" placeholder="e.g. Outreach, Retreat, Social"></div>
         <div class="field"><label>Description</label><textarea id="evDescription" rows="3"></textarea></div>
         <button type="submit" class="btn btn-primary">Submit for Review</button>
@@ -165,6 +166,7 @@ async function renderExecEvents(el) {
           date: document.getElementById('evDate').value,
           time: document.getElementById('evTime').value,
           location: document.getElementById('evLocation').value,
+          mapUrl: document.getElementById('evMapUrl').value,
           category: document.getElementById('evCategory').value,
           description: document.getElementById('evDescription').value
         })
@@ -174,6 +176,7 @@ async function renderExecEvents(el) {
       openPanel('events');
     } catch (err) {
       setFormMsg('eventSubmitMsg', err.message || 'Could not submit this event.', 'error');
+      if (err.field === 'mapUrl') document.getElementById('evMapUrl').focus();
     }
   });
 }
@@ -231,6 +234,7 @@ async function renderExecDepartment(el) {
         </div>
         <div class="field"><label>Meeting Location</label>
           <input type="text" id="dMeetingLocation" value="${escapeHtml(d.meetingLocation || '')}"></div>
+        ${mapLinkFieldHtml('dMapUrl', d.mapUrl)}
         <button type="submit" class="btn btn-primary">Save Department</button>
         <div class="form-msg" id="deptMsg"></div>
       </form>
@@ -247,13 +251,15 @@ async function renderExecDepartment(el) {
           description: document.getElementById('dDescription').value,
           meetingDay: document.getElementById('dMeetingDay').value,
           meetingTime: document.getElementById('dMeetingTime').value,
-          meetingLocation: document.getElementById('dMeetingLocation').value
+          meetingLocation: document.getElementById('dMeetingLocation').value,
+          mapUrl: document.getElementById('dMapUrl').value
         })
       });
       showToast('Department updated.', 'success');
       openPanel('department');
     } catch (err) {
       setFormMsg('deptMsg', err.message || 'Could not save your department.', 'error');
+      if (err.field === 'mapUrl') document.getElementById('dMapUrl').focus();
     }
   });
 }

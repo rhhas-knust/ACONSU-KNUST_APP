@@ -56,7 +56,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <h2 id="whereHead">Where to find us</h2>
       <p class="visit-place" id="visitPlace"></p>
       <p class="visit-address" id="visitAddress"></p>
-      <a class="btn btn-outline" id="visitDirections" target="_blank" rel="noopener" hidden>Get directions</a>
+      <div id="visitMap"></div>
     </article>
 
     <article class="visit-card visit-wide" aria-labelledby="expectHead">
@@ -101,18 +101,20 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     ? times.map(t => `<li>${escapeHtml(t)}</li>`).join('')
     : '<li class="muted">Our meeting times will be posted here soon. Message us in the meantime and we will tell you.</li>';
 
-  // Where: the hall, and the address that finds it.
+  // Where: the hall, the address that finds it, and the chapter's own map link
+  // (the one its website uses too), with the map itself on request.
   const place = (settings.meetingPlace || '').trim();
   const address = (settings.address || '').trim();
-  if (!place && !address) {
+  if (!place && !address && !settings.mapUrl) {
     $('whereCard').hidden = true;
   } else {
     $('visitPlace').textContent = place;
     $('visitPlace').hidden = !place;
     $('visitAddress').textContent = address && address !== place ? address : '';
-    const dir = $('visitDirections');
-    dir.href = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([place, address].filter(Boolean).join(', '))}`;
-    dir.hidden = false;
+    $('visitMap').innerHTML = mapBlockHtml({
+      url: settings.mapUrl, place: settings.mapPlace, label: place || address,
+      fallbackQuery: [place, address].filter(Boolean).join(', ')
+    });
   }
 
   // What to expect: the chapter's own words when it has written them. Without

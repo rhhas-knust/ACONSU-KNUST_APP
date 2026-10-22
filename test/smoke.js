@@ -19,6 +19,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
 (async () => {
   process.env.MONGODB_URI = 'mongodb://stub/aconsu_test';
+  process.env.MAP_LINK_RESOLVE = 'off'; // map links are never followed out to Google from a test
   process.env.PORT = '4321';
   process.env.ADMIN_USERNAME = 'admin';
   process.env.ADMIN_PASSWORD = 'admin123';
@@ -5624,7 +5625,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       check('every page is sent with a Content-Security-Policy', csp.length > 100, csp.slice(0, 60));
       check('which allows scripts only from the app itself', /script-src 'self' 'unsafe-inline'/.test(csp) && !/script-src[^;]*https?:/.test(csp), csp);
       check('forbids plugins, and framing by other sites, and posting to other sites', /object-src 'none'/.test(csp) && /frame-ancestors 'self'/.test(csp) && /form-action 'self'/.test(csp), csp);
-      check('and lets a page frame only YouTube (no-cookie) and Facebook', /frame-src https:\/\/www\.youtube-nocookie\.com https:\/\/www\.facebook\.com(;|$)/.test(csp), csp);
+      check('and lets a page frame only YouTube (no-cookie), Facebook and Google\'s map', /frame-src https:\/\/www\.youtube-nocookie\.com https:\/\/www\.facebook\.com https:\/\/www\.google\.com https:\/\/maps\.google\.com(;|$)/.test(csp), csp);
       check('connections go back to the app only', /connect-src 'self'(;|$)/.test(csp), csp);
       const pp = res.headers.get('permissions-policy') || '';
       check('camera and microphone are for this app only and nothing else is asked for', /camera=\(self\)/.test(pp) && /microphone=\(self\)/.test(pp) && /geolocation=\(\)/.test(pp), pp);

@@ -511,6 +511,7 @@ function openEventForm(event) {
         <div class="field"><label>Time</label><input type="time" id="evTime" value="${event?.time || ''}" required></div>
       </div>
       <div class="field"><label>Location</label><input type="text" id="evLocation" value="${escapeHtml(event?.location || '')}"></div>
+      ${mapLinkFieldHtml('evMapUrl', event?.mapUrl)}
       <div class="field"><label>Description</label><textarea id="evDescription">${escapeHtml(event?.description || '')}</textarea></div>
       <div class="field"><label>Recurring label (optional)</label><input type="text" id="evRecurring" value="${escapeHtml(event?.recurring || '')}" placeholder="e.g. Every Wednesday"></div>
       ${isEdit ? `
@@ -541,6 +542,7 @@ function openEventForm(event) {
       date: document.getElementById('evDate').value,
       time: document.getElementById('evTime').value,
       location: document.getElementById('evLocation').value,
+      mapUrl: document.getElementById('evMapUrl').value,
       description: document.getElementById('evDescription').value,
       recurring: document.getElementById('evRecurring').value
     };
@@ -571,6 +573,7 @@ function openEventForm(event) {
       openPanel('events');
     } catch (err) {
       setFormMsg('eventFormMsg', err.message || 'Could not save this event.', 'error');
+      if (err.field === 'mapUrl') document.getElementById('evMapUrl').focus();
     }
   });
 }

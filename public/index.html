@@ -321,7 +321,10 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <p class="join-eyebrow">Join us</p>
           ${times.length ? `<ul class="join-times">${times.slice(0, 3).map(t => `<li>${escapeHtml(t)}</li>`).join('')}</ul>` : ''}
           ${place ? `<p class="join-place">${svgIcon(ICON_PIN)}<span>${escapeHtml(place)}</span></p>` : ''}
-          <a class="join-link" href="/visit.html">Directions and what to expect</a>
+          <div class="join-links">
+            ${safeMapUrl(settings.mapUrl) ? `<a class="join-link" href="${escapeHtml(safeMapUrl(settings.mapUrl))}" target="_blank" rel="noopener noreferrer">Open in Maps</a>` : ''}
+            <a class="join-link" href="/visit.html">${safeMapUrl(settings.mapUrl) ? 'What to expect' : 'Directions and what to expect'}</a>
+          </div>
         </div>`;
     }
   }

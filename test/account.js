@@ -13,6 +13,7 @@ const { fakeModels } = require('./harness.js');
 
 (async () => {
   process.env.MONGODB_URI = 'mongodb://stub/aconsu_account';
+  process.env.MAP_LINK_RESOLVE = 'off'; // map links are never followed out to Google from a test
   process.env.PORT = '4323';
   process.env.ADMIN_USERNAME = 'admin';
   process.env.ADMIN_PASSWORD = 'admin123';
