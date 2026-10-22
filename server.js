@@ -36,6 +36,7 @@ const { registerAccountRoutes } = require('./routes/account');
 const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
 const officeAccounts = require('./lib/officeAccounts');
 const maps = require('./lib/maps');
+const { moveGlobalSetupToChapter } = require('./lib/globalMove');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
 
@@ -47,13 +48,18 @@ const rawUpload = multer({
   limits: { fileSize: UPLOAD_LIMIT_BYTES }
 });
 // multer parses field names like  name[$ne]  into nested objects AFTER the
-// body parsers have run, so the operator-key check has to run again behind it.
-// Every route that takes an upload goes through here, so none can forget to.
+// body parsers have run, so the operator-key check has to run again behind it,
+// and so does everything else that reads the fields: the map-link check, and
+// the rule that a chapter's own things change only at its request (set below,
+// once routes/chapter-requests.js is registered). Every route that takes an
+// upload goes through here, so none can forget to.
+let chapterGuardAfterUpload = (req, res, next) => next();
+const afterUpload = [rejectOperatorKeys, checkMapLink, (req, res, next) => chapterGuardAfterUpload(req, res, next)];
 const upload = {
-  single: (name) => [rawUpload.single(name), rejectOperatorKeys, checkMapLink],
-  array: (name, max) => [rawUpload.array(name, max), rejectOperatorKeys, checkMapLink],
-  fields: (spec) => [rawUpload.fields(spec), rejectOperatorKeys, checkMapLink],
-  none: () => [rawUpload.none(), rejectOperatorKeys, checkMapLink]
+  single: (name) => [rawUpload.single(name), ...afterUpload],
+  array: (name, max) => [rawUpload.array(name, max), ...afterUpload],
+  fields: (spec) => [rawUpload.fields(spec), ...afterUpload],
+  none: () => [rawUpload.none(), ...afterUpload]
 };
 
 // ---------- map links ----------
@@ -259,10 +265,10 @@ app.use((req, res, next) => {
   });
 });
 
-// A chapter's look (its site settings, artwork, pages and department pages) is
-// its own: the main admin may change it only while the chapter has asked. See
+// A chapter is its own: its look, its events, its members and its accounts.
+// The main admin may change them only while the chapter has asked. See
 // routes/chapter-requests.js. Registered here, before every route it guards.
-registerChapterRequestRoutes(app, { repo, models, rolesLib, currentStaff, actorName });
+({ guardAfterUpload: chapterGuardAfterUpload } = registerChapterRequestRoutes(app, { repo, models, rolesLib, currentStaff, actorName }));
 
 // ---------- auth routes ----------
 // One session carries every identity this browser holds - the env admin flag,
@@ -997,24 +1003,40 @@ function escapeHtmlForEmail(str) {
   if (!str) return '';
   return String(str).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
 }
-// Fire-and-forget email to whatever address is set in Site Settings, used for
-// things the admin should know about quickly (a new join request, a contact
-// message). Never blocks or fails the request that triggered it.
-async function notifyAdminByEmail(subject, html) {
+// Where a chapter's mail goes: its own contact email, and its own office's when
+// it has set one. A chapter's messages never go to another chapter's address,
+// nor to the national one. Without a chapter, it is national business, and goes
+// to the address on the Global Settings page.
+const OFFICE_EMAIL_KEYS = { shepherdingEmail: 'shepherding', publicityEmail: 'publicity', financeEmail: 'finance', welfareEmail: 'welfare' };
+async function emailRecipients(chapterId, officeKey) {
+  if (chapterId) {
+    const chapter = await repo.getById('chapters', chapterId);
+    if (!chapter) return [];
+    const office = officeKey ? ((chapter.officeEmails || {})[OFFICE_EMAIL_KEYS[officeKey]] || '') : '';
+    return [...new Set([office, (chapter.contact || {}).email].filter(Boolean))];
+  }
+  const settings = await repo.getSettings();
+  return [...new Set([officeKey ? settings[officeKey] : '', settings.email].filter(Boolean))];
+}
+
+// Fire-and-forget email for things the admin should know about quickly (a new
+// join request, a contact message). Never blocks or fails the request that
+// triggered it.
+async function notifyAdminByEmail(subject, html, chapterId) {
   try {
-    const settings = await repo.getSettings();
-    if (!settings.email) return; // no admin email configured - nothing to send to
-    mailer.sendMail({ to: settings.email, subject, html }).catch(() => {});
+    const recipients = await emailRecipients(chapterId, '');
+    if (!recipients.length) return; // no address set - nothing to send to
+    mailer.sendMail({ to: recipients.join(','), subject, html }).catch(() => {});
   } catch (e) { /* non-critical - never let this break the original request */ }
 }
 
 // Same idea, but for mail that belongs to one particular office (shepherding,
-// finance, publicity). Falls back to the main contact address when that office
-// hasn't set its own, and de-duplicates so nobody gets the same mail twice.
-async function notifyOfficeByEmail(officeKey, subject, html) {
+// finance, publicity, welfare). Falls back to the main contact address when
+// that office hasn't set its own, and de-duplicates so nobody gets the same
+// mail twice.
+async function notifyOfficeByEmail(officeKey, subject, html, chapterId) {
   try {
-    const settings = await repo.getSettings();
-    const recipients = [...new Set([settings[officeKey], settings.email].filter(Boolean))];
+    const recipients = await emailRecipients(chapterId, officeKey);
     if (!recipients.length) return;
     mailer.sendMail({ to: recipients.join(','), subject, html }).catch(() => {});
   } catch (e) { /* non-critical */ }
@@ -3000,71 +3022,84 @@ function sanitiseHeroArt(stored) {
   return out;
 }
 
+// What Global may tell a visitor: the national app's own name, contacts and
+// banner. The council's meeting link, the office email addresses and the record
+// of the move to ACONSU-KNUST stay on the server.
+const PUBLIC_GLOBAL_KEYS = [
+  'fellowshipName', 'fullName', 'tagline', 'verseOfTheWeek', 'address', 'email', 'phone', 'whatsapp',
+  'instagram', 'facebook', 'youtube', 'twitter', 'tiktok', 'telegram', 'spotify', 'homeHeaderImageFileId'
+];
+function publicGlobalSettings(globalSettings) {
+  const out = {};
+  PUBLIC_GLOBAL_KEYS.forEach((key) => { if (globalSettings[key] !== undefined) out[key] = globalSettings[key]; });
+  return out;
+}
+
+// A chapter's page shows that chapter's own details and nobody else's. It used
+// to fill whatever a chapter left blank from Global, which was ACONSU-KNUST's:
+// a new chapter with no phone number showed KNUST's, and with no MoMo number,
+// KNUST's. Now a blank stays blank and the page leaves that part out. Only the
+// union's own name stands in for a chapter that has not written its full name.
 function buildPublicSettings(globalSettings, chapter) {
+  const national = publicGlobalSettings(globalSettings);
   // heroArt is always an object, chapter or not, so a page never has to guard
   // against the shape of the answer before looking for its own artwork.
-  if (!chapter) return { ...globalSettings, heroArt: {} };
+  if (!chapter) return { ...national, heroArt: {} };
   const contact = chapter.contact || {};
   const payment = chapter.payment || {};
-  const globalAbout = globalSettings.about || {};
   const about = chapter.about || {};
+  const own = (v) => v || '';
   return {
-    ...globalSettings,
     chapterId: chapter.id,
     chapterName: chapter.name,
-    fellowshipName: chapter.name || globalSettings.fellowshipName,
-    fullName: chapter.fullName || globalSettings.fullName,
-    tagline: chapter.tagline || globalSettings.tagline,
-    verseOfTheWeek: chapter.verseOfTheWeek || globalSettings.verseOfTheWeek,
-    address: chapter.address || chapter.location || globalSettings.address,
-    homeHeaderImageFileId: chapter.homeHeaderImageFileId || globalSettings.homeHeaderImageFileId,
+    fellowshipName: chapter.name || national.fellowshipName || 'ACONSU',
+    fullName: chapter.fullName || national.fullName || '',
+    tagline: own(chapter.tagline),
+    verseOfTheWeek: own(chapter.verseOfTheWeek),
+    address: chapter.address || chapter.location || '',
+    homeHeaderImageFileId: own(chapter.homeHeaderImageFileId),
     // Every page already loads settings to draw its header and footer, so the
     // artwork map rides along with it rather than costing a request of its own.
     heroArt: sanitiseHeroArt(chapter.heroArt),
-    serviceTimes: chapter.serviceTimes?.length ? chapter.serviceTimes : (globalSettings.serviceTimes || []),
-    email: contact.email || globalSettings.email,
-    phone: contact.phone || globalSettings.phone,
-    whatsapp: contact.whatsapp || globalSettings.whatsapp,
-    facebook: contact.facebook || globalSettings.facebook,
-    instagram: contact.instagram || globalSettings.instagram,
-    youtube: contact.youtube || globalSettings.youtube,
-    tiktok: contact.tiktok || globalSettings.tiktok,
-    twitter: contact.twitter || globalSettings.twitter,
-    telegram: contact.telegram || globalSettings.telegram,
-    momoNumber: payment.momoNumber || globalSettings.momoNumber,
-    momoName: payment.momoName || globalSettings.momoName,
+    serviceTimes: chapter.serviceTimes || [],
+    email: own(contact.email),
+    phone: own(contact.phone),
+    whatsapp: own(contact.whatsapp),
+    facebook: own(contact.facebook),
+    instagram: own(contact.instagram),
+    youtube: own(contact.youtube),
+    tiktok: own(contact.tiktok),
+    twitter: own(contact.twitter),
+    telegram: own(contact.telegram),
+    spotify: own(contact.spotify),
+    momoNumber: own(payment.momoNumber),
+    momoName: own(payment.momoName),
     contact: {
-      email: contact.email || globalSettings.email || '',
-      phone: contact.phone || globalSettings.phone || '',
-      whatsapp: contact.whatsapp || globalSettings.whatsapp || '',
-      facebook: contact.facebook || globalSettings.facebook || '',
-      instagram: contact.instagram || globalSettings.instagram || '',
-      youtube: contact.youtube || globalSettings.youtube || '',
-      tiktok: contact.tiktok || globalSettings.tiktok || '',
-      twitter: contact.twitter || globalSettings.twitter || '',
-      telegram: contact.telegram || globalSettings.telegram || ''
+      email: own(contact.email), phone: own(contact.phone), whatsapp: own(contact.whatsapp),
+      facebook: own(contact.facebook), instagram: own(contact.instagram), youtube: own(contact.youtube),
+      tiktok: own(contact.tiktok), twitter: own(contact.twitter), telegram: own(contact.telegram), spotify: own(contact.spotify)
     },
     payment: {
-      provider: payment.provider || globalSettings.provider || '',
-      momoNumber: payment.momoNumber || globalSettings.momoNumber || '',
-      momoName: payment.momoName || globalSettings.momoName || '',
-      bankName: payment.bankName || globalSettings.bankName || '',
-      bankAccountName: payment.bankAccountName || globalSettings.bankAccountName || '',
-      bankAccountNumber: payment.bankAccountNumber || globalSettings.bankAccountNumber || '',
-      donationDestination: payment.donationDestination || globalSettings.donationDestination || '',
-      welfareDestination: payment.welfareDestination || globalSettings.welfareDestination || '',
+      provider: own(payment.provider),
+      momoNumber: own(payment.momoNumber),
+      momoName: own(payment.momoName),
+      bankName: own(payment.bankName),
+      bankAccountName: own(payment.bankAccountName),
+      bankAccountNumber: own(payment.bankAccountNumber),
+      donationDestination: own(payment.donationDestination),
+      welfareDestination: own(payment.welfareDestination),
       // Welfare collects into its own account, so its details are published
       // alongside the chapter's rather than members being told the wrong number.
-      welfareMomoNumber: payment.welfareMomoNumber || '',
-      welfareMomoName: payment.welfareMomoName || ''
+      welfareMomoNumber: own(payment.welfareMomoNumber),
+      welfareMomoName: own(payment.welfareMomoName)
     },
     about: {
-      history: about.history || globalAbout.history || '',
-      vision: about.vision || globalAbout.vision || '',
-      mission: about.mission || globalAbout.mission || '',
-      values: about.values || globalAbout.values || '',
-      leadership: about.leadership || globalAbout.leadership || '',
-      firstVisit: about.firstVisit || globalAbout.firstVisit || ''
+      history: own(about.history),
+      vision: own(about.vision),
+      mission: own(about.mission),
+      values: own(about.values),
+      leadership: own(about.leadership),
+      firstVisit: own(about.firstVisit)
     },
     // Where the chapter meets (the hall), apart from the postal address, so a
     // newcomer is told both where to go and how to find it.
@@ -3083,7 +3118,7 @@ app.get('/api/settings', async (req, res) => {
     const explicitChapterId = cleanText(req.query.chapterId);
     const chapterId = explicitChapterId || await resolvePublicChapterId(req);
     if (!chapterId) {
-      return res.json(globalSettings);
+      return res.json(publicGlobalSettings(globalSettings));
     }
     const chapter = await repo.getById('chapters', chapterId);
     res.json(buildPublicSettings(globalSettings, chapter));
@@ -3245,9 +3280,12 @@ app.get('/api/verse-image', verseImageLimiter, async (req, res) => {
     let verseText = typeof req.query.verse === 'string' ? req.query.verse.slice(0, 800) : '';
     let reference = cleanText(String(typeof req.query.reference === 'string' ? req.query.reference : '')).slice(0, 80);
     if (!verseText) {
-      const settings = await repo.getSettings();
-      if (!settings.verseOfTheWeek) return res.status(400).json({ error: 'No verse configured' });
-      verseText = settings.verseOfTheWeek;
+      // The chapter's own verse; Global's only for the national app.
+      const chapterId = await resolvePublicChapterId(req);
+      const chapter = chapterId ? await repo.getById('chapters', chapterId) : null;
+      const verse = chapter ? chapter.verseOfTheWeek : (await repo.getSettings()).verseOfTheWeek;
+      if (!verse) return res.status(400).json({ error: 'No verse configured' });
+      verseText = verse;
     }
     // The client passes the reference when it knows it; otherwise split the
     // strip so the reference is set apart rather than run on from the quote.
@@ -3767,7 +3805,8 @@ app.post('/api/join-requests', formLimiter, async (req, res) => {
     res.json({ success: true });
     notifyAdminByEmail(
       'New Join Request | ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name)}</strong> wants to join a department.</p><p>Email: ${escapeHtmlForEmail(email)}${phone ? '<br>Phone: ' + escapeHtmlForEmail(phone) : ''}</p><p>Log in to the admin dashboard to see full details.</p>`
+      `<p><strong>${escapeHtmlForEmail(name)}</strong> wants to join a department.</p><p>Email: ${escapeHtmlForEmail(email)}${phone ? '<br>Phone: ' + escapeHtmlForEmail(phone) : ''}</p><p>Log in to the admin dashboard to see full details.</p>`,
+      chapterId
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not save your request. Please try again.' });
@@ -3798,7 +3837,8 @@ app.post('/api/prayer-requests', formLimiter, async (req, res) => {
     res.json({ success: true });
     notifyAdminByEmail(
       'New Prayer Request | ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> submitted a prayer request.</p><p>Log in to the admin dashboard to see it.</p>`
+      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> submitted a prayer request.</p><p>Log in to the admin dashboard to see it.</p>`,
+      chapterId
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not save your request. Please try again.' });
@@ -3887,7 +3927,8 @@ app.post('/api/testimonies', formLimiter, async (req, res) => {
     notifyOfficeByEmail(
       'publicityEmail',
       'New Testimony Submitted | ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> shared a testimony awaiting review.</p><p>Open the Publicity portal to publish it.</p>`
+      `<p><strong>${escapeHtmlForEmail(name || 'Anonymous')}</strong> shared a testimony awaiting review.</p><p>Open the Publicity portal to publish it.</p>`,
+      chapterId
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not save your testimony. Please try again.' });
@@ -3907,7 +3948,8 @@ app.post('/api/contact', formLimiter, async (req, res) => {
     notifyOfficeByEmail(
       'shepherdingEmail',
       'New Contact Message | ACONSU',
-      `<p><strong>${escapeHtmlForEmail(name)}</strong> (${escapeHtmlForEmail(email)}) sent a message:</p><p>${escapeHtmlForEmail(message)}</p><p>Open the Shepherding portal to reply and mark it handled.</p>`
+      `<p><strong>${escapeHtmlForEmail(name)}</strong> (${escapeHtmlForEmail(email)}) sent a message:</p><p>${escapeHtmlForEmail(message)}</p><p>Open the Shepherding portal to reply and mark it handled.</p>`,
+      chapterId
     );
   } catch (e) {
     res.status(500).json({ error: 'Could not send your message. Please try again.' });
@@ -7732,8 +7774,11 @@ app.put('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => 
     if (hasOwn(req.body, 'serviceTimes')) next.serviceTimes = cleanStringList(req.body.serviceTimes);
     if (hasOwn(req.body, 'contact')) {
       next.contact = mergeTextFields(chapter.contact, req.body.contact, [
-        'email', 'phone', 'whatsapp', 'facebook', 'instagram', 'youtube', 'tiktok', 'twitter', 'telegram'
+        'email', 'phone', 'whatsapp', 'facebook', 'instagram', 'youtube', 'tiktok', 'twitter', 'telegram', 'spotify'
       ]);
+    }
+    if (hasOwn(req.body, 'officeEmails')) {
+      next.officeEmails = mergeTextFields(chapter.officeEmails, req.body.officeEmails, ['shepherding', 'publicity', 'finance', 'welfare']);
     }
     if (hasOwn(req.body, 'payment')) {
       next.payment = mergeTextFields(chapter.payment, req.body.payment, [
@@ -7789,7 +7834,12 @@ app.post('/api/admin/chapter-settings/banner', requireChapterAdmin, upload.singl
 // on its Chapter record instead (edited via the National/Chapter Coordinator
 // portals), so this stays a National Coordinator action.
 app.put('/api/admin/settings', rolesLib.requireNational, async (req, res) => {
-  await repo.setSettings(req.body);
+  // Only the page's own fields. The council's meeting, the wider church and the
+  // record of the move to ACONSU-KNUST have their own homes and are never
+  // overwritten by a copy of the form sent back.
+  const next = {};
+  PUBLIC_GLOBAL_KEYS.forEach((key) => { if (hasOwn(req.body, key)) next[key] = cleanText(req.body[key]); });
+  await repo.setSettings(next);
   res.json({ success: true });
 });
 
@@ -8541,12 +8591,14 @@ async function checkRetentionAlerts() {
           notifyOfficeByEmail(
             'shepherdingEmail',
             'Retention Alert: 30+ days inactive',
-            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please follow up from the Shepherding portal.</p>`
+            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please follow up from the Shepherding portal.</p>`,
+            member.chapterId
           );
           notifyOfficeByEmail(
             'welfareEmail',
             'Welfare Attention Needed: 30+ days inactive',
-            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please coordinate care support if needed.</p>`
+            `<p><strong>${escapeHtmlForEmail(member.name)}</strong> has been absent for ${daysAbsent} day(s).</p><p>Please coordinate care support if needed.</p>`,
+            member.chapterId
           );
         } else if (open.daysAbsent !== daysAbsent) {
           await repo.updateById('retentionAlerts', open.id, { ...open, daysAbsent, lastPresentDate });
@@ -8684,7 +8736,14 @@ connectDB()
     setInterval(loadMemberRevocations, 5 * 60 * 1000);
     refreshSoleActiveChapter();
     setInterval(refreshSoleActiveChapter, 5 * 60 * 1000); // belt and braces against drift
-    fillLegacyChapterFromWebsite().then(() => resolvePendingMapLinks()).catch(() => {});
+    // What Global held was ACONSU-KNUST's: moved there once (lib/globalMove.js),
+    // then anything still blank is filled from its website.
+    moveGlobalSetupToChapter({ repo, chapterId: rolesLib.LEGACY_CHAPTER_ID })
+      .then((done) => { if (done && done.moved) console.log(`Moved Global Settings to ${done.chapterId}: ${done.moved.join(', ') || 'nothing to move'}; Global is back to its defaults`); })
+      .catch((e) => console.warn('Could not move Global Settings to the chapter:', e.message))
+      .then(() => fillLegacyChapterFromWebsite())
+      .then(() => resolvePendingMapLinks())
+      .catch(() => {});
     setInterval(() => resolvePendingMapLinks().catch(() => {}), 60 * 60 * 1000);
     checkBirthdaysAndNotify();
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day

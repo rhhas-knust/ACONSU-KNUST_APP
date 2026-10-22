@@ -1,5 +1,6 @@
-// The main admin and a chapter's look, in a real browser: the look panels are
-// locked until the chapter asks, open while it has, and close again when done.
+// The main admin and a chapter's own things, in a real browser: its look, events,
+// members and accounts panels are locked until the chapter asks, open while it
+// has, and close again when done.
 //
 //   node test/chapter-look-ui.js
 //
@@ -60,6 +61,22 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await adm.click('[data-panel="media"]');
   await adm.waitForSelector('#panel-media .oversight-note');
   check(true, 'the media library is locked the same way');
+  await adm.click('[data-panel="events"]');
+  await adm.waitForSelector('#panel-events .oversight-note');
+  check(/events belong to ACONSU KNUST/.test(await adm.textContent('#panel-events .oversight-note')) && !(await adm.isVisible('#addBtn-events')), 'so are its events, with no way to add one');
+  await adm.click('[data-panel="members"]');
+  await adm.waitForSelector('#panel-members .oversight-note');
+  check(/members belong to ACONSU KNUST/.test(await adm.textContent('#panel-members .oversight-note')), 'and its members');
+  await adm.click('[data-panel="staff"]');
+  await adm.waitForSelector('#panel-staff .oversight-note');
+  const staffText = await adm.textContent('#panel-staff');
+  check(/leadership accounts belong to ACONSU KNUST/.test(staffText) && /View only/.test(staffText) && await adm.locator('#panel-staff [data-edit-staff]').count() === 0,
+    'its leadership accounts are view only');
+  await adm.click('#addStaffBtn');
+  await adm.waitForSelector('#stRole');
+  const roles = await adm.$$eval('#stRole option', os => os.map(o => o.value));
+  check(roles.length === 1 && roles[0] === 'nationalCoordinator' && /Add National Coordinator/.test(staffText), 'while a National Coordinator\'s account, the main admin\'s own, can still be made', roles);
+  await adm.click('#cancelModalBtn');
   check(await adm.isVisible('#navChapterRequestsBtn') && !(await adm.isVisible('#navAskNationalBtn')), 'the main admin has Chapter Requests, not Ask National');
   await adm.click('[data-panel="chapterRequests"]');
   await adm.waitForSelector('#panel-chapterRequests .cr-card');
@@ -88,6 +105,12 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   check(/asked for help/.test(await adm.textContent('#panel-chapterSettings .cr-notice')) && await adm.locator('#panel-chapterSettings .oversight-note').count() === 0, 'the settings open, with the chapter\'s request at the top');
   const nowEditable = await adm.$$eval('#panel-chapterSettings input, #panel-chapterSettings textarea', els => els.filter(e => !e.disabled && e.offsetParent).length);
   check(nowEditable > 0, 'and can be changed', nowEditable);
+  await adm.click('[data-panel="events"]');
+  await adm.waitForSelector('#addBtn-events');
+  check(await adm.isVisible('#addBtn-events') && await adm.locator('#panel-events .oversight-note').count() === 0, 'its events open too');
+  await adm.click('[data-panel="staff"]');
+  await adm.waitForSelector('#panel-staff [data-edit-staff]');
+  check(await adm.locator('#panel-staff .oversight-note').count() === 0 && /\+ Add Account/.test(await adm.textContent('#addStaffBtn')), 'and its accounts');
   await adm.click('[data-panel="chapterRequests"]');
   await adm.waitForSelector('[data-done]');
   check(/ACONSU KNUST/.test(await adm.textContent('#panel-chapterRequests')) && /retreat photo/.test(await adm.textContent('#panel-chapterRequests')), 'the main admin sees which chapter asked and what for');
@@ -128,7 +151,9 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await adm.click('[data-work]');
   await adm.waitForSelector('#stopHelpingBtn');
   check(/ACONSU UCC/.test(await adm.textContent('.cr-notice')), 'working on the chapter that asked says whose look it is');
-  check(await adm.isVisible('[data-panel="chapterSettings"]') && !(await adm.isVisible('[data-panel="members"]')), 'and opens only its look panels, not its members or anything else');
+  check(await adm.isVisible('[data-panel="chapterSettings"]') && await adm.isVisible('[data-panel="events"]') && await adm.isVisible('[data-panel="members"]') && await adm.isVisible('[data-panel="staff"]')
+    && !(await adm.isVisible('[data-panel="prayerRequests"]')) && !(await adm.isVisible('[data-panel="contactMessages"]')),
+    'and opens only what a chapter can ask for: its look, events, members and accounts, not its prayer requests or messages');
   await adm.click('[data-panel="chapterSettings"]');
   await adm.waitForSelector('#panel-chapterSettings .cr-notice');
   check(/ACONSU UCC asked for help/.test(await adm.textContent('#panel-chapterSettings .cr-notice')), 'the settings shown are that chapter\'s, open at its request');

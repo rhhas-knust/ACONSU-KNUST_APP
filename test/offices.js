@@ -116,10 +116,11 @@ const { fakeModels } = require('./harness.js');
   }
   check('every office is seated, each to a member of its own chapter', Object.values(made).every(m => m.out.status === 200), Object.entries(made).filter(([, m]) => m.out.status !== 200));
 
-  // The Chapter Coordinators and a Finance office login.
+  // The Chapter Coordinators, then a Finance office login. Once a chapter has
+  // its own Coordinator its accounts are its own, so that one is theirs to open.
   for (const [jar, username, chapterId] of [['coord', 'coord.one', C1], ['coord2', 'coord.two', C2], ['fin', 'fin.one', C1]]) {
     const memberId = await registerMember(username, chapterId);
-    const out = await call('admin', 'POST', '/api/admin/staff', {
+    const out = await call(jar === 'fin' ? 'coord' : 'admin', 'POST', '/api/admin/staff', {
       username, name: username, role: jar === 'fin' ? 'finance' : 'coordinator', password: 'password123', memberId, chapterId
     });
     check(`${username} is created`, out.status === 200, out.data);
@@ -547,7 +548,7 @@ const { fakeModels } = require('./harness.js');
   r = await call('gs', 'POST', '/api/executive/minutes', { date: '2026-11-21', presentExecutiveIds: [idOf('Yaw President')], body: 'Short meeting.' });
   const third = r.data.item.id;
   await call('gs', 'POST', `/api/executive/minutes/${third}/review`);
-  r = await call('admin', 'PUT', `/api/admin/staff/${people.ags.staffId}`, { endTerm: true });
+  r = await call('coord', 'PUT', `/api/admin/staff/${people.ags.staffId}`, { endTerm: true });
   check('the Assistant\'s term ends', r.status === 200, r.data);
   r = await call('ags', 'GET', '/api/executive/minutes');
   check('their login stops at once', denied(r), r);
@@ -698,7 +699,7 @@ const { fakeModels } = require('./harness.js');
 
   // A second President cannot be seated next to the first.
   const spare = await registerMember('Spare Person', C1);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.pres.two', name: 'Spare Person', role: 'executive', password: 'password123', memberId: spare, positionKey: 'president', chapterId: C1 });
+  r = await call('coord', 'POST', '/api/admin/staff', { username: 'exec.pres.two', name: 'Spare Person', role: 'executive', password: 'password123', memberId: spare, positionKey: 'president', chapterId: C1 });
   check('a seat that is held cannot be given to a second person', r.status === 409 && /Hand over/.test(r.data.error), r.data);
 
   const handover = (body) => call('coord', 'POST', '/api/coordinator/offices/handover', body);
@@ -745,7 +746,7 @@ const { fakeModels } = require('./harness.js');
     r.status === 200 && r.data.items.some(o => o.id === nextDraftId && o.status === 'draft') && r.data.items.some(o => o.id === outlineId && o.status === 'approved'), r.data);
   r = await call('newpres', 'PUT', `/api/executive/outline/${nextDraftId}`, { title: 'Second semester', semesterLabel: '2027 second semester' });
   check('and carries on editing it', r.status === 200, r.data);
-  r = await call('admin', 'PUT', `/api/admin/staff/${people.pres.staffId}`, { renewTerm: true });
+  r = await call('coord', 'PUT', `/api/admin/staff/${people.pres.staffId}`, { renewTerm: true });
   check('the old account cannot be renewed to get the seat back', r.status === 409, r.data);
   r = await call('coord', 'GET', '/api/coordinator/offices');
   const presRow = r.data.items.find(o => o.key === 'president');

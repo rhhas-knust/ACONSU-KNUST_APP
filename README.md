@@ -138,6 +138,7 @@ aconsu-app/
     mailer.js              SMTP email sending (password reset, office alerts)
     imageProcess.js        Automatic image resize/compression on upload
     maps.js                Map links: which are accepted, and the spot each points at (section 27)
+    globalMove.js          The one-time move of Global Settings into ACONSU-KNUST (docs/offices.md)
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
   migrate-multichapter.js One-time migration to the multi-chapter model — see section 20
   capacitor.config.json    Native app (iOS/Android) wrapper config
@@ -147,10 +148,11 @@ aconsu-app/
     offices-ui.js          The same screens in a real browser (`node test/offices-ui.js`, needs Playwright)
     account.js             My Account and changing a password (`npm test`)
     account-ui.js          Show / Hide on password boxes and the My Account page, in a browser (needs Playwright)
-    chapter-look.js        A chapter's look changes only when the chapter asks (`npm test`)
+    chapter-look.js        A chapter's look, events, members and accounts change only when it asks (`npm test`)
     chapter-look-ui.js     The same, in a browser (needs Playwright)
     visit-ui.js            The home page and Plan your visit for a first-time visitor, and its map (needs Playwright)
     maps.js                Map links: the rules, every way of saving one, following a short link (`npm test`)
+    global.js              Global Settings moved to ACONSU-KNUST once; chapters show only their own (`npm test`)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
@@ -176,7 +178,7 @@ aconsu-app/
     images/logo.jpg         ACONSU logo
 ```
 
-The executive offices (President, Vice President, the secretariat, Financial Secretary, Alumni President), their logins (`president.knust`, starting password `president123`, changed at the first sign-in), how an office is handed over, and why the main admin changes a chapter's look only when the chapter asks are described in [docs/offices.md](docs/offices.md).
+The executive offices (President, Vice President, the secretariat, Financial Secretary, Alumni President), their logins (`president.knust`, starting password `president123`, changed at the first sign-in), how an office is handed over, why the main admin changes a chapter's look, events, members and accounts only when the chapter asks, and why Global Settings are the national app's alone are described in [docs/offices.md](docs/offices.md).
 
 Run `npm test` to check the portals still behave after a change — it boots the real
 app against an in-memory database and exercises every portal route, permission rule

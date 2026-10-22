@@ -1,6 +1,7 @@
-// A chapter's look is its own: the main admin may change a chapter's site
-// settings, artwork, media, custom pages and department pages only while that
-// chapter has asked it to. Boots the real app on the in-memory data layer.
+// A chapter is its own: the main admin may change a chapter's look (site
+// settings, artwork, media, custom pages, department pages), its events, its
+// members and its leadership accounts only while that chapter has asked it to.
+// Boots the real app on the in-memory data layer.
 //
 //   node test/chapter-look.js     (also run by `npm test`)
 const { fakeModels } = require('./harness.js');
@@ -60,9 +61,13 @@ const { fakeModels } = require('./harness.js');
   };
   const deptK = (await call('admin', 'POST', '/api/admin/departments', { name: 'Choir', chapterId: 'knust' })).data.item.id;
   check('before a chapter has an admin of its own, the main admin sets it up', !!deptK);
-  for (const [username, role, chapterId] of [['coord.k', 'coordinator', 'knust'], ['admin.u', 'chapterAdmin', 'ucc'], ['fin.k', 'finance', 'knust']]) {
-    const r = await call('admin', 'POST', '/api/admin/staff', { username, name: username, role, password: 'password123', memberId: await member(username, chapterId), chapterId });
-    check(`${username} is created`, r.status === 200, r.data);
+  const staffIds = {};
+  // The first account of each chapter is the main admin's to make (the chapter
+  // has nobody else yet); after that, the chapter's own Coordinator makes them.
+  for (const [username, role, chapterId, by] of [['coord.k', 'coordinator', 'knust', 'admin'], ['admin.u', 'chapterAdmin', 'ucc', 'admin'], ['fin.k', 'finance', 'knust', 'coord.k']]) {
+    const r = await call(by, 'POST', '/api/admin/staff', { username, name: username, role, password: 'password123', memberId: await member(username, chapterId), chapterId });
+    check(`${username} is created${by === 'admin' ? '' : ' by the chapter\'s own Coordinator'}`, r.status === 200, r.data);
+    staffIds[username] = r.data.item && r.data.item.id;
     await call(username, 'POST', '/api/portal/login', { username, password: 'password123' });
   }
   await call('member', 'POST', '/api/auth/login', { email: 'look1@test.com', password: 'secret123' });
@@ -87,14 +92,82 @@ const { fakeModels } = require('./harness.js');
   check('not its content hub', asked(r), r.data);
   r = await call('admin', 'GET', '/api/admin/chapter-settings', null, K);
   check('it can still look', r.status === 200, r.data);
-  r = await call('admin', 'POST', '/api/admin/events', { title: 'Joint rally', date: '2026-12-01', chapterId: 'knust' });
-  check('and what is not the chapter\'s look is unchanged (an event)', r.status === 200, r.data);
+  r = await call('admin', 'PUT', `/api/admin/departments/${deptK}`, { tagline: 'Sing louder' }, { 'X-Chapter-Id': 'legon' });
+  check('nor by choosing a chapter that is still in set-up while changing this one\'s', asked(r), r.data);
   r = await call('admin', 'PUT', '/api/admin/chapter-settings', { tagline: 'A new chapter' }, { 'X-Chapter-Id': 'legon' });
   check('a chapter with no admin of its own yet can still be set up', r.status === 200, r.data);
   r = await call('coord.k', 'PUT', '/api/admin/chapter-settings', { tagline: 'Our own words' });
   check('the chapter\'s own Coordinator changes its look whenever it likes', r.status === 200, r.data);
   r = await call('admin.u', 'PUT', '/api/admin/chapter-settings', { tagline: 'Ours too' });
   check('so does another chapter\'s own admin, for their chapter', r.status === 200, r.data);
+
+  console.log('\n== nor its events, its members or its accounts ==');
+  const eventK = (await call('coord.k', 'POST', '/api/admin/events', { title: 'Chapter night', date: '2026-12-05' })).data.item.id;
+  const plainK = await member('Plain Knust', 'knust');
+  const cardK = (await call('coord.k', 'POST', '/api/admin/executives', { name: 'Card Knust', role: 'Organiser' })).data.item.id;
+  r = await call('admin', 'POST', '/api/admin/events', { title: 'Joint rally', date: '2026-12-01', chapterId: 'knust' });
+  check('not a new event for it', asked(r) && r.data.area === 'events' && /events belong to ACONSU-KNUST/.test(r.data.error), r.data);
+  r = await call('admin', 'PUT', `/api/admin/events/${eventK}`, { title: 'Renamed from above' });
+  check('not a change to one of its events, found by the event itself whatever chapter is chosen', asked(r), r.data);
+  r = await call('admin', 'DELETE', `/api/admin/events/${eventK}`, null, { 'X-Chapter-Id': 'legon' });
+  check('not deleting one, even with a chapter in set-up chosen', asked(r), r.data);
+  r = await call('admin', 'POST', '/api/publicity/events', { title: 'Through Publicity', date: '2026-12-02' }, K);
+  check('not through the Publicity portal either', asked(r), r.data);
+  r = await call('admin', 'POST', '/api/admin/events', { title: 'National youth day', date: '2026-12-10', isNational: true });
+  check('a national event is the main admin\'s own, and still opens', r.status === 200 && r.data.item.isNational === true, r.data);
+  r = await call('admin', 'PUT', `/api/admin/members/${plainK}`, { name: 'Renamed from above' });
+  check('not a change to one of its members', asked(r) && r.data.area === 'members', r.data);
+  r = await call('admin', 'DELETE', `/api/admin/members/${plainK}`);
+  check('nor removing one', asked(r), r.data);
+  r = await call('admin', 'PUT', `/api/shepherd/members/${plainK}`, { notes: 'x' });
+  check('nor through the Shepherding portal', asked(r), r.data);
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'pub.k', name: 'pub.k', role: 'publicity', password: 'password123', memberId: plainK, chapterId: 'knust' });
+  check('not a new leadership account for it', asked(r) && r.data.area === 'accounts', r.data);
+  r = await call('admin', 'PUT', `/api/admin/staff/${staffIds['fin.k']}`, { password: 'Taken-Over-1' });
+  check('not a password reset on one of its accounts, whatever chapter is chosen', asked(r), r.data);
+  r = await call('admin', 'PUT', `/api/admin/staff/${staffIds['fin.k']}`, { password: 'Taken-Over-1', chapterId: 'legon' }, { 'X-Chapter-Id': 'legon' });
+  check('nor by naming a chapter in set-up', asked(r), r.data);
+  r = await call('admin', 'DELETE', `/api/admin/staff/${staffIds['fin.k']}`);
+  check('nor deleting one', asked(r), r.data);
+  r = await call('admin', 'POST', '/api/coordinator/offices/reset-password', { staffId: staffIds['fin.k'] }, K);
+  check('nor through the Coordinator\'s office tools', asked(r), r.data);
+  r = await call('admin', 'POST', '/api/coordinator/offices/reset-password', { staffId: staffIds['fin.k'], chapterId: 'legon' }, K);
+  check('nor by naming a chapter in set-up inside the request while this one is chosen', asked(r), r.data);
+  r = await call('admin', 'PUT', `/api/admin/executives/${cardK}`, { name: 'Renamed from above' });
+  check('nor its executive cards', asked(r), r.data);
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'nat.two', name: 'Second National', role: 'nationalCoordinator', password: 'password123', memberId: await member('nat.two', 'legon') });
+  check('a National Coordinator\'s account is the main admin\'s own, and still opens', r.status === 200, r.data);
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'admin.l', name: 'admin.l', role: 'chapterAdmin', password: 'password123', memberId: await member('admin.l', 'legon'), chapterId: 'legon' });
+  check('and a chapter with nobody of its own yet is given its first admin', r.status === 200, r.data);
+  const legonAdmin = r.data.item.id;
+  r = await call('coord.k', 'PUT', `/api/admin/staff/${staffIds['fin.k']}`, { name: 'Finance Knust' });
+  check('the chapter\'s own Coordinator runs all of it as before', r.status === 200, r.data);
+  r = await call('coord.k', 'PUT', `/api/admin/events/${eventK}`, { title: 'Chapter night (moved)' });
+  check('its events too', r.status === 200, r.data);
+
+  console.log('\n== a write sent with a file is checked once its fields are read ==');
+  const withFile = (field, fields) => {
+    const f = new FormData();
+    f.append(field, new Blob([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0])], { type: 'image/jpeg' }), 'x.jpg');
+    Object.entries(fields).forEach(([k, v]) => f.append(k, v));
+    return f;
+  };
+  // Each of these is listed in UPLOAD_WRITES (routes/chapter-requests.js): sent
+  // with a file, they are let past the first check and judged behind the upload.
+  // Naming the chapter only inside the form, with no chapter chosen, shows the
+  // second check really runs.
+  for (const [method, path, field] of [['POST', '/api/admin/uploads', 'file'], ['POST', '/api/admin/chapter-settings/banner', 'image'],
+    ['POST', '/api/admin/executives', 'image'], ['PUT', `/api/admin/executives/${cardK}`, 'image'],
+    ['POST', '/api/admin/content', 'imageFile'], ['PUT', '/api/admin/content/no-such-item', 'imageFile']]) {
+    r = await call('admin', method, path, withFile(field, { chapterId: 'knust', name: 'From above', kind: 'weekly_highlight', title: 'From above' }), null, true);
+    check(`${method} ${path.replace(cardK, ':id')}, naming the chapter only inside the form, is refused`, asked(r), r);
+  }
+  r = await call('admin', 'POST', '/api/admin/executives', withFile('image', { chapterId: '__national__', name: 'National Secretary', role: 'National Secretary' }), null, true);
+  check('a national executive sent with a photo is the main admin\'s own, and still opens', r.status === 200, r.data);
+  r = await call('admin', 'DELETE', `/api/admin/staff/${legonAdmin}`);
+  check('once a chapter has an admin of its own, its accounts are its own too', asked(r), r.data);
+  // Back to a chapter with nobody yet, for the set-up checks further down.
+  fakeModels.StaffUser._docs.splice(fakeModels.StaffUser._docs.findIndex(d => d.id === legonAdmin), 1);
 
   r = await call('admin', 'GET', '/api/chapter-requests/status?chapterId=knust');
   check('the dashboard can see why: the chapter has not asked', r.status === 200 && r.data.canChangeLook === false && r.data.reason === 'not_asked', r.data);
@@ -116,6 +189,12 @@ const { fakeModels } = require('./harness.js');
   check('now the main admin can change that chapter\'s look', r.status === 200, r.data);
   r = await call('admin', 'POST', '/api/admin/departments', { name: 'Media', chapterId: 'knust' });
   check('all of it, while the request is open', r.status === 200, r.data);
+  r = await call('admin', 'PUT', `/api/admin/events/${eventK}`, { title: 'Chapter night, as asked' }, K);
+  check('its events open too', r.status === 200, r.data);
+  r = await call('admin', 'PUT', `/api/admin/members/${plainK}`, { phone: '0240000001' }, K);
+  check('and its members', r.status === 200, r.data);
+  r = await call('admin', 'PUT', `/api/admin/staff/${staffIds['fin.k']}`, { name: 'Finance Office' });
+  check('and its accounts', r.status === 200, r.data);
   r = await call('admin', 'PUT', '/api/admin/chapter-settings', { tagline: 'Not asked' }, { 'X-Chapter-Id': 'ucc' });
   check('but only that chapter\'s: another chapter that has not asked stays closed', asked(r), r.data);
   r = await call('admin', 'GET', '/api/chapter-requests/status?chapterId=knust');

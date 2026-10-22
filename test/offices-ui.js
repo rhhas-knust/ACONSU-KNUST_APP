@@ -42,13 +42,15 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
     return (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fd })).json()).member.id;
   };
   const staff = async (username, name, role, extra) => api('POST', '/api/admin/staff', { username, name, role, password: 'password123', memberId: await member(name), chapterId: C, ...(extra || {}) });
-  await staff('coord', 'Chapter Coordinator', 'coordinator');
+  // The main admin sets the chapter up while it has nobody of its own; the
+  // Coordinator comes last, and from then on its accounts are the chapter's.
   await staff('pres', 'Yaw President', 'executive', { positionKey: 'president' });
   await staff('vp', 'Efua Vice', 'executive', { positionKey: 'vice_president' });
   await staff('gs', 'Abena Secretary', 'executive', { positionKey: 'general_secretary' });
   await staff('ags', 'Akosua Assistant', 'executive', { positionKey: 'assistant_general_secretary' });
   await staff('fs', 'Kojo FinSec', 'executive', { positionKey: 'financial_secretary' });
   await staff('choir', 'Ama Choir', 'executive', { positionKey: 'music_director', department: dept.Choir });
+  await staff('coord', 'Chapter Coordinator', 'coordinator');
   const successor = await member('Kwesi Successor');
   // These accounts are past their first sign-in; that screen has its own test in account-ui.js.
   fakeModels.StaffUser._docs.forEach(a => { a.mustChangePassword = false; });

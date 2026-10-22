@@ -130,23 +130,49 @@ and the password goes back to hidden when the form is sent or the page is put in
 the background. It is added by `public/js/main.js`, so a form added later cannot
 be left without one.
 
-## A chapter's look is its own
+## A chapter is its own
 
-A chapter's site settings, artwork, media library, custom pages, department
-pages and content hub belong to that chapter. The main admin (the login behind
-the admin dashboard) can change them only while the chapter has asked:
+A chapter's look (site settings, artwork, media library, custom pages,
+department pages, content hub), its events, its members and its leadership
+accounts and executive offices belong to that chapter. The main admin (the
+login behind the admin dashboard) can change them only while the chapter has
+asked:
 
 1. The Chapter Admin or Chapter Coordinator opens **Ask National for Help**,
    says what they need, and how long to keep the request open (3 to 30 days).
-2. The main admin sees it under **Chapter Requests**, works on that chapter's
-   look (and only that chapter's), and marks it done.
+2. The main admin sees it under **Chapter Requests**, works on that chapter
+   (and only that chapter), and marks it done.
 3. The request closes when it is marked done, withdrawn by the chapter, or its
-   days run out, and the look panels lock again.
+   days run out, and the panels lock again.
 
-Until then the main admin's look panels say whose look it is and are view only,
-and the server refuses the changes. A chapter with no admin of its own yet can
-still be set up. What is not the chapter's look (events, members, accounts) is
-unchanged. The rule is in `routes/chapter-requests.js`.
+Until then the main admin's Chapter Site Settings, Custom Pages, Media Library,
+Departments, Events, Members, Join Requests, Alumni Wall, Executives and
+Leadership Accounts panels say whose they are and are view only, and the server
+refuses the changes, from the Publicity, Shepherding and Coordinator portals
+too. A change to one record (an event, a member, an account) is judged by that
+record's own chapter, whatever chapter the request names.
+
+What stays the main admin's own: national events, national executives,
+National Coordinator accounts, and appointing a chapter's Coordinator from the
+National portal (which is also how a chapter locked out of every account gets
+back in). A chapter with no admin of its own yet can still be set up. The rule
+is in `routes/chapter-requests.js`.
+
+## Global Settings are the national app's
+
+What the Global Settings page held had been set for ACONSU-KNUST, from when the
+app was KNUST's alone, and every other chapter showed it wherever its own was
+blank (KNUST's phone number, banner and office email addresses). On the first
+start after this change it is moved into ACONSU-KNUST's Chapter Site Settings,
+only where KNUST had not set its own, and Global goes back to the union's plain
+defaults (`lib/globalMove.js`). What Global held is kept on the settings record,
+and it happens once: afterwards Global is the national app's to fill.
+
+From then on a chapter's page shows only its own details: a blank stays blank
+and the page leaves it out. Each chapter sets its own office email addresses
+(Shepherding, Publicity, Finance, Welfare) in its Chapter Site Settings, and a
+chapter's messages go only to its own addresses. The wider church, the founders
+and the national council are the whole union's and were left where they are.
 
 ## What the research said
 
@@ -174,5 +200,6 @@ described to us and are not from those sources.
 | My Account and password change | `routes/account.js`, `lib/passwords.js`, `public/js/account.js` |
 | Show / Hide on password boxes | the end of `public/js/main.js`, `.pw-wrap` in `public/css/style.css` |
 | Office logins | `lib/officeAccounts.js`, `issueOfficeLogin` in `server.js`, the first-sign-in screen in `public/js/portal.js` |
-| A chapter's look | `routes/chapter-requests.js`, `public/js/chapter-requests.js` |
-| Tests | `test/offices.js`, `test/account.js`, `test/chapter-look.js` (server rules); `test/offices-ui.js`, `test/account-ui.js`, `test/chapter-look-ui.js`, `test/visit-ui.js` (browser) |
+| A chapter is its own | `routes/chapter-requests.js`, `public/js/chapter-requests.js` |
+| Global Settings moved to ACONSU-KNUST | `lib/globalMove.js` |
+| Tests | `test/offices.js`, `test/account.js`, `test/chapter-look.js`, `test/global.js` (server rules); `test/offices-ui.js`, `test/account-ui.js`, `test/chapter-look-ui.js`, `test/visit-ui.js` (browser) |

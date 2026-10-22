@@ -161,16 +161,16 @@ const { fakeModels } = require('./harness.js');
   check('and nobody else\'s moved', (await login('presCheck', 'exec.pres', 'Rooted In Him 77')).status === 200);
 
   console.log('\n== when the Coordinator resets it ==');
-  r = await call('admin', 'PUT', `/api/admin/staff/${pres.id}`, { password: 'Reset-By-Coordinator-1' });
+  await call('coord', 'POST', '/api/portal/login', { username: 'coord.one', password: 'Start-Pass-1' });
+  r = await call('coord', 'PUT', `/api/admin/staff/${pres.id}`, { password: 'Reset-By-Coordinator-1' });
   check('the Coordinator can still reset a leader\'s password', r.status === 200, r.data);
   r = await login('afterReset', 'exec.pres', 'Reset-By-Coordinator-1');
   r = await call('afterReset', 'GET', '/api/portal/account');
   check('and it counts as a starting password again, until its owner changes it', r.data.usingStartingPassword === true && r.data.passwordChangedAt === null, r.data);
 
   console.log('\n== an executive office comes with its own login ==');
-  await call('coord', 'POST', '/api/portal/login', { username: 'coord.one', password: 'Start-Pass-1' });
   const vpMember = await member('Efua Vice');
-  r = await call('admin', 'POST', '/api/admin/staff', { role: 'executive', positionKey: 'vice_president', memberId: vpMember, chapterId: C });
+  r = await call('coord', 'POST', '/api/admin/staff', { role: 'executive', positionKey: 'vice_president', memberId: vpMember, chapterId: C });
   check('appointing an executive without a username or password issues the office\'s own login',
     r.status === 200 && r.data.issued && r.data.issued.username === 'vicepresident.knust' && r.data.issued.password === 'vicepresident123', r.data);
   check('named after the member', r.data.item && r.data.item.name === 'Efua Vice', r.data.item);
@@ -250,7 +250,7 @@ const { fakeModels } = require('./harness.js');
   check('a Coordinator cannot reset another chapter\'s office', r.status === 404, r.data);
   r = await call('fin', 'POST', '/api/coordinator/offices/reset-password', { staffId: vpAfter.id });
   check('nor can anyone but the Coordinator', r.status === 401 || r.status === 403, r);
-  r = await call('admin', 'PUT', `/api/admin/staff/${pres.id}`, { password: 'Reset-By-Coordinator-2' });
+  r = await call('coord', 'PUT', `/api/admin/staff/${pres.id}`, { password: 'Reset-By-Coordinator-2' });
   const presAfter = fakeModels.StaffUser._docs.find(a => a.id === pres.id);
   check('a password set for an executive by someone else must also be changed at the next sign-in', presAfter.mustChangePassword === true, presAfter);
   presAfter.mustChangePassword = false; // back to how the next section expects it

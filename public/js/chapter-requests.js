@@ -1,9 +1,9 @@
 /* ============================================================
-   A chapter's look is its own.
+   A chapter is its own.
    The chapter side (Chapter Admin, Chapter Coordinator) asks the main admin for
-   help with its site settings, artwork, pages or department pages. The main
-   admin sees the requests, works on that chapter while one is open, and marks
-   it done. Shared by the admin dashboards and the Coordinator portal, so it
+   help with its look (site settings, artwork, pages, department pages), its
+   events, its members or its leadership accounts. The main admin sees the
+   requests, works on that chapter while one is open, and marks it done. Shared by the admin dashboards and the Coordinator portal, so it
    needs only main.js, and everything lives inside ChapterRequests.
    ============================================================ */
 window.ChapterRequests = (function () {
@@ -21,16 +21,16 @@ window.ChapterRequests = (function () {
     el.innerHTML = `
       <div class="panel-head"><div>
         <h2>Ask National for help</h2>
-        <p class="sub">Your chapter's look is your own: its site settings, artwork, media, custom pages and department pages. The main admin can change them only when you ask, and only for as long as your request is open.</p>
+        <p class="sub">Your chapter is your own: its look (site settings, artwork, media, pages and department pages), its events, its members and its leadership accounts. The main admin can change them only when you ask, and only for as long as your request is open.</p>
       </div></div>
       <form class="cr-card" id="crForm" novalidate>
         <h3>What do you need?</h3>
         <div class="field"><label for="crMessage">Tell National what to change</label>
-          <textarea id="crMessage" rows="4" required aria-describedby="crHint" placeholder="For example: Please put the retreat photo on our home page and fix the spelling of our address."></textarea>
+          <textarea id="crMessage" rows="4" required aria-describedby="crHint" placeholder="For example: Please put the retreat photo on our home page, or: Please reset our Finance officer's password."></textarea>
           <small class="hint" id="crHint">They will see exactly what you write.</small></div>
         <div class="field"><label for="crDays">Keep it open for</label>
           <select id="crDays"><option value="3">3 days</option><option value="7" selected>7 days</option><option value="14">14 days</option><option value="30">30 days</option></select>
-          <small class="hint">The main admin can change your chapter's look only while it is open. You can close it sooner.</small></div>
+          <small class="hint">The main admin can make changes for your chapter only while it is open. You can close it sooner.</small></div>
         <div class="cr-actions"><button class="btn btn-primary" type="submit">Send the request</button></div>
         <div class="form-msg" id="crMsg" role="alert"></div>
       </form>
@@ -53,12 +53,12 @@ window.ChapterRequests = (function () {
       button.disabled = true;
       try {
         await send('/api/chapter-requests', { message: form.querySelector('#crMessage').value, days: form.querySelector('#crDays').value });
-        showToast('Sent. National can now help with your chapter\'s look.', 'success');
+        showToast('Sent. National can now help your chapter.', 'success');
         renderAsk(el);
       } catch (err) { msg(form.querySelector('#crMsg'), err.message || 'Could not send it.', 'error'); button.disabled = false; }
     });
     el.querySelectorAll('[data-withdraw]').forEach(b => b.addEventListener('click', async () => {
-      if (!confirm('Close this request? National will no longer be able to change your chapter\'s look.')) return;
+      if (!confirm('Close this request? National will no longer be able to make changes for your chapter.')) return;
       try { await send(`/api/chapter-requests/${b.dataset.withdraw}/close`); renderAsk(el); }
       catch (err) { showToast(err.message || 'Could not close it.', 'error'); }
     }));
@@ -73,7 +73,7 @@ window.ChapterRequests = (function () {
     el.innerHTML = `
       <div class="panel-head"><div>
         <h2>Chapter requests</h2>
-        <p class="sub">A chapter's look belongs to that chapter. You can change it only while the chapter has asked you to, here. Mark a request done when the work is finished.</p>
+        <p class="sub">A chapter's look, events, members and leadership accounts belong to that chapter. You can change them only while the chapter has asked you to, here. Mark a request done when the work is finished.</p>
       </div></div>
       <div class="cr-card">
         <h3>Open${open.length ? ` (${open.length})` : ''}</h3>

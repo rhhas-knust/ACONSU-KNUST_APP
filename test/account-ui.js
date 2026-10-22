@@ -40,13 +40,16 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
     return (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fd })).json()).member.id;
   };
   const staff = async (username, name, role, extra) => api('POST', '/api/admin/staff', { username, name, role, password: 'Start-Pass-1', memberId: await member(name), chapterId: C, ...(extra || {}) });
-  await staff('coord', 'Chapter Coordinator', 'coordinator');
+  // The main admin sets the chapter up while it has nobody of its own; the
+  // Coordinator comes last, and from then on its accounts are the chapter's.
   await staff('pres', 'Yaw President', 'executive', { positionKey: 'president' });
   await staff('choir', 'Ama Choir', 'executive', { positionKey: 'music_director', department: dept });
   // These two are past their first sign-in; the first sign-in is tested on its own below.
   fakeModels.StaffUser._docs.forEach(a => { a.mustChangePassword = false; });
   const treasurerMember = await member('Kwame Treasurer');
   const issued = (await api('POST', '/api/admin/staff', { role: 'executive', positionKey: 'treasurer', memberId: treasurerMember, chapterId: C })).issued;
+  await staff('coord', 'Chapter Coordinator', 'coordinator');
+  fakeModels.StaffUser._docs.find(a => a.username === 'coord').mustChangePassword = false;
 
   const browser = await chromium.launch({ executablePath: CHROME });
   const errors = [];

@@ -116,34 +116,45 @@ function lockForOversight(root, { note = false, text = '' } = {}) {
   }
 }
 
-// ---------- A chapter's look is its own ----------
-// The main admin can change a chapter's site settings, artwork, media, custom
-// pages and department pages only while that chapter has asked it to (see
+// ---------- A chapter is its own ----------
+// The main admin can change a chapter's look (site settings, artwork, media,
+// custom pages, department pages), its events, its members and its leadership
+// accounts only while that chapter has asked it to (see
 // routes/chapter-requests.js, which is what actually refuses). Here the panels
 // say so, and lock, rather than offering buttons that would all be refused.
-const LOOK_PANELS = new Set(['chapterSettings', 'pages', 'media', 'departments']);
+// Each panel names what in it is the chapter's, for the note at its top.
+const CHAPTER_OWN_PANELS = new Map([
+  ['chapterSettings', 'look'], ['pages', 'look'], ['media', 'look'], ['departments', 'look'],
+  ['events', 'events'], ['members', 'members'], ['joinRequests', 'members'], ['alumni', 'members'],
+  ['executives', 'executive offices'], ['staff', 'leadership accounts']
+]);
+// Leadership Accounts is locked row by row instead (renderStaffAccounts): the
+// National Coordinator accounts in it are the main admin's own.
+const LOCKED_BY_ROW = new Set(['staff']);
 let LOOK_STATUS = null;
 const HELPING_KEY = 'aconsu.helpingChapter';
 function helpingChapter() { try { return sessionStorage.getItem(HELPING_KEY) || ''; } catch (e) { return ''; } }
 
-function lookLocked(panelName) {
-  return ADMIN_SCOPE.role === 'admin' && !!LOOK_STATUS && LOOK_STATUS.canChangeLook === false && LOOK_PANELS.has(panelName);
+function chapterLocked(panelName) {
+  return ADMIN_SCOPE.role === 'admin' && !!LOOK_STATUS && LOOK_STATUS.canChange === false && CHAPTER_OWN_PANELS.has(panelName);
 }
 
-function lookNoteText() {
+function chapterNoteText(panelName) {
   const name = (LOOK_STATUS && LOOK_STATUS.chapterName) || 'This chapter';
-  return `${name}'s look belongs to ${name}. You can change it only when the chapter asks: their Chapter Admin or Coordinator sends a request from Ask National for Help. View only until then.`;
+  const what = CHAPTER_OWN_PANELS.get(panelName) || 'look';
+  const owns = what === 'look' ? `${name}'s look belongs to ${name}. You can change it` : `${name}'s ${what} belong to ${name}. You can change them`;
+  return `${owns} only when the chapter asks: their Chapter Admin or Coordinator sends a request from Ask National for Help. View only until then.`;
 }
 
-// A line at the top of each look panel while working at a chapter's request,
-// so it is clear whose look this is and why it is open.
+// A line at the top of each of the chapter's panels while working at its
+// request, so it is clear whose this is and why it is open.
 function markAskedPanel(panel) {
   if (!LOOK_STATUS || LOOK_STATUS.reason !== 'asked' || panel.querySelector(':scope > .cr-notice')) return;
   const r = LOOK_STATUS.request || {};
   const div = document.createElement('div');
   div.className = 'cr-notice good';
   div.setAttribute('role', 'status');
-  div.textContent = `${LOOK_STATUS.chapterName} asked for help: "${r.message || ''}". You can change its look until ${r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'the request is closed'}.`;
+  div.textContent = `${LOOK_STATUS.chapterName} asked for help: "${r.message || ''}". You can make changes for it until ${r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'the request is closed'}.`;
   panel.prepend(div);
 }
 
@@ -156,11 +167,13 @@ async function initLookGuard() {
     new MutationObserver(run).observe(el, { childList: true, subtree: true });
     run();
   };
-  LOOK_PANELS.forEach(name => watch(document.getElementById(`panel-${name}`), (panel) => {
-    if (lookLocked(name)) lockForOversight(panel, { note: true, text: lookNoteText() });
-    else markAskedPanel(panel);
+  CHAPTER_OWN_PANELS.forEach((what, name) => watch(document.getElementById(`panel-${name}`), (panel) => {
+    if (!chapterLocked(name)) markAskedPanel(panel);
+    else if (!LOCKED_BY_ROW.has(name)) lockForOversight(panel, { note: true, text: chapterNoteText(name) });
   }));
-  watch(document.getElementById('modalContent'), (modal) => { if (lookLocked(CURRENT_PANEL)) lockForOversight(modal); });
+  watch(document.getElementById('modalContent'), (modal) => {
+    if (chapterLocked(CURRENT_PANEL) && !LOCKED_BY_ROW.has(CURRENT_PANEL)) lockForOversight(modal);
+  });
 }
 
 // Working on another chapter's look, at its request, from a dashboard that
@@ -224,7 +237,7 @@ function applyNavScopeVisibility() {
   });
   if (pruned && ADMIN_SCOPE.role === 'admin' && helpingChapter()) {
     document.querySelectorAll('#adminNav [data-scope="chapter"]').forEach(el => {
-      if (LOOK_PANELS.has(el.dataset.panel)) el.style.display = '';
+      if (CHAPTER_OWN_PANELS.has(el.dataset.panel)) el.style.display = '';
     });
     document.querySelectorAll('#adminNav .nav-group').forEach(group => {
       const body = group.querySelector('.nav-group-body');
@@ -269,7 +282,7 @@ async function showAdminShell() {
     const bar = document.createElement('div');
     bar.className = 'cr-notice good';
     bar.setAttribute('role', 'status');
-    bar.innerHTML = `You are working on <strong>${escapeHtml((LOOK_STATUS && LOOK_STATUS.chapterName) || 'a chapter')}</strong>'s look at its request.${LOOK_STATUS && !LOOK_STATUS.canChangeLook ? ' The request has closed, so it is view only now.' : ''} <button type="button" class="btn btn-outline btn-sm" id="stopHelpingBtn">Stop</button>`;
+    bar.innerHTML = `You are working on <strong>${escapeHtml((LOOK_STATUS && LOOK_STATUS.chapterName) || 'a chapter')}</strong> at its request.${LOOK_STATUS && !LOOK_STATUS.canChange ? ' The request has closed, so it is view only now.' : ''} <button type="button" class="btn btn-outline btn-sm" id="stopHelpingBtn">Stop</button>`;
     if (main) main.prepend(bar);
     document.getElementById('stopHelpingBtn').addEventListener('click', stopHelping);
   }
@@ -832,11 +845,16 @@ async function renderStaffAccounts() {
   const el = document.getElementById('panel-staff');
   el.innerHTML = skeletonHtml();
   const users = await fetchJSON('/api/admin/staff');
+  // Until the chapter asks, the main admin keeps only what is its own here:
+  // the National Coordinator accounts. The chapter's accounts are view only.
+  const locked = chapterLocked('staff');
+  const mayEdit = (u) => !locked || u.role === 'nationalCoordinator';
 
   el.innerHTML = `
+    ${locked ? `<p class="oversight-note">${escapeHtml(chapterNoteText('staff'))} National Coordinator accounts are yours and stay open.</p>` : ''}
     <div class="panel-head">
       <h2 style="margin:0;">Leadership Accounts (${users.length})</h2>
-      <button class="btn btn-primary btn-sm" id="addStaffBtn">+ Add Account</button>
+      <button class="btn btn-primary btn-sm" id="addStaffBtn">${locked ? '+ Add National Coordinator' : '+ Add Account'}</button>
     </div>
     <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">
       Each account opens one portal. Give the leader their username and password, then send them the portal link below,
@@ -865,8 +883,8 @@ async function renderStaffAccounts() {
             <td><span class="status-pill ${u.active ? 'done' : ''}">${u.active ? 'active' : 'disabled'}</span></td>
             <td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'never'}</td>
             <td class="row-actions">
-              <button data-edit-staff="${u.id}">Edit</button>
-              <button class="danger" data-delete-staff="${u.id}">Delete</button>
+              ${mayEdit(u) ? `<button data-edit-staff="${u.id}">Edit</button>
+              <button class="danger" data-delete-staff="${u.id}">Delete</button>` : '<span class="tiny muted">View only</span>'}
             </td>
           </tr>
         `).join('') || '<tr><td colspan="6">No leadership accounts yet. Add one to give a leader their portal.</td></tr>'}
@@ -893,7 +911,10 @@ async function openStaffForm(user) {
   // A chapter-scoped admin can't hand out Chapter Coordinator (only National
   // can - see NATIONAL_ONLY_STAFF_ROLES) and never needs a chapter picker,
   // since the server always scopes their accounts to their own chapter.
-  const roleOptions = PORTAL_ROLES.filter(r => ADMIN_SCOPE.isNational || !NATIONAL_ONLY_STAFF_ROLES.includes(r.value));
+  // Until the chapter asks, the main admin may open only a National
+  // Coordinator's account (see chapterLocked).
+  const roleOptions = PORTAL_ROLES.filter(r => ADMIN_SCOPE.isNational || !NATIONAL_ONLY_STAFF_ROLES.includes(r.value))
+    .filter(r => !chapterLocked('staff') || r.value === 'nationalCoordinator');
   let chapters = [];
   if (ADMIN_SCOPE.isNational) {
     chapters = await fetchJSON('/api/national/chapters').catch(() => []);
@@ -2613,16 +2634,15 @@ async function renderSettings() {
   el.innerHTML = skeletonHtml();
   const settings = await fetchJSON('/api/settings?global=1');
   CURRENT_SETTINGS = settings;
+  // The national app's own settings. A chapter's (and its offices' email
+  // addresses) are in its Chapter Site Settings, and are never filled from here.
   const fields = [
     { key: 'fellowshipName', label: 'Short Name' },
     { key: 'fullName', label: 'Full Name' },
     { key: 'tagline', label: 'Tagline' },
     { key: 'verseOfTheWeek', label: 'Verse of the Week' },
     { key: 'address', label: 'Address' },
-    { key: 'email', label: 'Contact Email (everything goes here unless an office address is set below)' },
-    { key: 'shepherdingEmail', label: 'Shepherding Email (contact-form messages)' },
-    { key: 'publicityEmail', label: 'Publicity Email (new testimonies)' },
-    { key: 'financeEmail', label: 'Finance Email' },
+    { key: 'email', label: 'National contact email (national notices, such as alumni and monthly theme requests, come here)' },
     { key: 'phone', label: 'Phone' },
     { key: 'whatsapp', label: 'WhatsApp Number (digits only, with country code)' },
     { key: 'instagram', label: 'Instagram URL' },
@@ -2634,8 +2654,11 @@ async function renderSettings() {
     { key: 'spotify', label: 'Spotify Playlist or Profile URL' },
     { key: 'homeHeaderImageFileId', label: 'Home Header Image File ID (recommended: set via Media Library > Home page header banner)' }
   ];
+  const move = settings.movedToChapter;
   el.innerHTML = `
-    <h2 style="margin-bottom:20px;">Site Settings</h2>
+    <h2 style="margin-bottom:8px;">Global Settings</h2>
+    <p class="hint" style="max-width:640px; margin:0 0 16px;">The national app's own name, contacts and banner. Each chapter keeps its own in its Chapter Site Settings, and a chapter's page never borrows from here.</p>
+    ${move && move.chapterId ? `<div class="cr-notice good" role="status" style="max-width:640px;">What was set here belonged to ${escapeHtml(move.chapterName || move.chapterId)}, so it was moved to its Chapter Site Settings on ${escapeHtml(new Date(move.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }))}, and these were set back to the national defaults.</div>` : ''}
     <form class="form-card" id="settingsForm" style="max-width:640px; margin:0;">
       ${fields.map(f => `
         <div class="field">
@@ -2649,7 +2672,7 @@ async function renderSettings() {
   `;
   document.getElementById('settingsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const payload = { ...settings };
+    const payload = {};
     fields.forEach(f => { payload[f.key] = document.querySelector(`[data-key="${f.key}"]`).value; });
     try {
       await fetchJSON('/api/admin/settings', {
@@ -2674,6 +2697,7 @@ async function renderChapterSettings() {
       fetchJSON('/api/admin/chapter-sms').catch(() => null)
     ]);
     const contact = data.contact || {};
+    const officeEmails = data.officeEmails || {};
     const payment = data.payment || {};
     const about = data.about || {};
     const serviceTimesStr = (data.serviceTimes || []).join('\n');
@@ -2798,6 +2822,33 @@ async function renderChapterSettings() {
           <div class="field">
             <label>X / Twitter URL</label>
             <input type="text" id="csTwitter" value="${escapeHtml(contact.twitter || '')}">
+          </div>
+        </div>
+        <div class="field">
+          <label for="csSpotify">Spotify playlist or profile URL</label>
+          <input type="text" id="csSpotify" value="${escapeHtml(contact.spotify || '')}">
+        </div>
+
+        <h3 style="margin:24px 0 8px;">Office email addresses</h3>
+        <p class="hint" style="margin:0 0 14px;">Where each office's copy of a new message goes. Left blank, it goes to the chapter's contact email above. Only this chapter's messages come here.</p>
+        <div class="field-row">
+          <div class="field">
+            <label for="csShepherdingEmail">Shepherding (contact-form messages)</label>
+            <input type="email" id="csShepherdingEmail" value="${escapeHtml(officeEmails.shepherding || '')}">
+          </div>
+          <div class="field">
+            <label for="csPublicityEmail">Publicity (new testimonies)</label>
+            <input type="email" id="csPublicityEmail" value="${escapeHtml(officeEmails.publicity || '')}">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="csFinanceEmail">Finance</label>
+            <input type="email" id="csFinanceEmail" value="${escapeHtml(officeEmails.finance || '')}">
+          </div>
+          <div class="field">
+            <label for="csWelfareEmail">Welfare</label>
+            <input type="email" id="csWelfareEmail" value="${escapeHtml(officeEmails.welfare || '')}">
           </div>
         </div>
 
@@ -2998,7 +3049,14 @@ async function renderChapterSettings() {
           facebook: document.getElementById('csFacebook').value,
           telegram: document.getElementById('csTelegram').value,
           tiktok: document.getElementById('csTiktok').value,
-          twitter: document.getElementById('csTwitter').value
+          twitter: document.getElementById('csTwitter').value,
+          spotify: document.getElementById('csSpotify').value
+        },
+        officeEmails: {
+          shepherding: document.getElementById('csShepherdingEmail').value,
+          publicity: document.getElementById('csPublicityEmail').value,
+          finance: document.getElementById('csFinanceEmail').value,
+          welfare: document.getElementById('csWelfareEmail').value
         },
         payment: {
           provider: document.getElementById('csProvider').value,

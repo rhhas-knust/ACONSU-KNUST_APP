@@ -103,6 +103,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123', memberId: officeMemberIds[user] });
     check(`create ${role} account`, r.status === 200, r.data);
   }
+  // The test chapter now has its own Coordinator, so the chapter is its own:
+  // its look, its events, its members and its accounts. Much of this suite has
+  // the main admin set the chapter up, as a chapter would ask it to: the
+  // Coordinator asks once, for the length of the run. The rule itself is tested
+  // in test/chapter-look.js.
+  r = await call('coord', 'POST', '/api/portal/login', { username: 'coord.yaw', password: 'password123' });
+  r = await call('coord', 'POST', '/api/chapter-requests', { message: 'Please help set up our chapter.', days: 30 });
+  check('the chapter asks the main admin for help setting it up', r.status === 200, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.nomember', name: 'No Member', role: 'finance', password: 'password123' });
   check('a chapter office account cannot be created without a member behind it', r.status === 400, r.data);
   // An executive is a promoted member, so the office can't be created out of
@@ -119,12 +127,6 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     r = await call(jar, 'POST', '/api/portal/login', { username: user, password: 'password123' });
     check(`${user} signs in`, r.status === 200, r.data);
   }
-  // The test chapter now has its own Coordinator, so its look is its own. Much of
-  // this suite has the main admin set the chapter up, as a chapter would ask it
-  // to: the Coordinator asks once, for the length of the run. The rule itself is
-  // tested in test/chapter-look.js.
-  r = await call('coord', 'POST', '/api/chapter-requests', { message: 'Please help set up our chapter site.', days: 30 });
-  check('the chapter asks the main admin for help setting up its look', r.status === 200, r.data);
   r = await call('bad', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'wrong' });
   check('wrong password rejected', r.status === 401, r.data);
 

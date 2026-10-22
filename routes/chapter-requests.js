@@ -1,31 +1,89 @@
-// A chapter's look is its own.
+// A chapter is its own.
 //
-// A chapter's site settings, artwork, media, custom pages and department pages
+// A chapter's look (its site settings, artwork, media, custom pages and
+// department pages), its events, its members and its leadership accounts
 // belong to that chapter. The main admin (the break-glass login behind the
 // admin dashboard) can change them only while the chapter has asked it to: its
 // Chapter Admin or Chapter Coordinator sends a request saying what they need,
 // and for as long as that request is open - until it is marked done, withdrawn,
-// or its days run out - the main admin may change that chapter's look, and only
-// that chapter's.
+// or its days run out - the main admin may change that chapter, and only that
+// chapter. It can always look.
 //
 // A chapter with no admin of its own yet has nobody to ask, so the main admin
-// can still set it up. That is the only exception.
+// can still set it up. That is the only exception. Appointing a chapter's
+// Coordinator from the National portal (/api/national/...) is national's own
+// duty and stays open, which is also how a chapter locked out of every account
+// is given a way back in.
 //
 // The main admin owns the deployment, so this is a rule of conduct that every
 // normal route keeps, not a wall against someone holding the server's keys.
 
-// The writes that change how a chapter looks to the people who visit it.
-const CHAPTER_LOOK_WRITES = [
-  /^\/api\/admin\/chapter-settings\b/,   // name, about, contact, banner
-  /^\/api\/admin\/hero-art\b/,           // the artwork on each page
-  /^\/api\/admin\/uploads\b/,            // the media library and image placements
-  /^\/api\/admin\/files\b/,
-  /^\/api\/admin\/departments\b/,        // department pages and their headers
-  /^\/api\/admin\/pages\b/,              // custom pages
-  /^\/api\/admin\/content\b/             // the content hub: live service, seminars, highlights
+// What each part is called when the main admin is told why it was refused.
+const AREAS = {
+  look: 'look (its site settings, artwork, media, pages and department pages)',
+  events: 'events',
+  members: 'members',
+  accounts: 'leadership accounts and executive offices'
+};
+
+// The writes that are a chapter's own. A rule with a `resource` also catches
+// the id of the one record a write is aimed at, so the chapter checked is that
+// record's own, whatever chapter the request names. `national` says when a
+// write is the union's rather than a chapter's: a national event, a national
+// executive, a National Coordinator's account. Those are the main admin's.
+const isEventNational = (req, record) => (record
+  ? record.isNational === true && (req.body || {}).isNational !== false
+  : (req.body || {}).isNational === true);
+const isExecutiveNational = (req, record, rolesLib) => (record
+  ? !record.chapterId
+  : String((req.body || {}).chapterId || '') === rolesLib.NATIONAL_SCOPE);
+const isStaffNational = (req, record) => (record
+  ? record.role === 'nationalCoordinator'
+  : (req.body || {}).role === 'nationalCoordinator');
+
+const CHAPTER_OWN_WRITES = [
+  { area: 'look', re: /^\/api\/admin\/chapter-settings\b/ },
+  { area: 'look', re: /^\/api\/admin\/hero-art\b/ },
+  { area: 'look', re: /^\/api\/admin\/uploads\b/ },
+  { area: 'look', re: /^\/api\/admin\/files\b/ },
+  { area: 'look', re: /^\/api\/admin\/departments(?:\/([^/]+))?/, resource: 'departments' },
+  { area: 'look', re: /^\/api\/admin\/pages(?:\/([^/]+))?/, resource: 'pages' },
+  { area: 'look', re: /^\/api\/admin\/content(?:\/([^/]+))?/, resource: 'contentItems' },
+  { area: 'events', re: /^\/api\/admin\/events(?:\/([^/]+))?/, resource: 'events', national: isEventNational },
+  { area: 'events', re: /^\/api\/publicity\/events(?:\/([^/]+))?/, resource: 'events', national: isEventNational },
+  { area: 'events', re: /^\/api\/executive\/events\b/ },
+  { area: 'events', re: /^\/api\/events\/([^/]+)\/volunteers\b/, resource: 'events' },
+  { area: 'members', re: /^\/api\/admin\/members\/([^/]+)/, resource: 'members' },
+  { area: 'members', re: /^\/api\/admin\/join-requests\/([^/]+)/, resource: 'joinRequests' },
+  { area: 'members', re: /^\/api\/admin\/alumni\/([^/]+)/, resource: 'alumniProfiles' },
+  { area: 'members', re: /^\/api\/admin\/executive-applications\/([^/]+)/, resource: 'members' },
+  { area: 'members', re: /^\/api\/shepherd\/members\/([^/]+)/, resource: 'members' },
+  { area: 'members', re: /^\/api\/shepherd\/team(?:\/([^/]+))?/, resource: 'members' },
+  { area: 'accounts', re: /^\/api\/admin\/staff(?:\/([^/]+))?/, resource: 'staffUsers', national: isStaffNational },
+  { area: 'accounts', re: /^\/api\/admin\/executives(?:\/([^/]+))?/, resource: 'executives', national: isExecutiveNational },
+  { area: 'accounts', re: /^\/api\/coordinator\/offices\b/ }
 ];
-const isLookWrite = (req) => !['GET', 'HEAD', 'OPTIONS'].includes(req.method)
-  && CHAPTER_LOOK_WRITES.some((re) => re.test(req.path));
+// The look's writes alone, as the first version of this rule had them.
+const CHAPTER_LOOK_WRITES = CHAPTER_OWN_WRITES.filter((r) => r.area === 'look').map((r) => r.re);
+
+// Writes sent with a file. Their fields (the chapter they name among them) are
+// read only once the file is, so they are checked then, behind the upload
+// (see `upload` in server.js), and not before. Every one of these must go
+// through that upload step: test/chapter-look.js sends each one.
+const UPLOAD_WRITES = [
+  ['POST', /^\/api\/admin\/uploads$/],
+  ['POST', /^\/api\/admin\/chapter-settings\/banner$/],
+  ['POST', /^\/api\/admin\/executives$/],
+  ['PUT', /^\/api\/admin\/executives\/[^/]+$/],
+  ['POST', /^\/api\/admin\/content$/],
+  ['PUT', /^\/api\/admin\/content\/[^/]+$/]
+];
+
+const ruleFor = (req) => (['GET', 'HEAD', 'OPTIONS'].includes(req.method)
+  ? null
+  : CHAPTER_OWN_WRITES.find((r) => r.re.test(req.path)) || null);
+const isMultipart = (req) => /^multipart\/form-data/i.test(String((req.headers && req.headers['content-type']) || ''));
+const checkedAfterUpload = (req) => isMultipart(req) && UPLOAD_WRITES.some(([m, re]) => m === req.method && re.test(req.path));
 
 const MAX_OPEN = 3;
 const DEFAULT_DAYS = 7;
@@ -55,38 +113,60 @@ function registerChapterRequestRoutes(app, deps) {
     return n > 0;
   }
 
-  // Which chapter a main-admin write is aimed at: the one it names, the one
-  // chosen in the dashboard, or the only chapter there is. Blank means the
-  // write is national (the public app itself), which is the main admin's own.
+  // Which chapter the dashboard is looking at: the one a write names, the one
+  // chosen in the dashboard, or the only chapter there is. Blank is national.
   function targetChapter(req) {
     const body = req.body || {};
     const named = typeof body.chapterId === 'string' && body.chapterId && body.chapterId !== rolesLib.NATIONAL_SCOPE ? body.chapterId : '';
     return named || rolesLib.selectedChapterId(req) || rolesLib.getSoleActiveChapterId() || '';
   }
 
+  // Which chapters a main-admin write could touch: the one it names, the one
+  // chosen in the dashboard (or the only chapter there is), and the chapter of
+  // the record it is aimed at. Every one has to allow it, so naming a chapter
+  // that allows it while working on one that does not gets nowhere. None at
+  // all means the write is national (the public app itself), the main admin's
+  // own.
+  async function chaptersTouched(req, rule) {
+    const body = req.body || {};
+    const id = rule.resource ? (rule.re.exec(req.path) || [])[1] : '';
+    let record = null;
+    if (id) { try { record = await repo.getById(rule.resource, decodeURIComponent(id)); } catch (e) { record = null; } }
+    if (rule.national && rule.national(req, record, rolesLib)) return [];
+    const named = typeof body.chapterId === 'string' && body.chapterId && body.chapterId !== rolesLib.NATIONAL_SCOPE ? body.chapterId : '';
+    const chosen = rolesLib.selectedChapterId(req) || rolesLib.getSoleActiveChapterId() || '';
+    return [...new Set([record && record.chapterId, named, chosen].filter(Boolean))];
+  }
+
   async function lookStatus(chapterId) {
     const chapter = chapterId ? await repo.getById('chapters', chapterId) : null;
-    if (!chapter) return { chapterId: '', canChangeLook: true, reason: 'national' };
+    if (!chapter) return { chapterId: '', canChange: true, canChangeLook: true, reason: 'national' };
     const request = await openRequestFor(chapterId);
-    if (request) return { chapterId, chapterName: chapter.name, canChangeLook: true, reason: 'asked', request };
-    if (!(await hasOwnAdmin(chapterId))) return { chapterId, chapterName: chapter.name, canChangeLook: true, reason: 'setup' };
-    return { chapterId, chapterName: chapter.name, canChangeLook: false, reason: 'not_asked' };
+    if (request) return { chapterId, chapterName: chapter.name, canChange: true, canChangeLook: true, reason: 'asked', request };
+    if (!(await hasOwnAdmin(chapterId))) return { chapterId, chapterName: chapter.name, canChange: true, canChangeLook: true, reason: 'setup' };
+    return { chapterId, chapterName: chapter.name, canChange: false, canChangeLook: false, reason: 'not_asked' };
   }
 
   // ---------- the rule ----------
-  app.use(async (req, res, next) => {
-    if (!isLookWrite(req) || !isMainAdmin(req)) return next();
+  async function guard(req, res, next) {
+    const rule = ruleFor(req);
+    if (!rule || !isMainAdmin(req)) return next();
     try {
-      const status = await lookStatus(targetChapter(req));
-      if (status.canChangeLook) return next();
-      return res.status(403).json({
-        error: `${status.chapterName}'s look belongs to ${status.chapterName}. The main admin can change it only when the chapter asks: their Chapter Admin or Coordinator sends a request from their dashboard (Ask National).`,
-        needsChapterRequest: true, chapterId: status.chapterId
-      });
+      for (const chapterId of await chaptersTouched(req, rule)) {
+        const status = await lookStatus(chapterId);
+        if (status.canChange) continue;
+        const name = status.chapterName;
+        return res.status(403).json({
+          error: `${name}'s ${AREAS[rule.area]} belong to ${name}. The main admin can change them only when the chapter asks: their Chapter Admin or Coordinator sends a request from their dashboard (Ask National).`,
+          needsChapterRequest: true, chapterId: status.chapterId, area: rule.area
+        });
+      }
+      return next();
     } catch (e) {
       return res.status(500).json({ error: 'Could not check whether this chapter asked for help.' });
     }
-  });
+  }
+  app.use((req, res, next) => (checkedAfterUpload(req) ? next() : guard(req, res, next)));
 
   // ---------- reading ----------
   // The dashboard asks before it draws a look panel, so it can say why the
@@ -160,6 +240,9 @@ function registerChapterRequestRoutes(app, deps) {
       res.status(500).json({ error: 'Could not close the request.' });
     }
   });
+
+  // For server.js's upload step: the same rule, once a file's fields are read.
+  return { guardAfterUpload: (req, res, next) => (checkedAfterUpload(req) ? guard(req, res, next) : next()) };
 }
 
-module.exports = { registerChapterRequestRoutes, CHAPTER_LOOK_WRITES };
+module.exports = { registerChapterRequestRoutes, CHAPTER_LOOK_WRITES, CHAPTER_OWN_WRITES, UPLOAD_WRITES };
