@@ -316,12 +316,6 @@
     document.querySelectorAll('[data-app-link]').forEach(function (a) {
       a.href = C.appUrl; a.hidden = false;
     });
-  } else if (has(C.appComingSoon)) {
-    // Not ready yet: say so where the links will be, with nothing to press.
-    // A button that goes nowhere would be worse than no button at all.
-    document.querySelectorAll('[data-app-soon]').forEach(function (el) { el.hidden = false; });
-    var soonNote = document.querySelector('[data-app-soon-note]');
-    if (soonNote) { soonNote.textContent = C.appComingSoon; soonNote.hidden = false; }
   }
 
   // ---- the month's theme, and the alumni ---------------------------------

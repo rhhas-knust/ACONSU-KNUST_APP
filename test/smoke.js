@@ -3811,13 +3811,6 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       /if \(cta && !cta\.children\.length\) cta\.remove\(\);/.test(js), null);
     check('a blank app link hides every way into the app',
       /if \(has\(C\.appUrl\)\)/.test(js), null);
-    // Before the app is ready, the page can say it is on its way, where its
-    // links will be. Words only: a link or a button there would go nowhere.
-    check('while the app is not ready, the page can say it is coming soon',
-      /\} else if \(has\(C\.appComingSoon\)\) \{/.test(js) && typeof CHAPTER.appComingSoon === 'string', null);
-    check('with nothing to press where the app links will be',
-      /<span class="soon-tag" data-app-soon hidden>/.test(html) && /<p class="soon-note" data-app-soon-note hidden><\/p>/.test(html)
-        && !/<(a|button)[^>]*data-app-soon/.test(html), null);
 
     // Same collision as the social icons, written fresh: `.top nav a` is
     // (0,1,2) and `.btn-primary` is (0,1,0), so the nav rule won on colour and

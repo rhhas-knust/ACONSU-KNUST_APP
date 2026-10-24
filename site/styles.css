@@ -135,13 +135,6 @@ section { padding: 56px 0; }
 .btn-ghost { border-color: var(--ink-faint); color: var(--ink); background: transparent; }
 .btn-light { background: #fff; color: var(--purple-ink); }
 .btn-sm { min-height: 40px; padding: 8px 14px; font-size: 0.95rem; }
-/* The app is on its way: words where its links will be, and nothing to press,
-   so it is a label rather than a button. */
-.soon-tag {
-  display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 4px;
-  background: var(--warn-bg); color: var(--warn); font-size: 0.9rem; font-weight: 700;
-}
-.soon-note { margin: 0; max-width: 32ch; padding-left: 12px; border-left: 3px solid var(--accent-fill); color: #fff; font-weight: 600; }
 @media (hover: hover) and (pointer: fine) {
   .btn-primary:hover { background: var(--purple-rich); }
   .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
