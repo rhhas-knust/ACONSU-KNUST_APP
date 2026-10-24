@@ -348,4 +348,10 @@ window.CHAPTER = {
   // Where members go to sign in. Blank hides every link to it, so this page
   // works on its own before the app is ready to show anyone.
   //appUrl: 'https://aconsu-knust-app.onrender.com',
+
+  // While appUrl above is blank: what the page says where the app links will
+  // be, so visitors know it is on its way. Nothing to press, only the words.
+  // Fill in appUrl when the app is ready and the real links take its place.
+  // Blank shows nothing at all.
+  appComingSoon: 'The ACONSU app is coming soon. Watch this space.',
 };
