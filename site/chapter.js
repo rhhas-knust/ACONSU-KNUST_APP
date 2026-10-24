@@ -107,10 +107,11 @@ window.CHAPTER = {
       photo: 'images/church-founding-member.jpg', inMemoriam: true },
 
     { name: 'Apostle Ebenezer Annan', role: 'General Secretary, the Church',
-      about: 'A graduate from the prestigious Kwame Nkrumah University of Science and Technology (KNUST), '
-           + 'where he studied mathematics and later rose to occupy one of the most important offices in his profession at GRA. '
-           + 'He was ordained to be an Apostle when he was appointed as the General Secretary of the church, due to his diligent work to support the ministry. '
-           + 'He visionary leader he is.',
+      about: 'A mathematics graduate of the Kwame Nkrumah University of Science and '
+           + 'Technology (KNUST), he rose to one of the highest offices in his '
+           + 'profession at the Ghana Revenue Authority. For his diligent work in '
+           + 'support of the ministry, he was appointed General Secretary of the '
+           + 'church and ordained an Apostle. What a visionary leader he is.',
       photo: 'images/church-general-secretary.jpg', inMemoriam: false },
   ],
 
@@ -215,7 +216,7 @@ window.CHAPTER = {
   // itself - a group shot from the week it describes. A card without one starts
   // at its title rather than showing a grey box.
   //
-  // ONE WARNING: THE IMAGES DO NOT NEED: the shrinker only touches pictures. A
+  // ONE WARNING, FOR PDFs ONLY: the shrinker only touches pictures. A
   // PDF goes up exactly as large as it is, and a 20MB report costs a reader on
   // campus data real money. If yours is heavy, export it again at a lower
   // quality before putting it here.
