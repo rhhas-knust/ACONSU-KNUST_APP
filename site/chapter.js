@@ -107,10 +107,10 @@ window.CHAPTER = {
       photo: 'images/church-founding-member.jpg', inMemoriam: true },
 
     { name: 'Apostle Ebenezer Annan', role: 'General Secretary, the Church',
-      about: 'A graduate from the prestigious Kwame Nkrumah University of Science and Technology - KNUST'
-           +'Where he studied mathematics and later rose to occupy one of the most important offices in his profession at GRA'
-           +'He was ordained to be an Apostle when he was appointed as the General Secretary of the church due to his diligent work to support the ministry'
-           +'He visionary leader he is.',
+      about: 'A graduate from the prestigious Kwame Nkrumah University of Science and Technology (KNUST), '
+           + 'where he studied mathematics and later rose to occupy one of the most important offices in his profession at GRA. '
+           + 'He was ordained to be an Apostle when he was appointed as the General Secretary of the church, due to his diligent work to support the ministry. '
+           + 'He visionary leader he is.',
       photo: 'images/church-general-secretary.jpg', inMemoriam: false },
   ],
 
@@ -320,7 +320,7 @@ window.CHAPTER = {
       'Father, I impact the world with Your Word. The lost must see Christ through my actions and the testimony of my lips. Today I will speak to at least one soul and lead them to the light of Christ. There is no darkness where there is light; so there is no darkness where I stand. (John 1:5; Matthew 5:14)',
       'I am bold to spread Your Word, for You have not given me a spirit of fear, but of power, love, and a sound mind. (2 Timothy 1:7; Acts 1:8)',
       'One soul won brings joy in heaven, and I have decided to be the one who brings that joy. (Luke 15:7; Proverbs 11:30)',
-      'I have made up my mind to fulfil the Father's will. I will always commit to the Great Commission. (John 6:38; Matthew 28:19-20)',
+      'I have made up my mind to fulfil the Father’s will. I will always commit to the Great Commission. (John 6:38; Matthew 28:19-20)',
       'I will not be selfish with the love I received from the Father; I seek the joy of heaven, which is more precious than anything else. (Matthew 13:44; Psalm 16:11)',
       'He who sits in heaven shall laugh; I sit with Him in heaven, so I laugh. (Ephesians 2:6; Psalm 2:4) Joy comes from the Lord. I do the work of the Lord, so I am and will forever be joyful. (Nehemiah 8:10; Philippians 4:4)',
       'Father, I pray for every lost soul. Lord Jesus, touch their hearts, that they may see the hope of Your glory. I pray that every mind the prince of this world has blinded will receive the revelation of Your Word and power. May those who have lost hope regain hope and strength. (Ephesians 1:18; 2 Corinthians 4:4; Isaiah 40:31)',
