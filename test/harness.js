@@ -61,7 +61,11 @@ function applyUpdate(doc, update) {
   return doc;
 }
 
-function makeModel(defaults) {
+// `unique` lists fields the real collection has a unique index on, for a model
+// whose code relies on the database refusing a second document with the same
+// value (a register made by two phones at once): create() then refuses one as
+// MongoDB does, with code 11000.
+function makeModel(defaults, { unique = [] } = {}) {
   const docs = [];
   let counter = 0;
 
@@ -89,9 +93,24 @@ function makeModel(defaults) {
     return p;
   };
 
+  // A read that takes a while to come back, as one over a network does: what
+  // was read is a snapshot, and another request may write in between.
+  const later = (value, ms) => {
+    const p = new Promise((resolve) => setTimeout(() => resolve(value), ms));
+    p.lean = () => p;
+    p.sort = () => p;
+    p.limit = () => p;
+    return p;
+  };
+
   return {
     _docs: docs,
-    find(query) { return result(docs.filter(d => matches(d, query || {})).map(clone)); },
+    // Instant unless a test about a "read, then write" race sets findDelayMs.
+    findDelayMs: 0,
+    find(query) {
+      const value = docs.filter(d => matches(d, query || {})).map(clone);
+      return this.findDelayMs > 0 ? later(value, this.findDelayMs) : result(value);
+    },
     // Mongoose's findOne() (without .lean()) hands back a real document with a
     // .save() on it, and some routes mutate that document and save it rather
     // than going through repo. Returning a bare object here meant any such
@@ -122,6 +141,8 @@ function makeModel(defaults) {
       return this.countDelayMs > 0 ? new Promise((resolve) => setTimeout(() => resolve(n), this.countDelayMs)) : Promise.resolve(n);
     },
     create(data) {
+      const taken = unique.find(f => data[f] !== undefined && docs.some(d => d[f] === data[f]));
+      if (taken) return Promise.reject(Object.assign(new Error(`E11000 duplicate key error: ${taken}`), { code: 11000 }));
       const doc = { _id: `oid${++counter}`, ...defaults, ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       docs.push(doc);
       return Promise.resolve(clone(doc));
@@ -259,10 +280,10 @@ const fakeModels = {
   Notification: makeModel({ chapterId: '', source: 'admin' }),
   PushSubscription: makeModel({ chapterId: '' }),
   SystemState: makeModel({ lastBirthdayNotifDate: '' }),
-  ShepherdingRecord: makeModel({ chapterId: '', memberId: '', name: '', phone: '', address: '', emergencyContact: '', attendanceStatus: 'new', lastContactDate: '', pastoralNotes: '', imageFileId: '' }),
+  ShepherdingRecord: makeModel({ chapterId: '', memberId: '', name: '', phone: '', email: '', level: '', programme: '', department: '', birthdayMonth: null, birthdayDay: null, origin: 'manual', address: '', emergencyContact: '', attendanceStatus: 'new', lastContactDate: '', pastoralNotes: '', imageFileId: '' }),
   FinanceEntry: makeModel({ chapterId: '', method: 'cash', reference: '', payee: '', budgetId: '', budgetLineId: '', approvalStatus: 'recorded', approvedBy: '', receiptFileId: '', description: '', recordedBy: '' }),
   Budget: makeModel({ chapterId: '', status: 'draft', notes: '', lines: [], createdBy: '' }),
-  AttendanceRecord: makeModel({ chapterId: '', serviceType: 'sunday', title: '', marks: [], visitorCount: 0, notes: '', recordedBy: '' }),
+  AttendanceRecord: makeModel({ chapterId: '', serviceType: 'sunday', title: '', marks: [], visitorCount: 0, notes: '', recordedBy: '', rev: 0 }, { unique: ['id'] }),
   ScheduledNotification: makeModel({ chapterId: '', status: 'scheduled', channels: ['app'], audience: 'all', url: '/index.html', sentAt: null, result: '', createdBy: '' }),
   SmsLog: makeModel({ chapterId: '', status: 'sent', detail: '', sourceId: '' }),
   StaffUser: makeModel({ chapterId: '', memberId: '', active: true, lastLoginAt: null, name: '', positionKey: '', endedAt: null, handedOverTo: '', handedOverFrom: '', passwordChangedAt: null, mustChangePassword: false, startingPasswordExpiresAt: null }),
