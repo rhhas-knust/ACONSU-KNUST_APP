@@ -10,7 +10,7 @@ Official website + admin backend for **ACONSU — The Apostles' Continuation Stu
 - **Leadership portals** — one signed-in area per office, each with its own account (see section 17):
   - **Coordinator** (`/coordinator.html`) — a read-only dashboard across every office.
   - **Finance** (`/finance.html`) — budgets with planned-vs-actual tracking, a full ledger, reports and CSV export.
-  - **Shepherding** (`/shepherding.html`) — Sunday attendance registers, member records they can edit, and the contact-message inbox.
+  - **Shepherding** (`/shepherding.html`) — Sunday check-in at the door, the chapter's own list brought in from a spreadsheet, attendance registers, member records they can edit, and the contact-message inbox. It works on its own, before anyone has an app account.
   - **Publicity** (`/publicity.html`) — app + SMS announcements, scheduled sends, event updates, and the testimony inbox.
 - **Installable app (PWA)** with offline support, real push notifications, and a Capacitor scaffold for native iOS/Android builds.
 - **MongoDB Atlas** as the data store — a cloud database kept on three machines. Backups depend on the Atlas plan: **a free (M0) cluster has none**, so read [docs/operations.md](docs/operations.md) and set one up.
@@ -138,6 +138,8 @@ aconsu-app/
     mailer.js              SMTP email sending (password reset, office alerts)
     imageProcess.js        Automatic image resize/compression on upload
     maps.js                Map links: which are accepted, and the spot each points at (section 27)
+    peopleImport.js        Reading a chapter's list from a CSV file, and who on it is new (Shepherding)
+    attendance.js          Sunday check-in from several phones at once, and attendance rates
     globalMove.js          The one-time move of Global Settings into ACONSU-KNUST (docs/offices.md)
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
   migrate-multichapter.js One-time migration to the multi-chapter model — see section 20
@@ -153,6 +155,8 @@ aconsu-app/
     visit-ui.js            The home page and Plan your visit for a first-time visitor, and its map (needs Playwright)
     maps.js                Map links: the rules, every way of saving one, following a short link (`npm test`)
     global.js              Global Settings moved to ACONSU-KNUST once; chapters show only their own (`npm test`)
+    shepherd-list.js       Shepherding's list from a CSV file, and Sunday check-in (`npm test`)
+    shepherd-ui.js         The same on a phone, with two phones at the door (needs Playwright)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
@@ -174,6 +178,7 @@ aconsu-app/
     js/coordinator.js       Chapter Coordinator dashboard (approvals, chapter-wide announcements)
     js/finance.js           Finance office (budgets, ledger, reports)
     js/shepherd.js          Shepherding portal (attendance, members, messages, membership workflow)
+    js/shepherd-list.js     Shepherding: Sunday check-in at the door, and bringing the list in from CSV
     js/publicity.js         Publicity portal (announcements, SMS, testimonies)
     images/logo.jpg         ACONSU logo
 ```
@@ -351,7 +356,7 @@ The union's back office is split into four signed-in areas, one per office. They
 | --- | --- | --- |
 | Coordinator | `/coordinator.html` | Read-only dashboard across every office, plus who holds which portal |
 | Finance | `/finance.html` | Budgets, ledger, reports, CSV export |
-| Shepherding | `/shepherding.html` | Attendance registers, member records, contact messages |
+| Shepherding | `/shepherding.html` | Sunday check-in, the chapter's list (from CSV), attendance registers, member records, contact messages |
 | Publicity | `/publicity.html` | Announcements (app + SMS), scheduled sends, events, testimonies |
 
 None of these are linked from the public site. Give each leader their URL along with their credentials.
@@ -384,7 +389,20 @@ Income sources stay fixed to the union's actual ones — **MoMo, Tithe, Harvest,
 
 ### Shepherding
 
-**Attendance** — the register is the centre of this portal. Pick a date (it defaults to the Sunday just gone) and a service, then mark each person Present, Excused or Absent, with a headcount box for walk-in visitors who aren't on any list. A running tally shows how many are in the room as you go. Saving the same date twice updates that register rather than creating a second one, so corrections during the week are just an edit. Every person's attendance rate is available from their row.
+Shepherding can be used on its own, before the rest of the app is in people's hands: bring the chapter's existing list in once, then check people in every Sunday. Nobody on the list needs an account. When the app opens to members, people with accounts appear beside the list and are checked in the same way.
+
+**Bringing your list in** — Members, then **Import list (CSV)**. Save the list from Excel (File, Save As, "CSV UTF-8") or Google Sheets (File, Download, "Comma-separated values"), with a row of headings at the top, and choose the file. Three steps, and nothing is written until the last:
+1. *What is in each column?* Each column is matched to Name, Phone, Email, Level, Programme, Hall / hostel, Church department, Birthday, Emergency contact or Notes from its heading ("Phone Number", "Hall/Hostel", "Surname" + "Other names", a Google Form's "Timestamp" left out). Anything else, such as Gender, is kept in the person's notes under its own heading, or can be left out.
+2. *Before anything is added* — who will be added, who is already on the list (their blanks are filled in from the file; nothing already written is changed), who already has an app account, and every row left out with its reason (no name; the same person as an earlier row). A phone number Excel has turned into 2.44E+08 is flagged rather than guessed.
+3. *Bring them in.* They are marked as from the chapter's list and counted as members on the dashboards, not as visitors. Bringing the same file in again adds nobody.
+
+Names typed in capitals are tidied ("KOFI MENSAH" becomes "Kofi Mensah"), a phone Excel dropped the leading 0 from gets it back, "Level 200" is 200, and only the birthday's day and month are kept (day first, as Ghana writes dates, unless the column is plainly month first). A sample list can be downloaded from the same screen. Up to 3,000 people, 1 MB, per file.
+
+**Sunday Check-In** — the screen for the door, and the one to bookmark on the phones there: `/shepherding.html#checkin` opens straight on it. Type the start of a name (or a few digits of their phone) and tap: they are checked in at once, saved there and then, so a phone that sleeps or loses signal loses nothing already done. Enter checks in the only match. A wrong tap is taken back with **Undo**. Someone not on the list is added there and then with **Add as someone new** (name and phone), marked new for the team to follow up; a phone number already on the list is that person, not a second one. Members with the app can show the QR code on their membership card instead.
+
+Any number of phones can work the door at once, all signed in to the Shepherding account. Every check-in goes onto one register for that Sunday and is never written over by another phone's (lib/attendance.js); each phone shows the same count, refreshed every 15 seconds.
+
+**Attendance** — the register is the centre of this portal. Pick a date (it defaults to the Sunday just gone) and a service, then mark each person Present, Excused or Absent, with a headcount box for walk-in visitors who aren't on any list. A running tally shows how many are in the room as you go. Saving the same date twice updates that register rather than creating a second one, so corrections during the week are just an edit. Every person's attendance rate is available from their row. With check-in, only the people who came get a mark, so a Sunday someone was not checked in at counts as missed once they were on the list; Sundays from before they were on it are not held against them. The register is for corrections and for marking people excused: if someone was checked in at the door after it was opened, saving it is refused and it asks to be opened again, so nobody is marked absent by mistake.
 
 **Members** — everyone with an ACONSU account appears automatically with their details pulled live from their account; visitors without accounts can be added by hand. Shepherding can now **edit a member's details** (name, phone, level, department, birthday) — they're the office that finds out a number has changed. Email and password stay with the member, since changing an email from someone else's screen is how people get locked out. Alongside that sits the pastoral layer only shepherding keeps: address, emergency contact, attendance pattern, last contact date and private notes.
 

@@ -331,3 +331,71 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 .of-row-actions button { min-height: 44px; padding: 8px 14px; }
 .portal-panel .btn-sm { min-height: 44px; }
 .pill.of-chip { text-transform: none; }
+
+/* ============================================================
+   Sunday check-in (shepherd-list.js): built for a phone held in
+   one hand at the door. Big names to tap, the count in view,
+   the same colour tokens as everything else so night mode follows.
+   ============================================================ */
+.ci-bar { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.ci-count { display: flex; align-items: baseline; gap: 8px; }
+.ci-count b { font-size: 2.6rem; line-height: 1; color: var(--brand); font-variant-numeric: tabular-nums; }
+.ci-count span { font-weight: 700; color: var(--ink-soft); }
+.ci-when { margin-bottom: 0; }
+.ci-label { display: block; font-weight: 800; font-size: 1rem; margin-bottom: 8px; color: var(--brand-strong); }
+.ci-search {
+  width: 100%; min-height: 54px; font-size: 1.15rem; padding: 12px 16px;
+  border: 2px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
+}
+.ci-search:focus { border-color: var(--brand); outline: 3px solid var(--lilac-mid); outline-offset: 1px; }
+.ci-results { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.ci-person {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 14px;
+  border: 2px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
+  text-align: left; font: inherit; cursor: pointer;
+}
+.ci-person:hover, .ci-person:focus-visible { border-color: var(--brand); }
+.ci-person .who { flex: 1; min-width: 0; }
+.ci-person .who strong { display: block; font-size: 1rem; }
+.ci-person .who small { display: block; color: var(--ink-faint); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ci-action { flex: none; font-weight: 800; font-size: 0.85rem; padding: 8px 12px; border-radius: 8px; background: var(--action); color: var(--action-ink); }
+.ci-person.is-in { cursor: default; border-color: var(--ok-ink); background: var(--ok-bg); }
+.ci-person.is-in .ci-action { background: transparent; color: var(--ok-ink); }
+.ci-new-line { margin: 12px 0 0; color: var(--ink-soft); }
+.ci-new { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 12px; background: var(--lilac-light); }
+.ci-new h3 { margin: 0 0 10px; }
+.ci-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
+.ci-list li { display: flex; align-items: center; gap: 10px; min-height: 44px; border-bottom: 1px solid var(--line); }
+.ci-list li:last-child { border-bottom: none; }
+.ci-list .ci-name { flex: 1; min-width: 0; font-weight: 600; }
+.ci-undo {
+  min-height: 44px; min-width: 64px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink-soft); font: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+}
+.ci-undo:hover { border-color: var(--bad-ink); color: var(--bad-ink); }
+
+/* bringing the list in */
+.imp-how { margin: 0 0 16px 1.2em; padding: 0; display: grid; gap: 6px; color: var(--ink-soft); }
+.imp-cols { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 10px; }
+.imp-cols li {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 240px); gap: 2px 14px; align-items: center;
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: var(--surface);
+}
+.imp-cols label { font-weight: 800; color: var(--ink); }
+.imp-cols .imp-eg { grid-column: 1; font-size: 0.8rem; color: var(--ink-faint); overflow-wrap: anywhere; }
+.imp-cols select { grid-column: 2; grid-row: 1 / span 2; width: 100%; min-height: 44px; }
+.imp-summary { list-style: none; padding: 0; margin: 0 0 16px; display: grid; gap: 8px; }
+.imp-summary li { border: 1px solid var(--line); border-left-width: 5px; border-radius: 10px; padding: 10px 14px; }
+.imp-summary li.good { border-color: var(--ok-ink); background: var(--ok-bg); color: var(--ok-ink); }
+.imp-summary li.warn { border-color: var(--warn-ink); background: var(--warn-bg); color: var(--warn-ink); }
+.imp-issues { margin: 0 0 10px 1.2em; padding: 0; display: grid; gap: 4px; font-size: 0.88rem; }
+.modal h4 { margin: 14px 0 8px; }
+
+@media (max-width: 560px) {
+  .ci-bar { align-items: stretch; }
+  .ci-when { width: 100%; }
+  .ci-when .field { flex: 1 1 140px; }
+  .ci-when .field input, .ci-when .field select { min-width: 0; width: 100%; }
+  .imp-cols li { grid-template-columns: 1fr; }
+  .imp-cols select { grid-column: 1; grid-row: auto; margin-top: 6px; }
+}

@@ -1,7 +1,8 @@
 /* ============================================================
    Shepherding Portal. The pastoral side of the union.
    Sunday attendance, the people directory (editable here), and
-   the contact messages members send in.
+   the contact messages members send in. Sunday check-in at the
+   door and bringing the chapter's list in are in shepherd-list.js.
    ============================================================ */
 
 const SHEP_ROWS_PER_PAGE = 15;
@@ -42,11 +43,16 @@ async function renderShepOverview(el) {
         <h2>Shepherding Overview</h2>
         <p class="sub">Who is here, who has drifted, and who is waiting to hear back from us.</p>
       </div>
-      ${PORTAL.canEdit ? '<div class="panel-actions"><button class="btn btn-primary btn-sm" id="quickRegisterBtn">Take Attendance</button></div>' : ''}
+      ${PORTAL.canEdit ? `<div class="panel-actions">
+        <button class="btn btn-primary btn-sm" id="quickCheckinBtn">Sunday Check-In</button>
+        <button class="btn btn-outline btn-sm" id="quickRegisterBtn">Attendance Register</button>
+      </div>` : ''}
     </div>
 
     <div class="stat-grid">
-      ${statCard('People Tracked', people.length, { foot: `${people.filter(p => p.source === 'visitor').length} visitors without accounts` })}
+      ${statCard('People Tracked', people.length, {
+        foot: `${people.filter(p => p.source === 'member').length} with app accounts · ${people.filter(p => p.origin === 'import').length} from your list · ${people.filter(p => p.source === 'visitor' && p.origin !== 'import').length} visitors`
+      })}
       ${statCard('Last Service', lastService ? String(lastService.total) : '-', {
         tone: 'good',
         foot: lastService ? `${shortDate(lastService.date)} · ${lastService.present} on the register + ${lastService.visitorCount} walk-ins` : 'No register taken yet'
@@ -106,95 +112,12 @@ async function renderShepOverview(el) {
 
   const quick = document.getElementById('quickRegisterBtn');
   if (quick) quick.addEventListener('click', () => openPanel('attendance'));
+  const quickCheckin = document.getElementById('quickCheckinBtn');
+  if (quickCheckin) quickCheckin.addEventListener('click', () => openPanel('checkin'));
 }
 
 // ---------- attendance ----------
 const registerState = { date: lastSundayISO(), serviceType: 'sunday', marks: {}, loaded: false };
-
-// Quick Check-In: SCAN QR -> IDENTIFY MEMBER -> VERIFY CHAPTER -> RECORD
-// ATTENDANCE (section 13), with a manual search fallback when scanning isn't
-// available - either browser support (BarcodeDetector isn't universal yet)
-// or simply no camera to hand. Both paths call the same server-side
-// check-in, which is what actually verifies chapter membership.
-function wireQuickCheckIn(people) {
-  const feedback = document.getElementById('checkinFeedback');
-  const showFeedback = (text, type) => { feedback.textContent = text; feedback.className = `form-msg ${type || ''}`; };
-
-  async function checkIn(payload, label) {
-    try {
-      const res = await fetchJSON('/api/attendance/scan', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, date: registerState.date, serviceType: registerState.serviceType })
-      });
-      showFeedback(res.alreadyMarked ? `${res.member.name} was already marked present.` : `${res.member.name} marked present.`, 'success');
-      showToast(`${res.member.name} checked in`, 'success');
-    } catch (err) {
-      showFeedback(err.message || `Could not check in ${label}.`, 'error');
-    }
-  }
-
-  // ---- manual search fallback (always available) ----
-  const searchInput = document.getElementById('checkinSearch');
-  const resultsHost = document.getElementById('checkinResults');
-  searchInput.addEventListener('input', () => {
-    const term = searchInput.value.trim().toLowerCase();
-    if (!term) { resultsHost.innerHTML = ''; return; }
-    const matches = people.filter(p => p.source === 'member' && (p.name || '').toLowerCase().includes(term)).slice(0, 6);
-    resultsHost.innerHTML = matches.map(p => `
-      <button type="button" class="mark-btn" data-checkin-member="${p.memberId}" style="display:flex; width:100%; justify-content:flex-start; margin-bottom:6px;">${escapeHtml(p.name)}</button>
-    `).join('') || '<p class="tiny muted">No match.</p>';
-    resultsHost.querySelectorAll('[data-checkin-member]').forEach(btn => btn.addEventListener('click', async () => {
-      await checkIn({ memberId: btn.dataset.checkinMember }, btn.textContent);
-      searchInput.value = ''; resultsHost.innerHTML = '';
-    }));
-  });
-
-  // ---- camera QR scan (feature-detected - not every browser supports it yet) ----
-  const startBtn = document.getElementById('startScanBtn');
-  const stopBtn = document.getElementById('stopScanBtn');
-  const scanArea = document.getElementById('scanArea');
-  const video = document.getElementById('scanVideo');
-  let stream = null;
-  let scanTimer = null;
-
-  if (!('BarcodeDetector' in window)) {
-    startBtn.disabled = true;
-    startBtn.textContent = 'Scanning not supported on this browser. Use search below';
-    return;
-  }
-
-  async function stopScan() {
-    if (scanTimer) clearInterval(scanTimer);
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    stream = null;
-    scanArea.style.display = 'none';
-  }
-
-  startBtn.addEventListener('click', async () => {
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-      video.srcObject = stream;
-      await video.play();
-      scanArea.style.display = 'block';
-      const detector = new BarcodeDetector({ formats: ['qr_code'] });
-      let busy = false;
-      scanTimer = setInterval(async () => {
-        if (busy) return;
-        busy = true;
-        try {
-          const codes = await detector.detect(video);
-          if (codes.length) {
-            await checkIn({ qrToken: codes[0].rawValue }, 'this member');
-          }
-        } catch (e) { /* a missed frame isn't an error - just try again next tick */ }
-        busy = false;
-      }, 800);
-    } catch (e) {
-      showFeedback('Could not access the camera. You can still check people in with search below.', 'error');
-    }
-  });
-  stopBtn.addEventListener('click', stopScan);
-}
 
 async function renderAttendance(el) {
   const [people, services, existing] = await Promise.all([
@@ -237,21 +160,7 @@ async function renderAttendance(el) {
 
     ${PORTAL.canEdit ? `
       <div class="portal-card">
-        <h3>Quick Check-In (section 13)</h3>
-        <p class="hint">Scan a member's QR code, or search by name if scanning isn't available. Either instantly marks them present for the service selected above.</p>
-        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px;">
-          <button type="button" class="btn btn-primary btn-sm" id="startScanBtn">Scan QR Code</button>
-        </div>
-        <div id="scanArea" style="display:none; margin-bottom:14px;">
-          <video id="scanVideo" style="width:100%; max-width:360px; border-radius:12px; background:#000;" playsinline muted></video>
-          <div><button type="button" class="btn btn-outline btn-sm" id="stopScanBtn" style="margin-top:8px;">Stop Scanning</button></div>
-        </div>
-        <div class="field" style="max-width:360px;">
-          <label>Or search by name</label>
-          <input type="search" id="checkinSearch" placeholder="Type a name…" autocomplete="off">
-        </div>
-        <div id="checkinResults" style="max-width:360px;"></div>
-        <div id="checkinFeedback" class="form-msg"></div>
+        <p style="margin:0;">On Sunday, use <button type="button" class="link-btn" id="toCheckinBtn">Sunday Check-In</button> at the door: one tap per person, on as many phones as you like. This register is for corrections afterwards, and for marking people excused.</p>
       </div>
     ` : ''}
 
@@ -337,7 +246,11 @@ async function renderAttendance(el) {
 
   if (!PORTAL.canEdit) return;
 
-  wireQuickCheckIn(people);
+  document.getElementById('toCheckinBtn').addEventListener('click', () => {
+    checkinState.date = registerState.date;
+    checkinState.serviceType = registerState.serviceType;
+    openPanel('checkin');
+  });
 
   const listEl = document.getElementById('registerList');
   const tallyEl = document.getElementById('registerTally');
@@ -413,6 +326,10 @@ async function renderAttendance(el) {
         body: JSON.stringify({
           date: registerState.date,
           serviceType: registerState.serviceType,
+          // The version this register was opened at: if people have been
+          // checked in at the door since, the server asks for it to be opened
+          // again rather than marking them absent.
+          rev: record ? (record.rev || 0) : 0,
           visitorCount: Number(document.getElementById('regVisitors').value || 0),
           notes: document.getElementById('regNotes').value,
           marks: people.map(p => ({
@@ -427,6 +344,14 @@ async function renderAttendance(el) {
       openPanel('attendance');
     } catch (err) {
       setFormMsg('registerMsg', err.message || 'Could not save this register.', 'error');
+      if (/checked in since/.test(err.message || '')) {
+        const again = document.createElement('button');
+        again.type = 'button';
+        again.className = 'link-btn';
+        again.textContent = 'Open it again';
+        again.addEventListener('click', () => openPanel('attendance'));
+        document.getElementById('registerMsg').append(' ', again);
+      }
     } finally {
       btn.disabled = false;
     }
@@ -456,7 +381,9 @@ async function renderShepMembers(el) {
       </div>
       <div class="panel-actions">
         <input type="search" id="memberSearch" value="${escapeHtml(memberSearch)}" placeholder="Search name, email, phone…" style="padding:9px 12px; border:1px solid var(--line); border-radius:9px;">
-        ${PORTAL.canEdit ? '<button class="btn btn-primary btn-sm" id="addVisitorBtn">+ Add Visitor</button>' : ''}
+        ${PORTAL.canEdit ? `
+          <button class="btn btn-outline btn-sm" id="importListBtn">Import list (CSV)</button>
+          <button class="btn btn-primary btn-sm" id="addVisitorBtn">+ Add Visitor</button>` : ''}
       </div>
     </div>
 
@@ -470,7 +397,7 @@ async function renderShepMembers(el) {
             <tr>
               <td style="display:flex; align-items:center; gap:10px;">
                 ${avatar(p)}
-                <span>${escapeHtml(p.name)}${p.source === 'visitor' ? '<br><small class="muted">visitor. No account</small>' : ''}</span>
+                <span>${escapeHtml(p.name)}${p.source === 'visitor' ? `<br><small class="muted">${escapeHtml(listLabel(p))}</small>` : ''}</span>
               </td>
               <td>${escapeHtml(p.email || '-')}${p.phone ? `<br>${escapeHtml(p.phone)}` : ''}</td>
               <td>${escapeHtml(deptName(p.department) || '-')}</td>
@@ -504,10 +431,12 @@ async function renderShepMembers(el) {
   });
 
   const addBtn = document.getElementById('addVisitorBtn');
-  if (addBtn) addBtn.addEventListener('click', () => openCareForm(null));
+  if (addBtn) addBtn.addEventListener('click', () => openCareForm(null, departments));
+  const importBtn = document.getElementById('importListBtn');
+  if (importBtn) importBtn.addEventListener('click', () => openImportList(() => { shepMembersPage = 1; openPanel('members'); }));
 
   el.querySelectorAll('[data-care]').forEach(btn => {
-    btn.addEventListener('click', () => openCareForm(people.find(p => personKey(p) === btn.dataset.care)));
+    btn.addEventListener('click', () => openCareForm(people.find(p => personKey(p) === btn.dataset.care), departments));
   });
   el.querySelectorAll('[data-details]').forEach(btn => {
     btn.addEventListener('click', () => openMemberDetailsForm(people.find(p => p.memberId === btn.dataset.details), departments));
@@ -586,14 +515,36 @@ function openMemberDetailsForm(person, departments) {
 
 // The pastoral layer that only shepherding keeps: address, next of kin, how
 // they're doing, and what was said last time.
-function openCareForm(person) {
+function openCareForm(person, departments) {
   const isVisitor = !person || person.source === 'visitor';
   showModal(`
     <h3>${person ? `Care Notes: ${escapeHtml(person.name)}` : 'Add a Visitor'}</h3>
     <form id="careForm">
       ${isVisitor ? `
         <div class="field"><label>Full Name</label><input type="text" id="cName" value="${escapeHtml(person?.name || '')}" required></div>
-        <div class="field"><label>Phone</label><input type="tel" id="cPhone" value="${escapeHtml(person?.phone || '')}"></div>
+        <div class="field-row">
+          <div class="field"><label>Phone</label><input type="tel" id="cPhone" value="${escapeHtml(person?.phone || '')}"></div>
+          <div class="field"><label for="cEmail">Email</label><input type="email" id="cEmail" value="${escapeHtml(person?.email || '')}"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="cLevel">Level / Year</label><input type="text" id="cLevel" value="${escapeHtml(person?.level || '')}" placeholder="e.g. 200"></div>
+          <div class="field"><label for="cProgramme">Programme</label><input type="text" id="cProgramme" value="${escapeHtml(person?.programme || '')}"></div>
+        </div>
+        <div class="field"><label for="cDepartment">Department</label>
+          <select id="cDepartment">
+            <option value="">None</option>
+            ${(departments || []).map(d => `<option value="${d.id}" ${person?.department === d.id ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-row">
+          <div class="field"><label for="cBMonth">Birthday Month</label>
+            <select id="cBMonth">
+              <option value="">-</option>
+              ${MONTHS.slice(1).map((m, i) => `<option value="${i + 1}" ${person?.birthdayMonth === i + 1 ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field"><label for="cBDay">Birthday Day</label><input type="number" id="cBDay" min="1" max="31" value="${person?.birthdayDay || ''}"></div>
+        </div>
       ` : '<p class="tiny muted" style="margin-bottom:16px;">Name, phone and photo come from their account. Edit those under “Details”.</p>'}
       <div class="field"><label>Address / Hall</label><input type="text" id="cAddress" value="${escapeHtml(person?.address || '')}"></div>
       <div class="field"><label>Emergency Contact</label><input type="text" id="cEmergency" value="${escapeHtml(person?.emergencyContact || '')}"></div>
@@ -619,6 +570,12 @@ function openCareForm(person) {
     if (isVisitor) {
       formData.append('name', document.getElementById('cName').value);
       formData.append('phone', document.getElementById('cPhone').value);
+      formData.append('email', document.getElementById('cEmail').value);
+      formData.append('level', document.getElementById('cLevel').value);
+      formData.append('programme', document.getElementById('cProgramme').value);
+      formData.append('department', document.getElementById('cDepartment').value);
+      formData.append('birthdayMonth', document.getElementById('cBMonth').value);
+      formData.append('birthdayDay', document.getElementById('cBDay').value);
       if (person?.recordId) formData.append('recordId', person.recordId);
     } else {
       formData.append('memberId', person.memberId);
@@ -1166,9 +1123,10 @@ initPortal({
   label: 'Shepherding',
   panels: [
     { key: 'overview', label: 'Overview', render: renderShepOverview },
+    { key: 'checkin', label: 'Sunday Check-In', render: renderCheckIn },
     { key: 'visitors', label: 'Membership Workflow', render: renderVisitors },
     { key: 'team', label: 'Check-up Team', render: renderShepTeam },
-    { key: 'attendance', label: 'Attendance', render: renderAttendance },
+    { key: 'attendance', label: 'Attendance Register', render: renderAttendance },
     { key: 'members', label: 'Members', render: renderShepMembers },
     { key: 'care', label: 'Pastoral Care', render: renderCare },
     { key: 'messages', label: 'Messages', render: renderMessages },

@@ -294,6 +294,10 @@ async function initPortal(config) {
   PORTAL.allPanels = config.panels;
   PORTAL.resolvePanels = config.resolvePanels || null;
   PORTAL.active = config.panels[0].key;
+  // A link can open one panel straight away: shepherding.html#checkin is the
+  // Sunday check-in, kept as a bookmark on the phones at the door.
+  const fromLink = window.location.hash.slice(1);
+  if (config.panels.some(p => p.key === fromLink)) PORTAL.active = fromLink;
 
   document.getElementById('modalBackdrop').addEventListener('click', (e) => {
     if (e.target.id === 'modalBackdrop') closeModal();

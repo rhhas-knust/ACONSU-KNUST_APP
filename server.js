@@ -34,6 +34,8 @@ const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
 const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
+const { registerShepherdListRoutes } = require('./routes/shepherd-list');
+const attendanceLib = require('./lib/attendance');
 const officeAccounts = require('./lib/officeAccounts');
 const maps = require('./lib/maps');
 const { moveGlobalSetupToChapter } = require('./lib/globalMove');
@@ -4194,17 +4196,23 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
       };
     });
 
+    // Everyone on Shepherding's own list with no account: visitors added by
+    // hand, people brought in from the chapter's list, and newcomers checked
+    // in at the door (`origin` says which).
     const visitors = standaloneRecords.map((r) => ({
       source: 'visitor',
+      origin: r.origin || 'manual',
       memberId: '',
       recordId: r.id,
       name: r.name,
-      email: '',
+      email: r.email || '',
       phone: r.phone,
-      level: '',
-      department: '',
-      birthdayMonth: null,
-      birthdayDay: null,
+      level: r.level || '',
+      programme: r.programme || '',
+      department: r.department || '',
+      birthdayMonth: r.birthdayMonth || null,
+      birthdayDay: r.birthdayDay || null,
+      createdAt: r.createdAt,
       imageFileId: r.imageFileId || '',
       address: r.address,
       emergencyContact: r.emergencyContact,
@@ -4261,6 +4269,20 @@ app.post('/api/shepherd/records', requireShepherd, upload.single('image'), async
       pastoralNotes: pastoralNotes || ''
     };
     if (imageFileId) fields.imageFileId = imageFileId;
+    // Someone with no account: the details their list carries, each changed
+    // only when the form sends it, so an older form cannot blank them.
+    if (!memberId) {
+      ['email', 'level', 'programme', 'department'].forEach((f) => {
+        if (typeof req.body[f] === 'string') fields[f] = req.body[f].trim().slice(0, 120);
+      });
+      if ('birthdayMonth' in req.body) {
+        const month = parseInt(req.body.birthdayMonth, 10);
+        const day = parseInt(req.body.birthdayDay, 10);
+        const ok = month >= 1 && month <= 12 && day >= 1 && day <= 31;
+        fields.birthdayMonth = ok ? month : null;
+        fields.birthdayDay = ok ? day : null;
+      }
+    }
 
     let record;
     if (existing) {
@@ -4330,18 +4352,28 @@ app.get('/api/shepherd/attendance/:date', requireViewRole('shepherding'), async 
 
 app.post('/api/shepherd/attendance', requireShepherd, async (req, res) => {
   try {
-    const { date, serviceType, title, marks, visitorCount, notes } = req.body;
+    const { date, serviceType, title, marks, visitorCount, notes, rev } = req.body;
     if (!date) return res.status(400).json({ error: 'A service date is required' });
     const service = serviceType || 'sunday';
-    const cleanMarks = (Array.isArray(marks) ? marks : []).map((m) => ({
-      memberId: m.memberId || '',
-      recordId: m.recordId || '',
-      name: m.name || '',
-      status: ['present', 'absent', 'excused'].includes(m.status) ? m.status : 'absent'
-    }));
-
     const scopeFilter = rolesLib.chapterFilter(req);
     const existing = (await repo.getAll('attendanceRecords', scopeFilter)).find(r => r.date === date && r.serviceType === service);
+
+    // While this register was open on one screen, people may have been checked
+    // in at the door on another. Saved as it was opened, it would mark them
+    // absent again. The portal sends the version it opened (`rev`); when that
+    // is no longer the newest, it is asked to open the register again first.
+    const stale = 'People have been checked in since you opened this register. Open it again to see them, then make your changes.';
+    if (rev !== undefined && rev !== null && rev !== '' && Number(rev) !== ((existing && existing.rev) || 0)) {
+      return res.status(409).json({ error: stale });
+    }
+
+    // A check-in keeps the time it was made, through any later correction.
+    const checkedInAt = new Map((existing ? existing.marks : []).filter(m => m.at).map(m => [m.memberId || m.recordId, m.at]));
+    const cleanMarks = (Array.isArray(marks) ? marks : []).map((m) => {
+      const status = ['present', 'absent', 'excused'].includes(m.status) ? m.status : 'absent';
+      const at = status === 'present' ? checkedInAt.get(m.memberId || m.recordId) : null;
+      return { memberId: m.memberId || '', recordId: m.recordId || '', name: m.name || '', status, ...(at ? { at } : {}) };
+    });
     const fields = {
       chapterId: rolesLib.chapterIdForWrite(req),
       date, serviceType: service, title: title || '',
@@ -4350,9 +4382,22 @@ app.post('/api/shepherd/attendance', requireShepherd, async (req, res) => {
       notes: notes || '',
       recordedBy: actorName(req)
     };
-    const record = existing
-      ? await repo.updateById('attendanceRecords', existing.id, fields, scopeFilter)
-      : await repo.create('attendanceRecords', fields, 'att');
+    let record;
+    if (existing) {
+      const result = await models.AttendanceRecord.updateOne(
+        { id: existing.id, ...scopeFilter, ...attendanceLib.atRev(existing) },
+        { $set: fields, $inc: { rev: 1 } }
+      );
+      if ((result.modifiedCount ?? result.nModified) !== 1) return res.status(409).json({ error: stale });
+      record = await repo.getById('attendanceRecords', existing.id, scopeFilter);
+    } else {
+      try {
+        record = await repo.create('attendanceRecords', { ...fields, id: attendanceLib.registerId(fields.chapterId, date, service), rev: 1 });
+      } catch (e) {
+        if (e && e.code === 11000) return res.status(409).json({ error: stale });
+        throw e;
+      }
+    }
     res.json({ success: true, item: record });
   } catch (e) {
     res.status(500).json({ error: 'Could not save this register' });
@@ -4369,24 +4414,23 @@ app.delete('/api/shepherd/attendance/:id', requireShepherd, async (req, res) => 
 });
 
 // Attendance history for one person - how many of the last services they made.
+// The id is an account holder's or, for someone on Shepherding's own list, the
+// list record's. A service they were not checked in at counts as missed once
+// they were on the list (lib/attendance.js).
 app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherding'), async (req, res) => {
   try {
-    const records = await repo.getAll('attendanceRecords', rolesLib.chapterFilter(req));
+    const filter = rolesLib.chapterFilter(req);
     const key = req.params.memberId;
-    const history = records
-      .map((r) => {
-        const mark = r.marks.find(m => m.memberId === key || m.recordId === key);
-        return mark ? { date: r.date, serviceType: r.serviceType, status: mark.status } : null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => (a.date < b.date ? 1 : -1));
-    const attended = history.filter(h => h.status === 'present').length;
-    res.json({
-      history: history.slice(0, 20),
-      servicesRecorded: history.length,
-      attended,
-      rate: history.length ? Math.round((attended / history.length) * 100) : null
-    });
+    const [records, member, listed] = await Promise.all([
+      repo.getAll('attendanceRecords', filter),
+      repo.getById('members', key, filter),
+      repo.getById('shepherdingRecords', key, { ...filter, memberId: '' })
+    ]);
+    const person = member
+      ? { memberId: member.id, createdAt: member.createdAt }
+      : { recordId: key, createdAt: listed ? listed.createdAt : null };
+    const history = attendanceLib.attendanceFor(person, records);
+    res.json({ history: history.slice(0, 20), ...attendanceLib.attendanceRate(history) });
   } catch (e) {
     res.status(500).json({ error: 'Could not load attendance history' });
   }
@@ -4427,74 +4471,13 @@ app.get('/api/member/card', requireMember, async (req, res) => {
 // ---------- QR / manual attendance recording (section 13) ----------
 // Ushers/Shepherding/Publicity can take attendance at the door - same set of
 // roles allowed to manage chapter content, since "who's on the door" isn't
-// its own role in the hierarchy yet.
+// its own role in the hierarchy yet. The check-in routes themselves are in
+// routes/shepherd-list.js.
 function requireAttendanceTaker(req, res, next) {
   if (isChapterAdminOrAbove(req) || hasRole(req, 'shepherding') || hasRole(req, 'publicity')) return next();
   return res.status(401).json({ error: 'Not authenticated' });
 }
-
-function todayISODate() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-// Shared by both the scan and the manual-search fallback - SCAN QR ->
-// IDENTIFY MEMBER -> VERIFY CHAPTER -> RECORD ATTENDANCE (section 13). The
-// chapter check happens by construction: `member` is only ever found within
-// the scanner's own chapterFilter, so a mismatch surfaces as "not found"
-// rather than ever crossing into another chapter's register.
-async function markMemberPresent(req, member, date, serviceType) {
-  const chapterId = rolesLib.chapterIdForWrite(req) || member.chapterId;
-  const day = date || todayISODate();
-  const service = ['sunday', 'midweek', 'special'].includes(serviceType) ? serviceType : 'sunday';
-  const existing = (await repo.getAll('attendanceRecords', { date: day, serviceType: service, chapterId }))[0] || null;
-  const marks = existing ? [...existing.marks] : [];
-  const idx = marks.findIndex((m) => m.memberId === member.id);
-  const already = idx >= 0 && marks[idx].status === 'present';
-  if (idx >= 0) marks[idx] = { ...marks[idx], status: 'present' };
-  else marks.push({ memberId: member.id, recordId: '', name: member.name, status: 'present' });
-
-  const record = existing
-    ? await repo.updateById('attendanceRecords', existing.id, { ...existing, marks })
-    : await repo.create('attendanceRecords', {
-        chapterId, date: day, serviceType: service, marks,
-        visitorCount: 0, notes: '', recordedBy: actorName(req)
-      }, 'att');
-  return { already, recordId: record.id };
-}
-
-app.post('/api/attendance/scan', requireAttendanceTaker, async (req, res) => {
-  try {
-    const { qrToken, date, serviceType } = req.body;
-    if (!qrToken) return res.status(400).json({ error: 'A QR code is required' });
-    const filter = rolesLib.chapterFilter(req);
-    const member = await models.Member.findOne({ qrToken, ...filter }).lean();
-    if (!member) return res.status(404).json({ error: 'That code does not match anyone in this chapter.' });
-    const result = await markMemberPresent(req, member, date, serviceType);
-    res.json({
-      success: true, alreadyMarked: result.already,
-      member: { id: member.id, name: member.name, profileImageFileId: member.profileImageFileId, membershipStage: member.membershipStage }
-    });
-  } catch (e) {
-    res.status(500).json({ error: 'Could not record attendance' });
-  }
-});
-
-// Manual search fallback (section 13) - when scanning isn't available.
-// Reuses the same member list Shepherding already sees; this just adds the
-// one-tap "mark present" action on top of it.
-app.post('/api/attendance/mark', requireAttendanceTaker, async (req, res) => {
-  try {
-    const { memberId, date, serviceType } = req.body;
-    if (!memberId) return res.status(400).json({ error: 'A member is required' });
-    const filter = rolesLib.chapterFilter(req);
-    const member = await models.Member.findOne({ id: memberId, ...filter }).lean();
-    if (!member) return res.status(404).json({ error: 'Member not found in this chapter.' });
-    const result = await markMemberPresent(req, member, date, serviceType);
-    res.json({ success: true, alreadyMarked: result.already, member: { id: member.id, name: member.name } });
-  } catch (e) {
-    res.status(500).json({ error: 'Could not record attendance' });
-  }
-});
+registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
 
 // ---------- Attendance / membership reports (section 13, 37) ----------
 // Generate -> Preview (the existing register screens) -> Download PDF.
@@ -4535,20 +4518,28 @@ app.get('/api/shepherd/attendance/:date/report.pdf', requireViewRole('shepherdin
 app.get('/api/shepherd/attendance-summary.pdf', requireViewRole('shepherding'), async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
-    let [records, members] = await Promise.all([repo.getAll('attendanceRecords', filter), repo.getAll('members', filter)]);
+    let [records, members, listed, departments] = await Promise.all([
+      repo.getAll('attendanceRecords', filter), repo.getAll('members', filter),
+      repo.getAll('shepherdingRecords', { ...filter, memberId: '' }), repo.getAll('departments', filter)
+    ]);
     if (req.query.from) records = records.filter(r => r.date >= req.query.from);
     if (req.query.to) records = records.filter(r => r.date <= req.query.to);
     const chapter = filter.chapterId ? await repo.getById('chapters', filter.chapterId) : null;
+    const deptName = (id) => (departments.find(d => d.id === id) || {}).name || '-';
 
-    const rows = members
-      .filter(m => isActivatedMember(m))
-      .map((m) => {
-        const marked = records.filter(r => r.marks.some(mk => mk.memberId === m.id));
-        const present = records.filter(r => r.marks.some(mk => mk.memberId === m.id && mk.status === 'present')).length;
+    // Members with accounts, and everyone on Shepherding's own list (the
+    // chapter's list brought in, and newcomers from the door).
+    const people = [
+      ...members.filter(m => isActivatedMember(m)).map(m => ({ memberId: m.id, name: m.name, department: m.department, createdAt: m.createdAt })),
+      ...listed.map(r => ({ recordId: r.id, name: r.name, department: r.department, createdAt: r.createdAt }))
+    ];
+    const rows = people
+      .map((p) => {
+        const totals = attendanceLib.attendanceRate(attendanceLib.attendanceFor(p, records));
         return {
-          name: m.name, department: m.department || '-',
-          servicesRecorded: marked.length, present,
-          rate: marked.length ? `${Math.round((present / marked.length) * 100)}%` : '-'
+          name: p.name, department: deptName(p.department),
+          servicesRecorded: totals.servicesRecorded, present: totals.attended,
+          rate: totals.rate === null ? '-' : `${totals.rate}%`
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -6661,7 +6652,9 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
       },
       shepherding: {
         memberCount: members.length,
-        visitorCount: shepherdingRecords.filter(r => !r.memberId).length,
+        // People on the chapter's own list (brought in from its spreadsheet)
+        // are members without accounts, not visitors.
+        visitorCount: shepherdingRecords.filter(r => !r.memberId && r.origin !== 'import').length,
         servicesRecorded: attendance.length,
         lastService: recentServices[0] || null,
         averageAttendance: avgAttendance,
@@ -6874,9 +6867,10 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
         .filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null;
       return {
         id: c.id, name: c.name, status: c.status,
-        memberCount: chMembers.filter(m => isActivatedMember(m)).length,
+        memberCount: chMembers.filter(m => isActivatedMember(m)).length
+          + shepherdingRecords.filter(r => r.chapterId === c.id && !r.memberId && r.origin === 'import').length,
         visitorCount: chMembers.filter(m => ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length
-          + shepherdingRecords.filter(r => r.chapterId === c.id && !r.memberId).length,
+          + shepherdingRecords.filter(r => r.chapterId === c.id && !r.memberId && r.origin !== 'import').length,
         executiveCount: executives.filter(e => e.chapterId === c.id).length,
         upcomingEvents: events.filter(e => e.chapterId === c.id && new Date(`${e.date}T${e.time || '00:00'}:00`) >= now).length,
         lastServiceAttendance: recent ? recent.marks.filter(m => m.status === 'present').length + (recent.visitorCount || 0) : null,

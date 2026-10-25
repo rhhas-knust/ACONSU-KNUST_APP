@@ -59,6 +59,7 @@ const CHAPTER_OWN_WRITES = [
   { area: 'members', re: /^\/api\/admin\/executive-applications\/([^/]+)/, resource: 'members' },
   { area: 'members', re: /^\/api\/shepherd\/members\/([^/]+)/, resource: 'members' },
   { area: 'members', re: /^\/api\/shepherd\/team(?:\/([^/]+))?/, resource: 'members' },
+  { area: 'members', re: /^\/api\/shepherd\/import\b/ },
   { area: 'accounts', re: /^\/api\/admin\/staff(?:\/([^/]+))?/, resource: 'staffUsers', national: isStaffNational },
   { area: 'accounts', re: /^\/api\/admin\/executives(?:\/([^/]+))?/, resource: 'executives', national: isExecutiveNational },
   { area: 'accounts', re: /^\/api\/coordinator\/offices\b/ }
