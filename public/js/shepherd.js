@@ -397,7 +397,9 @@ async function renderShepMembers(el) {
             <tr>
               <td style="display:flex; align-items:center; gap:10px;">
                 ${avatar(p)}
-                <span>${escapeHtml(p.name)}${p.source === 'visitor' ? `<br><small class="muted">${escapeHtml(listLabel(p))}</small>` : ''}</span>
+                <span>${escapeHtml(p.name)}${p.source === 'visitor' ? `<br><small class="muted">${escapeHtml(listLabel(p))}</small>` : ''}
+                  ${p.suggestion ? `<br><small class="link-hint">Possible app account: ${escapeHtml(p.suggestion.name)} (${LINK_HOW[p.suggestion.how]})</small>` : ''}
+                  ${p.linkedHow ? `<br><small class="muted">On the chapter list, linked ${p.linkedHow === 'hand' ? 'by hand' : `by ${LINK_HOW[p.linkedHow]}`}</small>` : ''}</span>
               </td>
               <td>${escapeHtml(p.email || '-')}${p.phone ? `<br>${escapeHtml(p.phone)}` : ''}</td>
               <td>${escapeHtml(deptName(p.department) || '-')}</td>
@@ -408,6 +410,8 @@ async function renderShepMembers(el) {
                 <button data-care="${personKey(p)}">Care Notes</button>
                 ${p.source === 'member' ? `<button data-details="${p.memberId}">Details</button>` : ''}
                 <button data-history="${personKey(p)}">History</button>
+                ${p.source === 'visitor' ? `<button data-link="${p.recordId}">Link to account</button>` : ''}
+                ${p.canUnlink ? `<button data-unlink="${p.recordId}">Unlink</button>` : ''}
                 ${p.recordId ? `<button class="danger" data-delete="${p.recordId}">Delete</button>` : ''}
               </td>` : ''}
             </tr>
@@ -444,6 +448,20 @@ async function renderShepMembers(el) {
   el.querySelectorAll('[data-history]').forEach(btn => {
     btn.addEventListener('click', () => openAttendanceHistory(people.find(p => personKey(p) === btn.dataset.history)));
   });
+  el.querySelectorAll('[data-link]').forEach(btn => {
+    btn.addEventListener('click', () => openLinkForm(people.find(p => p.recordId === btn.dataset.link && p.source === 'visitor'), people));
+  });
+  el.querySelectorAll('[data-unlink]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const p = people.find(x => x.recordId === btn.dataset.unlink);
+      if (!confirm(`Unlink ${p ? p.name : 'them'} from the chapter list? They go back to being two: the account, and the person on your list, with the Sundays they were checked in at as a list person.`)) return;
+      try {
+        await fetchJSON(`/api/shepherd/records/${btn.dataset.unlink}/unlink`, { method: 'POST' });
+        showToast('Unlinked.', 'success');
+        openPanel('members');
+      } catch (err) { showToast(err.message || 'Could not unlink.', 'error'); }
+    });
+  });
   el.querySelectorAll('[data-delete]').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (!confirm('Delete this shepherding record? Their ACONSU account, if they have one, is untouched.')) return;
@@ -451,6 +469,61 @@ async function renderShepMembers(el) {
       showToast('Record deleted.', 'success');
       openPanel('members');
     });
+  });
+}
+
+const LINK_HOW = { phone: 'same phone number', email: 'same email', name: 'same name', hand: 'by hand' };
+
+// Someone on the list who has opened an app account: Shepherding picks the
+// account, and from then on they are one person (lib/listLink.js). The likely
+// account comes first; any account in the chapter can be found by name.
+function openLinkForm(person, people) {
+  const accounts = people.filter(p => p.source === 'member' && !p.linkedHow);
+  let chosen = person.suggestion ? person.suggestion.memberId : '';
+  showModal(`
+    <h3>Link ${escapeHtml(person.name)} to their app account</h3>
+    <p class="tiny muted">From then on they are one person: your notes about them, and the Sundays they were checked in at, go with the account. Nothing from your list is shown to them, and you can unlink it if it was wrong.</p>
+    <div class="field"><label for="linkSearch">Find their account</label>
+      <input type="search" id="linkSearch" placeholder="Type a name, email or phone" autocomplete="off">
+    </div>
+    <ul class="link-choices" id="linkChoices" aria-label="App accounts"></ul>
+    <div class="form-msg" id="linkMsg" role="alert"></div>
+    <div class="of-actions">
+      <button type="button" class="btn btn-primary" id="linkGo" ${chosen ? '' : 'disabled'}>Link</button>
+      <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+    </div>
+  `);
+  const list = document.getElementById('linkChoices');
+  const go = document.getElementById('linkGo');
+  const draw = () => {
+    const term = document.getElementById('linkSearch').value.trim().toLowerCase();
+    const shown = accounts
+      .filter(a => !term || `${a.name} ${a.email} ${a.phone}`.toLowerCase().includes(term))
+      .sort((a, b) => (b.memberId === (person.suggestion || {}).memberId) - (a.memberId === (person.suggestion || {}).memberId) || a.name.localeCompare(b.name))
+      .slice(0, 8);
+    list.innerHTML = shown.map(a => `
+      <li><label class="of-check-line">
+        <input type="radio" name="linkTo" value="${escapeHtml(a.memberId)}" ${a.memberId === chosen ? 'checked' : ''}>
+        <span><strong>${escapeHtml(a.name)}</strong>${person.suggestion && person.suggestion.memberId === a.memberId ? ` <span class="pill">${escapeHtml(LINK_HOW[person.suggestion.how])}</span>` : ''}
+        <br><small class="muted">${escapeHtml([a.email, a.phone].filter(Boolean).join(' · '))}</small></span>
+      </label></li>`).join('') || '<li class="muted">No account matches. They may not have registered yet.</li>';
+    list.querySelectorAll('input[name="linkTo"]').forEach(r => r.addEventListener('change', () => { chosen = r.value; go.disabled = false; }));
+  };
+  draw();
+  document.getElementById('linkSearch').addEventListener('input', draw);
+  go.addEventListener('click', async () => {
+    go.disabled = true;
+    try {
+      const res = await fetchJSON(`/api/shepherd/records/${person.recordId}/link`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberId: chosen })
+      });
+      closeModal();
+      showToast(`${person.name} is linked${res.movedSundays ? `, with ${res.movedSundays} Sunday${res.movedSundays === 1 ? '' : 's'} of attendance` : ''}.`, 'success');
+      openPanel('members');
+    } catch (err) {
+      go.disabled = false;
+      setFormMsg('linkMsg', err.message || 'Could not link them.', 'error');
+    }
   });
 }
 

@@ -17,8 +17,9 @@ the Chapter Coordinator renews it or hands the office to the next person.
 | **President** | Writes the semester outline in a guided form; follows up what the executive resolved. |
 | **Vice President** | Records the finances (the ledger); decides on department budgets Finance has reviewed; sets up committees and task forces; follows up action items. Stands in for the President. |
 | **General Secretary** and **Assistant General Secretary** | One grant, held by both. Take the minutes with a form that follows the order of a meeting, agree them between the two of them, then share them; collect Sunday announcements from every executive. |
-| **Financial Secretary** | Asks departments for their budgets at the start of the year, reviews what comes back, adds approved amounts to the chapter budget. |
-| **Treasurer, Organising Secretary, Campus Coordinator** | Read the shared outline and minutes, answer the announcement call. |
+| **Financial Secretary** | Keeps the books: records what the Treasurer files, brings in the books the chapter kept before (CSV), sees each Sunday's attendance beside its offering. Asks departments for their budgets at the start of the year, reviews what comes back, adds approved amounts to the chapter budget. Lands on The Books (`executive.html#ledger`). |
+| **Treasurer** | Holds the money and accounts for it: files each Sunday's offering with a photo of the count, and every other movement with evidence, for the Financial Secretary to record. Lands on Account for Money (`executive.html#treasury`). Reads the shared outline and minutes, answers the announcement call. |
+| **Organising Secretary, Campus Coordinator** | Read the shared outline and minutes, answer the announcement call. |
 | **Department heads and their assistants** | Answer a budget request for their department; read the outline and minutes; answer the announcement call. |
 | **Alumni President** | Has the alumni body's own desk: the chapter's alumni (showing only what each has chosen to share), and a plan for the alumni's semester that goes through the same approval. Must be an alumnus. |
 | **Chapter Coordinator** | Approves or returns outlines; decides on a budget if the Vice President cannot; reads the shared minutes; keeps the Key offices list. |

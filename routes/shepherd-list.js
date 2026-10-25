@@ -12,6 +12,7 @@
 const multer = require('multer');
 const peopleImport = require('../lib/peopleImport');
 const attendance = require('../lib/attendance');
+const listLink = require('../lib/listLink');
 const { rejectOperatorKeys } = require('../lib/requestGuard');
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -138,6 +139,33 @@ function registerShepherdListRoutes(app, deps) {
     res.set('Content-Type', 'text/csv; charset=utf-8');
     res.set('Content-Disposition', 'attachment; filename="aconsu-shepherding-list.csv"');
     res.send(TEMPLATE);
+  });
+
+  // ---------- one person: the list and their account ----------
+  // Linking happens on its own at registration when it is certain (see
+  // lib/listLink.js); these are Shepherding's hands for the rest, and for
+  // undoing a link that was wrong.
+  app.post('/api/shepherd/records/:id/link', requireShepherd, async (req, res) => {
+    try {
+      const chapterId = chapterOf(req);
+      const record = chapterId ? await repo.getById('shepherdingRecords', req.params.id, { chapterId, memberId: '' }) : null;
+      if (!record) return res.status(404).json({ error: 'That person is not on this chapter\'s list, or is already linked to an account.' });
+      const member = req.body.memberId ? await repo.getById('members', String(req.body.memberId), { chapterId }) : null;
+      if (!member) return res.status(404).json({ error: 'Choose an app account in this chapter.' });
+      const taken = (await repo.getAll('shepherdingRecords', { chapterId, memberId: member.id })).find(r => r.linkedAt);
+      if (taken) return res.status(409).json({ error: `${member.name}'s account is already linked to someone on the list. If that was wrong, unlink it first.` });
+      res.json({ success: true, ...(await listLink.link({ record, member, how: 'hand', by: actorName(req) })) });
+    } catch (e) { res.status(500).json({ error: 'Could not link them' }); }
+  });
+
+  app.post('/api/shepherd/records/:id/unlink', requireShepherd, async (req, res) => {
+    try {
+      const chapterId = chapterOf(req);
+      const record = chapterId ? await repo.getById('shepherdingRecords', req.params.id, { chapterId }) : null;
+      if (!record || !record.memberId || !record.linkedAt) return res.status(404).json({ error: 'That account is not linked to anyone on the list.' });
+      if (record.mergedFromList) return res.status(409).json({ error: 'This link was folded into care notes the account already had, so it cannot be undone. Correct the notes by hand instead.' });
+      res.json({ success: true, ...(await listLink.unlink({ record })) });
+    } catch (e) { res.status(500).json({ error: 'Could not unlink them' }); }
   });
 
   // ---------- Sunday check-in ----------

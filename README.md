@@ -138,7 +138,10 @@ aconsu-app/
     mailer.js              SMTP email sending (password reset, office alerts)
     imageProcess.js        Automatic image resize/compression on upload
     maps.js                Map links: which are accepted, and the spot each points at (section 27)
+    csvTable.js            Reading a spreadsheet saved as CSV, for the imports below
     peopleImport.js        Reading a chapter's list from a CSV file, and who on it is new (Shepherding)
+    listLink.js            Someone on Shepherding's list opens an app account: one person from then on
+    booksImport.js         Bringing the books a chapter already keeps into the ledger
     attendance.js          Sunday check-in from several phones at once, and attendance rates
     globalMove.js          The one-time move of Global Settings into ACONSU-KNUST (docs/offices.md)
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
@@ -157,6 +160,8 @@ aconsu-app/
     global.js              Global Settings moved to ACONSU-KNUST once; chapters show only their own (`npm test`)
     shepherd-list.js       Shepherding's list from a CSV file, and Sunday check-in (`npm test`)
     shepherd-ui.js         The same on a phone, with two phones at the door (needs Playwright)
+    books.js               The Treasurer and Financial Secretary: accounts, old books, Sunday offering (`npm test`)
+    books-ui.js            The same on a phone, and linking a list person to their account (needs Playwright)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
@@ -179,6 +184,8 @@ aconsu-app/
     js/finance.js           Finance office (budgets, ledger, reports)
     js/shepherd.js          Shepherding portal (attendance, members, messages, membership workflow)
     js/shepherd-list.js     Shepherding: Sunday check-in at the door, and bringing the list in from CSV
+    js/csv-import.js        The steps of bringing a CSV file in, shared by the list and the books
+    js/office-books.js      The Treasurer's Sunday offering, the Sundays side by side, the books brought in
     js/publicity.js         Publicity portal (announcements, SMS, testimonies)
     images/logo.jpg         ACONSU logo
 ```
@@ -387,6 +394,20 @@ Finance stands on its own, built the way a small finance office actually works.
 
 Income sources stay fixed to the union's actual ones — **MoMo, Tithe, Harvest, Offertory, Other** — while expense categories are free text, since spending varies far more than giving does.
 
+### The Financial Secretary and the Treasurer, on their own
+
+These two executive offices can run the chapter's money before the rest of the app is in people's hands. The Treasurer holds the money and files every movement with evidence; the Financial Secretary keeps the books and records what is filed. The person holding the funds never writes them into the books.
+
+**Their accounts.** Appointing either office (Leadership Accounts, role Executive, the office, and the member who holds it, with no username or password) issues the office's own login: `treasurer.knust` / `treasurer123` and `financialsecretary.knust` / `financialsecretary123`, where `knust` is the chapter's short name. The first sign-in asks for the email on the holder's member profile and a new password, within 14 days. Once a chapter has its own Coordinator, the Coordinator appoints them (the main admin only when the chapter asks).
+
+**Where they land.** Both sign in at `/executive.html` and land on their money, with the rest of the Executive portal below it under *Everything else*: the Treasurer on **Account for Money**, the Financial Secretary on **The Books**. `/executive.html#treasury` and `/executive.html#ledger` open those straight away, for a bookmark on the phone.
+
+**This Sunday's offering** (Treasurer). After the count: the service, the amount, how it came (cash, MoMo), who counted it with them, and a photo of the counted money or the count sheet, which is required. It waits for the Financial Secretary like any filing. One per service: if it was wrong, the Financial Secretary sends it back with a reason and it is filed again.
+
+**The Sundays** (both, and the President and Vice President, who read the books). Each recent service with how many were checked in at the door (with walk-ins, from Shepherding's Sunday check-in) beside the offering, recorded or still waiting. Counts only: nobody's name reaches the books.
+
+**Bringing in the books you already keep** (Financial Secretary: The Books, then *Bring in old books (CSV)*). Save the cash book from Excel or Google Sheets as CSV. The same three steps as Shepherding's list: match the columns, check, bring them in; nothing is written until the last. A cash book's *Receipts* and *Payments* columns, one *Amount* column with an *In/Out* column, or negative amounts for spending all work, and a running balance is left out (the ledger works it out). The check gives the totals in and out and the date range, to compare with the book before going on, and every row left out with its reason: no date, a date with no year, money in and out on one row, or no way to tell in from out. An offering, a harvest or MoMo giving is recognised from the category or, in a cash book without one, from the details. **Tithe is left out**, as the chapter keeps it in Welfare's own book. The entries are recorded as from the books kept before, and bringing the same file in again adds nothing.
+
 ### Shepherding
 
 Shepherding can be used on its own, before the rest of the app is in people's hands: bring the chapter's existing list in once, then check people in every Sunday. Nobody on the list needs an account. When the app opens to members, people with accounts appear beside the list and are checked in the same way.
@@ -397,6 +418,8 @@ Shepherding can be used on its own, before the rest of the app is in people's ha
 3. *Bring them in.* They are marked as from the chapter's list and counted as members on the dashboards, not as visitors. Bringing the same file in again adds nobody.
 
 Names typed in capitals are tidied ("KOFI MENSAH" becomes "Kofi Mensah"), a phone Excel dropped the leading 0 from gets it back, "Level 200" is 200, and only the birthday's day and month are kept (day first, as Ghana writes dates, unless the column is plainly month first). A sample list can be downloaded from the same screen. Up to 3,000 people, 1 MB, per file.
+
+**Someone on the list who opens an app account** is joined to them. At registration this happens on its own only when it is certain: the same phone number or email, names that agree (every word of the shorter name is in the longer, so two sisters sharing a parent's phone are kept apart), and exactly one person on the list who fits. Anything less, Shepherding sees *Possible app account* beside the person in Members and links them by hand with **Link to account**. From then on they are one person: the care notes go with the account, and so do the Sundays they were checked in at, which count from when they were first on the list. Nothing from the list is shown on their account, since a phone number is not checked at registration; Shepherding sees how each link was made and can **Unlink** one that was wrong.
 
 **Sunday Check-In** — the screen for the door, and the one to bookmark on the phones there: `/shepherding.html#checkin` opens straight on it. Type the start of a name (or a few digits of their phone) and tap: they are checked in at once, saved there and then, so a phone that sleeps or loses signal loses nothing already done. Enter checks in the only match. A wrong tap is taken back with **Undo**. Someone not on the list is added there and then with **Add as someone new** (name and phone), marked new for the team to follow up; a phone number already on the list is that person, not a second one. Members with the app can show the QR code on their membership card instead.
 
