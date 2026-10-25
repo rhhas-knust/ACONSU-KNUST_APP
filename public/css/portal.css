@@ -348,9 +348,11 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
   border: 2px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
 }
 .ci-search:focus { border-color: var(--brand); outline: 3px solid var(--lilac-mid); outline-offset: 1px; }
-.ci-results { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+/* minmax(0, 1fr) and min-width: 0 so a long line can never widen the list past the screen */
+.ci-results { list-style: none; padding: 0; margin: 10px 0 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.ci-results li { min-width: 0; }
 .ci-person {
-  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 10px 14px;
+  display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; min-height: 60px; padding: 10px 14px;
   border: 2px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
   text-align: left; font: inherit; cursor: pointer;
 }
@@ -392,9 +394,11 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 .modal h4 { margin: 14px 0 8px; }
 
 @media (max-width: 560px) {
-  .ci-bar { align-items: stretch; }
-  .ci-when { width: 100%; }
-  .ci-when .field { flex: 1 1 140px; }
+  .ci-bar { align-items: stretch; gap: 10px; }
+  /* the date and the service side by side, so the name search is in view sooner */
+  .ci-when { width: 100%; flex-wrap: nowrap; gap: 10px; }
+  .ci-when .field { flex: 1 1 auto; min-width: 0; }
+  .ci-when .field:last-child { flex: 0 0 108px; }
   .ci-when .field input, .ci-when .field select { min-width: 0; width: 100%; }
   .imp-cols li { grid-template-columns: 1fr; }
   .imp-cols select { grid-column: 1; grid-row: auto; margin-top: 6px; }

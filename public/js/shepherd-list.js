@@ -202,12 +202,13 @@ async function renderCheckIn(el) {
     results.innerHTML = matches.map((p) => {
       const key = ciKey(p);
       const isIn = present.has(key);
-      const detail = [p.phone, p.level && `Level ${p.level}`, p.programme].filter(Boolean).join(' · ') || listLabel(p) || p.email || '';
+      // The name, and the phone number only: enough to tell two people of the
+      // same name apart at the door, short enough to read at a glance.
       return `
         <li>
           <button type="button" class="ci-person ${isIn ? 'is-in' : ''}" data-key="${escapeHtml(key)}" ${isIn ? 'aria-disabled="true"' : ''}>
             ${avatar(p)}
-            <span class="who"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(detail)}</small></span>
+            <span class="who"><strong>${escapeHtml(p.name)}</strong>${p.phone ? `<small>${escapeHtml(p.phone)}</small>` : ''}</span>
             <span class="ci-action">${isIn ? 'Checked in' : 'Check in'}</span>
           </button>
         </li>`;
