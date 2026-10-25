@@ -412,3 +412,36 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 
 /* the Sundays side by side (office-books.js): three narrow columns, made to fit a phone */
 table.portal-table.bk-sundays { min-width: 0; }
+
+/* ============================================================
+   A table that turns into short cards on a phone (card-table):
+   what it is and the amount on the first line (ct-title, ct-side),
+   then a line or two of detail (ct-meta). Nothing scrolls sideways.
+   Wider screens keep the table.
+   ============================================================ */
+.clip { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; cursor: pointer; }
+.clip.open { display: block; -webkit-line-clamp: unset; }
+.card-table .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.card-table .row-actions button { min-height: 44px; padding: 8px 14px; font-size: 0.85rem; }
+.card-table td.ct-side { white-space: nowrap; }
+.ct-phone-only { display: none; }
+@media (max-width: 560px) {
+  /* "table.portal-table.card-table" each time: as specific as the table's own
+     cell rules (padding, lines), so the card's win. */
+  table.portal-table.card-table { min-width: 0; display: block; width: 100%; }
+  table.portal-table.card-table thead { display: none; }
+  table.portal-table.card-table tbody { display: block; width: 100%; }
+  table.portal-table.card-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  table.portal-table.card-table tr:last-child { border-bottom: none; }
+  table.portal-table.card-table td { display: block; grid-column: 1 / -1; min-width: 0; padding: 0; border: none; }
+  table.portal-table.card-table td.ct-title { grid-column: 1; grid-row: 1; font-weight: 700; }
+  table.portal-table.card-table td.ct-title .muted { font-weight: 400; }
+  table.portal-table.card-table td.ct-side { grid-column: 2; grid-row: 1; text-align: right; font-weight: 700; white-space: nowrap; }
+  table.portal-table.card-table td.ct-side.ct-quiet { font-weight: 400; color: var(--ink-faint); font-size: 0.8rem; }
+  table.portal-table.card-table td.ct-meta { font-size: 0.82rem; color: var(--ink-faint); }
+  table.portal-table.card-table td.ct-hide-phone { display: none; }
+  table.portal-table.card-table td.ct-actions { margin-top: 8px; }
+  table.portal-table.card-table td.ct-actions .row-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .ct-phone-only { display: inline; }
+}
+}

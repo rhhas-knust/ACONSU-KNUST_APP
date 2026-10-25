@@ -18,6 +18,21 @@
 // Filled in once per sign-in, from /api/executive/me.
 let EXEC_POSITION = null;
 
+// A long description, kept to one line until it is tapped (portal.css .clip),
+// so a list of money reads at a glance on a phone.
+const clipped = (text) => (text
+  ? `<span class="clip tiny muted" tabindex="0" role="button" aria-expanded="false" title="${escapeHtml(text)}">${escapeHtml(text)}</span>`
+  : '');
+document.addEventListener('click', (e) => {
+  const c = e.target.closest && e.target.closest('.clip');
+  if (!c) return;
+  c.classList.toggle('open');
+  c.setAttribute('aria-expanded', c.classList.contains('open') ? 'true' : 'false');
+});
+document.addEventListener('keydown', (e) => {
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.classList && e.target.classList.contains('clip')) { e.preventDefault(); e.target.click(); }
+});
+
 function can(capability) {
   return !!EXEC_POSITION && (EXEC_POSITION.capabilities || []).includes(capability);
 }
@@ -609,15 +624,15 @@ async function renderExecChapterMembers(el) {
     <div class="portal-card">
       <div class="field"><input type="search" id="memberSearch" placeholder="Search by name, department or programme"></div>
       ${members.length ? `
-        <div class="table-wrap"><table class="portal-table">
+        <div class="table-wrap"><table class="portal-table card-table">
           <thead><tr><th>Name</th><th>Department</th><th>Level</th><th>Stage</th><th>Contact</th></tr></thead>
           <tbody id="memberRows">${members.map(m => `
             <tr data-search="${escapeHtml(`${m.name} ${m.department} ${m.programme}`.toLowerCase())}">
-              <td>${escapeHtml(m.name || '')}</td>
-              <td>${escapeHtml(m.department || '-')}</td>
-              <td>${escapeHtml(m.level || '-')}</td>
-              <td>${escapeHtml((m.membershipStage || '').replace(/_/g, ' '))}</td>
-              <td>${escapeHtml(m.phone || m.email || '-')}</td>
+              <td class="ct-title">${escapeHtml(m.name || '')}</td>
+              <td class="ct-meta">${escapeHtml(m.department || '-')}</td>
+              <td class="ct-hide-phone">${escapeHtml(m.level || '-')}</td>
+              <td class="ct-side ct-quiet">${escapeHtml((m.membershipStage || '').replace(/_/g, ' '))}</td>
+              <td class="ct-meta">${escapeHtml(m.phone || m.email || '-')}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">No members yet.</p>'}
     </div>
@@ -817,14 +832,14 @@ async function renderExecTreasury(el) {
     <div class="portal-card">
       <h4 style="margin-top:0;">What you have filed</h4>
       ${filings.length ? `
-        <div class="table-wrap"><table class="portal-table">
+        <div class="table-wrap"><table class="portal-table card-table">
           <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>Status</th></tr></thead>
           <tbody>${filings.map(f => `
             <tr>
-              <td>${escapeHtml(f.date)}</td>
-              <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')}${f.description ? ' · ' + escapeHtml(f.description) : ''}</span></td>
-              <td>${money(f.amount)}</td>
-              <td>${statusLabel(f)}</td>
+              <td class="ct-meta">${escapeHtml(shortDate(f.date))}</td>
+              <td class="ct-title">${escapeHtml(f.category)} <span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')}</span>${clipped(f.description)}</td>
+              <td class="ct-side">${money(f.amount)}</td>
+              <td class="ct-meta">${statusLabel(f)}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">Nothing filed yet.</p>'}
     </div>
@@ -872,15 +887,15 @@ async function renderExecLedger(el) {
     <div class="portal-card">
       <h4 style="margin-top:0;">Waiting on you (${awaiting.length})</h4>
       ${awaiting.length ? `
-        <div class="table-wrap"><table class="portal-table">
+        <div class="table-wrap"><table class="portal-table card-table">
           <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>Evidence</th><th></th></tr></thead>
           <tbody>${awaiting.map(f => `
             <tr>
-              <td>${escapeHtml(f.date)}</td>
-              <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')} · filed by ${escapeHtml(f.filedBy || '-')}${f.description ? ' · ' + escapeHtml(f.description) : ''}</span></td>
-              <td>${money(f.amount)}</td>
-              <td>${f.receiptFileId ? `<a href="/api/files/${escapeHtml(f.receiptFileId)}" target="_blank" rel="noopener">View</a>` : '<span class="muted">-</span>'}</td>
-              <td><div class="row-actions">
+              <td class="ct-meta">${escapeHtml(shortDate(f.date))} · filed by ${escapeHtml(f.filedBy || '-')}</td>
+              <td class="ct-title">${escapeHtml(f.category)} <span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')}</span>${clipped(f.description)}</td>
+              <td class="ct-side">${money(f.amount)}</td>
+              <td class="ct-meta">${f.receiptFileId ? `<a href="/api/files/${escapeHtml(f.receiptFileId)}" target="_blank" rel="noopener">View the evidence</a>` : '<span class="muted">No evidence</span>'}</td>
+              <td class="ct-actions"><div class="row-actions">
                 <button data-record="${escapeHtml(f.id)}">Record</button>
                 <button class="danger" data-reject="${escapeHtml(f.id)}">Send back</button>
               </div></td>
@@ -891,14 +906,14 @@ async function renderExecLedger(el) {
     <div class="portal-card">
       <h4 style="margin-top:0;">The ledger</h4>
       ${ledger.length ? `
-        <div class="table-wrap"><table class="portal-table">
+        <div class="table-wrap"><table class="portal-table card-table">
           <thead><tr><th>Date</th><th>What</th><th>Amount</th><th>Recorded by</th></tr></thead>
           <tbody>${ledger.map(f => `
             <tr>
-              <td>${escapeHtml(f.date)}</td>
-              <td>${escapeHtml(f.category)}<br><span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')}${f.source === 'treasury' ? ' · from the Treasurer' : ''}${f.approvalStatus === 'rejected' ? ' · sent back' : ''}</span></td>
-              <td>${money(f.amount)}</td>
-              <td>${escapeHtml(f.recordedBy || '-')}</td>
+              <td class="ct-meta">${escapeHtml(shortDate(f.date))}</td>
+              <td class="ct-title">${escapeHtml(f.category)} <span class="tiny muted">${escapeHtml(f.entryType === 'income' ? 'received' : 'spent')}${f.source === 'treasury' ? ' · from the Treasurer' : ''}${f.approvalStatus === 'rejected' ? ' · sent back' : ''}</span></td>
+              <td class="ct-side">${money(f.amount)}</td>
+              <td class="ct-meta">${f.recordedBy ? `<span class="ct-phone-only">Recorded by </span>${escapeHtml(f.recordedBy)}` : ''}</td>
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">Nothing recorded yet.</p>'}
     </div>
