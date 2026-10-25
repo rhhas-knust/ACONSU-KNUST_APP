@@ -79,6 +79,11 @@ const BOOKS = [
   // Against the phone's own width: a page too wide for a phone makes the phone
   // zoom out, and then the page's idea of the window grows with it.
   const noSideways = (p) => p.evaluate((w) => document.documentElement.scrollWidth <= w + 1, p.viewportSize().width);
+  // Tables and lists that would make someone scroll sideways inside their box.
+  const inBoxes = (p, list) => p.evaluate((showList) => {
+    const wide = [...document.querySelectorAll('.portal-panel.active .table-wrap')].filter(t => t.scrollWidth > t.clientWidth + 1);
+    return showList ? wide.map(t => [...t.querySelectorAll('th')].map(x => x.textContent.trim()).join('|')) : wide.length === 0;
+  }, !!list);
   const activePanel = (p) => p.evaluate(() => (document.querySelector('#portalNav button.active') || {}).dataset.panel);
 
   console.log('\n== the Treasurer ==');
@@ -98,6 +103,7 @@ const BOOKS = [
   check('filed: the Sunday shows the offering waiting for the Financial Secretary', /640\.50/.test(sundays) && /waiting to be recorded/.test(sundays), sundays);
   check('the Sundays fit a phone without scrolling sideways', await t.$eval('.bk-sundays', el => el.scrollWidth <= el.parentElement.clientWidth + 1));
   check('no sideways scrolling', await noSideways(t));
+  check('and no list on it needs scrolling sideways either', await inBoxes(t), await inBoxes(t, true));
   await t.screenshot({ path: path.join(SHOTS, 'treasurer-phone.png'), fullPage: true });
 
   console.log('\n== the Financial Secretary ==');
@@ -120,6 +126,9 @@ const BOOKS = [
   await f.waitForFunction(() => /books kept before/.test(document.getElementById('panel-ledger').textContent));
   check('the old books are in the ledger', true);
   check('no sideways scrolling', await noSideways(f));
+  check('the waiting list and the ledger are cards that fit the phone', await inBoxes(f), await inBoxes(f, true));
+  const tap = await f.$$eval('[data-record], [data-reject]', bs => bs.map(b => Math.round(b.getBoundingClientRect().height)));
+  check('Record and Send back are big enough to tap', tap.length && tap.every(h => h >= 44), tap);
   await f.screenshot({ path: path.join(SHOTS, 'finsec-phone.png'), fullPage: true });
   const dark = await signIn('executive', fsec.username, fsec.password, '#ledger', { ...phone, colorScheme: 'dark' });
   check('executive.html#ledger opens the books too', await activePanel(dark) === 'ledger');
