@@ -76,7 +76,9 @@ const BOOKS = [
     await p.waitForTimeout(500);
     return p;
   }
-  const noSideways = (p) => p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+  // Against the phone's own width: a page too wide for a phone makes the phone
+  // zoom out, and then the page's idea of the window grows with it.
+  const noSideways = (p) => p.evaluate((w) => document.documentElement.scrollWidth <= w + 1, p.viewportSize().width);
   const activePanel = (p) => p.evaluate(() => (document.querySelector('#portalNav button.active') || {}).dataset.panel);
 
   console.log('\n== the Treasurer ==');

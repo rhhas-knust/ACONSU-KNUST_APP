@@ -21,12 +21,12 @@ let failures = 0;
 const check = (label, ok, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') + label + (ok || detail === undefined ? '' : ' - ' + JSON.stringify(detail).slice(0, 300))); if (!ok) failures++; };
 
 const LIST = [
-  'Full Name,Phone Number,Level,Hall/Hostel,Gender',
-  'KOFI MENSAH,244000001,Level 200,Unity Hall,Male',
-  'Ama Owusu,0201112222,300,Hall 7,Female',
-  'Yaw Boateng,0277777777,100,Africa Hall,Male',
-  ',0200000000,,,',
-  'Akua Sarpong,0209999999,,,'
+  'Full Name,Phone Number,Level,Hall/Hostel,Gender,Programme',
+  'KOFI MENSAH,244000001,Level 200,Unity Hall,Male,BSC Biomedical Engineering and Applied Sciences',
+  'Ama Owusu,0201112222,300,Hall 7,Female,',
+  'Yaw Boateng,0277777777,100,Africa Hall,Male,',
+  ',0200000000,,,,',
+  'Akua Sarpong,0209999999,,,,'
 ].join('\n');
 
 (async () => {
@@ -70,7 +70,9 @@ const LIST = [
     await p.waitForTimeout(400);
     return p;
   }
-  const noSideways = (p) => p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+  // Against the phone's own width: a page too wide for a phone makes the phone
+  // zoom out, and then the page's idea of the window grows with it.
+  const noSideways = (p) => p.evaluate((w) => document.documentElement.scrollWidth <= w + 1, p.viewportSize().width);
 
   // ------------------------------------------------------------ the list --
   console.log('\n== bringing the list in ==');
@@ -83,7 +85,7 @@ const LIST = [
   await a.setInputFiles('#impFile', { name: 'members.csv', mimeType: 'text/csv', buffer: Buffer.from(LIST) });
   await a.waitForSelector('.imp-cols');
   const guessed = await a.$$eval('.imp-cols select', s => s.map(x => x.value));
-  check('each column is matched to what it holds', JSON.stringify(guessed) === JSON.stringify(['name', 'phone', 'level', 'address', 'note']), guessed);
+  check('each column is matched to what it holds', JSON.stringify(guessed) === JSON.stringify(['name', 'phone', 'level', 'address', 'note', 'programme']), guessed);
   check('with examples from the file beside it', /KOFI MENSAH/.test(await a.textContent('.imp-cols')));
   await a.screenshot({ path: path.join(SHOTS, 'import-columns.png'), fullPage: true });
   await a.click('#impCheck');
@@ -107,6 +109,8 @@ const LIST = [
   await b.type('#ciSearch', 'kof');
   await b.waitForSelector('.ci-person');
   check('typing the start of a name finds them', (await b.textContent('#ciResults')).includes('Kofi Mensah'));
+  check('each name shows only their phone, not every detail on the list', !/Biomedical|Level/.test(await b.textContent('#ciResults')) && /0244000001/.test(await b.textContent('#ciResults')));
+  check('and a long line on the list never pushes the page wider than the phone', await noSideways(b));
   const tap = await b.$eval('.ci-person', el => { const r = el.getBoundingClientRect(); return [r.width, r.height]; });
   check('a name is a big thing to tap', tap[0] >= 300 && tap[1] >= 56, tap);
   await b.tap('.ci-person');
@@ -200,7 +204,11 @@ const LIST = [
   await dark.screenshot({ path: path.join(SHOTS, 'checkin-dark.png'), fullPage: true });
 
   const narrow = await signIn({ ...phone, viewport: { width: 320, height: 640 } }, '#checkin');
-  check('no sideways scrolling on the smallest phones', await noSideways(narrow));
+  await narrow.type('#ciSearch', 'kofi');
+  await narrow.waitForSelector('.ci-person');
+  check('no sideways scrolling on the smallest phones, with a name showing', await noSideways(narrow));
+  const side = await narrow.$$eval('.ci-when .field', els => els.map(e => Math.round(e.getBoundingClientRect().top)));
+  check('the date and the service sit side by side', side.length === 2 && side[0] === side[1], side);
   await narrow.screenshot({ path: path.join(SHOTS, 'checkin-320.png'), fullPage: true });
 
   const desk = await signIn({ viewport: { width: 1280, height: 900 } }, '#checkin');
