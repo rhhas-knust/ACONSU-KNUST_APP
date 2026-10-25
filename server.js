@@ -35,7 +35,9 @@ const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
 const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
 const { registerShepherdListRoutes } = require('./routes/shepherd-list');
+const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
+const listLink = require('./lib/listLink');
 const officeAccounts = require('./lib/officeAccounts');
 const maps = require('./lib/maps');
 const { moveGlobalSetupToChapter } = require('./lib/globalMove');
@@ -1126,6 +1128,9 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
       birthdayMonth: month, birthdayDay: day,
       consentedAt: new Date(), consentVersion: POLICY_VERSION
     }, 'mem');
+    // Already on Shepherding's list (the chapter's own list, or checked in at
+    // the door)? Then they are one person from now on - see lib/listLink.js.
+    await listLink.linkOnRegister(member);
     scheduleOnboardingTasks(member).catch(() => {});
     req.session.memberId = member.id;
     req.session.issuedAt = Date.now();
@@ -4168,19 +4173,28 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
         recordId: record ? record.id : '',
         name: m.name,
         email: m.email,
-        phone: m.phone,
-        level: m.level,
-        programme: m.programme || '',
+        // What the chapter's list said fills what the account leaves blank,
+        // here only: Shepherding sees it, the account holder's profile is
+        // never changed by it (lib/listLink.js).
+        phone: m.phone || (record && record.phone) || '',
+        level: m.level || (record && record.level) || '',
+        programme: m.programme || (record && record.programme) || '',
         hostel: m.hostel || '',
         // Someone who registered saying they had already graduated. The claim
         // is theirs; confirming it is Shepherding's, and until they do the
         // member is an ordinary visitor.
         registeredAsAlumni: !!m.registeredAsAlumni,
         graduationYear: m.graduationYear || '',
-        department: m.department,
-        birthdayMonth: m.birthdayMonth,
-        birthdayDay: m.birthdayDay,
+        department: m.department || (record && record.department) || '',
+        birthdayMonth: m.birthdayMonth || (record && record.birthdayMonth) || null,
+        birthdayDay: m.birthdayMonth ? m.birthdayDay : ((record && record.birthdayDay) || null),
         imageFileId: (record && record.imageFileId) || m.profileImageFileId || '',
+        // Matched to someone on the list: how, so Shepherding can check it,
+        // and whether it can be undone.
+        linkedHow: record && record.linkedAt ? record.linkedHow : '',
+        linkedAt: record && record.linkedAt ? record.linkedAt : null,
+        listOrigin: record && record.linkedAt ? record.origin : '',
+        canUnlink: !!(record && record.linkedAt && !record.mergedFromList),
         address: record ? record.address : '',
         emergencyContact: record ? record.emergencyContact : '',
         attendanceStatus: record ? record.attendanceStatus : 'new',
@@ -4199,8 +4213,12 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
     // Everyone on Shepherding's own list with no account: visitors added by
     // hand, people brought in from the chapter's list, and newcomers checked
     // in at the door (`origin` says which).
+    const linkedMemberIds = new Set(records.filter(r => r.memberId && r.linkedAt).map(r => r.memberId));
+    const likely = listLink.suggestions(standaloneRecords, members, linkedMemberIds);
     const visitors = standaloneRecords.map((r) => ({
       source: 'visitor',
+      // The app account that is probably theirs, for Shepherding to link.
+      suggestion: likely.get(r.id) || null,
       origin: r.origin || 'manual',
       memberId: '',
       recordId: r.id,
@@ -4413,6 +4431,8 @@ app.delete('/api/shepherd/attendance/:id', requireShepherd, async (req, res) => 
   }
 });
 
+const earliest = (...dates) => dates.filter(Boolean).sort((a, b) => new Date(a) - new Date(b))[0] || null;
+
 // Attendance history for one person - how many of the last services they made.
 // The id is an account holder's or, for someone on Shepherding's own list, the
 // list record's. A service they were not checked in at counts as missed once
@@ -4421,13 +4441,16 @@ app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherdi
   try {
     const filter = rolesLib.chapterFilter(req);
     const key = req.params.memberId;
-    const [records, member, listed] = await Promise.all([
+    const [records, member, listed, care] = await Promise.all([
       repo.getAll('attendanceRecords', filter),
       repo.getById('members', key, filter),
-      repo.getById('shepherdingRecords', key, { ...filter, memberId: '' })
+      repo.getById('shepherdingRecords', key, { ...filter, memberId: '' }),
+      repo.getAll('shepherdingRecords', { ...filter, memberId: key })
     ]);
+    // Someone on the list who later opened an account has been on the list
+    // since the list record was made, not since the account was.
     const person = member
-      ? { memberId: member.id, createdAt: member.createdAt }
+      ? { memberId: member.id, createdAt: earliest(member.createdAt, care[0] && care[0].linkedAt ? care[0].createdAt : null) }
       : { recordId: key, createdAt: listed ? listed.createdAt : null };
     const history = attendanceLib.attendanceFor(person, records);
     res.json({ history: history.slice(0, 20), ...attendanceLib.attendanceRate(history) });
@@ -4529,8 +4552,9 @@ app.get('/api/shepherd/attendance-summary.pdf', requireViewRole('shepherding'), 
 
     // Members with accounts, and everyone on Shepherding's own list (the
     // chapter's list brought in, and newcomers from the door).
+    const linkedSince = new Map((await repo.getAll('shepherdingRecords', filter)).filter(r => r.memberId && r.linkedAt).map(r => [r.memberId, r.createdAt]));
     const people = [
-      ...members.filter(m => isActivatedMember(m)).map(m => ({ memberId: m.id, name: m.name, department: m.department, createdAt: m.createdAt })),
+      ...members.filter(m => isActivatedMember(m)).map(m => ({ memberId: m.id, name: m.name, department: m.department, createdAt: earliest(m.createdAt, linkedSince.get(m.id)) })),
       ...listed.map(r => ({ recordId: r.id, name: r.name, department: r.department, createdAt: r.createdAt }))
     ];
     const rows = people
@@ -6357,6 +6381,10 @@ app.post('/api/executive/finance/ledger', requireRole('executive'), requireCapab
   }, 'fin');
   res.json({ success: true, item });
 }));
+
+// The books brought in from the chapter's own spreadsheet, each Sunday's
+// offering, and the Sundays side by side (routes/books.js).
+registerBooksRoutes(app, { repo, requireRole, requireCapability, CAP, upload, gridfs, compressIfImage, actorName, cleanText });
 
 // ---------- a chapter-wide announcement (President, Secretary) ----------
 app.post('/api/executive/chapter/announcement', requireRole('executive'), requireCapability(CAP.ANNOUNCE_CHAPTER, async (req, res, { staff }) => {

@@ -60,7 +60,7 @@ body { background: var(--lilac-light); font-family: var(--font-body); }
 }
 .portal-side .side-label {
   font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em;
-  color: #9b86a9; font-weight: 800; padding: 12px 24px 6px;
+  color: var(--ink-faint); font-weight: 800; padding: 16px 24px 6px;
 }
 .portal-side button {
   display: flex; align-items: center; gap: 10px;
@@ -399,3 +399,12 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
   .imp-cols li { grid-template-columns: 1fr; }
   .imp-cols select { grid-column: 1; grid-row: auto; margin-top: 6px; }
 }
+
+/* linking someone on the list to their app account */
+.link-hint { color: var(--brand); font-weight: 700; }
+.link-choices { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; }
+.link-choices li { border-bottom: 1px solid var(--line); }
+.link-choices li:last-child { border-bottom: none; }
+
+/* the Sundays side by side (office-books.js): three narrow columns, made to fit a phone */
+table.portal-table.bk-sundays { min-width: 0; }

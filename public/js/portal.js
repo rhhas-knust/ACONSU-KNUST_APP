@@ -149,7 +149,9 @@ function renderPortalChrome() {
   if (brand) brand.textContent = PORTAL.chapter ? `ACONSU: ${PORTAL.chapter.name}` : 'ACONSU';
 
   const nav = document.getElementById('portalNav');
-  nav.innerHTML = PORTAL.panels.map(p => `
+  // A panel can open a group of its own in the menu (`groupLabel`): the
+  // Treasurer's money first, then "Everything else".
+  nav.innerHTML = PORTAL.panels.map(p => `${p.groupLabel ? `<p class="side-label">${escapeHtml(p.groupLabel)}</p>` : ''}
     <button type="button" data-panel="${p.key}" class="${p.key === PORTAL.active ? 'active' : ''}">${escapeHtml(p.label)}</button>
   `).join('');
   nav.querySelectorAll('button').forEach(btn => {
@@ -279,6 +281,9 @@ async function showPortalOrLogin() {
         // refuse; showing the profile alone at least leaves a usable portal.
         PORTAL.panels = PORTAL.allPanels.slice(0, 1);
       }
+      // The narrowed list, in its own order, says where they land, unless a
+      // link chose the panel.
+      if (!PORTAL.fromLink) PORTAL.active = PORTAL.panels[0].key;
     }
     if (!PORTAL.panels.some(p => p.key === PORTAL.active)) PORTAL.active = PORTAL.panels[0].key;
     renderPortalChrome();
@@ -295,9 +300,11 @@ async function initPortal(config) {
   PORTAL.resolvePanels = config.resolvePanels || null;
   PORTAL.active = config.panels[0].key;
   // A link can open one panel straight away: shepherding.html#checkin is the
-  // Sunday check-in, kept as a bookmark on the phones at the door.
+  // Sunday check-in, kept as a bookmark on the phones at the door, and
+  // executive.html#treasury and #ledger are the Treasurer's and the Financial
+  // Secretary's.
   const fromLink = window.location.hash.slice(1);
-  if (config.panels.some(p => p.key === fromLink)) PORTAL.active = fromLink;
+  if (config.panels.some(p => p.key === fromLink)) { PORTAL.active = fromLink; PORTAL.fromLink = true; }
 
   document.getElementById('modalBackdrop').addEventListener('click', (e) => {
     if (e.target.id === 'modalBackdrop') closeModal();

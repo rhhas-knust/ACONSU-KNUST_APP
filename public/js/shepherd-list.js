@@ -5,11 +5,6 @@
    shepherd.js, which puts these panels in the portal.
    ============================================================ */
 
-function todayISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 // One key for a person whether they come from the people list or from a
 // mark on the register: an account holder by their member id, everyone else
 // by their list record.
@@ -340,159 +335,49 @@ function wireCardScan(onCode, onProblem) {
 }
 
 // ---------- bringing the list in ----------
-// Three steps, each a request with the same file: read it (and guess what each
-// column is), check it (who is new, who is already there, what is left out),
-// then bring it in. Nothing is written until the last one.
+// The steps are csv-import.js's; what is said at each is the list's.
 function openImportList(onDone) {
-  const state = { file: null, hasHeader: true, columns: [], fields: [], mapping: [] };
-
-  const send = async (step) => {
-    const fd = new FormData();
-    fd.append('file', state.file);
-    fd.append('step', step);
-    fd.append('hasHeader', state.hasHeader ? '1' : '0');
-    if (step !== 'read') fd.append('mapping', JSON.stringify(state.mapping));
-    return fetchJSON('/api/shepherd/import', { method: 'POST', body: fd });
-  };
-
-  function stepChoose(message) {
-    showModal(`
-      <h3>Bring in your list</h3>
-      <ol class="imp-how">
-        <li>Open your list in Excel or Google Sheets, with a row of headings at the top (Name, Phone, Level, Hall…).</li>
-        <li>Save it as a CSV file. In Excel: File, Save As, "CSV UTF-8". In Google Sheets: File, Download, "Comma-separated values".</li>
-        <li>Choose that file here. You will see what it holds before anything is added.</li>
-      </ol>
-      <div class="field">
-        <label for="impFile">Your list (CSV file)</label>
-        <input type="file" id="impFile" accept=".csv,text/csv,text/plain">
-      </div>
-      <label class="of-check-line"><input type="checkbox" id="impHeader" ${state.hasHeader ? 'checked' : ''}> The first row is headings, not a person</label>
-      <p class="tiny"><a href="/api/shepherd/import/template.csv">Download a sample list</a> to see the layout, or to start one.</p>
-      <div class="form-msg ${message ? 'error' : ''}" id="impMsg" role="alert">${message ? escapeHtml(message) : ''}</div>
-      <div class="of-actions"><button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button></div>
-    `);
-    document.getElementById('impFile').addEventListener('change', async (e) => {
-      state.file = e.target.files[0];
-      state.hasHeader = document.getElementById('impHeader').checked;
-      if (!state.file) return;
-      setFormMsg('impMsg', 'Reading the file…', '');
-      try {
-        const res = await send('read');
-        state.columns = res.columns;
-        state.fields = res.fields;
-        state.mapping = res.columns.map(c => c.field);
-        state.rowCount = res.rowCount;
-        stepColumns();
-      } catch (err) {
-        stepChoose(err.message);
-      }
-    });
-  }
-
-  function stepColumns(message) {
-    const options = (current) => state.fields.map(f => `<option value="${f.key}" ${f.key === current ? 'selected' : ''}>${escapeHtml(f.label)}</option>`).join('');
-    showModal(`
-      <h3>What is in each column?</h3>
-      <p class="tiny muted">${state.rowCount} ${state.rowCount === 1 ? 'person' : 'people'} in ${escapeHtml(state.file.name)}. Check each column is matched to the right thing. Anything without a place of its own can be kept in the person's notes.</p>
-      <ul class="imp-cols">
-        ${state.columns.map((c, i) => `
-          <li>
-            <label for="impCol${i}">${escapeHtml(c.heading || `Column ${i + 1}`)}</label>
-            <span class="imp-eg" id="impEg${i}">${c.samples.length ? `For example: ${c.samples.map(s => escapeHtml(s)).join(' · ')}` : 'Empty'}</span>
-            <select id="impCol${i}" data-col="${i}" aria-describedby="impEg${i}">${options(state.mapping[i])}</select>
-          </li>`).join('')}
-      </ul>
-      <div class="form-msg ${message ? 'error' : ''}" id="impMsg" role="alert">${message ? escapeHtml(message) : ''}</div>
-      <div class="of-actions">
-        <button type="button" class="btn btn-primary" id="impCheck">Check the list</button>
-        <button type="button" class="btn btn-outline" id="impBack">Choose another file</button>
-      </div>
-    `, true);
-    document.querySelectorAll('[data-col]').forEach(sel => sel.addEventListener('change', () => {
-      const i = Number(sel.dataset.col);
-      state.mapping[i] = sel.value;
-      // One column per thing: choosing Phone here moves the old Phone column to the notes.
-      if (!['note', 'skip'].includes(sel.value)) {
-        state.mapping.forEach((f, j) => {
-          if (j !== i && f === sel.value) {
-            state.mapping[j] = 'note';
-            document.getElementById(`impCol${j}`).value = 'note';
-          }
-        });
-      }
-    }));
-    document.getElementById('impBack').addEventListener('click', () => stepChoose());
-    document.getElementById('impCheck').addEventListener('click', async (e) => {
-      e.target.disabled = true;
-      setFormMsg('impMsg', 'Checking every row…', '');
-      try {
-        stepCheck(await send('check'));
-      } catch (err) {
-        e.target.disabled = false;
-        setFormMsg('impMsg', err.message, 'error');
-      }
-    });
-  }
-
-  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-
-  function stepCheck(res) {
-    const c = res.counts;
-    const left = res.notAdding.filter(p => p.action === 'skip');
-    const known = res.notAdding.filter(p => ['fill', 'same', 'account'].includes(p.action));
-    const why = (p) => (p.action === 'fill' ? `Already on the list as ${p.matchName}. Their missing details are filled in from your file.`
-      : p.action === 'same' ? `Already on the list as ${p.matchName}.`
-        : `Already has an app account, as ${p.matchName}.`);
-    showModal(`
-      <h3>Before anything is added</h3>
-      <ul class="imp-summary">
-        <li class="good"><strong>${plural(c.add, 'person', 'people')}</strong> will be added to the list.</li>
-        ${c.fill ? `<li><strong>${plural(c.fill, 'person is', 'people are')}</strong> already on the list; blanks in their details will be filled in. Nothing already there is changed.</li>` : ''}
-        ${c.same ? `<li><strong>${plural(c.same, 'person is', 'people are')}</strong> already on the list, and the file adds nothing new about them.</li>` : ''}
-        ${c.account ? `<li><strong>${plural(c.account, 'person has', 'people have')}</strong> an app account already, so ${c.account === 1 ? 'is' : 'are'} not added again.</li>` : ''}
-        ${c.skip ? `<li class="warn"><strong>${plural(c.skip, 'row is', 'rows are')}</strong> left out (below).</li>` : ''}
-      </ul>
-      ${res.adding.length ? `
-        <h4>The first few to be added</h4>
-        <div class="table-wrap"><table class="portal-table imp-preview">
-          <thead><tr><th>Row</th><th>Name</th><th>Phone</th><th>Level</th><th>Hall / hostel</th></tr></thead>
-          <tbody>${res.adding.map(p => `<tr><td>${p.row}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.phone || '-')}</td><td>${escapeHtml(p.level || '-')}</td><td>${escapeHtml(p.address || '-')}</td></tr>`).join('')}</tbody>
-        </table></div>` : ''}
-      ${left.length ? `
-        <details class="of-past" open><summary>Left out (${left.length})</summary>
-          <ul class="imp-issues">${left.map(p => `<li>Row ${p.row}${p.name ? `, ${escapeHtml(p.name)}` : ''}: ${escapeHtml(p.reason)}</li>`).join('')}</ul>
-        </details>` : ''}
-      ${res.warnings.length ? `
-        <details class="of-past"><summary>Worth checking (${res.warnings.length})</summary>
-          <ul class="imp-issues">${res.warnings.map(p => `<li>Row ${p.row}, ${escapeHtml(p.name)}: ${p.warnings.map(escapeHtml).join(' ')}</li>`).join('')}</ul>
-        </details>` : ''}
-      ${known.length ? `
-        <details class="of-past"><summary>Already known (${known.length})</summary>
-          <ul class="imp-issues">${known.map(p => `<li>Row ${p.row}, ${escapeHtml(p.name)}: ${escapeHtml(why(p))}</li>`).join('')}</ul>
-        </details>` : ''}
-      <div class="form-msg" id="impMsg" role="alert"></div>
-      <div class="of-actions">
-        ${c.add || c.fill ? `<button type="button" class="btn btn-primary" id="impGo">Bring in ${c.add ? plural(c.add, 'person', 'people') : 'the missing details'}</button>` : ''}
-        <button type="button" class="btn btn-outline" id="impBack">Back to the columns</button>
-      </div>
-    `, true);
-    document.getElementById('impBack').addEventListener('click', () => stepColumns());
-    const go = document.getElementById('impGo');
-    if (go) go.addEventListener('click', async () => {
-      go.disabled = true;
-      setFormMsg('impMsg', 'Bringing them in…', '');
-      try {
-        const done = (await send('import')).done;
-        closeModal();
-        showToast(`${plural(done.added, 'person', 'people')} added${done.filled ? `, ${done.filled} updated` : ''}.`, 'success');
-        if (onDone) onDone();
-      } catch (err) {
-        go.disabled = false;
-        setFormMsg('impMsg', err.message, 'error');
-      }
-    });
-  }
-
-  stepChoose();
+  const { plural, issues } = CsvImport;
+  const why = (p) => (p.action === 'fill' ? `Already on the list as ${p.matchName}. Their missing details are filled in from your file.`
+    : p.action === 'same' ? `Already on the list as ${p.matchName}.`
+      : `Already has an app account, as ${p.matchName}.`);
+  CsvImport.open({
+    url: '/api/shepherd/import',
+    title: 'Bring in your list',
+    steps: [
+      'Open your list in Excel or Google Sheets, with a row of headings at the top (Name, Phone, Level, Hall…).',
+      'Save it as a CSV file. In Excel: File, Save As, "CSV UTF-8". In Google Sheets: File, Download, "Comma-separated values".',
+      'Choose that file here. You will see what it holds before anything is added.'
+    ],
+    fileLabel: 'Your list (CSV file)',
+    headerLabel: 'The first row is headings, not a person',
+    templateUrl: '/api/shepherd/import/template.csv',
+    templateLabel: 'Download a sample list',
+    rowNoun: ['person', 'people'],
+    columnsHint: 'Check each column is matched to the right thing. Anything without a place of its own can be kept in the person\'s notes.',
+    checkLabel: 'Check the list',
+    renderCheck: (res) => {
+      const c = res.counts;
+      return `
+        <ul class="imp-summary">
+          <li class="good"><strong>${plural(c.add, 'person', 'people')}</strong> will be added to the list.</li>
+          ${c.fill ? `<li><strong>${plural(c.fill, 'person is', 'people are')}</strong> already on the list; blanks in their details will be filled in. Nothing already there is changed.</li>` : ''}
+          ${c.same ? `<li><strong>${plural(c.same, 'person is', 'people are')}</strong> already on the list, and the file adds nothing new about them.</li>` : ''}
+          ${c.account ? `<li><strong>${plural(c.account, 'person has', 'people have')}</strong> an app account already, so ${c.account === 1 ? 'is' : 'are'} not added again.</li>` : ''}
+          ${c.skip ? `<li class="warn"><strong>${plural(c.skip, 'row is', 'rows are')}</strong> left out (below).</li>` : ''}
+        </ul>
+        ${res.adding.length ? `
+          <h4>The first few to be added</h4>
+          <div class="table-wrap"><table class="portal-table imp-preview">
+            <thead><tr><th>Row</th><th>Name</th><th>Phone</th><th>Level</th><th>Hall / hostel</th></tr></thead>
+            <tbody>${res.adding.map(p => `<tr><td>${p.row}</td><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.phone || '-')}</td><td>${escapeHtml(p.level || '-')}</td><td>${escapeHtml(p.address || '-')}</td></tr>`).join('')}</tbody>
+          </table></div>` : ''}
+        ${issues('Left out', res.notAdding.filter(p => p.action === 'skip'), p => `Row ${p.row}${p.name ? `, ${escapeHtml(p.name)}` : ''}: ${escapeHtml(p.reason)}`, true)}
+        ${issues('Worth checking', res.warnings, p => `Row ${p.row}, ${escapeHtml(p.name)}: ${p.warnings.map(escapeHtml).join(' ')}`)}
+        ${issues('Already known', res.notAdding.filter(p => ['fill', 'same', 'account'].includes(p.action)), p => `Row ${p.row}, ${escapeHtml(p.name)}: ${escapeHtml(why(p))}`)}`;
+    },
+    goLabel: (res) => (res.counts.add || res.counts.fill ? `Bring in ${res.counts.add ? plural(res.counts.add, 'person', 'people') : 'the missing details'}` : ''),
+    doneMessage: (done) => `${plural(done.added, 'person', 'people')} added${done.filled ? `, ${done.filled} updated` : ''}.`,
+    onDone
+  });
 }

@@ -91,6 +91,11 @@ const peopleImport = require('../lib/peopleImport');
   check('someone on the list has their blanks filled', act(7).action === 'fill' && act(7).changes.phone === '0277777777', act(7));
   check('and someone the file adds nothing to is left alone', act(8).action === 'same', act(8));
   check('a different person with a similar name is not mistaken for them', !p.plan.some(x => x.matchId === 'r3'));
+  check('names agree when one is the other, in any order or with more to it', peopleImport.namesAgree('Kofi Mensah', 'MENSAH KOFI Jnr') && peopleImport.namesAgree('Bro. Kofi Mensah', 'Kofi Mensah'));
+  check('sisters sharing a surname do not', !peopleImport.namesAgree('Esi Owusu', 'Ama Owusu'));
+  const sistersFile = file('Name,Phone\nAma Owusu,0201112222\nEsi Owusu,0201112222\n');
+  const sisters = peopleImport.planImport(sistersFile, peopleImport.guessMapping(sistersFile.headers));
+  check('so a list with two sisters on one phone number brings in both, with a note to check', sisters.counts.add === 2 && /same phone number as Ama Owusu/.test(sisters.plan[1].warnings.join(' ')), sisters.plan);
   check('the counts add up', JSON.stringify(p.counts) === JSON.stringify({ add: 2, fill: 1, same: 1, account: 1, skip: 2 }), p.counts);
 
   // ------------------------------------------------------------------ the app --
@@ -289,12 +294,74 @@ const peopleImport = require('../lib/peopleImport');
   const waiting = fakeModels.Member._docs.filter(m => m.chapterId === 'knust' && ['visitor', 'under_review', 'accepted'].includes(m.membershipStage)).length;
   check('people from the chapter\'s list count as members, not visitors', k.visitorCount === waiting + others && k.memberCount >= imported, { k, imported, others, waiting });
 
+  console.log('\n== someone on the list opens an app account ==');
+  const kofiRecordId = ids['Kofi Mensah'].recordId;
+  const kofiSundays = (await call('shep.k', 'GET', `/api/shepherd/attendance-history/${kofiRecordId}`)).data.attended;
+  const kofiAccount = await member('Kofi Mensah', 'knust', '+233 24 400 0001');
+  let rec = fakeModels.ShepherdingRecord._docs.find(x => x.id === kofiRecordId);
+  check('registering with the phone number on the list links them at once', rec.memberId === kofiAccount && rec.linkedHow === 'phone' && rec.linkedBy === 'registration', rec);
+  const acct = fakeModels.Member._docs.find(x => x.id === kofiAccount);
+  check('and nothing from the list is put on their account (they see only what they typed)', acct.level === '' && acct.programme === '' && !acct.birthdayMonth, acct);
+  r = await call('shep.k', 'GET', `/api/shepherd/attendance-history/${kofiAccount}`);
+  check('the Sundays he was checked in at as a list person are now his account\'s', r.data.attended === kofiSundays && kofiSundays >= 3, { now: r.data.attended, before: kofiSundays });
+  check('and Sundays from when he was on the list still count, not only from when he registered', r.data.history.some(h => h.date === '2026-11-15' && h.status === 'absent'), r.data.history);
+  r = await call('shep.k', 'GET', '/api/shepherd/members');
+  const kofiRows = r.data.filter(x => x.name === 'Kofi Mensah');
+  check('the people list has him once, as the account, saying how he was linked', kofiRows.length === 1 && kofiRows[0].source === 'member' && kofiRows[0].linkedHow === 'phone' && kofiRows[0].canUnlink, kofiRows);
+  check('with what the list said filling what his account leaves blank, for Shepherding only', kofiRows[0].level === '200' && kofiRows[0].department === music, kofiRows[0]);
+  r = await call('shep.k', 'POST', '/api/attendance/mark', { memberId: kofiAccount, ...at });
+  check('checking him in by his account on a Sunday he was checked in by name does not count him twice', r.data.alreadyMarked === true, r.data);
+  const reg1101 = fakeModels.AttendanceRecord._docs.find(x => x.date === day && x.chapterId === 'knust');
+  check('one mark for him on that register', reg1101.marks.filter(m => m.memberId === kofiAccount).length === 1, reg1101.marks);
+
+  const otherYaw = await member('Yaw Boateng', 'knust', '0200000077');
+  rec = fakeModels.ShepherdingRecord._docs.find(x => x.name === 'Yaw Boateng' && x.chapterId === 'knust');
+  check('the same name with a different phone is not linked on its own', rec.memberId === '', rec);
+  r = await call('shep.k', 'GET', '/api/shepherd/members');
+  const yawList = r.data.find(x => x.source === 'visitor' && x.name === 'Yaw Boateng');
+  check('but Shepherding sees the account suggested beside him', yawList.suggestion && yawList.suggestion.memberId === otherYaw && yawList.suggestion.how === 'name', yawList);
+  await member('Esi Owusu', 'knust', '0201112222');
+  check('her sister registering with the same phone number is not linked to her', !fakeModels.ShepherdingRecord._docs.find(x => x.name === 'Ama Owusu' && x.chapterId === 'knust').memberId);
+
+  r = await call('shep.l', 'POST', `/api/shepherd/records/${yawList.recordId}/link`, { memberId: otherYaw });
+  check('another chapter cannot link this chapter\'s people', r.status === 404, r.data);
+  r = await call('fin.k', 'POST', `/api/shepherd/records/${yawList.recordId}/link`, { memberId: otherYaw });
+  check('nor can another office', r.status === 401, r.data);
+  r = await call('shep.k', 'POST', `/api/shepherd/records/${yawList.recordId}/link`, { memberId: kofiAccount });
+  check('an account already linked to someone on the list is not linked to a second', r.status === 409, r.data);
+  r = await call('shep.k', 'POST', `/api/shepherd/records/${yawList.recordId}/link`, { memberId: otherYaw });
+  check('Shepherding links them by hand', r.status === 200 && r.data.record.memberId === otherYaw && r.data.record.linkedHow === 'hand', r.data);
+
+  r = await call('shep.k', 'POST', `/api/shepherd/records/${kofiRecordId}/unlink`);
+  check('a link that was wrong can be undone', r.status === 200 && r.data.record.memberId === '', r.data);
+  r = await call('shep.k', 'GET', `/api/shepherd/attendance-history/${kofiRecordId}`);
+  check('and the Sundays go back to the list person', r.data.attended === kofiSundays, r.data);
+  r = await call('shep.k', 'POST', `/api/shepherd/records/${kofiRecordId}/unlink`);
+  check('unlinking twice says there is nothing to undo', r.status === 404, r.data);
+
+  // An account Shepherding already keeps care notes on, then matched to the list.
+  const fd = new FormData();
+  fd.append('memberId', otherYaw); fd.append('pastoralNotes', 'Prays for his mother.');
+  await call('shep.k', 'POST', '/api/shepherd/records', fd);
+  await call('shep.k', 'POST', `/api/shepherd/records/${(await call('shep.k', 'GET', '/api/shepherd/members')).data.find(x => x.memberId === otherYaw).recordId}/unlink`);
+  const efuaAcct = await member('Efua Nyarko', 'knust', '');
+  const care = new FormData();
+  care.append('memberId', efuaAcct); care.append('pastoralNotes', 'Met her at the hall.');
+  await call('shep.k', 'POST', '/api/shepherd/records', care);
+  r = await call('shep.k', 'POST', `/api/shepherd/records/${efua.id}/link`, { memberId: efuaAcct });
+  check('linking to an account that already has care notes folds the two together', r.status === 200 && r.data.merged === true && /Met her at the hall/.test(r.data.record.pastoralNotes) && /First checked in/.test(r.data.record.pastoralNotes), r.data);
+  check('leaving one record for her', fakeModels.ShepherdingRecord._docs.filter(x => x.memberId === efuaAcct || x.id === efua.id).length === 1);
+  r = await call('shep.k', 'POST', `/api/shepherd/records/${r.data.record.id}/unlink`);
+  check('and that link says why it cannot be undone', r.status === 409 && /folded/.test(r.data.error), r.data);
+
   console.log('\n== the main admin and a chapter that runs itself ==');
   await call('admin', 'POST', '/api/admin/staff', { username: 'coord.k', name: 'coord.k', role: 'coordinator', password: 'Start-Pass-1', chapterId: 'knust', memberId: await member('coord.k', 'knust') });
   r = await upload('admin', 'Name\nSomeone From Above\n', 'import', {}, { 'X-Chapter-Id': 'knust' });
   check('the main admin cannot bring a list into a chapter that has not asked', r.status === 403 && r.data.needsChapterRequest === true, r.data);
   r = await upload('admin', 'Name\nSomeone From Above\n', 'import');
   check('nor into no chapter in particular', r.status === 403 && !fakeModels.ShepherdingRecord._docs.some(x => x.name === 'Someone From Above'), r.data);
+  r = await call('admin', 'POST', `/api/shepherd/records/${kofiRecordId}/link`, { memberId: kofiAccount }, { 'X-Chapter-Id': 'knust' });
+  check('nor link its people to accounts', r.status === 403 && r.data.needsChapterRequest === true, r.data);
 
   console.log(failures ? `\n${failures} FAILURES` : '\nall shepherd-list checks passed');
   process.exit(failures ? 1 : 0);

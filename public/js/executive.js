@@ -772,7 +772,10 @@ async function renderExecTreasury(el) {
         <p class="sub">You hold the funds; the Financial Secretary keeps the books. File every movement here with evidence and they will record it.</p>
       </div>
     </div>
+    <div class="portal-card bk-offering" id="offeringCard" style="max-width:520px;"></div>
+    <div class="portal-card" id="sundaysCard"></div>
     <div class="portal-card" style="max-width:520px;">
+      <h3>Other money received or spent</h3>
       <form id="treasuryForm">
         <div class="field-row">
           <div class="field"><label>What happened</label>
@@ -826,6 +829,8 @@ async function renderExecTreasury(el) {
         </table></div>` : '<p class="empty-state">Nothing filed yet.</p>'}
     </div>
   `;
+  OfficeBooks.offeringForm(document.getElementById('offeringCard'), () => openPanel('treasury'));
+  OfficeBooks.renderSundays(document.getElementById('sundaysCard'));
   document.getElementById('treasuryForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -859,7 +864,10 @@ async function renderExecLedger(el) {
         <h2>The Books</h2>
         <p class="sub">You keep the ledger. The Treasurer files what they received or spent, with evidence; recording it is yours.</p>
       </div>
-      <div class="panel-actions"><button class="btn btn-primary btn-sm" id="newEntryBtn">+ Record an Entry</button></div>
+      <div class="panel-actions">
+        <button class="btn btn-outline btn-sm" id="importBooksBtn">Bring in old books (CSV)</button>
+        <button class="btn btn-primary btn-sm" id="newEntryBtn">+ Record an Entry</button>
+      </div>
     </div>
     <div class="portal-card">
       <h4 style="margin-top:0;">Waiting on you (${awaiting.length})</h4>
@@ -879,6 +887,7 @@ async function renderExecLedger(el) {
             </tr>`).join('')}</tbody>
         </table></div>` : '<p class="empty-state">Nothing waiting. The Treasurer has filed everything.</p>'}
     </div>
+    <div class="portal-card" id="sundaysCard"></div>
     <div class="portal-card">
       <h4 style="margin-top:0;">The ledger</h4>
       ${ledger.length ? `
@@ -918,6 +927,8 @@ async function renderExecLedger(el) {
     } catch (err) { showToast(err.message || 'Could not send this back.', 'error'); }
   }));
 
+  OfficeBooks.renderSundays(document.getElementById('sundaysCard'));
+  document.getElementById('importBooksBtn').addEventListener('click', () => OfficeBooks.openImport(() => openPanel('ledger')));
   document.getElementById('newEntryBtn').addEventListener('click', () => {
     showModal(`
       <h3>Record an Entry</h3>
@@ -1064,6 +1075,12 @@ const EXEC_PANELS = [
   { key: 'events',           label: 'My Events',           capability: 'events',               render: renderExecEvents }
 ];
 
+// executive.html#treasury and #ledger open these straight away (portal.js).
+const MONEY_FIRST = {
+  treasurer: ['treasury', 'finance'],
+  financial_secretary: ['ledger', 'finance', 'budgetDesk']
+};
+
 initPortal({
   role: 'executive',
   label: 'Executive',
@@ -1081,6 +1098,14 @@ initPortal({
     // `unlessCapability` hides the read-only version of a screen from anyone whose
     // office has the full one, so an officer never sees the same section twice.
     const granted = all.filter(p => can(p.capability) && !(p.unlessCapability && can(p.unlessCapability)));
-    return granted.length ? granted : all.filter(p => p.key === 'profile');
+    if (!granted.length) return all.filter(p => p.key === 'profile');
+    // The two money offices land on their money, with the rest of the portal
+    // after it under its own heading: the Treasurer on the offering and the
+    // filings, the Financial Secretary on the books.
+    const first = MONEY_FIRST[(me.position || {}).key] || [];
+    if (!first.length) return granted;
+    const lead = first.map(k => granted.find(p => p.key === k)).filter(Boolean);
+    const rest = granted.filter(p => !first.includes(p.key));
+    return [...lead, ...rest.map((p, i) => (i === 0 ? { ...p, groupLabel: 'Everything else' } : p))];
   }
 });
