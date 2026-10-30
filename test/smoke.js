@@ -5533,7 +5533,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('a member password must be at least 8 characters', w.status === 400 && /8 characters/.test(w.data.error), w.data);
     w = await call('anon', 'POST', '/api/auth/reset-password', { token: 'x', email: 'a@b.co', newPassword: '1234567' });
     check('and so must a reset one', w.status === 400 && /8 characters/.test(w.data.error), w.data);
-    const serverSrc = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    // The server, wherever its routes live now (server.js and routes/).
+    const serverSrc = [path.join(__dirname, '..', 'server.js'), ...fs.readdirSync(path.join(__dirname, '..', 'routes')).map(f => path.join(__dirname, '..', 'routes', f))]
+      .map(f => fs.readFileSync(f, 'utf8')).join('\n');
     check('the reset link is built from configuration and nothing the sender typed',
       /publicBaseUrl\(req\)/.test(serverSrc) && !/req\.get\('host'\)/.test(serverSrc) && !/req\.headers\.host/.test(serverSrc), null);
 
