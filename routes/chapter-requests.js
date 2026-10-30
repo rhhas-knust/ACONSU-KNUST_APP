@@ -133,7 +133,7 @@ function registerChapterRequestRoutes(app, deps) {
     const body = req.body || {};
     const id = rule.resource ? (rule.re.exec(req.path) || [])[1] : '';
     let record = null;
-    if (id) { try { record = await repo.getById(rule.resource, decodeURIComponent(id)); } catch (e) { record = null; } }
+    if (id) { try { record = await repo.getById(rule.resource, decodeURIComponent(id), repo.allChapters()); } catch (e) { record = null; } }
     if (rule.national && rule.national(req, record, rolesLib)) return [];
     const named = typeof body.chapterId === 'string' && body.chapterId && body.chapterId !== rolesLib.NATIONAL_SCOPE ? body.chapterId : '';
     const chosen = rolesLib.selectedChapterId(req) || rolesLib.getSoleActiveChapterId() || '';
@@ -188,7 +188,7 @@ function registerChapterRequestRoutes(app, deps) {
     try {
       const lead = chapterLead(req);
       if (!lead && !isMainAdmin(req) && !isNationalStaff(req)) return res.status(401).json({ error: 'Not authenticated' });
-      const filter = lead ? { chapterId: lead.chapterId } : {};
+      const filter = lead ? { chapterId: lead.chapterId } : repo.allChapters();
       const [items, chapters] = await Promise.all([repo.getAll('chapterRequests', filter), repo.getAll('chapters', {})]);
       const names = new Map(chapters.map((c) => [c.id, c.name]));
       const now = Date.now();
@@ -231,7 +231,7 @@ function registerChapterRequestRoutes(app, deps) {
       const lead = chapterLead(req);
       const main = isMainAdmin(req);
       if (!lead && !main) return res.status(403).json({ error: 'Only the chapter that asked, or the main admin, can close a request.' });
-      const filter = lead ? { chapterId: lead.chapterId, status: 'open' } : { status: 'open' };
+      const filter = lead ? { chapterId: lead.chapterId, status: 'open' } : repo.allChapters({ status: 'open' });
       const item = await repo.patchById('chapterRequests', req.params.id, {
         status: lead ? 'withdrawn' : 'done', closedAt: new Date(), closedBy: actorName(req) || 'Main admin',
         closedNote: String((req.body && req.body.note) || '').trim().slice(0, 500)

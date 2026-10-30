@@ -30,6 +30,12 @@ function registerChatRoutes(app, deps) {
     const chapterId = await chapterInView(req);
     return !!(item && chapterId && item.chapterId === chapterId);
   };
+  // Topics and messages are only ever read from the chapter in view, so one in
+  // another chapter is simply not found (lib/repo.js: the chapter wall).
+  const findInView = async (req, resource) => {
+    const chapterId = await chapterInView(req);
+    return chapterId ? repo.getById(resource, req.params.id, { chapterId }) : null;
+  };
 
   app.get('/api/chat/topics', requireMemberOrModerator, async (req, res) => {
     try {
@@ -52,7 +58,7 @@ function registerChatRoutes(app, deps) {
       if (!req.body.title || !req.body.title.trim()) return res.status(400).json({ error: 'A title is required' });
       const chapterId = await resolveViewerChapterId(req);
       if (!chapterId) return res.status(400).json({ error: 'Could not determine your chapter.' });
-      const member = await repo.getById('members', req.session.memberId);
+      const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
       if (member && member.chatRestricted) return res.status(403).json({ error: 'Your posting privileges have been restricted. Contact your Chapter Admin.' });
       const topic = await repo.create('chatTopics', { chapterId, title: req.body.title.trim(), createdByMemberId: req.session.memberId, createdByName: member ? member.name : '' }, 'topic');
       res.json({ success: true, item: topic });
@@ -61,7 +67,7 @@ function registerChatRoutes(app, deps) {
 
   app.get('/api/chat/topics/:id/messages', requireMemberOrModerator, async (req, res) => {
     try {
-      const topic = await repo.getById('chatTopics', req.params.id);
+      const topic = await findInView(req, 'chatTopics');
       if (!await belongsToViewerChapter(req, topic)) return res.status(404).json({ error: 'Discussion not found' });
       const messages = await repo.getAll('chatMessages', { topicId: topic.id, chapterId: topic.chapterId, hidden: false });
       res.json(messages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
@@ -91,11 +97,11 @@ function registerChatRoutes(app, deps) {
 
   app.post('/api/chat/topics/:id/messages', requireMember, async (req, res) => {
     try {
-      const topic = await repo.getById('chatTopics', req.params.id);
+      const topic = await findInView(req, 'chatTopics');
       if (!await belongsToViewerChapter(req, topic)) return res.status(404).json({ error: 'Discussion not found' });
       if (topic.locked) return res.status(400).json({ error: 'This discussion has been locked.' });
       if (!req.body.body || !req.body.body.trim()) return res.status(400).json({ error: 'A message is required' });
-      const member = await repo.getById('members', req.session.memberId);
+      const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
       if (member && member.chatRestricted) return res.status(403).json({ error: 'Your posting privileges have been restricted. Contact your Chapter Admin.' });
       if (chatTooFast(req.session.memberId)) return res.status(429).json({ error: 'You are sending messages very quickly. Wait a moment, then try again.' });
       const message = await repo.create('chatMessages', { chapterId: topic.chapterId, topicId: topic.id, authorMemberId: req.session.memberId,
@@ -106,7 +112,7 @@ function registerChatRoutes(app, deps) {
 
   app.post('/api/chat/messages/:id/report', requireMember, async (req, res) => {
     try {
-      const message = await repo.getById('chatMessages', req.params.id);
+      const message = await findInView(req, 'chatMessages');
       if (!await belongsToViewerChapter(req, message)) return res.status(404).json({ error: 'Message not found' });
       await models.ChatMessage.updateOne({ id: req.params.id, chapterId: message.chapterId }, { $inc: { reportCount: 1 } });
       res.json({ success: true });

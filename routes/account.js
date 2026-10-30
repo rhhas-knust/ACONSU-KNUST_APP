@@ -43,7 +43,7 @@ function registerAccountRoutes(app, deps) {
   async function signOutOthers(req, staffId) {
     const at = Date.now();
     rememberRevocation(staffId, at);
-    await repo.patchById('staffUsers', staffId, { sessionsRevokedAt: new Date(at) }).catch(() => { /* held in memory for this process */ });
+    await repo.patchById('staffUsers', staffId, { sessionsRevokedAt: new Date(at) }, repo.ownRecord()).catch(() => { /* held in memory for this process */ });
     req.session.staff.issuedAt = at + 1;
   }
 
@@ -110,7 +110,7 @@ function registerAccountRoutes(app, deps) {
       if (problem) return res.status(400).json({ error: problem });
       await repo.patchById('staffUsers', account.id, {
         passwordHash: await bcrypt.hash(newPassword, 10), passwordChangedAt: new Date()
-      });
+      }, { chapterId: account.chapterId });
       await signOutOthers(req, account.id);
       res.json({ success: true });
     } catch (e) {
@@ -147,7 +147,7 @@ function registerAccountRoutes(app, deps) {
       await repo.patchById('staffUsers', account.id, {
         passwordHash: await bcrypt.hash(newPassword, 10), passwordChangedAt: new Date(),
         mustChangePassword: false, startingPasswordExpiresAt: null
-      });
+      }, { chapterId: account.chapterId });
       req.session.staff.mustChangePassword = false;
       await signOutOthers(req, account.id);
       res.json({ success: true });

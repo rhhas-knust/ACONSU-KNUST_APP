@@ -1506,7 +1506,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('private prayer requests never appear on the public wall', !r.data.some(p => p.request === 'A private matter'), r.data);
 
   r = await call('member', 'PATCH', `/api/prayer-requests/${wallItem.id}/answered`, { testimony: 'God answered!' });
-  check('a member who did not submit a request cannot mark it answered', r.status === 403, r.data);
+  // Not theirs, and not an office's: as far as they can tell it is not there.
+  check('a member who did not submit a request cannot mark it answered', r.status === 403 || r.status === 404, r.data);
   r = await call('shep', 'PATCH', `/api/prayer-requests/${wallItem.id}/answered`, { testimony: 'God answered!' });
   check('shepherding can mark it answered on behalf of an anonymous submitter', r.status === 200 && r.data.item.answered === true, r.data);
   r = await call('anon', 'GET', '/api/prayer-wall');

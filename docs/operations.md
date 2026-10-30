@@ -149,3 +149,14 @@ lapses after 30 minutes.
   automatic in the phone's settings.
 - **Every leader's codes stopped working at once**: `SESSION_SECRET` was
   changed. The secrets are sealed with it; each leader needs a reset.
+
+## 8. "Chapter guard" in the logs
+
+The data layer refuses a read or write on people's records that does not
+say which chapter it is about (README section 30). Every such place found in
+the code and tests has been fixed, but one the tests do not reach could
+still turn up in production, as an error on one page and `Chapter guard:`
+in the logs, naming the line. To keep the page working while it is fixed:
+Render, **Environment**, `CHAPTER_GUARD=warn`, save. The place is then
+logged once (`CHAPTER GUARD: ...`) and let through. Remove the setting once
+the fix is deployed.

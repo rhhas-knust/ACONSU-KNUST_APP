@@ -788,3 +788,15 @@ What erasing does (`lib/eraseMember.js`, `PLAN` lists every record type):
 **12 characters.** A leader's password needs at least 12 characters wherever it is set (by them or for them). Existing shorter passwords keep working until they are changed. Members' passwords stay at 8.
 
 **Not covered:** the administrator login set in the server's settings (`ADMIN_USERNAME`/`ADMIN_PASSWORD`) has no account to hold a second step. Give it a long password and use a National Coordinator account for day-to-day work.
+
+## 30. Chapter walls in the data layer
+
+Every read or write through `lib/repo.js` on a record that holds people's data or a chapter's own work (members, leadership accounts, care records, the books, registers, welfare, giving, prayer requests, messages, groups, chat and the rest: `CHAPTER_SCOPED`) must say which chapter it is about, with a `chapterId` in its filter (or, for a create, in its data). A call that means every chapter says so with `repo.allChapters()` (National's totals, the scheduled jobs, public content when no chapter is chosen), and a member reaching their own record by the id in their signed-in session says `repo.ownRecord()`. Both are a symbol the database never sees. Anything else is refused with an error naming the place in the code.
+
+Not walled: the chapters themselves and what is union-wide or public by design (Alumni Connect and the alumni wall, monthly themes, events, sermons, pages, content, departments, the roster cards, founders, the council, notifications).
+
+National keeps its reach: totals and comparisons across chapters, and any one chapter's records once it is chosen, as `GOVERNANCE_TIER_REVIEW.md` describes; it does not see members of every chapter merged together.
+
+`test/chapter-wall.js` checks the rule, reads every data-layer call in the code without running it (458 on walled records) and fails if one leaves its chapter out, and checks a chapter admin cannot reach another chapter's records. The whole test suite runs with the wall on, so a route that turns out chapterless at run time fails its test. Wiring this in found and closed one real gap: a chapter admin could mark another chapter's prayer request answered by its id.
+
+If a page breaks in production with `Chapter guard` in the logs, set `CHAPTER_GUARD=warn` on Render to let it through while it is fixed (each place is logged once), then remove it.
