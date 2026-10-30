@@ -144,10 +144,6 @@ window.OfficeBodies = (function () {
   }
 
   // ================= key offices (Chapter Coordinator) =================
-  const SEAT_NOTE = {
-    current: 'In office until the end of the year.', ending: 'Their year is about to end. Renew them or hand over.',
-    ended: 'Their year has ended and they can no longer sign in. Renew them or hand over.', vacant: 'Nobody holds this office yet.'
-  };
   // The office login, shown once to be passed on (president.knust / president123).
   function issuedHtml(title, issued) {
     return `

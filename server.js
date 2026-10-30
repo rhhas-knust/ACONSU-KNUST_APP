@@ -594,7 +594,6 @@ function requireViewRole(role) {
 
 const requireFinance = requireRole('finance');
 const requirePublicity = requireRole('publicity');
-const requireCoordinator = requireRole('coordinator');
 
 // ---------- the national council ----------
 // The one body where the whole union sits together: the National Coordinator,
@@ -1002,8 +1001,11 @@ async function membersAwaitingAppointment(chapterId) {
 
 // A chapter's Coordinators, as members - a coordinator account is
 // member-backed, which is what makes it possible to reach the person rather
-// than the office.
-async function coordinatorMemberIds(chapterId) {
+// than the office. Only accounts still in use: a push goes to a person.
+// (Not to be confused with coordinatorMemberIds below, which answers who
+// shepherds by office. Once both had that name, and the later one silently
+// replaced this everywhere; the code checker now refuses that.)
+async function activeCoordinatorMemberIds(chapterId) {
   const staff = await repo.getAll('staffUsers', { chapterId, role: 'coordinator' });
   return staff.filter((u) => u.active !== false && u.memberId).map((u) => u.memberId);
 }
@@ -1013,7 +1015,7 @@ async function coordinatorMemberIds(chapterId) {
 // announce to every member which of them had just been made an executive.
 async function tellCoordinatorSomeoneNeedsAnAccount(member) {
   try {
-    const memberIds = await coordinatorMemberIds(member.chapterId);
+    const memberIds = await activeCoordinatorMemberIds(member.chapterId);
     if (!memberIds.length) return;
     await push.sendPushToAll({
       title: 'An executive is waiting for an account',

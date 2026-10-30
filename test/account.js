@@ -72,7 +72,7 @@ const { fakeModels } = require('./harness.js');
   const pres = await made('exec.pres', 'Yaw President', 'executive', { positionKey: 'president' });
   await made('exec.choir', 'Ama Choir', 'executive', { positionKey: 'music_director', department: dept });
   await made('fin.one', 'Finance One', 'finance');
-  const coord = await made('coord.one', 'Coordinator One', 'coordinator');
+  await made('coord.one', 'Coordinator One', 'coordinator');
   check('every leader signs in with their starting password',
     [(await login('pres', 'exec.pres', 'Start-Pass-1')).status, (await login('choir', 'exec.choir', 'Start-Pass-1')).status,
       (await login('fin', 'fin.one', 'Start-Pass-1')).status, (await login('coord', 'coord.one', 'Start-Pass-1')).status].every(s => s === 200));

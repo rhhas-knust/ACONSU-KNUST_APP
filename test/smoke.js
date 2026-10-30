@@ -435,8 +435,24 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('a QR token was generated for the digital membership card', !!r.data.item.qrToken, r.data.item);
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'worker' });
   check('lifecycle can advance from active to worker', r.status === 200 && r.data.item.membershipStage === 'worker', r.data);
-  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'executive' });
-  check('lifecycle can advance from worker to executive', r.status === 200 && r.data.item.membershipStage === 'executive', r.data);
+  {
+    // Made an Executive with no account behind it: the chapter's Coordinator is
+    // told on their own devices. (This once never fired: a second function of
+    // the same name replaced the one it called. The code checker now catches that.)
+    const push = require('../lib/push');
+    const realSend = push.sendPushToAll;
+    const sent = [];
+    push.sendPushToAll = async (...args) => { sent.push(args); return { sent: 1, failed: 0 }; };
+    const chapterOf = fakeModels.Member._docs.find(m => m.id === memberId).chapterId;
+    fakeModels.StaffUser._docs.push({ id: 'coord-push-check', username: 'coord.pushcheck', name: 'Coord', role: 'coordinator', chapterId: chapterOf, memberId: graceId, active: true });
+    r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'executive' });
+    await new Promise(res => setTimeout(res, 50));
+    fakeModels.StaffUser._docs.splice(fakeModels.StaffUser._docs.findIndex(a => a.id === 'coord-push-check'), 1);
+    push.sendPushToAll = realSend;
+    check('lifecycle can advance from worker to executive', r.status === 200 && r.data.item.membershipStage === 'executive', r.data);
+    check('and the Coordinator is told, on their own devices, that an account is needed',
+      sent.length === 1 && /waiting for an account/.test(sent[0][0].title) && sent[0][1] === chapterOf && Array.isArray(sent[0][2]) && sent[0][2].includes(graceId), sent);
+  }
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'alumni' });
   check('lifecycle can advance from executive to alumni', r.status === 200 && r.data.item.membershipStage === 'alumni', r.data);
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active' });
@@ -2845,7 +2861,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       /\.dash-quick \.tile-grid \{[^}]*repeat\(3, 1fr\)/.test(css), null);
 
     check('the home dashboard leads with what is happening next',
-      /\.dash-events \{ order: 1; \}/.test(css) && /\.dash-verse  \{ order: 3; \}/.test(css), null);
+      /\.dash-events \{ order: 1; \}/.test(css) && /\.dash-verse {2}\{ order: 3; \}/.test(css), null);
   }
 
   console.log('\n== notifications, in the app rather than on another page ==');
@@ -3694,11 +3710,11 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     {
       const formJs = read('request.js');
       const formHtml = read('alumni-request.html');
-      const apiRefs = (html + js + formHtml).match(/\/api\/[A-Za-z0-9\/_-]*/g) || [];
+      const apiRefs = (html + js + formHtml).match(/\/api\/[A-Za-z0-9/_-]*/g) || [];
       check('the home page and its script call the app for nothing at all', apiRefs.length === 0, apiRefs);
       const fetches = (js.match(/\bfetch\(([^,)]*)/g) || []).map(f => f.replace(/\bfetch\(/, '').trim());
       check('the only thing the home page fetches is its own data file', fetches.length === 1 && fetches[0] === "'data/feed.json'", fetches);
-      const formApi = (formJs.match(/\/api\/[A-Za-z0-9\/_-]*/g) || []);
+      const formApi = (formJs.match(/\/api\/[A-Za-z0-9/_-]*/g) || []);
       check('the form page sends to two places and no more: the details, and the wall request',
         formApi.length === 2 && formApi.includes('/api/public/alumni-details') && formApi.includes('/api/public/alumni-requests'), formApi);
       const submit = formJs.indexOf("form.addEventListener('submit'");
@@ -5444,7 +5460,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('a chapter\'s admin opens their own chapter\'s receipts and records, and not another chapter\'s',
       (await open('ovAdmin', f.receipt)).status === 200 && (await open('ovAdmin', f.pastoral)).status === 200 && (await open('ovAdmin', f.receiptOther)).status === 404, null);
     {
-      const lg = await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
+      await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
       const r = [(await open('otherAdmin', f.receipt)).status, (await open('otherAdmin', f.pastoral)).status, (await open('otherAdmin', f.receiptOther)).status];
       check('another chapter\'s admin opens none of this chapter\'s, only their own', r.join() === '404,404,200', r);
     }
@@ -5534,7 +5550,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and what is stored for a file records what it is, not what the uploader said it was',
       /contentType: fileTypes\.storedType\(buffer, metadata && metadata\.contentType\)/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'gridfs.js'), 'utf8'))
       && require('../lib/fileTypes').storedType(Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'), 'text/html') === 'image/png', null);
-    const cacheable = (swSrc.match(/const CACHEABLE_API = \[([\s\S]*?)\];/) || [, ''])[1];
+    const cacheable = (swSrc.match(/const CACHEABLE_API = \[([\s\S]*?)\];/) || ['', ''])[1];
     check('the offline cache holds public content', ['/api/events', '/api/bible', '/api/public/'].every(p => cacheable.includes(`'${p}`)), cacheable);
     check('and never anything behind a sign-in',
       ['/api/admin', '/api/finance', '/api/shepherd', '/api/welfare', '/api/national', '/api/portal', '/api/member', '/api/auth', '/api/chat', '/api/executive/'].every(p => !cacheable.includes(`'${p}`)), cacheable);
@@ -5857,7 +5873,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       check('newest first, and the oldest are not in it', titles[0] === 'Bulk notice 45' && !titles.includes('Bulk notice 1'), titles.slice(0, 3));
 
       // chat: ten messages a minute from one member
-      const chatMember = await registerMember('Chatty Member', 'chatty@test.com');
+      await registerMember('Chatty Member', 'chatty@test.com');
       await call('chatty', 'POST', '/api/auth/login', { email: 'chatty@test.com', password: 'secret123' });
       x = await call('chatty', 'POST', '/api/chat/topics', { title: 'A busy topic' });
       const busyTopic = x.data.item && x.data.item.id;
@@ -5904,7 +5920,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
       // badges are drawn icons, and no emoji is left in what the server sends
       const badgeLogin = await call('phoneD', 'GET', '/api/member/badges');
-      const iconNames = [...read('public/js/main.js').match(/const BADGE_ICONS = \{([\s\S]*?)\n\};/)[1].matchAll(/^  (\w+):/gm)].map(m => m[1]);
+      const iconNames = [...read('public/js/main.js').match(/const BADGE_ICONS = \{([\s\S]*?)\n\};/)[1].matchAll(/^ {2}(\w+):/gm)].map(m => m[1]);
       check('every profile badge names one of the app\'s own drawn icons',
         badgeLogin.status === 200 && badgeLogin.data.badges.length === 8 && badgeLogin.data.badges.every(b => iconNames.includes(b.icon)), badgeLogin.data.badges && badgeLogin.data.badges.map(b => b.icon));
       const emojiPattern = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}]/u;
@@ -5956,8 +5972,10 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       const pkg = JSON.parse(read('package.json'));
       check('the app asks for Node 22, the version it is tested on, and not the end-of-life Node 20', pkg.engines && pkg.engines.node === '22.x', pkg.engines);
       check('CI stops on a known high-severity vulnerability instead of only reporting it', /npm audit --audit-level=high\s*\n/.test(ci) && !/npm audit[^\n]*\|\| true/.test(ci), null);
-      check('and CI runs the browser suite too, reporting without blocking until it has passed on GitHub',
-        /browser:[\s\S]*?continue-on-error: true[\s\S]*?node test\/ux\.js/.test(ci), null);
+      check('and CI runs the browser suite too, and a failure there now fails the build',
+        /browser:[\s\S]*?node test\/ux\.js/.test(ci) && !/continue-on-error/.test(ci), null);
+      check('and the code checker, which refuses a name used but never defined or a function defined twice',
+        /npm run lint\s*\n/.test(ci) && pkg.scripts.lint === 'eslint .' && pkg.devDependencies.eslint, null);
       const readme = read('README.md');
       check('the README no longer promises backups the free plan does not give, and shows no real-looking database username',
         !/automatic backups/.test(readme) && /free \(M0\) cluster has none/.test(readme) && !/acousuadmin/.test(readme), null);

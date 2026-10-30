@@ -12,7 +12,8 @@
     "cap:open:android": "npx cap open android",
     "cap:open:ios": "npx cap open ios",
     "test": "node test/smoke.js && node test/offices.js && node test/account.js && node test/chapter-look.js && node test/maps.js && node test/global.js && node test/shepherd-list.js && node test/books.js && node test/domain.js",
-    "ux": "node test/ux.js"
+    "ux": "node test/ux.js",
+    "lint": "eslint ."
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -39,6 +40,9 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/cli": "^8.5.0",
     "@capacitor/core": "^8.5.0",
-    "@capacitor/ios": "^8.5.0"
+    "@capacitor/ios": "^8.5.0",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0"
   }
 }

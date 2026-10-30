@@ -130,7 +130,7 @@ window.OfficeBudget = (function () {
   async function renderDesk(el, callId) {
     if (callId) return renderCall(el, callId);
     const data = await fetchJSON('/api/budget/calls');
-    const { canCall, canDecide } = data;
+    const { canCall } = data;
     const items = data.items || [];
     el.innerHTML = `
       <div class="panel-head"><div>
