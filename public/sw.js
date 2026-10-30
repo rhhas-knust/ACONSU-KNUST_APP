@@ -1,7 +1,12 @@
 // ACONSU service worker - enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v35';
+const CACHE_NAME = 'aconsu-v36';
+
+// The offline outbox's store and sender (outbox-core.js): what a page could
+// not send without signal is sent from here when the phone is back online,
+// even if the page has been closed by then.
+importScripts('/js/outbox-core.js');
 
 const APP_SHELL = [
   '/index.html',
@@ -51,6 +56,8 @@ const APP_SHELL = [
   '/favicon.ico',
   '/js/main.js',
   '/js/share.js',
+  '/js/outbox-core.js',
+  '/js/outbox.js',
   '/images/logo.jpg',
   '/manifest.json',
   '/icons/icon-72.png',
@@ -228,6 +235,18 @@ self.addEventListener('message', (event) => {
       )
     )
   );
+});
+
+// Back online: send what is waiting, in order, and tell any open page.
+function flushOutbox() {
+  return self.AconsuOutboxCore.flush()
+    .then((result) => self.clients.matchAll({ includeUncontrolled: true }).then((list) => {
+      list.forEach((c) => c.postMessage({ type: 'OUTBOX_SENT', result: { sent: result.sent.length, refused: result.refused.length, left: result.left } }));
+    }))
+    .catch(() => {});
+}
+self.addEventListener('sync', (event) => {
+  if (event.tag === self.AconsuOutboxCore.TAG) event.waitUntil(flushOutbox());
 });
 
 self.addEventListener('push', (event) => {

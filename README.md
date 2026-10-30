@@ -878,3 +878,14 @@ Anyone can give (decisions of 30 October: manual only, no Paystack or other paid
 
 `test/giving.js` (in `npm test`) and `test/give-ui.js` (a guest gives on a phone, Finance confirms, the receipt link updates).
 
+## 38. With no signal: the offline outbox
+
+Sunday check-in at the door, prayer requests and the contact form keep working without signal (BUILD_PROMPT_OPUS item 8). What cannot be sent is kept on the phone (IndexedDB, `public/js/outbox-core.js`), shown as **waiting to send** (a line at the foot of the page; a check-in shows it on the person's row), and sent by itself, **in the order it was made**, the moment the phone is back online: by the page (`public/js/outbox.js`), or by the service worker even if the page was closed (Background Sync, where the phone supports it).
+
+- **Never twice:** each queued request carries an `Idempotency-Key` made once on the phone. The server (`lib/idempotency.js`) keeps the first answer to each key for a day and gives it again, with `Idempotent-Replay: true`, without doing the work again; a second copy arriving while the first is still being handled is told to try again (409). So a request that reached the server but whose answer was lost on a bad connection still counts once. Keys are per person, method and path; requests without one are handled as before. Used on `/api/prayer-requests`, `/api/contact` and the door's `/api/attendance/mark`, `unmark`, `newcomer` and `scan`.
+- **Order:** while anything is waiting, new submissions queue behind it. Something the server turns down for good (a 4xx) is taken out and reported; no signal, a busy or sleeping server (409, 429, 5xx) waits for the next try.
+- At the door, a check-in made offline has no Undo until it is sent; the screen catches up with the server once everything has gone.
+- The leaders' portals are not kept for offline opening (they never were): this covers the signal dropping while the check-in screen is open, which is what happens in a full hall.
+
+`test/outbox.js` (in `npm test`) and `test/outbox-ui.js` (a phone goes offline: a prayer request and three check-ins are kept, then sent once the phone is back; an answer lost on the way back still counts once). Not tested here: Background Sync with the page closed (needs a real phone).
+

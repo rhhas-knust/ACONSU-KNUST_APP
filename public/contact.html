@@ -78,6 +78,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js"></script>
+<script src="/js/outbox-core.js"></script>
+<script src="/js/outbox.js"></script>
 <script>
 (async function() {
   const settings = await initLayout('/contact.html');
@@ -112,18 +114,20 @@ document.getElementById('contactForm').addEventListener('submit', async (e) => {
   const msg = document.getElementById('contactMsg');
   btn.disabled = true; btn.textContent = 'Sending...';
   try {
-    await fetchJSON('/api/contact', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    // No signal: kept on the phone and sent by itself when it is back (outbox.js).
+    const out = await AconsuOutbox.send({
+      url: '/api/contact', label: 'Message',
+      body: {
         name: document.getElementById('name').value,
         email: document.getElementById('email').value,
         message: document.getElementById('message').value
-      })
+      }
     });
-    msg.textContent = "Message sent. We'll get back to you soon.";
+    msg.textContent = out.queued
+      ? 'No signal right now. Your message is saved on this phone and will be sent by itself when you are back online.'
+      : "Message sent. We'll get back to you soon.";
     msg.className = 'form-msg success';
-    showToast("Message sent, we'll get back to you soon.", 'success');
+    if (!out.queued) showToast("Message sent, we'll get back to you soon.", 'success');
     document.getElementById('contactForm').reset();
   } catch (err) {
     msg.textContent = err.message || 'Something went wrong. Please try again.';

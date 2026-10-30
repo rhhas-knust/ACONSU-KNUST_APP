@@ -51,6 +51,7 @@ const memberAccount = require('./lib/memberAccount');
 const { registerPhoneSigninRoutes } = require('./routes/phone-signin');
 const { registerGivingRoutes, registerPaymentWebhook, tellGuest, amountOf } = require('./routes/giving');
 const payments = require('./lib/payments');
+const { idempotent } = require('./lib/idempotency');
 const smsCode = require('./lib/smsCode');
 const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
@@ -4162,7 +4163,7 @@ app.post('/api/join-requests', formLimiter, async (req, res) => {
 
 const PRAYER_VISIBILITIES = ['public', 'private', 'shepherd_only', 'anonymous'];
 
-app.post('/api/prayer-requests', formLimiter, async (req, res) => {
+app.post('/api/prayer-requests', formLimiter, idempotent(), async (req, res) => {
   const { name, email, request, isPrivate, visibility } = req.body;
   if (!request) return res.status(400).json({ error: 'Request details are required' });
   try {
@@ -4288,7 +4289,7 @@ app.post('/api/testimonies', formLimiter, async (req, res) => {
   }
 });
 
-app.post('/api/contact', formLimiter, async (req, res) => {
+app.post('/api/contact', formLimiter, idempotent(), async (req, res) => {
   const { name, email, message } = req.body;
   if (!name || !email || !message) return res.status(400).json({ error: 'All fields are required' });
   try {

@@ -283,6 +283,7 @@ const fakeModels = {
   PushSubscription: makeModel({ chapterId: '' }),
   SystemState: makeModel({ lastBirthdayNotifDate: '' }, { unique: ['singleton'] }),
   Metric: makeModel({ count: 0 }),
+  IdempotencyKey: makeModel({ state: 'working', status: 0, body: null }, { unique: ['id'] }),
   PhoneCode: makeModel({ codeHash: '', expiresAt: null, attempts: 0, sends: [], purgeAt: null }),
   DoorCode: makeModel({ serviceType: 'sunday', active: true, uses: 0, createdBy: '', closedAt: null, closedBy: '' }, { unique: ['token'] }),
   ShepherdingRecord: makeModel({ chapterId: '', memberId: '', name: '', phone: '', email: '', level: '', programme: '', department: '', birthdayMonth: null, birthdayDay: null, origin: 'manual', linkedAt: null, linkedHow: '', linkedBy: '', mergedFromList: false, address: '', emergencyContact: '', attendanceStatus: 'new', lastContactDate: '', pastoralNotes: '', imageFileId: '' }),

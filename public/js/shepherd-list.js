@@ -46,6 +46,9 @@ const checkinState = { date: '', serviceType: 'sunday' };
 // Short, so the choice fits beside the date on a phone.
 const CI_SERVICE_LABELS = { sunday: 'Sunday', midweek: 'Midweek', special: 'Special' };
 let checkinTimer = null;
+// What to do once the outbox has sent everything (the check-in screen on show).
+let ciAfterSend = null;
+let ciListening = false;
 
 async function renderCheckIn(el) {
   if (checkinTimer) { clearInterval(checkinTimer); checkinTimer = null; }
@@ -120,8 +123,8 @@ async function renderCheckIn(el) {
     listEl.innerHTML = rows.map(m => `
       <li>
         <span class="ci-name">${escapeHtml(m.name)}</span>
-        <span class="tiny muted">${ciTime(m.at)}</span>
-        ${canEdit ? `<button type="button" class="ci-undo" data-undo="${escapeHtml(ciKey(m))}" aria-label="Take back ${escapeHtml(m.name)}'s check-in">Undo</button>` : ''}
+        <span class="tiny muted">${m.waiting ? '<span class="ci-waiting">Waiting to send</span>' : ciTime(m.at)}</span>
+        ${canEdit && !m.waiting ? `<button type="button" class="ci-undo" data-undo="${escapeHtml(ciKey(m))}" aria-label="Take back ${escapeHtml(m.name)}'s check-in">Undo</button>` : ''}
       </li>`).join('') || '<li class="muted">Nobody yet.</li>';
     listEl.querySelectorAll('[data-undo]').forEach(b => b.addEventListener('click', () => undo(b.dataset.undo)));
   }
@@ -130,7 +133,15 @@ async function renderCheckIn(el) {
     ...(key.startsWith('m:') ? { memberId: key.slice(2) } : { recordId: key.slice(2) }),
     date: checkinState.date, serviceType: checkinState.serviceType
   });
-  const post = (url, body) => fetchJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  // Through the offline outbox (outbox.js): with no signal at the door a
+  // check-in is kept on this phone, shown as waiting to send, and sent by
+  // itself, in order, when the signal is back. { queued: true } then.
+  const post = async (url, body) => {
+    if (!window.AconsuOutbox) return fetchJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const out = await AconsuOutbox.send({ url, body, label: 'Check-in' });
+    return out.queued ? { queued: true } : out.data;
+  };
+  const NO_SIGNAL = 'No signal: kept on this phone, and sent by itself when the signal is back.';
 
   async function checkIn(person) {
     const key = ciKey(person);
@@ -140,6 +151,11 @@ async function renderCheckIn(el) {
     clearSearch();
     try {
       const res = await post('/api/attendance/mark', bodyFor(key));
+      if (res.queued) {
+        present.set(key, { ...present.get(key), waiting: true });
+        drawList();
+        return say(`${person.name} is checked in on this phone. ${NO_SIGNAL}`, 'success');
+      }
       countEl.textContent = String(Math.max(present.size, res.present || 0));
       say(`${res.person.name} is checked in.`, 'success');
     } catch (err) {
@@ -155,8 +171,8 @@ async function renderCheckIn(el) {
     present.delete(key);
     drawList();
     try {
-      await post('/api/attendance/unmark', bodyFor(key));
-      say(`${was.name}'s check-in was taken back.`, 'success');
+      const res = await post('/api/attendance/unmark', bodyFor(key));
+      say(res.queued ? `${was.name}'s check-in is taken back on this phone. ${NO_SIGNAL}` : `${was.name}'s check-in was taken back.`, 'success');
     } catch (err) {
       present.set(key, was);
       drawList();
@@ -172,13 +188,20 @@ async function renderCheckIn(el) {
     }
     try {
       live = await fetchJSON(`/api/attendance/checkins?date=${checkinState.date}&serviceType=${checkinState.serviceType}`);
+      // What is still waiting to send stays on screen: the server does not
+      // know about it yet.
+      const waiting = [...present.entries()].filter(([, m]) => m.waiting);
       present = new Map(live.present.map(m => [ciKey(m), m]));
+      waiting.forEach(([k, m]) => { if (!present.has(k)) present.set(k, m); });
       drawList();
       const known = new Set(people.map(ciKey));
       if (live.present.some(m => !known.has(ciKey(m)))) people = await fetchJSON('/api/shepherd/members');
     } catch (e) { /* the next refresh will try again */ }
   }
   checkinTimer = setInterval(refresh, 15000);
+  // Sent at last: the server's list replaces what this phone was keeping.
+  ciAfterSend = () => { if (!document.body.contains(listEl)) return; present.forEach((m, k) => { if (m.waiting) present.delete(k); }); refresh(); };
+  if (window.AconsuOutbox && !ciListening) { ciListening = true; AconsuOutbox.onChange((s) => { if (!s.waiting && ciAfterSend) ciAfterSend(); }); }
 
   drawList();
 
@@ -258,6 +281,13 @@ async function renderCheckIn(el) {
           phone: document.getElementById('ciNewPhone').value,
           date: checkinState.date, serviceType: checkinState.serviceType
         });
+        if (res.queued) {
+          const name = document.getElementById('ciNewName').value.trim();
+          present.set(`q:${Date.now()}`, { name, at: new Date().toISOString(), waiting: true });
+          drawList();
+          clearSearch();
+          return say(`${name} will be added and checked in. ${NO_SIGNAL}`, 'success');
+        }
         present.set(ciKey(res.person), { ...res.person, at: new Date().toISOString() });
         drawList();
         clearSearch();
@@ -287,6 +317,7 @@ async function renderCheckIn(el) {
   wireCardScan(async (qrToken) => {
     try {
       const res = await post('/api/attendance/scan', { qrToken, date: checkinState.date, serviceType: checkinState.serviceType });
+      if (res.queued) return say(`Card read. ${NO_SIGNAL}`, 'success');
       present.set(ciKey(res.person), { ...res.person, at: new Date().toISOString() });
       drawList();
       say(res.alreadyMarked ? `${res.person.name} was already checked in.` : `${res.person.name} is checked in.`, 'success');

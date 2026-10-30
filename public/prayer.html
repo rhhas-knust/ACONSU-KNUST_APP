@@ -118,6 +118,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <script src="/js/main.js"></script>
 <script src="/js/share.js"></script>
+<script src="/js/outbox-core.js"></script>
+<script src="/js/outbox.js"></script>
 <script>
 let currentMember = null;
 
@@ -189,21 +191,24 @@ document.getElementById('prayerForm').addEventListener('submit', async (e) => {
   const msg = document.getElementById('prayerMsg');
   btn.disabled = true; btn.textContent = 'Sending...';
   try {
-    await fetchJSON('/api/prayer-requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    // No signal: kept on the phone and sent by itself when it is back
+    // (outbox.js), so a request typed on a weak connection is never lost.
+    const out = await AconsuOutbox.send({
+      url: '/api/prayer-requests', label: 'Prayer request',
+      body: {
         name: document.getElementById('name').value,
         email: document.getElementById('email').value,
         request: document.getElementById('request').value,
         visibility: document.getElementById('visibility').value
-      })
+      }
     });
-    msg.textContent = 'We received your request. The prayer team is praying with you.';
+    msg.textContent = out.queued
+      ? 'No signal right now. Your request is saved on this phone and will be sent by itself when you are back online.'
+      : 'We received your request. The prayer team is praying with you.';
     msg.className = 'form-msg success';
-    showToast('Prayer request received, praying with you.', 'success');
+    if (!out.queued) showToast('Prayer request received, praying with you.', 'success');
     document.getElementById('prayerForm').reset();
-    loadPrayerWall();
+    if (!out.queued) loadPrayerWall();
   } catch (err) {
     msg.textContent = err.message || 'Something went wrong. Please try again.';
     msg.className = 'form-msg error';
