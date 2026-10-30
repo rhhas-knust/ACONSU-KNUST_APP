@@ -9,7 +9,7 @@
 // Two sign-ins are NOT accounts and cannot be changed here: the administrator
 // login and the legacy shepherding login both live in the server's settings.
 const rateLimit = require('express-rate-limit');
-const { passwordProblem } = require('../lib/passwords');
+const { passwordProblem, LEADER_MIN_LENGTH } = require('../lib/passwords');
 
 function registerAccountRoutes(app, deps) {
   const { repo, models, bcrypt, rolesLib, positions, currentStaff, rememberRevocation } = deps;
@@ -106,7 +106,7 @@ function registerAccountRoutes(app, deps) {
       if (!await bcrypt.compare(currentPassword, account.passwordHash || '')) {
         return res.status(401).json({ error: 'Your current password is not right.' });
       }
-      const problem = passwordProblem(newPassword, { username: account.username, current: currentPassword });
+      const problem = passwordProblem(newPassword, { username: account.username, current: currentPassword, minLength: LEADER_MIN_LENGTH });
       if (problem) return res.status(400).json({ error: problem });
       await repo.patchById('staffUsers', account.id, {
         passwordHash: await bcrypt.hash(newPassword, 10), passwordChangedAt: new Date()
@@ -139,7 +139,7 @@ function registerAccountRoutes(app, deps) {
         }
       }
       if (typeof newPassword !== 'string' || !newPassword) return res.status(400).json({ error: 'Choose a new password.' });
-      const problem = passwordProblem(newPassword, { username: account.username });
+      const problem = passwordProblem(newPassword, { username: account.username, minLength: LEADER_MIN_LENGTH });
       if (problem) return res.status(400).json({ error: problem });
       if (await bcrypt.compare(newPassword, account.passwordHash || '')) {
         return res.status(400).json({ error: 'That is the starting password. Choose one of your own.' });

@@ -227,7 +227,7 @@ async function app(browser) {
   const api = async (m, p, b) => { const h = {}; if (jar) h.cookie = jar; if (b) h['content-type'] = 'application/json'; const r = await fetch(BASE + p, { method: m, headers: h, body: b ? JSON.stringify(b) : undefined }); const sc = r.headers.getSetCookie(); if (sc.length) jar = sc.map(c => c.split(';')[0]).join('; '); return r.json().catch(() => ({})); };
   await api('POST', '/api/admin/login', { username: 'admin', password: 'admin123' });
   await api('POST', '/api/national/chapters', { id: 'aconsu-knust', name: 'ACONSU KNUST', institution: 'KNUST' });
-  await api('POST', '/api/admin/staff', { username: 'nat', name: 'National Coord', role: 'nationalCoordinator', password: 'password123' });
+  await api('POST', '/api/admin/staff', { username: 'nat', name: 'National Coord', role: 'nationalCoordinator', password: 'password1234' });
   const PHOTO = await placeholderPhoto();
 
   const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true });
@@ -248,7 +248,7 @@ async function app(browser) {
   const desk = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const p2 = await desk.newPage(); p2.on('pageerror', e => errs.push(e.message));
   await p2.goto(BASE + '/national.html', { waitUntil: 'networkidle' });
-  await p2.fill('#portalUsername', 'nat'); await p2.fill('#portalPassword', 'password123'); await p2.click('#portalLoginBtn');
+  await p2.fill('#portalUsername', 'nat'); await p2.fill('#portalPassword', 'password1234'); await p2.click('#portalLoginBtn');
   await p2.waitForSelector('#portalNav button');
   await p2.click('#portalNav button:has-text("Alumni")');
   await p2.waitForSelector('.al-request');
@@ -307,13 +307,13 @@ async function app(browser) {
   fdLead.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
   Object.entries({ name: 'Finance Officer', email: 'fin.ux@example.com', password: 'secret123', chapterId: 'aconsu-knust', consent: 'true' }).forEach(([k, v]) => fdLead.append(k, v));
   const regLead = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fdLead })).json();
-  await api('POST', '/api/admin/staff', { username: 'fin.ux', name: 'Finance Officer', role: 'finance', password: 'password123', memberId: regLead.member.id, chapterId: 'aconsu-knust' });
+  await api('POST', '/api/admin/staff', { username: 'fin.ux', name: 'Finance Officer', role: 'finance', password: 'password1234', memberId: regLead.member.id, chapterId: 'aconsu-knust' });
   await pl.reload({ waitUntil: 'networkidle' });
   await pl.waitForSelector('#leaderChapter');
   const labels = await pl.$$eval('#leaderChapter option', o => o.map(x => x.textContent.trim()));
   check(labels.join(' | ') === 'Choose your chapter | ACONSU KNUST: KNUST | ACONSU UCC: Cape Coast | National office', 'with two, the list is the chapters that exist, then National office: ' + labels.join(' | '));
   check(await pl.$eval('#leaderChapter', e => e.labels[0].textContent === 'Your chapter'), 'and it has a label a screen reader reads');
-  await pl.fill('#portalUsername', 'fin.ux'); await pl.fill('#portalPassword', 'password123');
+  await pl.fill('#portalUsername', 'fin.ux'); await pl.fill('#portalPassword', 'password1234');
   await pl.click('#portalLoginBtn');
   check(await pl.$eval('#leaderChapter', e => !e.validity.valid) && await pl.isVisible('#portalLoginWrap'), 'signing in without choosing a chapter is not allowed');
   await pl.selectOption('#leaderChapter', 'aconsu-ucc');

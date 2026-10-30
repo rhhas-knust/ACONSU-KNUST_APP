@@ -17,6 +17,9 @@
 const DAY = 86400000;
 const ENDING_SOON_DAYS = 60;
 
+const secondStep = require('../lib/secondStep');
+const { LEADER_MIN_LENGTH } = require('../lib/passwords');
+
 function registerOfficeHolderRoutes(app, deps) {
   const {
     repo, models, rolesLib, positions, requireRole, requireCapability, actorName, bcrypt,
@@ -127,7 +130,7 @@ function registerOfficeHolderRoutes(app, deps) {
     const chosenLogin = !!(username || password);
     if (chosenLogin) {
       if (!username || !password) return res.status(400).json({ error: 'Give both a username and a password, or leave both empty to use the office\'s own login.' });
-      if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      if (password.length < LEADER_MIN_LENGTH) return res.status(400).json({ error: `A leader's password needs at least ${LEADER_MIN_LENGTH} characters.` });
       if (await models.StaffUser.findOne({ username })) return res.status(400).json({ error: 'That username is already taken' });
     }
 
@@ -229,7 +232,7 @@ function registerOfficeHolderRoutes(app, deps) {
       type: 'executive_appointment', note: position.label, loggedBy: who
     });
 
-    const { passwordHash, ...safe } = account;
+    const safe = secondStep.safeAccount(account);
     res.json({ success: true, item: safe, card: item, handedOverFrom: outgoing ? outgoing.name : '', issued });
   }));
 

@@ -46,6 +46,11 @@ async function checkAuth() {
   try {
     const me = await fetchJSON('/api/portal/me');
     const role = me.staff && me.staff.role;
+    // Past their days to set up a second step: that first, on its own page.
+    if (me.staff && me.staff.mustSetUpSecondStep) {
+      window.location.href = `/second-step.html?back=${encodeURIComponent(location.pathname)}`;
+      return;
+    }
     // Executives are deliberately not admitted here: this dashboard's panels
     // are all gated on isChapterAdminOrAbove, which excludes them, so they
     // used to land in a 22-panel shell where almost everything 401'd. Their
@@ -884,6 +889,7 @@ async function renderStaffAccounts() {
             <td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'never'}</td>
             <td class="row-actions">
               ${mayEdit(u) ? `<button data-edit-staff="${u.id}">Edit</button>
+              ${u.secondStepOn || u.lockedMinutes ? `<button data-reset-step="${u.id}" data-name="${escapeHtml(u.name || u.username)}">${u.lockedMinutes ? 'Unlock' : 'Reset second step'}</button>` : ''}
               <button class="danger" data-delete-staff="${u.id}">Delete</button>` : '<span class="tiny muted">View only</span>'}
             </td>
           </tr>
@@ -893,6 +899,15 @@ async function renderStaffAccounts() {
   `;
 
   document.getElementById('addStaffBtn').addEventListener('click', () => openStaffForm(null));
+  // A lost phone, or an account resting after wrong tries (routes/second-step.js).
+  el.querySelectorAll('[data-reset-step]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm(`Reset ${btn.dataset.name}'s second step and unlock the account? They will set it up again when they next sign in, and are signed out now. This is recorded on their account.`)) return;
+    try {
+      await fetchJSON(`/api/admin/staff/${btn.dataset.resetStep}/second-step/reset`, { method: 'POST' });
+      showToast('Done. They can sign in with their password and set it up again.', 'success');
+      renderStaffAccounts();
+    } catch (err) { showToast(err.message, 'error'); }
+  }));
   el.querySelectorAll('[data-edit-staff]').forEach(btn => {
     btn.addEventListener('click', () => openStaffForm(users.find(u => u.id === btn.dataset.editStaff)));
   });
@@ -951,7 +966,7 @@ async function openStaffForm(user) {
         </div>
       ` : ''}
       <div class="field"><label>${isEdit ? 'New Password (leave blank to keep the current one)' : 'Password'}</label>
-        <input type="text" id="stPassword" ${isEdit ? '' : 'required'} placeholder="At least 8 characters">
+        <input type="text" id="stPassword" ${isEdit ? '' : 'required'} placeholder="At least 12 characters">
         <small class="hint">Shown in plain text so you can copy it to the leader. It is stored hashed and can never be read back.</small>
       </div>
       ${isEdit ? `
@@ -3277,7 +3292,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   setMsg('', 'form-msg');
   try {
     const chapterId = (await chapterPick).value();
-    await fetchJSON('/api/portal/login', {
+    const r = await fetchJSON('/api/portal/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3286,6 +3301,27 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         ...(chapterId ? { chapterId } : {})
       })
     });
+    // A second step set up: the six digits from their phone, then on as usual.
+    if (r && r.needsSecondStep) {
+      let recovery = false;
+      for (;;) {
+        const value = window.prompt(recovery
+          ? 'Type one of your recovery codes.'
+          : 'Type the six digits your authenticator app shows for ACONSU. (Lost your phone? Leave this empty and press OK to use a recovery code.)');
+        if (value === null) return;
+        if (!value.trim() && !recovery) { recovery = true; continue; }
+        try {
+          await fetchJSON('/api/portal/login/second-step', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(recovery ? { recoveryCode: value } : { code: value })
+          });
+          break;
+        } catch (err2) {
+          setMsg(err2.message || 'That code did not work.', 'form-msg error');
+          if (/password again|Too many/i.test(err2.message || '')) return;
+        }
+      }
+    }
     await checkAuth();
   } catch (err) {
     setMsg(err.message || 'Could not log in.', 'form-msg error');

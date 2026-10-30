@@ -772,3 +772,19 @@ What erasing does (`lib/eraseMember.js`, `PLAN` lists every record type):
 **Old things are cleared every day** (`lib/retention.js`): notifications, the record of texts sent and contact-form messages after 12 months, chat messages after 2 years. Each can be changed in days (`RETAIN_NOTIFICATIONS_DAYS`, `RETAIN_SMS_LOG_DAYS`, `RETAIN_CONTACT_MESSAGES_DAYS`, `RETAIN_CHAT_DAYS`; 0 keeps that kind for ever), and the privacy page states the same numbers (a test checks they match). It runs a minute after the app starts and then daily, under a lock in the database (`lib/jobLock.js`) so that when two copies of the app are running, only one does it.
 
 `test/privacy.js` reads every schema and fails if a field holding a member's id (any field with `memberId` in its name) is not covered by `PLAN`, so a new record type cannot be added and forgotten. Both actions ask for the password again and are limited to a few tries an hour (`PRIVACY_RATE_LIMIT_MAX`, default 5).
+
+## 29. Leaders' sign-in: a second step, rests after wrong tries, 12-character passwords
+
+**Second step.** After their password, a leader can be asked for the six-digit code an authenticator app on their phone shows (Google Authenticator, Microsoft Authenticator and the like; the standard time-based code, `lib/totp.js`, checked against the standard's own test values). It is set up on **My Account**: password again, scan the QR code, type the first code, save the ten recovery codes (each works once; only their hashes are kept). A code works for its 30 seconds and one step either side, and never twice.
+
+**Who needs it** (`lib/secondStep.js`): the National and Chapter Coordinators, chapter admins, Finance, Shepherding and Welfare accounts, and executives whose office reaches the books (President, Financial Secretary, Treasurer). Anyone else may turn it on, and off again.
+
+**Rolled out gently.** With `ENFORCE_LEADER_2FA` blank, the portal only asks, with a banner. Set it to `on` and each of those leaders gets 14 days (from that day, or from when their account was made), counted down in a banner; after that, signing in opens only the screen to set it up. Nobody is locked out on the day, and sessions already open carry on.
+
+**A lost phone.** Sign in with a recovery code. Out of codes: the Chapter Coordinator (or chapter admin, or National) presses **Reset second step** on the leadership accounts list. That is written on the account's own log with who did it, the holder is signed out, and they set it up again at their next sign-in. Nobody can reset their own.
+
+**Wrong tries.** Five wrong passwords or codes in a row and the account rests: a minute, then two, four, eight and so on up to an hour. This is on top of the limit per address. The account's log says so, the accounts list shows it, and **Unlock** there clears it.
+
+**12 characters.** A leader's password needs at least 12 characters wherever it is set (by them or for them). Existing shorter passwords keep working until they are changed. Members' passwords stay at 8.
+
+**Not covered:** the administrator login set in the server's settings (`ADMIN_USERNAME`/`ADMIN_PASSWORD`) has no account to hold a second step. Give it a long password and use a National Coordinator account for day-to-day work.

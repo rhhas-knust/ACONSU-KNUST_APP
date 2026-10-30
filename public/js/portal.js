@@ -225,7 +225,7 @@ async function showFirstPassword() {
     <div class="field">
       <label for="fpNew">Your new password</label>
       <input type="password" id="fpNew" autocomplete="new-password" required aria-describedby="fpNewHint">
-      <small class="hint" id="fpNewHint">At least 8 characters. A short phrase you will remember works well. Very common passwords are turned away.</small>
+      <small class="hint" id="fpNewHint">At least 12 characters. A short phrase you will remember works well. Very common passwords are turned away.</small>
     </div>
     <div class="field">
       <label for="fpAgain">Type it again</label>
@@ -262,9 +262,96 @@ async function showFirstPassword() {
   if (first) first.focus();
 }
 
+// The leader's account needs a second step at sign-in and their days to set
+// it up are over: signing in still works, and opens only this (account.js
+// does the setting up).
+function showSecondStepSetup() {
+  const wrap = document.getElementById('portalLoginWrap');
+  document.getElementById('portalShell').style.display = 'none';
+  wrap.style.display = 'flex';
+  const loginForm = document.getElementById('portalLoginForm');
+  if (loginForm) loginForm.style.display = 'none';
+  let card = document.getElementById('secondStepSetup');
+  if (!card) {
+    card = document.createElement('div');
+    card.id = 'secondStepSetup';
+    card.className = 'portal-login-card';
+    wrap.appendChild(card);
+  }
+  card.innerHTML = `
+    <img class="mark" src="/images/logo.jpg" alt="ACONSU">
+    <h1>One more step</h1>
+    <p class="sub">Your account needs a second step at sign-in before it can be used. It takes two minutes, with your phone.</p>
+    <div id="ssHost"></div>
+    <p class="tiny muted" style="text-align:center; margin-top:16px;">Not you? <button type="button" class="link-btn" id="ssSignOut">Sign out</button></p>`;
+  if (window.PortalAccount) PortalAccount.setupScreen(card.querySelector('#ssHost'), () => window.location.reload());
+  card.querySelector('#ssSignOut').onclick = async () => {
+    await fetchJSON('/api/portal/logout', { method: 'POST' }).catch(() => {});
+    window.location.reload();
+  };
+}
+
+// After the password, the six digits from their authenticator app, or one of
+// their recovery codes. `done` carries on exactly as a password-only sign-in.
+function askSecondStep(done) {
+  const loginForm = document.getElementById('portalLoginForm');
+  loginForm.style.display = 'none';
+  let form = document.getElementById('secondStepForm');
+  if (!form) {
+    form = document.createElement('form');
+    form.id = 'secondStepForm';
+    form.className = 'portal-login-card';
+    form.noValidate = true;
+    loginForm.parentNode.appendChild(form);
+  }
+  let recovery = false;
+  const paint = () => {
+    form.innerHTML = `
+      <img class="mark" src="/images/logo.jpg" alt="ACONSU">
+      <h1>${recovery ? 'Use a recovery code' : 'Type the code from your phone'}</h1>
+      <p class="sub">${recovery ? 'One of the ten codes you saved when you set up your second step. Each works once.' : 'Open your authenticator app and type the six digits it shows for ACONSU.'}</p>
+      <div class="field">
+        <label for="ssLoginCode">${recovery ? 'Recovery code' : 'Six-digit code'}</label>
+        <input type="text" id="ssLoginCode" ${recovery ? 'autocomplete="off" autocapitalize="characters" spellcheck="false"' : 'inputmode="numeric" autocomplete="one-time-code" maxlength="7"'} required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="ssLoginBtn">Sign In</button>
+      <div class="form-msg" id="ssLoginMsg" role="alert"></div>
+      <p class="tiny muted" style="text-align:center; margin-top:16px;">
+        <button type="button" class="link-btn" id="ssToggle">${recovery ? 'Use the code from my phone' : 'Lost your phone? Use a recovery code'}</button>
+      </p>`;
+    form.querySelector('#ssToggle').onclick = () => { recovery = !recovery; paint(); };
+    form.querySelector('#ssLoginCode').focus();
+  };
+  paint();
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('#ssLoginBtn');
+    const value = form.querySelector('#ssLoginCode').value;
+    btn.disabled = true;
+    try {
+      const r = await fetchJSON('/api/portal/login/second-step', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(recovery ? { recoveryCode: value } : { code: value })
+      });
+      if (r.recoveryCodesLeft !== undefined) {
+        showToast(`Signed in with a recovery code. ${r.recoveryCodesLeft} left: make new ones on My Account.`, 'info');
+      }
+      form.remove();
+      loginForm.style.display = '';
+      await done();
+    } catch (err) {
+      setFormMsg('ssLoginMsg', err.message || 'That code did not work.', 'error');
+      btn.disabled = false;
+      // Too long since the password: back to it.
+      if (/password again/i.test(err.message || '')) { form.remove(); loginForm.style.display = ''; }
+    }
+  };
+}
+
 async function showPortalOrLogin() {
   const allowed = await refreshPortalSession();
   if (PORTAL.user && PORTAL.user.mustChangePassword) return showFirstPassword();
+  if (PORTAL.user && PORTAL.user.mustSetUpSecondStep) return showSecondStepSetup();
   document.getElementById('portalLoginWrap').style.display = allowed ? 'none' : 'flex';
   document.getElementById('portalShell').style.display = allowed ? 'block' : 'none';
   if (allowed) {
@@ -319,6 +406,21 @@ async function initPortal(config) {
     ? LeaderChapter.attach(document.getElementById('portalLoginForm'), 'portalUsername')
     : Promise.resolve({ value: () => undefined });
 
+  // Signed in (by password, or password and code): check this account opens
+  // this portal, then show it.
+  async function afterSignIn() {
+    const btn = document.getElementById('portalLoginBtn');
+    // Wait a brief moment for the session cookie to be set
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const allowed = await refreshPortalSession();
+    if (!allowed && !(PORTAL.user && (PORTAL.user.mustChangePassword || PORTAL.user.mustSetUpSecondStep))) {
+      setFormMsg('portalLoginMsg', `That account is not part of the ${PORTAL.label}. Check with the admin about which portal it opens.`, 'error');
+      btn.disabled = false;
+      return;
+    }
+    showPortalOrLogin();
+  }
+
   document.getElementById('portalLoginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('portalLoginBtn');
@@ -335,6 +437,12 @@ async function initPortal(config) {
         })
       });
       
+      // A second step set up: the code first, then on as usual.
+      if (loginResponse && loginResponse.needsSecondStep) {
+        btn.disabled = false;
+        return askSecondStep(afterSignIn);
+      }
+
       // Verify login was successful
       if (!loginResponse || !loginResponse.success) {
         setFormMsg('portalLoginMsg', 'Login failed. Please try again.', 'error');
@@ -342,19 +450,7 @@ async function initPortal(config) {
         return;
       }
 
-      // Wait a brief moment for the session cookie to be set
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Now refresh the session to verify access
-      const allowed = await refreshPortalSession();
-      if (!allowed) {
-        setFormMsg('portalLoginMsg', `That account is not part of the ${PORTAL.label}. Check with the admin about which portal it opens.`, 'error');
-        btn.disabled = false;
-        return;
-      }
-      
-      // Proceed to show the portal
-      showPortalOrLogin();
+      await afterSignIn();
     } catch (err) {
       setFormMsg('portalLoginMsg', err.message || 'Invalid username or password.', 'error');
       btn.disabled = false;

@@ -110,10 +110,10 @@ const { fakeModels } = require('./harness.js');
   r = await change('pres', 'not-my-password', 'short');
   check('the new password is judged only once the current one is proved', r.status === 401, r.data);
   for (const [label, pw, expect] of [
-    ['too short', 'Short1', /at least 8/],
-    ['a common password', 'password123', /first that anyone would try/],
-    ['a run of digits', '12345678', /run like/],
-    ['one repeated character', 'aaaaaaaaaa', /repeated/],
+    ['too short', 'Short-Pass1', /at least 12/],
+    ['a common password', 'password1234', /first that anyone would try/],
+    ['a run of letters', 'abcdefghijkl', /run like/],
+    ['one repeated character', 'aaaaaaaaaaaa', /repeated/],
     ['the username inside it', 'Exec.Pres-2026!', /username/],
     ['spaces at either end', ' Rooted In Him 7', /spaces/],
     ['longer than bcrypt reads', 'Q9' + 'x'.repeat(80), /72/],
@@ -195,7 +195,7 @@ const { fakeModels } = require('./harness.js');
   const vpEmail = fakeModels.Member._docs.find(m => m.id === vpMember).email;
   r = await firstPw('vp', vpEmail.toUpperCase(), 'vicepresident123');
   check('the starting password cannot be kept', r.status === 400 && /starting password/.test(r.data.error), r.data);
-  r = await firstPw('vp', vpEmail, 'password123');
+  r = await firstPw('vp', vpEmail, 'password1234');
   check('a very common one is turned away', r.status === 400, r.data);
   r = await firstPw('vp', ' ' + vpEmail.toUpperCase() + ' ', 'Steady Hands 2026');
   check('with the right email (in any case) and a good password it is saved', r.status === 200, r.data);

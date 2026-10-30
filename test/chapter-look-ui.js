@@ -38,7 +38,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
     Object.entries({ name, email: `lk${n}@example.com`, password: 'secret123', chapterId, consent: 'true' }).forEach(([k, v]) => fd.append(k, v));
     return (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fd })).json()).member.id;
   };
-  await api('POST', '/api/admin/staff', { username: 'coord', name: 'Chapter Coordinator', role: 'coordinator', password: 'password123', memberId: await member('Coord', 'aconsu-knust'), chapterId: 'aconsu-knust' });
+  await api('POST', '/api/admin/staff', { username: 'coord', name: 'Chapter Coordinator', role: 'coordinator', password: 'password1234', memberId: await member('Coord', 'aconsu-knust'), chapterId: 'aconsu-knust' });
 
   const browser = await chromium.launch({ executablePath: CHROME });
   const errors = [];
@@ -85,7 +85,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   console.log('\n== the chapter asks ==');
   const co = await newPage();
   await co.goto(`${BASE}/coordinator.html`, { waitUntil: 'networkidle' });
-  await co.fill('#portalUsername', 'coord'); await co.fill('#portalPassword', 'password123'); await co.click('#portalLoginBtn');
+  await co.fill('#portalUsername', 'coord'); await co.fill('#portalPassword', 'password1234'); await co.click('#portalLoginBtn');
   await co.waitForSelector('#portalNav button', { state: 'attached' });
   await co.click('#portalNav button:text-is("Ask National for Help")');
   await co.waitForSelector('#crForm');
@@ -129,13 +129,13 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
 
   console.log('\n== several chapters: working on the one that asked ==');
   await api('POST', '/api/national/chapters', { id: 'aconsu-ucc', name: 'ACONSU UCC', institution: 'UCC' });
-  await api('POST', '/api/admin/staff', { username: 'admin.ucc', name: 'UCC Admin', role: 'chapterAdmin', password: 'password123', memberId: await member('UCC Admin', 'aconsu-ucc'), chapterId: 'aconsu-ucc' });
+  await api('POST', '/api/admin/staff', { username: 'admin.ucc', name: 'UCC Admin', role: 'chapterAdmin', password: 'password1234', memberId: await member('UCC Admin', 'aconsu-ucc'), chapterId: 'aconsu-ucc' });
   const ch = await newPage();
   await ch.goto(`${BASE}/chapter.html`, { waitUntil: 'networkidle' });
   await ch.waitForSelector('#loginForm');
   const pick = await ch.$('#leaderChapter');
   if (pick) await ch.selectOption('#leaderChapter', 'aconsu-ucc');
-  await ch.fill('#username', 'admin.ucc'); await ch.fill('#password', 'password123'); await ch.click('#loginForm button[type="submit"]');
+  await ch.fill('#username', 'admin.ucc'); await ch.fill('#password', 'password1234'); await ch.click('#loginForm button[type="submit"]');
   await ch.waitForSelector('#adminShell', { state: 'visible' });
   check(await ch.isVisible('#navAskNationalBtn'), 'a Chapter Admin has Ask National for Help');
   await ch.click('[data-panel="askNational"]');

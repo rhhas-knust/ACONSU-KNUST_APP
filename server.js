@@ -11,6 +11,8 @@ const bcrypt = require('bcryptjs');
 const { connectDB, createSessionStore, dbStatus, endMemberSessions: endStoredMemberSessions } = require('./lib/db');
 const eraseMember = require('./lib/eraseMember');
 const retention = require('./lib/retention');
+const secondStep = require('./lib/secondStep');
+const totp = require('./lib/totp');
 const repo = require('./lib/repo');
 const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
@@ -36,6 +38,7 @@ const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
+const { registerSecondStepRoutes } = require('./routes/second-step');
 const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
 const { registerShepherdListRoutes } = require('./routes/shepherd-list');
 const { registerPrivacyRoutes } = require('./routes/privacy');
@@ -532,11 +535,15 @@ function isSessionRevoked(staff) {
 // other route it is as if nobody were signed in, so no route has to remember to
 // check: a guessed starting password reaches nothing.
 const FIRST_PASSWORD_PATHS = new Set(['/api/portal/me', '/api/portal/account', '/api/portal/first-password', '/api/portal/logout']);
+// The same for a leader past their 14 days with no second step, while it is
+// enforced: signing in works, and opens only the screen to set it up.
+const SECOND_STEP_SETUP_PATHS = new Set(['/api/portal/me', '/api/portal/account', '/api/portal/logout', '/api/portal/second-step', '/api/portal/second-step/begin', '/api/portal/second-step/confirm']);
 
 function currentStaff(req) {
   const staff = (req.session && req.session.staff) || null;
   if (isTermExpired(staff) || isSessionRevoked(staff)) return null;
   if (staff && staff.mustChangePassword && !FIRST_PASSWORD_PATHS.has(req.path)) return null;
+  if (staff && !staff.mustChangePassword && staff.mustSetUpSecondStep && !SECOND_STEP_SETUP_PATHS.has(req.path)) return null;
   return staff;
 }
 
@@ -717,6 +724,86 @@ function chapterConfidential(what) {
 // chapter decides, as it always has. It is checked only after the password has
 // been, so a wrong password still answers exactly as it did and the choice can
 // never be used to find out which chapter a username belongs to.
+// ---------- leader sign-in: the session, wrong tries, the second step ----------
+// The session a leader gets once they are who they say they are, by password
+// alone or by password and code.
+async function startStaffSession(req, user) {
+  // An executive's position is stamped into the session at sign-in rather
+  // than looked up per request: the office-portal guards are synchronous and
+  // run on every call, so a database read there would cost a query each
+  // time. A position change revokes the holder's sessions (see the reshuffle
+  // route), which is what stops a stamped value going stale.
+  let positionKey = '';
+  if (user.role === 'executive') {
+    const card = await models.Executive.findOne({ staffId: user.id, chapterId: user.chapterId || '' }).lean();
+    positionKey = positions.resolvePosition(
+      card && card.positionKey, card && card.role, !!(card && card.department)
+    ).key;
+  }
+  const standing = secondStep.standing({ ...user, positionKey }, { since: await leaderSecondStepSince() });
+  await freshSession(req);
+  req.session.staff = {
+    id: user.id, username: user.username, name: user.name || user.username,
+    role: user.role, chapterId: user.chapterId || '',
+    memberId: user.memberId || '',
+    positionKey,
+    termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
+    // Still on the starting password: the portal shows the "choose your own"
+    // screen and nothing else until it is done (see currentStaff).
+    mustChangePassword: !!user.mustChangePassword,
+    // Past the 14 days with no second step while it is enforced: the portal
+    // shows the screen to set it up and nothing else (see currentStaff).
+    mustSetUpSecondStep: standing.mustSetUpNow,
+    issuedAt: Date.now() // what a later revocation is measured against
+  };
+  models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
+}
+
+// When enforcement was switched on: a row of its own, made the first time the
+// server sees ENFORCE_LEADER_2FA on, removed when it is off, so switching it
+// off and on again starts a fresh 14 days.
+async function leaderSecondStepSince() {
+  if (!secondStep.enforced()) return null;
+  let row = await models.SystemState.findOne({ singleton: 'leader2fa' }).lean();
+  if (!row) {
+    await models.SystemState.create({ singleton: 'leader2fa', startedAt: new Date() }).catch(() => {});
+    row = await models.SystemState.findOne({ singleton: 'leader2fa' }).lean();
+  }
+  return row && row.startedAt ? new Date(row.startedAt) : new Date();
+}
+
+// The account's own record of what happened to its sign-in, newest last, the
+// last 50 kept. Shown to the holder on My Account.
+async function logSecurity(staffId, what, by) {
+  const account = await models.StaffUser.findOne({ id: staffId }).lean();
+  if (!account) return;
+  const log = [...(account.securityLog || []), { at: new Date(), what, by: by || '' }].slice(-50);
+  await models.StaffUser.updateOne({ id: staffId }, { $set: { securityLog: log } });
+}
+
+// A wrong password or code: counted, and after five in a row the account
+// rests (lib/secondStep.js). Returns the minutes it now rests for, or 0.
+async function recordWrongTry(user, what) {
+  const next = secondStep.afterWrongTry(user);
+  await models.StaffUser.updateOne({ id: user.id }, { $set: next });
+  if (!next.lockedUntil) return 0;
+  await logSecurity(user.id, `rested after ${next.failedSignIns} wrong tries in a row (last: ${what})`, 'system');
+  return secondStep.lockedFor(next);
+}
+
+async function clearWrongTries(user) {
+  if (user.failedSignIns || user.lockedUntil) {
+    await models.StaffUser.updateOne({ id: user.id }, { $set: { failedSignIns: 0, lockedUntil: null } });
+  }
+}
+
+// A leader's password is a key to other people's records, so it is longer than
+// a member's: 12 characters, wherever one is set (lib/passwords.js).
+const { LEADER_MIN_LENGTH: LEADER_MIN } = require('./lib/passwords');
+const LEADER_SHORT = `A leader's password needs at least ${LEADER_MIN} characters. A short phrase works well.`;
+
+const restingMessage = (minutes) => `Too many wrong tries on this account. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}, or ask your Chapter Coordinator to unlock it.`;
+
 const NATIONAL_CHOICE = 'national';
 function chosenChapter(body) {
   const raw = body && body.chapterId;
@@ -765,11 +852,21 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     }
 
     const user = await models.StaffUser.findOne({ username: String(username).toLowerCase().trim() });
+    // An account resting after too many wrong tries says so, rather than
+    // letting its holder keep typing into a wall.
+    const resting = user && user.active ? secondStep.lockedFor(user) : 0;
+    if (resting) return res.status(429).json({ error: restingMessage(resting) });
     // An unknown username used to answer measurably faster than a wrong
     // password (no hash to check), which tells a stranger which usernames exist.
     // A hash is always checked, so both take as long.
     const ok = await bcrypt.compare(String(password), (user && user.passwordHash) || DUMMY_HASH);
-    if (!user || !user.active || !ok) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user || !user.active || !ok) {
+      if (user && user.active) {
+        const locked = await recordWrongTry(user, 'password');
+        if (locked) return res.status(429).json({ error: restingMessage(locked) });
+      }
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
     // A lapsed term is not a wrong password - say so, so the outgoing
     // executive knows to ask their Coordinator rather than retyping.
     if (isTermExpired(user)) {
@@ -789,33 +886,72 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       });
     }
 
-    // An executive's position is stamped into the session at sign-in rather
-    // than looked up per request: the office-portal guards are synchronous and
-    // run on every call, so a database read there would cost a query each
-    // time. A position change revokes the holder's sessions (see the reshuffle
-    // route), which is what stops a stamped value going stale.
-    let positionKey = '';
-    if (user.role === 'executive') {
-      const card = await models.Executive.findOne({ staffId: user.id, chapterId: user.chapterId || '' }).lean();
-      positionKey = positions.resolvePosition(
-        card && card.positionKey, card && card.role, !!(card && card.department)
-      ).key;
+    // The password was right. With a second step set up, that is half of it:
+    // the session holds only "waiting for the code" until the code comes.
+    if (user.totpEnabledAt) {
+      await freshSession(req);
+      req.session.pendingSignIn = { staffId: user.id, at: Date.now() };
+      return res.json({ success: false, needsSecondStep: true });
     }
-
-    await freshSession(req);
-    req.session.staff = {
-      id: user.id, username: user.username, name: user.name || user.username,
-      role: user.role, chapterId: user.chapterId || '',
-      memberId: user.memberId || '',
-      positionKey,
-      termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
-      // Still on the starting password: the portal shows the "choose your own"
-      // screen and nothing else until it is done (see currentStaff).
-      mustChangePassword: !!user.mustChangePassword,
-      issuedAt: Date.now() // what a later revocation is measured against
-    };
-    models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
+    await clearWrongTries(user);
+    await startStaffSession(req, user);
     res.json({ success: true, staff: req.session.staff, mustChangePassword: !!user.mustChangePassword });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not sign you in right now. Please try again.' });
+  }
+});
+
+// The six-digit code from their authenticator app, or one of their recovery
+// codes, after the password. Good for five minutes after the password was.
+const SECOND_STEP_WINDOW_MS = 5 * 60 * 1000;
+app.post('/api/portal/login/second-step', loginLimiter, async (req, res) => {
+  try {
+    const pending = req.session && req.session.pendingSignIn;
+    if (!pending || Date.now() - pending.at > SECOND_STEP_WINDOW_MS) {
+      if (req.session) delete req.session.pendingSignIn;
+      return res.status(401).json({ error: 'That took too long. Sign in with your password again.' });
+    }
+    const user = await models.StaffUser.findOne({ id: pending.staffId }).lean();
+    if (!user || !user.active || !user.totpEnabledAt) {
+      delete req.session.pendingSignIn;
+      return res.status(401).json({ error: 'Sign in with your password again.' });
+    }
+    const resting = secondStep.lockedFor(user);
+    if (resting) return res.status(429).json({ error: restingMessage(resting) });
+
+    const { code, recoveryCode } = req.body || {};
+    let passed = false;
+    let usedRecovery = false;
+    if (recoveryCode) {
+      // Each recovery code works once: it is taken off the account in the same
+      // write that accepts it, so two tries with one code cannot both pass.
+      const h = totp.hashRecovery(recoveryCode);
+      if ((user.totpRecoveryHashes || []).includes(h)) {
+        const r = await models.StaffUser.updateOne({ id: user.id, totpRecoveryHashes: h }, { $pull: { totpRecoveryHashes: h } });
+        passed = usedRecovery = r.modifiedCount === 1;
+      }
+    } else {
+      const step = totp.verify(totp.open(user.totpSecretEnc), code, { lastStep: user.totpLastStep || 0 });
+      if (step) {
+        // Moving lastStep forward is what makes a code single-use, and doing it
+        // only where it is still behind stops the same code passing twice at once.
+        const r = await models.StaffUser.updateOne({ id: user.id, totpLastStep: { $lte: step - 1 } }, { $set: { totpLastStep: step } });
+        passed = r.modifiedCount === 1;
+      }
+    }
+    if (!passed) {
+      const locked = await recordWrongTry(user, 'second step');
+      if (locked) return res.status(429).json({ error: restingMessage(locked) });
+      return res.status(401).json({ error: recoveryCode ? 'That recovery code is not right, or has been used.' : 'That code is not right. Check the time on your phone is set automatically, or use a recovery code.' });
+    }
+    delete req.session.pendingSignIn;
+    await clearWrongTries(user);
+    if (usedRecovery) await logSecurity(user.id, `signed in with a recovery code (${Math.max(0, (user.totpRecoveryHashes || []).length - 1)} left)`, user.name || user.username);
+    await startStaffSession(req, user);
+    res.json({
+      success: true, staff: req.session.staff, mustChangePassword: !!user.mustChangePassword,
+      recoveryCodesLeft: usedRecovery ? Math.max(0, (user.totpRecoveryHashes || []).length - 1) : undefined
+    });
   } catch (e) {
     res.status(500).json({ error: 'Could not sign you in right now. Please try again.' });
   }
@@ -5936,6 +6072,7 @@ registerOfficeHolderRoutes(app, {
   officeAppointmentProblem, issueOfficeLogin, officeAccounts
 });
 registerAccountRoutes(app, { repo, models, bcrypt, rolesLib, positions, currentStaff, rememberRevocation });
+registerSecondStepRoutes(app, { models, bcrypt, currentStaff, requireChapterAdmin, rolesLib, actorName, revokeStaffSessions, logSecurity, leaderSecondStepSince, passwordLimiter: loginLimiter });
 
 // ---------- chapter attendance (Secretary, Assistant Secretary, Organiser) ----------
 app.get('/api/executive/chapter/attendance', requireRole('executive'), requireCapability(CAP.ATTENDANCE_CHAPTER, async (req, res, { staff }) => {
@@ -6793,7 +6930,7 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
         unreadMessages: contactMessages.filter(m => m.status !== 'replied').length
       },
       welfare,
-      team: staff.map(({ passwordHash, ...s }) => s),
+      team: staff.map(secondStep.safeAccount),
       // Marked an Executive by Shepherding, still with no account of their
       // own. Counted from rows already read rather than asked for again.
       awaitingAppointment: members.filter(
@@ -6924,7 +7061,7 @@ app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNation
     } else {
       const { username, name, password } = req.body;
       if (!username || !password) return res.status(400).json({ error: 'Username and password are required for a new account' });
-      if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      if (password.length < LEADER_MIN) return res.status(400).json({ error: LEADER_SHORT });
       const clean = String(username).toLowerCase().trim();
       const dupe = await models.StaffUser.findOne({ username: clean });
       if (dupe) return res.status(400).json({ error: 'That username is already taken' });
@@ -6937,7 +7074,7 @@ app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNation
     const updatedChapter = await repo.updateById('chapters', chapter.id, {
       ...chapter, coordinatorStaffId: account.id, coordinatorName: account.name
     });
-    const { passwordHash, ...safeAccount } = account;
+    const safeAccount = secondStep.safeAccount(account);
     res.json({ success: true, chapter: updatedChapter, coordinator: safeAccount });
   } catch (e) {
     res.status(500).json({ error: 'Could not assign a coordinator' });
@@ -7246,7 +7383,7 @@ app.get('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req, { required: false });
     const users = await repo.getAll('staffUsers', filter);
-    res.json(users.map(({ passwordHash, ...safe }) => safe));
+    res.json(users.map(secondStep.safeAccount));
   } catch (e) {
     res.status(500).json({ error: 'Could not load leadership accounts' });
   }
@@ -7263,7 +7400,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Username, role and password are required' });
   }
   if (!PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
-  if (!officeLogin && password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!officeLogin && password.length < LEADER_MIN) return res.status(400).json({ error: LEADER_SHORT });
   const scope = rolesLib.getActingScope(req);
   if (NATIONAL_ONLY_ROLES.includes(role) && !scope.isNational) {
     return res.status(403).json({ error: 'Only the National Coordinator can assign this role.' });
@@ -7380,7 +7517,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
         type: 'executive_appointment', note: position.label, loggedBy: 'System'
       });
     }
-    const { passwordHash, ...safe } = user;
+    const safe = secondStep.safeAccount(user);
     // The office login is shown once, to be passed on. It works only until its
     // holder has chosen their own password.
     res.json({ success: true, item: safe, ...(officeLogin ? { issued: { username: clean, password } } : {}) });
@@ -7392,7 +7529,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
 app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
   const { name, role, password, active } = req.body;
   if (role && !PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
-  if (password && password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (password && password.length < LEADER_MIN) return res.status(400).json({ error: LEADER_SHORT });
   const scope = rolesLib.getActingScope(req);
   try {
     const existing = await repo.getById('staffUsers', req.params.id);
@@ -7445,7 +7582,7 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
       || (role && role !== existing.role)
       || !!password;
     if (authorityChanged) revokeStaffSessions(existing.id);
-    const { passwordHash, ...safe } = updated;
+    const safe = secondStep.safeAccount(updated);
     res.json({ success: true, item: safe });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this account' });
@@ -8814,6 +8951,9 @@ connectDB()
   // get a window where it works again.
   .then(() => loadStaffRevocations())
   .then(() => loadMemberRevocations())
+  // Leaders' second step switched off: forget when it was switched on, so
+  // switching it on again starts a fresh 14 days for everyone.
+  .then(() => (secondStep.enforced() ? null : models.SystemState.deleteOne({ singleton: 'leader2fa' }).catch(() => {})))
   .then(() => {
     const httpServer = app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);
