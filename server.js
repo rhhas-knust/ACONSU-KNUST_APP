@@ -42,6 +42,7 @@ const { registerSecondStepRoutes } = require('./routes/second-step');
 const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
 const { registerShepherdListRoutes } = require('./routes/shepherd-list');
 const { registerPrivacyRoutes } = require('./routes/privacy');
+const { registerShareRoutes, sharePreviews } = require('./routes/share');
 const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
 const listLink = require('./lib/listLink');
@@ -178,6 +179,9 @@ app.use(compression({
 // styles are checked with the server on every visit (they change when the app
 // is deployed); things that do not change are kept: fonts for a year, pictures
 // and icons for a week, the how-to video for a day.
+// The shareable pages carry a preview for when a link to them is pasted into
+// WhatsApp (routes/share.js); everything else is the plain file.
+app.use(sharePreviews({ repo, publicDir: path.join(__dirname, 'public') }));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, filePath) {
     if (/[\\/]fonts[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -4731,6 +4735,7 @@ function requireAttendanceTaker(req, res, next) {
 }
 registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
+registerShareRoutes(app);
 
 // ---------- Attendance / membership reports (section 13, 37) ----------
 // Generate -> Preview (the existing register screens) -> Download PDF.

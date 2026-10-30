@@ -800,3 +800,14 @@ National keeps its reach: totals and comparisons across chapters, and any one ch
 `test/chapter-wall.js` checks the rule, reads every data-layer call in the code without running it (458 on walled records) and fails if one leaves its chapter out, and checks a chapter admin cannot reach another chapter's records. The whole test suite runs with the wall on, so a route that turns out chapterless at run time fails its test. Wiring this in found and closed one real gap: a chapter admin could mark another chapter's prayer request answered by its id.
 
 If a page breaks in production with `Chapter guard` in the logs, set `CHAPTER_GUARD=warn` on Render to let it through while it is fixed (each place is logged once), then remove it.
+
+## 31. Sharing to WhatsApp, with link previews
+
+A Share button on every event, every sermon and every public prayer request, on the verse of the day, and Invite a friend on the home page and the profile (`public/js/share.js`). It opens the phone's own share sheet when it has one, which includes WhatsApp, and goes straight to WhatsApp otherwise. The link is the app's chosen address (`PUBLIC_BASE_URL`, given to the page by `GET /api/public/address`), or the page's own while there is none. No tracking parameter is ever added.
+
+A link to an event or sermon opens on that event or sermon, and when it is pasted into a chat the preview shows it: the shareable pages (`PAGES` in `routes/share.js`) are sent with Open Graph tags filled in, with the event's flyer as the picture. A draft or missing event gets the events page's own preview. `og:url` and the canonical link are only given once an address is chosen, so a preview never names the stand-in.
+
+Counts, not tracking (`lib/metrics.js`): each share adds one to that day's count for its kind, and the sign-up form adds one to "sign-ups started" the first time someone types in it. A row is a kind, a day and a number; nothing about who is kept. Only the keys in `KEYS` are stored. The National Health panel reads them.
+
+`test/share.js` checks the counts, the address and the previews (including that a draft never shows); `test/share-ui.js` checks the button in a browser.
+

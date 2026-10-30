@@ -117,6 +117,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js"></script>
+<script src="/js/share.js"></script>
 <script>
 let currentMember = null;
 
@@ -139,6 +140,8 @@ async function loadPrayerWall() {
             <button type="button" class="pray-btn" data-pray="${p.id}">I'm praying</button>
           </div>
         </div>
+        <div style="margin-top:8px;">${AconsuShare.button({ kind: 'prayer', title: 'Pray with us | ACONSU',
+          text: `Pray with us: "${p.request.length > 200 ? `${p.request.slice(0, 199)}…` : p.request}"`, path: '/prayer.html', label: 'Ask others to pray' })}</div>
         ${p.testimony ? `<div class="testimony-box">"${escapeHtml(p.testimony)}"</div>` : ''}
         ${p.isMine && !p.answered ? `
           <div class="mine-actions">

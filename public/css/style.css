@@ -1214,3 +1214,9 @@ body {
 .my-data-delete { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
 .my-data-delete summary { cursor: pointer; font-weight: 700; color: var(--bad-ink); min-height: 44px; display: flex; align-items: center; }
 .my-data-delete p { font-size: 0.87rem; color: var(--ink-soft); margin: 6px 0 12px; }
+
+/* ---------- sharing (share.js) ---------- */
+.share-btn { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+.share-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.invite-strip { margin-top: 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.invite-strip p { margin: 0; color: var(--ink-soft); }

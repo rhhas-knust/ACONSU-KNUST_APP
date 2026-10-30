@@ -146,6 +146,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <button type="button" class="btn btn-outline btn-sm" id="alertsToggleBtn">Enable Alerts</button>
     </div>
 
+    <div class="form-card" style="margin-top:24px;">
+      <h2 style="margin-bottom:6px;">Invite a friend</h2>
+      <p class="my-data-hint">Know someone who should be part of ACONSU? Send them the app on WhatsApp.</p>
+      <button type="button" class="btn btn-outline share-btn" data-share="invite" data-share-title="ACONSU"
+        data-share-text="Come and join us at ACONSU: services, prayer, the Bible and friends on campus." data-share-path="/">Invite a friend</button>
+    </div>
+
     <div class="form-card my-data" id="myDataCard" style="margin-top:24px;">
       <h2 style="margin-bottom:6px;">Your data</h2>
       <p class="my-data-hint">Download a copy of everything ACONSU holds about you, or delete your account for good. Type your password first, for either one.</p>
@@ -179,6 +186,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js"></script>
+<script src="/js/share.js"></script>
 <script src="/js/my-data.js"></script>
 <script>
 let CURRENT_MEMBER = null;
