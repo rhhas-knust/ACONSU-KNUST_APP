@@ -837,3 +837,14 @@ Shepherding makes a QR code for one service on one day (**Sunday Check-In**, Vis
 
 `test/door-checkin.js` (in `npm test`) and `test/door-ui.js` (two phones: Shepherding and a visitor).
 
+## 35. A shorter sign-up, signing in by phone, and the photo straight after
+
+Signing up asks for a **name, a phone number, the chapter, a password** and agreement to the Terms. An **email address is optional**. Programme, level, hall, birthday and "I have finished my studies" moved to the profile, which asks for them gently ("A few more details, when you have a minute", with Not now) and never requires them. The password stays required until a chapter's own SMS works (Phase 5b).
+
+- **The photo** is not on the form but is still required: sign-up goes straight to `photo.html` (take one or choose one), and until there is a photo every page of the app sends a signed-in member back there, remembering where they were going (`/api/auth/me` says `needsPhoto`; `POST /api/member/photo`). The privacy pages, the Terms and the photo step are let through.
+- **Signing in** takes a phone number (024..., +233 24..., 233 24..., all one number: `lib/phone.js`) or an email address. A wrong password and a number nobody has get the same answer. Accounts from before keep signing in with their email and password.
+- **One account per phone number** (Ghanaian mobile numbers) and per email address, among accounts that have one. A number from another country needs an email address to sign in with. The profile can no longer blank the number (it used to, whenever the form left it out), and changing it to another account's is refused.
+- **On start-up** (`lib/memberAccount.js`, in the background): the old member email index, which made an email compulsory, is replaced by one that is unique only among accounts with an email; and older accounts get the phone key they sign in with. Both only add and are done once; `scripts/member-accounts.js` does the same by hand, with a dry run first. `phoneKey` then follows `phone` on every save and update (schema hooks).
+
+`test/signup.js` (in `npm test`) and `test/signup-ui.js` (the whole journey on a phone). The older suites sign their people up with an email only; the test harness gives each such sign-up a phone number of its own.
+

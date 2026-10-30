@@ -873,6 +873,8 @@ function renderFooter(settings) {
   `;
 }
 
+const PHOTO_FREE_PAGES = ['/photo.html', '/privacy.html', '/terms.html', '/cookies.html'];
+
 async function initLayout(activePath) {
   // Arrived straight after deleting their account (my-data.js): say it is done.
   if (/[?&]deleted=1(&|$)/.test(location.search)) {
@@ -887,6 +889,13 @@ async function initLayout(activePath) {
   try {
     const authRes = await fetchJSON('/api/auth/me');
     member = authRes.member;
+    // Signed up but no photo yet: that comes first (photo.html). The pages
+    // they may need on the way (the photo step itself, the Terms and the
+    // privacy pages) are let through.
+    if (member && member.needsPhoto && !PHOTO_FREE_PAGES.includes(location.pathname)) {
+      location.replace(`/photo.html?next=${encodeURIComponent(location.pathname + location.search)}`);
+      return new Promise(() => {});
+    }
     if (member) {
       dailyCheckin();
       // A signed-in member's own chapter is authoritative - keeps this

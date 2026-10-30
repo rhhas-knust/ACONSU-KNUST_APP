@@ -27,14 +27,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   /* An inline display:grid beats the browser's own [hidden] rule, so hiding
      these blocks by setting .hidden silently did nothing. */
   [hidden] { display: none !important; }
-  .who-are-you { display:grid; gap:10px; grid-template-columns:1fr 1fr; }
-  .who-opt { display:flex; align-items:flex-start; gap:9px; border:1px solid var(--line); border-radius:11px; padding:12px 13px; cursor:pointer; background:var(--surface); }
-  .who-opt:has(input:checked) { border-color:var(--brand); background:var(--lilac-light); }
-  .who-opt input { margin-top:3px; flex:none; }
-  .who-opt span { display:flex; flex-direction:column; gap:2px; }
-  .who-opt strong { font-size:0.95rem; color:var(--ink); }
-  .who-opt small { font-size:0.76rem; color:var(--ink-faint); }
-  @media (max-width:420px){ .who-are-you { grid-template-columns:1fr; } }
 </style>
 </head>
 <body class="has-side-rail">
@@ -45,88 +37,38 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section style="padding-top:64px; padding-bottom:64px;">
   <div class="container">
-    <form class="form-card" id="registerForm">
+    <form class="form-card" id="registerForm" novalidate>
       <img src="/images/logo.jpg" alt="ACONSU" style="width:56px; height:56px; border-radius:50%; margin:0 auto 14px; display:block;">
       <h1 style="text-align:center; font-size:1.8rem;">Join ACONSU</h1>
       <p style="text-align:center; color:var(--ink-soft); margin-bottom:8px;">Create your account to register for events faster and keep your profile up to date.</p>
       <p style="text-align:center; margin-bottom:24px;"><a href="/how-to.html">New to the app? Watch how it works</a></p>
 
       <div class="field">
-        <label for="chapterId">ACONSU Chapter</label>
+        <label for="name">Your full name</label>
+        <input type="text" id="name" maxlength="80" autocomplete="name" autocapitalize="words" required>
+      </div>
+      <div class="field">
+        <label for="phone">Phone number</label>
+        <input type="tel" id="phone" maxlength="30" autocomplete="tel" inputmode="tel" required aria-describedby="phoneHint">
+        <small class="hint" id="phoneHint" style="color:var(--ink-faint);">You sign in with this, like 024 412 3456.</small>
+      </div>
+      <div class="field">
+        <label for="chapterId">ACONSU chapter</label>
         <select id="chapterId" required>
           <option value="">Loading chapters…</option>
         </select>
       </div>
-
       <div class="field">
-        <label for="profileImage">Profile Photo</label>
-        <input type="file" id="profileImage" accept="image/*" required>
-        <small class="hint" style="color:var(--ink-faint);">Required. Used on your digital membership card once you're accepted as a member.</small>
-        <img id="photoPreview" alt="" style="display:none; width:88px; height:88px; border-radius:50%; object-fit:cover; margin-top:10px;">
-      </div>
-
-      <div class="field">
-        <label for="name">Full Name</label>
-        <input type="text" id="name" required>
+        <label for="password">Choose a password</label>
+        <input type="password" id="password" minlength="8" autocomplete="new-password" required aria-describedby="passwordHint">
+        <small class="hint" id="passwordHint" style="color:var(--ink-faint);">At least 8 characters.</small>
       </div>
       <div class="field">
-        <label for="email">Email Address</label>
-        <input type="email" id="email" required>
+        <label for="email">Email address (optional)</label>
+        <input type="email" id="email" maxlength="120" autocomplete="email" aria-describedby="emailHint">
+        <small class="hint" id="emailHint" style="color:var(--ink-faint);">Only if you want to sign in with it too, or get a password reset by email.</small>
       </div>
-      <div class="field">
-        <label for="password">Password</label>
-        <input type="password" id="password" minlength="8" autocomplete="new-password" required>
-        <small class="hint" style="color:var(--ink-faint);">At least 8 characters.</small>
-      </div>
-      <div class="field">
-        <label for="phone">Phone Number (optional)</label>
-        <input type="tel" id="phone">
-      </div>
-      <!-- Not everyone signing up is a student. An alumnus asked for level and
-           hostel is being asked the wrong questions, so the form changes to
-           match who they are. -->
-      <div class="field">
-        <label>Are you studying now, or have you finished?</label>
-        <div class="who-are-you">
-          <label class="who-opt"><input type="radio" name="memberKind" value="student" checked> <span><strong>I'm a student</strong><small>currently on campus</small></span></label>
-          <label class="who-opt"><input type="radio" name="memberKind" value="alumni"> <span><strong>I'm an alumnus</strong><small>I've finished my studies</small></span></label>
-        </div>
-      </div>
-      <div class="field">
-        <label for="programme">Programme / Course (optional)</label>
-        <input type="text" id="programme" placeholder="e.g. BSc. Computer Science">
-      </div>
-      <div class="field-row" id="studentFields" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-        <div class="field">
-          <label for="level">Academic Year / Level (optional)</label>
-          <input type="text" id="level" placeholder="e.g. 200 Level">
-        </div>
-        <div class="field">
-          <label for="hostel">Hostel / Residence (optional)</label>
-          <input type="text" id="hostel" placeholder="e.g. Hostel A">
-        </div>
-      </div>
-      <div class="field" id="alumniFields" hidden>
-        <label for="graduationYear">Year you finished (optional)</label>
-        <input type="text" id="graduationYear" inputmode="numeric" placeholder="e.g. 2021">
-        <small class="hint" style="color:var(--ink-faint);">Shepherding will confirm your details and welcome you back. Once they do, you can add yourself to Alumni Connect if you would like other members to find you.</small>
-      </div>
-      <div class="field">
-        <label>Birthday (optional, month &amp; day only, no year, ever)</label>
-        <div class="field-row" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-          <select id="birthdayMonth" aria-label="Birthday month">
-            <option value="">Month</option>
-            <option value="1">January</option><option value="2">February</option><option value="3">March</option>
-            <option value="4">April</option><option value="5">May</option><option value="6">June</option>
-            <option value="7">July</option><option value="8">August</option><option value="9">September</option>
-            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
-          </select>
-          <select id="birthdayDay" aria-label="Birthday day">
-            <option value="">Day</option>
-          </select>
-        </div>
-        <small class="hint" style="color:var(--ink-faint);">We'll celebrate you on the day. Your birth year is never collected or stored.</small>
-      </div>
+      <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 12px;">Next you will add a photo of yourself. What you study, your hall and your birthday can wait for your profile.</p>
       <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong>. The Shepherding team will follow up and accept you as an official member.</p>
       <label class="consent-line"><input type="checkbox" id="agree" required>
         <span>I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms of use</a> and have read the <a href="/privacy.html" target="_blank" rel="noopener">Privacy policy</a>. I understand that holding an account shows a religious affiliation, and I agree to it being recorded. If I am under 18, a parent or guardian agrees.</span></label>
@@ -145,26 +87,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <script src="/js/main.js"></script>
 <script>
-// Level and hostel are a student's questions; a graduation year is an
-// alumnus's. Only one set is ever on screen.
-document.querySelectorAll('input[name="memberKind"]').forEach(function (r) {
-  r.addEventListener('change', function () {
-    var alumni = document.querySelector('input[name="memberKind"]:checked').value === 'alumni';
-    document.getElementById('studentFields').hidden = alumni;
-    document.getElementById('alumniFields').hidden = !alumni;
-  });
-});
-
+// Name, phone, chapter, password and agreement: everything else is on the
+// profile, asked for later and never required. The photo comes straight
+// after (photo.html), before anything else opens.
 (async function () {
   const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
   if (authRes.member) { window.location.href = '/profile.html'; return; }
   await initLayout('/register.html');
-  const daySelect = document.getElementById('birthdayDay');
-  for (let d = 1; d <= 31; d++) {
-    const opt = document.createElement('option');
-    opt.value = d; opt.textContent = d;
-    daySelect.appendChild(opt);
-  }
 
   const chapterSelect = document.getElementById('chapterId');
   try {
@@ -183,14 +112,6 @@ document.querySelectorAll('input[name="memberKind"]').forEach(function (r) {
   }
 })();
 
-document.getElementById('profileImage').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  const preview = document.getElementById('photoPreview');
-  if (!file) { preview.style.display = 'none'; return; }
-  preview.src = URL.createObjectURL(file);
-  preview.style.display = 'block';
-});
-
 // Counted once a visit, the first time someone types into the form: only how
 // many sign-ups were started, to set beside how many were finished. Nothing
 // about who (routes/share.js, lib/metrics.js).
@@ -202,40 +123,34 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   e.preventDefault();
   const btn = document.getElementById('registerBtn');
   const msg = document.getElementById('registerMsg');
-  const photoFile = document.getElementById('profileImage').files[0];
-  if (!photoFile) {
-    msg.textContent = 'A profile photo is required to register.';
+  const say = (text, focus) => {
+    msg.textContent = text;
     msg.className = 'form-msg error';
-    return;
-  }
+    if (focus) document.getElementById(focus).focus();
+  };
+  const v = (id) => document.getElementById(id).value.trim();
+  if (v('name').length < 2) return say('Type your full name.', 'name');
+  if (v('phone').replace(/\D/g, '').length < 9) return say('Type your phone number, like 024 412 3456.', 'phone');
+  if (!v('chapterId')) return say('Choose your ACONSU chapter.', 'chapterId');
+  if (document.getElementById('password').value.length < 8) return say('Choose a password of at least 8 characters.', 'password');
+  if (!document.getElementById('agree').checked) return say('Tick the box to agree to the Terms and the Privacy policy.', 'agree');
   btn.disabled = true; btn.textContent = 'Creating account...';
   try {
     const formData = new FormData();
-    formData.append('profileImage', photoFile);
-    formData.append('chapterId', document.getElementById('chapterId').value);
-    formData.append('name', document.getElementById('name').value);
-    formData.append('email', document.getElementById('email').value);
+    formData.append('chapterId', v('chapterId'));
+    formData.append('name', v('name'));
+    formData.append('phone', v('phone'));
+    formData.append('email', v('email'));
     formData.append('password', document.getElementById('password').value);
-    formData.append('phone', document.getElementById('phone').value);
-    formData.append('programme', document.getElementById('programme').value);
-    formData.append('level', document.getElementById('level').value);
-    formData.append('hostel', document.getElementById('hostel').value);
-    formData.append('consent', document.getElementById('agree').checked ? 'true' : 'false');
-    const kind = document.querySelector('input[name="memberKind"]:checked');
-    formData.append('memberKind', kind ? kind.value : 'student');
-    formData.append('graduationYear', document.getElementById('graduationYear').value);
-    formData.append('birthdayMonth', document.getElementById('birthdayMonth').value);
-    formData.append('birthdayDay', document.getElementById('birthdayDay').value);
+    formData.append('consent', 'true');
     // fetchJSON attaches an X-Chapter-Id header automatically; multipart
     // bodies must not get a manual Content-Type (the browser sets the
     // multipart boundary itself), so this call intentionally passes none.
     await fetchJSON('/api/auth/register', { method: 'POST', body: formData });
-    setSelectedChapterId(document.getElementById('chapterId').value);
-    showToast('Account created, welcome to ACONSU!', 'success');
-    window.location.href = '/profile.html';
+    setSelectedChapterId(v('chapterId'));
+    window.location.href = '/photo.html?new=1';
   } catch (err) {
-    msg.textContent = err.message || 'Could not create account.';
-    msg.className = 'form-msg error';
+    say(err.message || 'Could not create account.');
     btn.disabled = false; btn.textContent = 'Create Account';
   }
 });

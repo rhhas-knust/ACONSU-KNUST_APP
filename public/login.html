@@ -37,8 +37,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <h1 style="text-align:center; font-size:1.8rem;">Welcome back</h1>
       <p style="text-align:center; color:var(--ink-soft); margin-bottom:24px;">Log in to your ACONSU account.</p>
       <div class="field">
-        <label for="email">Email Address</label>
-        <input type="email" id="email" required>
+        <label for="email">Phone number or email</label>
+        <input type="text" id="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required>
       </div>
       <div class="field">
         <label for="password">Password</label>
@@ -76,9 +76,13 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: document.getElementById('email').value,
+        identifier: document.getElementById('email').value,
         password: document.getElementById('password').value
       })
+    }).then((out) => {
+      // Signed up but never added a photo: that comes first.
+      if (out && out.needsPhoto) { window.location.href = '/photo.html'; return new Promise(() => {}); }
+      return out;
     });
     showToast('Welcome back!', 'success');
     window.location.href = '/profile.html';

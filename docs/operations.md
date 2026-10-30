@@ -170,3 +170,12 @@ Shepherding makes it on **Sunday Check-In** (Visitor QR code), for the service a
 - On the free Render plan the app sleeps after 15 minutes. Open the Shepherding portal a few minutes before the service so the first visitor does not wait for it to wake.
 - If check-ins are refused with "Too many check-ins from this network", raise `DOOR_CHECKIN_LIMIT_MAX` (default 60 per 10 minutes per network).
 
+## 10. Members without an email address
+
+From Phase 5, members sign up with a phone number and the email address is optional. On its first start after that deploy, the app replaces the members' email index (one that required an email on every account) with one that only stops two accounts sharing an email. It removes no record, and it logs `Member email: ...` when it does it. If you want to see first what it would do, run it by hand against the database before deploying:
+
+    MONGODB_URI=... node scripts/member-accounts.js            # dry run, changes nothing
+    MONGODB_URI=... node scripts/member-accounts.js --apply    # does it
+
+If sign-ups without an email fail with "duplicate key" in the logs, the old index is still there: run the script with `--apply`.
+

@@ -2845,12 +2845,16 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       && !/^\s*body \{ padding-left: 248px/m.test(railBlock), null);
     // Which pages those are is not a judgement call: the rail is drawn by
     // initLayout, so the pages that call it are exactly the pages that get it.
+    // A page calls it inline or from a script of its own (photo.js), never
+    // from main.js, which only defines it.
     const htmlPages = fs.readdirSync(path.join(__dirname, '..', 'public')).filter(f => f.endsWith('.html'));
-    const railPages = htmlPages.filter(f => /initLayout\(/.test(pub(f)));
+    const drawsRail = (f) => /initLayout\(/.test(pub(f)) || [...pub(f).matchAll(/<script src="\/js\/([\w-]+\.js)/g)]
+      .some(([, js]) => js !== 'main.js' && fs.existsSync(path.join(__dirname, '..', 'public', 'js', js)) && /\binitLayout\(/.test(pub(`js/${js}`)));
+    const railPages = htmlPages.filter(drawsRail);
     const unmarked = railPages.filter(f => !/<body[^>]*class="[^"]*has-side-rail/.test(pub(f)));
     check(`all ${railPages.length} pages that draw the rail make room for it`,
       unmarked.length === 0, unmarked);
-    const wrongly = htmlPages.filter(f => !/initLayout\(/.test(pub(f)) && /has-side-rail/.test(pub(f)));
+    const wrongly = htmlPages.filter(f => !drawsRail(f) && /has-side-rail/.test(pub(f)));
     check('and no page without the rail reserves space for one', wrongly.length === 0, wrongly);
 
     check('the bottom tabs stay the phone\'s navigation',
