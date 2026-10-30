@@ -317,7 +317,9 @@ alumni: {
   the wall will be empty. (National portal → Chapters shows it.)
 - **`requestUrl`** is the app's address. It is the *only* place this page talks to
   the app, and only when someone presses **Send**. Blank it and the form goes away;
-  the wall still shows.
+  the wall still shows. Leave the address itself as it is: when the app moves to a
+  domain, set the repository variable `APP_URL` (Settings → Secrets and variables →
+  Actions → Variables) and the publish writes the new address into the pages.
 - Point the refresh at a different app by setting a repository variable called
   `APP_URL` (Settings → Secrets and variables → Actions → Variables).
 

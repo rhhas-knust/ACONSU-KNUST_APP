@@ -23,6 +23,7 @@ const sms = require('./lib/sms');
 const mailer = require('./lib/mailer');
 const { compressIfImage } = require('./lib/imageProcess');
 const { rejectOperatorKeys, publicBaseUrl, safeEqual, csvSafe, isPushEndpoint } = require('./lib/requestGuard');
+const baseUrl = require('./lib/baseUrl');
 const fileTypes = require('./lib/fileTypes');
 const securityHeaders = require('./lib/securityHeaders');
 const { renderTableReport } = require('./lib/pdf');
@@ -130,7 +131,24 @@ if (isProd) {
 const startupWarnings = [];
 if (process.env.RENDER && !isProd) {
   startupWarnings.push('NODE_ENV is not "production" on Render: cookies are not HTTPS-only, HSTS is off and default passwords would be accepted. Set NODE_ENV=production in the Render environment.');
-  startupWarnings.forEach((w) => console.warn('WARNING: ' + w));
+}
+// Set, but not something an address can be made of: ignored, and said so,
+// rather than quietly falling back to Render's address.
+if (String(process.env.PUBLIC_BASE_URL || '').trim() && !baseUrl.chosen()) {
+  startupWarnings.push('PUBLIC_BASE_URL is set but is not an address like https://example.org (no path, no trailing words), so it is ignored.');
+}
+if (String(process.env.COOKIE_DOMAIN || '').trim() && !baseUrl.cookieDomain()) {
+  startupWarnings.push('COOKIE_DOMAIN is set but is not a domain like example.org, so sign-in cookies stay on the app\'s own address.');
+}
+startupWarnings.forEach((w) => console.warn('WARNING: ' + w));
+
+// What is switched on and what is waiting for a setting (a domain, an email
+// account, push keys): one line at start-up, and the same list in /api/health.
+// Waiting is normal before there is a domain; nothing here is an error.
+const configuredFeatures = () => baseUrl.features({ mailReady: mailer.isConfigured(), pushReady: push.ensureConfigured() });
+{
+  const waitingNow = baseUrl.waiting(configuredFeatures());
+  if (waitingNow.length) console.log(`Waiting for configuration (the app works without them): ${waitingNow.join(', ')}. See docs/when-you-have-a-domain.md.`);
 }
 
 app.use(helmet({
@@ -180,7 +198,10 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 8, // 8 hours
     httpOnly: true,
     secure: isProd, // only require HTTPS-only cookies once deployed behind HTTPS
-    sameSite: 'lax'
+    sameSite: 'lax',
+    // Host-only (the address the app is on) unless COOKIE_DOMAIN asks
+    // otherwise; see lib/baseUrl.js.
+    ...(baseUrl.cookieDomain() ? { domain: baseUrl.cookieDomain() } : {})
   }
 }));
 // Straight after the session is read, before any route looks at who it is.
@@ -2199,6 +2220,7 @@ app.get('/api/health', async (req, res) => {
     database = { state: 'unknown', connected: false, error: 'status unavailable' };
   }
   const ok = !!database.connected;
+  const features = configuredFeatures();
   res.status(ok ? 200 : 503).json({
     ok,
     service: 'aconsu',
@@ -2206,8 +2228,41 @@ app.get('/api/health', async (req, res) => {
     warnings: startupWarnings,
     uptimeSeconds: Math.round(process.uptime()),
     database,
+    features,
+    waitingForConfiguration: baseUrl.waiting(features),
     checkedAt: new Date().toISOString()
   });
+});
+
+// ---------- files that only make sense with an address ----------
+// Search engines are told where the public pages are only once the owner has
+// chosen the app's address (PUBLIC_BASE_URL). Before that the site is still
+// crawlable, but nothing points them at a stand-in address that will change.
+const SITEMAP_PAGES = ['/', '/about.html', '/events.html', '/visit.html', '/bible.html', '/give.html', '/contact.html', '/how-to.html', '/privacy.html', '/terms.html', '/cookies.html'];
+
+app.get('/robots.txt', (req, res) => {
+  const site = baseUrl.chosen();
+  res.type('text/plain').send(['User-agent: *', 'Disallow: /api/', ...(site ? ['', `Sitemap: ${site}/sitemap.xml`] : [])].join('\n') + '\n');
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const site = baseUrl.chosen();
+  if (!site) return res.status(404).type('text/plain').send('No sitemap until the app\'s address is set (PUBLIC_BASE_URL).\n');
+  res.type('application/xml').send([
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...SITEMAP_PAGES.map(p => `  <url><loc>${site}${p}</loc></url>`),
+    '</urlset>'
+  ].join('\n') + '\n');
+});
+
+// The Android app's claim to open this site's links (Digital Asset Links). Its
+// contents come from the Play Console, so until ANDROID_ASSET_LINKS is set
+// there is nothing to claim and the file is not there.
+app.get('/.well-known/assetlinks.json', (req, res) => {
+  const links = baseUrl.assetLinks();
+  if (!links) return res.status(404).json({ error: 'Not set up yet.' });
+  res.json(links);
 });
 
 app.get('/api/push/vapid-public-key', (req, res) => {

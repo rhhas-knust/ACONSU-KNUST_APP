@@ -11,7 +11,7 @@
     "cap:sync": "npx cap sync",
     "cap:open:android": "npx cap open android",
     "cap:open:ios": "npx cap open ios",
-    "test": "node test/smoke.js && node test/offices.js && node test/account.js && node test/chapter-look.js && node test/maps.js && node test/global.js && node test/shepherd-list.js && node test/books.js",
+    "test": "node test/smoke.js && node test/offices.js && node test/account.js && node test/chapter-look.js && node test/maps.js && node test/global.js && node test/shepherd-list.js && node test/books.js && node test/domain.js",
     "ux": "node test/ux.js"
   },
   "dependencies": {

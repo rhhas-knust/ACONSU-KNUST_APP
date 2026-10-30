@@ -39,6 +39,12 @@ jobs:
   deploy:
     name: Publish site/ to GitHub Pages
     runs-on: ubuntu-latest
+    # The app's address, in one place for the whole publish: where the alumni
+    # and theme are fetched from, and the address written into the published
+    # pages (site/tools/app-address.js). Set the repository variable APP_URL
+    # the day the app moves to a domain; until then it is Render's address.
+    env:
+      APP_URL: ${{ vars.APP_URL || 'https://aconsu-knust-app.onrender.com' }}
     # The app sleeps on free hosting and takes up to a minute to wake; the sync
     # step below waits for it, so this is more generous than a plain publish.
     timeout-minutes: 15
@@ -87,8 +93,6 @@ jobs:
       # succeeds: the last good copy stays published. Set a repository variable
       # called APP_URL to point it somewhere else.
       - name: Fetch the alumni and monthly theme from the app
-        env:
-          APP_URL: ${{ vars.APP_URL || 'https://aconsu-knust-app.onrender.com' }}
         run: node site/tools/sync-feed.js
 
       # Shrink BEFORE the upload, in the same run, so the small file is the one
@@ -125,6 +129,11 @@ jobs:
             git rebase --abort 2>/dev/null || true
             echo "::warning::Could not save the refreshed alumni and pictures back to the repository (is main protected against pushes?). They are published this time, but the repository still holds the older copy."
           fi
+
+      # After the save above, so it changes only the copy being published:
+      # the files in the repository keep the address they were written with.
+      - name: Point the pages at the app's address
+        run: node site/tools/app-address.js
 
       # The site is plain files: no build, nothing to go wrong between the
       # folder and the web.

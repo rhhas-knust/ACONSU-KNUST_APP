@@ -102,6 +102,8 @@ Because content now lives in Atlas rather than local JSON files, you no longer n
 2. Add a free uptime monitor on `/api/health` (every 5 minutes). It keeps a free host awake and emails you if the app goes down.
 3. Find out whether your Atlas cluster has backups. A free one does not.
 
+**No domain yet?** Everything works on Render's own address. `/api/health` lists what is waiting for a setting (`waitingForConfiguration`), and [docs/when-you-have-a-domain.md](docs/when-you-have-a-domain.md) is the checklist for the day one is bought. The app's address lives in one setting, `PUBLIC_BASE_URL`; the website's, in the repository variable `APP_URL`.
+
 ## 4. A real firewall — Cloudflare (free)
 
 App code alone can't be a firewall — that protection has to sit in front of the server, at the network level. The straightforward way to get real protection (DDoS mitigation, a web application firewall, bot filtering) at no cost:
