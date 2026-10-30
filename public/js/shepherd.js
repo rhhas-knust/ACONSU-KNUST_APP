@@ -1191,9 +1191,26 @@ async function renderCare(el) {
   }));
 }
 
+// Today: Shepherding's week (today.js).
 initPortal({
   role: 'shepherding',
   label: 'Shepherding',
+  today: {
+    intro: 'Who is here, who has drifted, and who is waiting to hear from you.',
+    actions: [
+      { panel: 'checkin', label: 'Sunday check-in' },
+      { panel: 'care', label: 'People who have stopped coming', count: async (get) => (await get('/api/shepherd/retention-alerts')).filter(a => a.status === 'open').length, one: 'to check on', many: 'to check on' },
+      { panel: 'visitors', label: 'Membership workflow', count: async (get) => (await get('/api/shepherd/members')).filter(p => p.source === 'member' && ['visitor', 'under_review', 'accepted'].includes(p.membershipStage)).length, one: 'new person to welcome', many: 'new people to welcome' },
+      { panel: 'messages', label: 'Messages', count: async (get) => (await get('/api/shepherd/contact-messages')).filter(m => m.status !== 'replied').length, one: 'to answer', many: 'to answer' },
+      { panel: 'attendance', label: 'Attendance register' }
+    ],
+    checklist: [
+      { key: 'checkin', label: 'Try the Sunday check-in' },
+      { key: 'members', label: 'Look through your members' },
+      { key: 'visitors', label: 'Move a new person along' },
+      { key: 'care', label: 'Open pastoral care' }
+    ]
+  },
   panels: [
     { key: 'overview', label: 'Overview', render: renderShepOverview },
     { key: 'checkin', label: 'Sunday Check-In', render: renderCheckIn },

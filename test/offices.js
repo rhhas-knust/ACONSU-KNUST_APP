@@ -84,10 +84,10 @@ const { fakeModels } = require('./harness.js');
     const memberId = await registerMember(name, chapterId);
     if (alumnus) fakeModels.Member._docs.find(m => m.id === memberId).membershipStage = 'alumni';
     const out = await call('admin', 'POST', '/api/admin/staff', {
-      username, name, role: 'executive', password: 'password123', memberId, positionKey, chapterId, ...(department ? { department } : {})
+      username, name, role: 'executive', password: 'password1234', memberId, positionKey, chapterId, ...(department ? { department } : {})
     });
     if (out.status !== 200) return { out, memberId };
-    await call(jar, 'POST', '/api/portal/login', { username, password: 'password123' });
+    await call(jar, 'POST', '/api/portal/login', { username, password: 'password1234' });
     people[jar] = { memberId, staffId: out.data.item.id, username, name };
     return { out, memberId };
   }
@@ -121,10 +121,10 @@ const { fakeModels } = require('./harness.js');
   for (const [jar, username, chapterId] of [['coord', 'coord.one', C1], ['coord2', 'coord.two', C2], ['fin', 'fin.one', C1]]) {
     const memberId = await registerMember(username, chapterId);
     const out = await call(jar === 'fin' ? 'coord' : 'admin', 'POST', '/api/admin/staff', {
-      username, name: username, role: jar === 'fin' ? 'finance' : 'coordinator', password: 'password123', memberId, chapterId
+      username, name: username, role: jar === 'fin' ? 'finance' : 'coordinator', password: 'password1234', memberId, chapterId
     });
     check(`${username} is created`, out.status === 200, out.data);
-    await call(jar, 'POST', '/api/portal/login', { username, password: 'password123' });
+    await call(jar, 'POST', '/api/portal/login', { username, password: 'password1234' });
   }
   const member = await registerMember('Plain Member', C1);
   void member;
@@ -699,47 +699,47 @@ const { fakeModels } = require('./harness.js');
 
   // A second President cannot be seated next to the first.
   const spare = await registerMember('Spare Person', C1);
-  r = await call('coord', 'POST', '/api/admin/staff', { username: 'exec.pres.two', name: 'Spare Person', role: 'executive', password: 'password123', memberId: spare, positionKey: 'president', chapterId: C1 });
+  r = await call('coord', 'POST', '/api/admin/staff', { username: 'exec.pres.two', name: 'Spare Person', role: 'executive', password: 'password1234', memberId: spare, positionKey: 'president', chapterId: C1 });
   check('a seat that is held cannot be given to a second person', r.status === 409 && /Hand over/.test(r.data.error), r.data);
 
   const handover = (body) => call('coord', 'POST', '/api/coordinator/offices/handover', body);
   const successorMember = await registerMember('Kwesi New President', C1);
-  r = await handover({ positionKey: 'nonsense', memberId: successorMember, username: 'exec.newpres', password: 'password123' });
+  r = await handover({ positionKey: 'nonsense', memberId: successorMember, username: 'exec.newpres', password: 'password1234' });
   check('hand-over needs a real office', r.status === 400, r.data);
-  r = await handover({ positionKey: 'president', username: 'exec.newpres', password: 'password123' });
+  r = await handover({ positionKey: 'president', username: 'exec.newpres', password: 'password1234' });
   check('and the member taking over', r.status === 400, r.data);
-  r = await handover({ positionKey: 'president', memberId: 'nobody', username: 'exec.newpres', password: 'password123' });
+  r = await handover({ positionKey: 'president', memberId: 'nobody', username: 'exec.newpres', password: 'password1234' });
   check('who must exist', r.status === 400, r.data);
-  r = await handover({ positionKey: 'president', memberId: people.pres2.memberId, username: 'exec.newpres', password: 'password123' });
+  r = await handover({ positionKey: 'president', memberId: people.pres2.memberId, username: 'exec.newpres', password: 'password1234' });
   check('and be a member of this chapter first', r.status === 400, r.data);
-  r = await handover({ positionKey: 'president', memberId: successorMember, username: 'exec.pres', password: 'password123' });
+  r = await handover({ positionKey: 'president', memberId: successorMember, username: 'exec.pres', password: 'password1234' });
   check('with a username that is free', r.status === 400, r.data);
   r = await handover({ positionKey: 'president', memberId: successorMember, username: 'exec.newpres', password: 'short' });
   check('and a password of a decent length', r.status === 400, r.data);
-  r = await handover({ positionKey: 'president', memberId: people.pres.memberId, username: 'exec.newpres', password: 'password123' });
+  r = await handover({ positionKey: 'president', memberId: people.pres.memberId, username: 'exec.newpres', password: 'password1234' });
   check('the person already holding the office is told to use renew, not hand over', r.status === 400 && /Renew/.test(r.data.error), r.data);
-  r = await handover({ positionKey: 'president', memberId: people.vp.memberId, username: 'exec.newpres', password: 'password123' });
+  r = await handover({ positionKey: 'president', memberId: people.vp.memberId, username: 'exec.newpres', password: 'password1234' });
   check('someone who holds another office must leave it first', r.status === 409, r.data);
-  r = await handover({ positionKey: 'alumni_president', memberId: successorMember, username: 'exec.newalum', password: 'password123' });
+  r = await handover({ positionKey: 'alumni_president', memberId: successorMember, username: 'exec.newalum', password: 'password1234' });
   check('the Alumni President seat can pass only to an alumnus', r.status === 409 && /alumn/i.test(r.data.error), r.data);
-  r = await call('pres', 'POST', '/api/coordinator/offices/handover', { positionKey: 'president', memberId: successorMember, username: 'exec.newpres', password: 'password123' });
+  r = await call('pres', 'POST', '/api/coordinator/offices/handover', { positionKey: 'president', memberId: successorMember, username: 'exec.newpres', password: 'password1234' });
   check('an executive cannot hand over their own office', denied(r), r);
 
   const cardBefore = fakeModels.Executive._docs.find(c => c.positionKey === 'president' && c.chapterId === C1);
-  r = await handover({ positionKey: 'president', memberId: successorMember, username: 'exec.newpres', password: 'password123' });
+  r = await handover({ positionKey: 'president', memberId: successorMember, username: 'exec.newpres', password: 'password1234' });
   check('the Coordinator hands the Presidency over', r.status === 200 && r.data.handedOverFrom === 'Yaw President' && r.data.item.positionKey === 'president', r.data);
   const newStaffId = r.data.item.id;
   const oldAccount = fakeModels.StaffUser._docs.find(a => a.id === people.pres.staffId);
   check('the outgoing account is ended and points to the successor, not deleted', !!oldAccount && oldAccount.handedOverTo === newStaffId && !!oldAccount.endedAt && new Date(oldAccount.termEndsAt) <= new Date(), oldAccount);
   r = await call('pres', 'GET', '/api/executive/outline');
   check('the outgoing President\'s session stops at once, as a signed-out one, not merely a refused one', r.status === 401, r);
-  r = await call('pres', 'POST', '/api/portal/login', { username: 'exec.pres', password: 'password123' });
+  r = await call('pres', 'POST', '/api/portal/login', { username: 'exec.pres', password: 'password1234' });
   check('and they cannot sign in again', denied(r), r);
   const cardAfter = fakeModels.Executive._docs.find(c => c.id === cardBefore.id);
   check('the office keeps its roster card, now showing the successor', cardAfter.staffId === newStaffId && cardAfter.name === 'Kwesi New President' && cardAfter.history.length === 0, cardAfter);
   check('the outgoing member no longer shows as an executive, the new one does',
     fakeModels.Member._docs.find(m => m.id === people.pres.memberId).isExecutive === false && fakeModels.Member._docs.find(m => m.id === successorMember).isExecutive === true);
-  r = await call('newpres', 'POST', '/api/portal/login', { username: 'exec.newpres', password: 'password123' });
+  r = await call('newpres', 'POST', '/api/portal/login', { username: 'exec.newpres', password: 'password1234' });
   check('the successor signs in with their own login', r.status === 200, r.data);
   r = await call('newpres', 'GET', '/api/executive/outline');
   check('and finds the outline draft the last President left, and the approved one',
@@ -755,9 +755,9 @@ const { fakeModels } = require('./harness.js');
   // A department head's office carries its department and its open work.
   const choirCard = fakeModels.Executive._docs.find(c => c.positionKey === 'music_director' && c.chapterId === C1);
   const choirSuccessor = await registerMember('Yaa New Choir', C1);
-  r = await handover({ positionKey: 'music_director', memberId: choirSuccessor, username: 'exec.newchoir', password: 'password123' });
+  r = await handover({ positionKey: 'music_director', memberId: choirSuccessor, username: 'exec.newchoir', password: 'password1234' });
   check('a department head\'s office passes on with its department', r.status === 200 && r.data.card.department === dept.choir && r.data.card.id === choirCard.id, r.data);
-  await call('newchoir', 'POST', '/api/portal/login', { username: 'exec.newchoir', password: 'password123' });
+  await call('newchoir', 'POST', '/api/portal/login', { username: 'exec.newchoir', password: 'password1234' });
   r = await call('newchoir', 'GET', '/api/executive/announcement-requests');
   check('the successor finds the answer their office gave to the announcement call', r.data.items[0].answer && r.data.items[0].answer.fromName === 'Ama Choir', r.data);
   r = await call('newchoir', 'GET', '/api/executive/budget-requests');
@@ -781,29 +781,29 @@ const { fakeModels } = require('./harness.js');
 
   // Filling a seat nobody holds.
   const orgMember = await registerMember('Efo Organiser', C1);
-  r = await handover({ positionKey: 'organising_secretary', memberId: orgMember, username: 'exec.org', password: 'password123' });
+  r = await handover({ positionKey: 'organising_secretary', memberId: orgMember, username: 'exec.org', password: 'password1234' });
   check('a vacant office is filled the same way, with nobody to end', r.status === 200 && r.data.handedOverFrom === '', r.data);
-  r = await handover({ positionKey: 'music_director', memberId: orgMember, username: 'exec.org2', password: 'password123' });
+  r = await handover({ positionKey: 'music_director', memberId: orgMember, username: 'exec.org2', password: 'password1234' });
   check('though nobody can hold two', r.status === 409, r.data);
 
   // Alumni seat passes to another alumnus.
   const alumSuccessor = await registerMember('Nii New Alumni', C1);
   fakeModels.Member._docs.find(m => m.id === alumSuccessor).membershipStage = 'alumni';
-  r = await handover({ positionKey: 'alumni_president', memberId: alumSuccessor, username: 'exec.newalum', password: 'password123' });
+  r = await handover({ positionKey: 'alumni_president', memberId: alumSuccessor, username: 'exec.newalum', password: 'password1234' });
   check('the Alumni President seat passes to another alumnus', r.status === 200 && r.data.handedOverFrom === 'Nana Alumnus', r.data);
-  await call('newalum', 'POST', '/api/portal/login', { username: 'exec.newalum', password: 'password123' });
+  await call('newalum', 'POST', '/api/portal/login', { username: 'exec.newalum', password: 'password1234' });
   r = await call('newalum', 'GET', '/api/executive/outline');
   check('who inherits the alumni plan', r.data.items.length === 1 && r.data.items[0].id === alumOutline, r.data);
 
   // Renewing the same person for another year.
   fakeModels.StaffUser._docs.find(a => a.id === people.tr.staffId).termEndsAt = new Date(Date.now() - 86400000).toISOString();
-  r = await call('tr2', 'POST', '/api/portal/login', { username: 'exec.tr', password: 'password123' });
+  r = await call('tr2', 'POST', '/api/portal/login', { username: 'exec.tr', password: 'password1234' });
   check('a Treasurer whose year has ended can no longer sign in', denied(r), r);
   r = await call('coord', 'GET', '/api/coordinator/offices');
   check('and shows as ended', r.data.items.find(o => o.key === 'treasurer').status === 'ended', r.data.items.find(o => o.key === 'treasurer'));
   r = await call('coord', 'PUT', `/api/admin/staff/${people.tr.staffId}`, { renewTerm: true });
   check('the Coordinator renews the same person for the new year', r.status === 200 && new Date(r.data.item.termEndsAt) > new Date(), r.data);
-  r = await call('tr', 'POST', '/api/portal/login', { username: 'exec.tr', password: 'password123' });
+  r = await call('tr', 'POST', '/api/portal/login', { username: 'exec.tr', password: 'password1234' });
   check('and they sign in again', r.status === 200, r.data);
 
   console.log(failures ? `\n${failures} check(s) failed` : '\nall office checks passed');

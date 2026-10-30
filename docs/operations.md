@@ -132,3 +132,31 @@ log says `Retention: removed ...`. It takes a lock in the database first
 (the `systemstates` collection, row `lock:retention`), so two copies of the
 app running at once never both run it; a lock left by a copy that crashed
 lapses after 30 minutes.
+
+## 7. A leader cannot sign in
+
+- **"Too many wrong tries on this account"**: it rests for a minute, doubling
+  with each further wrong try up to an hour. Their Chapter Coordinator presses
+  **Unlock** on the leadership accounts list.
+- **Lost the phone with their authenticator app**: they sign in with one of
+  their ten recovery codes, then make new ones on My Account. Out of codes:
+  **Reset second step** on the accounts list. The reset is recorded on the
+  account, signs them out, and they set it up again at their next sign-in.
+- **Only the "One more step" screen opens**: `ENFORCE_LEADER_2FA` is on and
+  their 14 days to set up a second step are over. Setting it up (two minutes)
+  opens the portal again.
+- **Codes are always "not right"**: the phone's clock is off. Set the time to
+  automatic in the phone's settings.
+- **Every leader's codes stopped working at once**: `SESSION_SECRET` was
+  changed. The secrets are sealed with it; each leader needs a reset.
+
+## 8. "Chapter guard" in the logs
+
+The data layer refuses a read or write on people's records that does not
+say which chapter it is about (README section 30). Every such place found in
+the code and tests has been fixed, but one the tests do not reach could
+still turn up in production, as an error on one page and `Chapter guard:`
+in the logs, naming the line. To keep the page working while it is fixed:
+Render, **Environment**, `CHAPTER_GUARD=warn`, save. The place is then
+logged once (`CHAPTER GUARD: ...`) and let through. Remove the setting once
+the fix is deployed.

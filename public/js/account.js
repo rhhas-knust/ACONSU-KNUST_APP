@@ -7,7 +7,7 @@
    ============================================================ */
 window.PortalAccount = (function () {
   const esc = (v) => escapeHtml(String(v == null ? '' : v));
-  const MIN = 8;
+  const MIN = 12;
 
   const send = (url, body) => fetchJSON(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined
@@ -76,6 +76,7 @@ window.PortalAccount = (function () {
         </form>
         <p class="tiny muted">Changing it signs you out of every other phone or computer, so anyone else who had your password loses their way in.</p>
       </div>
+      <div class="portal-card" id="secondStepCard" aria-live="polite"></div>
       <div class="portal-card">
         <h3>Signed in somewhere else?</h3>
         <p>If you left a sign-in open on a shared computer, or lost a phone, sign out of everything except this device.</p>
@@ -108,6 +109,8 @@ window.PortalAccount = (function () {
       }
     });
 
+    secondStepCard(el.querySelector('#secondStepCard'));
+
     el.querySelector('#signOutOthers').addEventListener('click', async (e) => {
       const button = e.currentTarget; // gone by the time the request comes back
       button.disabled = true;
@@ -121,20 +124,165 @@ window.PortalAccount = (function () {
     });
   }
 
+  // ---------- the second step at sign-in ----------
+  // A six-digit code from an authenticator app, asked after the password.
+  // Server side: routes/second-step.js.
+  const stepIntro = 'After your password, the app on your phone (Google Authenticator, Microsoft Authenticator or similar, all free) shows a six-digit code that changes every 30 seconds. Someone who learns your password still cannot get in without your phone.';
+
+  function recoveryList(codes) {
+    return `
+      <div class="of-notice warn" role="status"><strong>Save these ten recovery codes now.</strong> Each one lets you in once if you lose your phone. Write them down or keep them somewhere safe: they are not shown again.</div>
+      <ul class="ss-codes">${codes.map((c) => `<li><code>${esc(c)}</code></li>`).join('')}</ul>
+      <div class="of-actions"><button type="button" class="btn btn-outline" data-copy>Copy them</button></div>`;
+  }
+  function wireCopy(host, codes) {
+    const b = host.querySelector('[data-copy]');
+    if (!b) return;
+    b.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(codes.join('\n')); b.textContent = 'Copied'; } catch (e) { b.textContent = 'Copy did not work: write them down'; }
+    });
+  }
+
+  // Setting it up, in three steps on one card: password, scan, first code.
+  function setupFlow(host, after) {
+    host.innerHTML = `
+      <h3>Set up your second step</h3>
+      <p>${stepIntro}</p>
+      <ol class="ss-steps">
+        <li>Install an authenticator app on your phone if you do not have one.</li>
+        <li>Type your password here, then scan the picture that appears with the app.</li>
+        <li>Type the six digits the app shows.</li>
+      </ol>
+      <form id="ssBegin" novalidate>
+        <div class="field"><label for="ssPassword">Your password</label><input type="password" id="ssPassword" autocomplete="current-password" required></div>
+        <div class="of-actions"><button class="btn btn-primary" type="submit">Show the code to scan</button></div>
+        <div class="form-msg" id="ssMsg" role="alert"></div>
+      </form>`;
+    host.querySelector('#ssBegin').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('[type="submit"]');
+      btn.disabled = true;
+      try {
+        const r = await send('/api/portal/second-step/begin', { password: host.querySelector('#ssPassword').value });
+        host.innerHTML = `
+          <h3>Scan this with your authenticator app</h3>
+          <img class="ss-qr" src="${r.qr}" alt="A code for your authenticator app to scan" width="240" height="240">
+          <p class="tiny muted">Cannot scan it? In the app choose to enter a key and type: <code class="ss-secret">${esc(r.secret)}</code></p>
+          <form id="ssConfirm" novalidate>
+            <div class="field"><label for="ssCode">The six digits your app shows</label>
+              <input type="text" id="ssCode" inputmode="numeric" autocomplete="one-time-code" maxlength="7" pattern="[0-9 ]*" required></div>
+            <div class="of-actions"><button class="btn btn-primary" type="submit">Turn it on</button></div>
+            <div class="form-msg" id="ssMsg" role="alert"></div>
+          </form>`;
+        host.querySelector('#ssCode').focus();
+        host.querySelector('#ssConfirm').addEventListener('submit', async (ev) => {
+          ev.preventDefault();
+          const b2 = ev.target.querySelector('[type="submit"]');
+          b2.disabled = true;
+          try {
+            const done = await send('/api/portal/second-step/confirm', { code: host.querySelector('#ssCode').value });
+            host.innerHTML = `<h3>Your second step is on</h3>${recoveryList(done.recoveryCodes)}
+              <div class="of-actions"><button type="button" class="btn btn-primary" id="ssSaved">I have saved them</button></div>`;
+            wireCopy(host, done.recoveryCodes);
+            host.querySelector('#ssSaved').addEventListener('click', () => after());
+          } catch (err) {
+            setFormMsg('ssMsg', err.message, 'error');
+            b2.disabled = false;
+          }
+        });
+      } catch (err) {
+        setFormMsg('ssMsg', err.message, 'error');
+        btn.disabled = false;
+      }
+    });
+  }
+
+  async function secondStepCard(host) {
+    if (!host) return;
+    let s;
+    try { s = await fetchJSON('/api/portal/second-step'); } catch (e) { host.remove(); return; }
+    const log = (s.log || []).length ? `
+      <details class="ss-log"><summary>What has happened to your sign-in</summary>
+        <ul>${s.log.map((l) => `<li>${esc(day(l.at))}: ${esc(l.what)}${l.by && l.by !== 'system' ? `, by ${esc(l.by)}` : ''}</li>`).join('')}</ul></details>` : '';
+    if (!s.enrolled) {
+      host.innerHTML = `
+        <h3>Second step at sign-in</h3>
+        ${s.required ? `<div class="of-notice ${s.mustSetUpNow || s.daysLeft !== null ? 'warn' : ''}" role="status">${s.mustSetUpNow
+          ? '<strong>Your account needs a second step before it can be used.</strong>'
+          : s.daysLeft !== null ? `<strong>Your account needs a second step: ${s.daysLeft} day${s.daysLeft === 1 ? '' : 's'} left to set it up.</strong> After that, signing in opens only this screen until you do.`
+            : '<strong>Your account can reach records that need protecting.</strong> Set up a second step now; it will soon be required.'}</div>` : ''}
+        <p>${stepIntro}</p>
+        <div class="of-actions"><button type="button" class="btn btn-primary" id="ssStart">Set it up</button></div>${log}`;
+      host.querySelector('#ssStart').addEventListener('click', () => setupFlow(host, () => secondStepCard(host)));
+      return;
+    }
+    host.innerHTML = `
+      <h3>Second step at sign-in</h3>
+      <p><strong>On.</strong> ${s.recoveryCodesLeft} recovery code${s.recoveryCodesLeft === 1 ? '' : 's'} left.${s.recoveryCodesLeft <= 3 ? ' Make new ones soon.' : ''}</p>
+      <form id="ssManage" novalidate>
+        <div class="field"><label for="ssPw">Your password</label><input type="password" id="ssPw" autocomplete="current-password"></div>
+        <div class="field"><label for="ssNow">The six digits your app shows</label><input type="text" id="ssNow" inputmode="numeric" autocomplete="one-time-code" maxlength="7"></div>
+        <div class="of-actions">
+          <button type="button" class="btn btn-outline" id="ssNewCodes">Make new recovery codes</button>
+          ${s.required ? '' : '<button type="button" class="btn btn-outline" id="ssOff">Turn it off</button>'}
+        </div>
+        <div class="form-msg" id="ssMsg" role="alert"></div>
+      </form>
+      ${s.required ? '<p class="tiny muted">Your account needs it, so it cannot be turned off. Lost your phone? Use a recovery code to sign in, or ask your Chapter Coordinator to reset it.</p>' : ''}${log}`;
+    const both = () => ({ password: host.querySelector('#ssPw').value, code: host.querySelector('#ssNow').value });
+    host.querySelector('#ssNewCodes').addEventListener('click', async () => {
+      try {
+        const r = await send('/api/portal/second-step/recovery-codes', both());
+        host.innerHTML = `<h3>New recovery codes</h3><p>The old ones no longer work.</p>${recoveryList(r.recoveryCodes)}
+          <div class="of-actions"><button type="button" class="btn btn-primary" id="ssSaved">I have saved them</button></div>`;
+        wireCopy(host, r.recoveryCodes);
+        host.querySelector('#ssSaved').addEventListener('click', () => secondStepCard(host));
+      } catch (err) { setFormMsg('ssMsg', err.message, 'error'); }
+    });
+    const off = host.querySelector('#ssOff');
+    if (off) {
+      off.addEventListener('click', async () => {
+        try { await send('/api/portal/second-step/off', both()); showToast('Second step turned off.', 'success'); secondStepCard(host); } catch (err) { setFormMsg('ssMsg', err.message, 'error'); }
+      });
+    }
+  }
+
+  // The whole screen, when the account must have a second step and its days
+  // are up: nothing else opens until it is set up (portal.js shows this).
+  function setupScreen(card, after) {
+    card.innerHTML = '';
+    const host = document.createElement('div');
+    card.appendChild(host);
+    setupFlow(host, after);
+  }
+
   // A line at the top of a leader's first page while they are still on the
-  // password someone else chose, with a way straight to changing it.
+  // password someone else chose, or still need a second step, with a way
+  // straight to fixing it.
   async function nudge(el) {
     try {
       const a = await fetchJSON('/api/portal/account');
-      if (!a.editable || !a.usingStartingPassword) return;
-      const note = document.createElement('div');
-      note.className = 'of-notice warn';
-      note.setAttribute('role', 'status');
-      note.innerHTML = `<strong>You are still using the starting password.</strong> Your Chapter Coordinator chose it, so they know it. <button type="button" class="link-btn">Choose your own now</button>`;
-      note.querySelector('button').addEventListener('click', () => openPanel('account'));
-      el.insertBefore(note, el.firstChild);
+      if (!a.editable) return;
+      const say = (html) => {
+        const note = document.createElement('div');
+        note.className = 'of-notice warn';
+        note.setAttribute('role', 'status');
+        note.innerHTML = html;
+        note.querySelector('button').addEventListener('click', () => openPanel('account'));
+        el.insertBefore(note, el.firstChild);
+      };
+      if (a.usingStartingPassword) {
+        say('<strong>You are still using the starting password.</strong> Your Chapter Coordinator chose it, so they know it. <button type="button" class="link-btn">Choose your own now</button>');
+        return;
+      }
+      const s = await fetchJSON('/api/portal/second-step');
+      if (s.required && !s.enrolled) {
+        say(s.daysLeft !== null
+          ? `<strong>Set up your second step: ${s.daysLeft} day${s.daysLeft === 1 ? '' : 's'} left.</strong> <button type="button" class="link-btn">Set it up now</button>`
+          : '<strong>Protect your account with a second step at sign-in.</strong> It will soon be required. <button type="button" class="link-btn">Set it up now</button>');
+      }
     } catch (e) { /* the page is fine without the reminder */ }
   }
 
-  return { render, nudge };
+  return { render, nudge, setupScreen };
 })();

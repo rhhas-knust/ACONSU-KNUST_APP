@@ -41,7 +41,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
     Object.entries({ name, email: `ui${n}@example.com`, password: 'secret123', chapterId: C, consent: 'true' }).forEach(([k, v]) => fd.append(k, v));
     return (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fd })).json()).member.id;
   };
-  const staff = async (username, name, role, extra) => api('POST', '/api/admin/staff', { username, name, role, password: 'password123', memberId: await member(name), chapterId: C, ...(extra || {}) });
+  const staff = async (username, name, role, extra) => api('POST', '/api/admin/staff', { username, name, role, password: 'password1234', memberId: await member(name), chapterId: C, ...(extra || {}) });
   // The main admin sets the chapter up while it has nobody of its own; the
   // Coordinator comes last, and from then on its accounts are the chapter's.
   await staff('pres', 'Yaw President', 'executive', { positionKey: 'president' });
@@ -65,7 +65,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
     p.on('dialog', d => d.accept(''));
     await p.goto(`${BASE}/${page}.html`, { waitUntil: 'networkidle' });
     await p.fill('#portalUsername', who);
-    await p.fill('#portalPassword', 'password123');
+    await p.fill('#portalPassword', 'password1234');
     await p.click('#portalLoginBtn');
     await p.waitForSelector('#portalNav button', { state: 'attached', timeout: 8000 });
     sessions[who] = { ctx, page: p };
@@ -120,6 +120,9 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   // ----------------------------------------------------------- the Coordinator --
   console.log('\n== the Chapter Coordinator approves it ==');
   const coord = await open('coord', 'coordinator');
+  await coord.waitForSelector('[data-today-open="outlines"] .today-count:not(:empty)');
+  check(/^1\s*Semester outlines\s*waiting for you$/.test((await coord.textContent('[data-today-open="outlines"]')).replace(/\s+/g, ' ').trim()), 'Today says one outline is waiting for them', await coord.textContent('[data-today-open="outlines"]'));
+  await nav(coord, 'Dashboard');
   await coord.waitForSelector('.of-waiting');
   check(/1 semester outline is waiting/.test(await coord.textContent('.of-waiting')), 'the dashboard says an outline is waiting');
   await coord.screenshot({ path: path.join(SHOTS, 'coordinator-waiting.png') });
@@ -302,7 +305,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   const dark = await darkCtx.newPage();
   dark.on('pageerror', e => errors.push('dark: ' + e.message));
   await dark.goto(`${BASE}/executive.html`, { waitUntil: 'networkidle' });
-  await dark.fill('#portalUsername', 'vp'); await dark.fill('#portalPassword', 'password123'); await dark.click('#portalLoginBtn');
+  await dark.fill('#portalUsername', 'vp'); await dark.fill('#portalPassword', 'password1234'); await dark.click('#portalLoginBtn');
   await dark.waitForSelector('#portalNav button');
   await dark.click('#portalNav button:text-is("Semester Outline")');
   await dark.waitForSelector('.of-doc');

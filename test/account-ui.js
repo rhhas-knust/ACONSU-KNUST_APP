@@ -145,7 +145,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   };
   await signIn(ex, 'pres', 'Start-Pass-1');
   const labels = await ex.$$eval('#portalNav button', b => b.map(x => x.textContent.trim()));
-  check(labels[0] === 'My Profile' && labels[1] === 'My Account', 'the executive\'s menu has My Account next to My Profile: ' + labels.slice(0, 3).join(' | '));
+  check(labels[0] === 'Today' && labels[1] === 'My Profile' && labels[2] === 'My Account', 'the executive\'s menu opens on Today, with My Account next to My Profile: ' + labels.slice(0, 3).join(' | '));
   await ex.waitForSelector('.portal-panel.active .of-notice.warn');
   check(/starting password/.test(await ex.locator('.portal-panel.active .of-notice.warn').textContent()), 'the first page reminds them they are on the starting password');
   await ex.click('.portal-panel.active .of-notice.warn button');
@@ -172,13 +172,18 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   check(await ex.locator('.portal-panel.active .of-notice.warn').count() === 0, 'changed: the starting-password warning is gone');
   await ex.click('#portalNav button:text-is("My Profile")');
   await ex.waitForSelector('#execForm');
-  check(await ex.locator('.portal-panel.active .of-notice.warn').count() === 0, 'and so is the reminder on the first page');
+  await ex.waitForFunction(() => document.querySelectorAll('.portal-panel.active .of-notice.warn').length > 0 || document.readyState === 'complete');
+  await ex.waitForTimeout(400);
+  const firstPage = await ex.locator('.portal-panel.active').textContent();
+  check(!/starting password/.test(firstPage), 'and so is the reminder on the first page');
+  // The President reaches the books, so the reminder now asks for a second step instead.
+  check(/second step/.test(firstPage), 'and in its place, a reminder to set up a second step, since this office reaches the books');
   await ex.fill('#pwNew', 'x').catch(() => {});
   await ex.click('#portalNav button:text-is("My Account")');
   await ex.waitForSelector('#pwForm');
   await ex.fill('#pwCurrent', 'Rooted In Him 77');
-  await ex.fill('#pwNew', 'password123');
-  await ex.fill('#pwAgain', 'password123');
+  await ex.fill('#pwNew', 'password1234');
+  await ex.fill('#pwAgain', 'password1234');
   await ex.click('#pwForm button[type=submit]');
   await ex.waitForFunction(() => /first that anyone would try/.test(document.getElementById('pwMsg').textContent));
   check(true, 'a very common password is turned away, with the reason in words');

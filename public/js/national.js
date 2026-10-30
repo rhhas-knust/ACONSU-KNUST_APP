@@ -207,6 +207,66 @@ function assignCoordinatorForm(chapter, staffInChapter) {
   });
 }
 
+// ---------- Health: is the app doing its job? ----------
+// Counts only (routes/health-panel.js). Nothing here is about one person.
+let HEALTH_DAYS = 28;
+async function renderHealth(el) {
+  const d = await fetchJSON(`/api/national/health?days=${HEALTH_DAYS}`);
+  const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '-');
+  const SHARE_LABELS = { event: 'Events', sermon: 'Sermons', prayer: 'Prayer requests', verse: 'Verse of the day', invite: 'Invite a friend' };
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Health</h2>
+        <p class="sub">Is the app doing its job? The last ${d.days} days, to ${shortDate(d.to)}.</p>
+      </div>
+      <div class="panel-actions" role="group" aria-label="How far back">
+        ${[7, 28, 90].map(n => `<button type="button" class="btn btn-sm ${n === d.days ? 'btn-primary' : 'btn-outline'}" data-health-days="${n}" aria-pressed="${n === d.days}">${n} days</button>`).join('')}
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      ${statCard('Sign-ups finished', d.signUps.completed, { foot: d.signUps.started >= d.signUps.completed
+        ? `of ${d.signUps.started} started (${pct(d.signUps.completed, d.signUps.started)})`
+        : `${d.signUps.started} started: starting is counted only since this screen was added` })}
+      ${statCard('Active this week', d.members.activeThisWeek, { tone: 'good', foot: `of ${d.members.total} members (${pct(d.members.activeThisWeek, d.members.total)})` })}
+      ${statCard('Shares', d.shares.total, { foot: 'taps on Share and Invite a friend' })}
+      ${statCard('Giving claims', d.payments.total, { tone: d.payments.pending ? 'gold' : '', foot: `${d.payments.confirmed} confirmed · ${d.payments.pending} waiting · ${d.payments.rejected} turned down` })}
+    </div>
+
+    <div class="portal-card">
+      <h3>Week by week</h3>
+      <div class="table-wrap" tabindex="0"><table class="portal-table hp-table">
+        <thead><tr><th>Week from</th><th class="num">Sign-ups started</th><th class="num">Finished</th><th class="num">Shares</th></tr></thead>
+        <tbody>${d.weeks.slice().reverse().map(w => `<tr><td>${shortDate(w.from)}</td><td class="num">${w.started}</td><td class="num">${w.completed}</td><td class="num">${w.shares}</td></tr>`).join('')}</tbody>
+      </table></div>
+    </div>
+
+    <div class="card-split">
+      <div class="portal-card">
+        <h3>What people share</h3>
+        <div class="table-wrap" tabindex="0"><table class="portal-table hp-table">
+          <thead><tr><th>Kind</th><th class="num">Shares</th></tr></thead>
+          <tbody>${Object.keys(SHARE_LABELS).map(k => `<tr><td>${SHARE_LABELS[k]}</td><td class="num">${d.shares[k] || 0}</td></tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+      <div class="portal-card">
+        <h3>Chapter by chapter</h3>
+        <div class="table-wrap" tabindex="0"><table class="portal-table hp-table">
+          <thead><tr><th>Chapter</th><th class="num">Members</th><th class="num">Active this week</th><th class="num">Joined</th></tr></thead>
+          <tbody>${d.chapters.map(c => `<tr><td>${escapeHtml(c.name || c.id)}</td><td class="num">${c.members}</td><td class="num">${c.activeThisWeek}</td><td class="num">${c.joined}</td></tr>`).join('') || emptyRow(4, 'No chapters yet.')}</tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <p class="tiny muted">Counts only. Nobody is followed: no cookies, no outside services, nothing kept about who shared or who started signing up. Shares and sign-ups started are counted for the whole union, not by chapter. "Active this week" is a member who opened the app, signed in, in the last 7 days.</p>
+  `;
+  el.querySelectorAll('[data-health-days]').forEach(b => b.addEventListener('click', () => {
+    HEALTH_DAYS = Number(b.dataset.healthDays);
+    renderHealth(el);
+  }));
+}
+
 async function renderChapters(el) {
   const chapters = await fetchJSON('/api/national/chapters');
 
@@ -871,6 +931,7 @@ initPortal({
   label: 'National Coordinator',
   panels: [
     { key: 'dashboard', label: 'National Dashboard', render: renderNationalDashboard },
+    { key: 'health', label: 'Health', render: renderHealth },
     { key: 'chapters', label: 'Chapters', render: renderChapters },
     { key: 'executives', label: 'National Executives', render: renderNationalExecutives },
     { key: 'church', label: 'The Wider Church', render: renderChurch },

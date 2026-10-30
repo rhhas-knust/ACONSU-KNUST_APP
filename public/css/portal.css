@@ -412,6 +412,9 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 
 /* the Sundays side by side (office-books.js): three narrow columns, made to fit a phone */
 table.portal-table.bk-sundays { min-width: 0; }
+/* National's Health panel: a few short columns of numbers, which fit a phone. */
+table.portal-table.hp-table { min-width: 0; }
+table.portal-table.hp-table th { white-space: normal; }
 
 /* ============================================================
    A table that turns into short cards on a phone (card-table):
@@ -445,3 +448,14 @@ table.portal-table.bk-sundays { min-width: 0; }
   .ct-phone-only { display: inline; }
 }
 }
+
+/* ---------- second step at sign-in (account.js, portal.js) ---------- */
+.ss-qr { display: block; width: 240px; height: 240px; max-width: 100%; margin: 12px auto; border-radius: 8px; } /* the picture brings its own white margin */
+.ss-secret { word-break: break-all; }
+.ss-steps { margin: 8px 0 16px 20px; }
+.ss-steps li { margin-bottom: 4px; }
+.ss-codes { list-style: none; padding: 0; margin: 12px 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.ss-codes code { display: block; text-align: center; padding: 8px; font-size: 1rem; letter-spacing: 0.06em; }
+.ss-log { margin-top: 14px; }
+.ss-log summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+.ss-log ul { margin: 6px 0 0 18px; font-size: 0.85rem; }

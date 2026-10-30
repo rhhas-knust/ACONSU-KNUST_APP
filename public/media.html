@@ -52,6 +52,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js"></script>
+<script src="/js/share.js"></script>
 <script>
 const mediaParams = new URLSearchParams(location.search);
 const selectedSermonId = mediaParams.get('sermon') || '';
@@ -81,7 +82,10 @@ const searchQuery = mediaParams.get('q') || '';
         <h3 style="margin:12px 0 4px;">${escapeHtml(s.title)}</h3>
         <p style="font-size:0.88rem; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(s.speaker || '')} ${s.date ? '· ' + formatDate(s.date) : ''}</p>
         <p style="color:var(--ink-soft); margin-bottom:12px;">${escapeHtml(s.description || '')}</p>
-        ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:var(--ink-faint);">Link coming soon</span>'}
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:var(--ink-faint);">Link coming soon</span>'}
+          ${AconsuShare.button({ kind: 'sermon', title: s.title, text: `${s.title}${s.speaker ? `, ${s.speaker}` : ''}. Worth hearing.`, path: `/media.html?sermon=${encodeURIComponent(s.id)}` })}
+        </div>
       </div>
     `).join('') || '<p class="empty-state">No sermons uploaded yet. Check back soon.</p>';
     if (selectedSermonId) {

@@ -383,9 +383,23 @@ function openWelfareEntryForm() {
   });
 }
 
+// Today: Welfare's week (today.js).
 initPortal({
   role: 'welfare',
   label: 'Welfare',
+  today: {
+    intro: 'Who has asked for help, and what has come into the purse.',
+    actions: [
+      { panel: 'queue', label: 'Requests for help', count: async (get) => (await get('/api/welfare/requests')).filter(w => ['submitted', 'under_review'].includes(w.status)).length },
+      { panel: 'purse', label: 'The purse', count: async (get) => (await get('/api/welfare/giving-queue')).length, one: 'gift to confirm', many: 'gifts to confirm' },
+      { panel: 'overview', label: 'Overview' }
+    ],
+    checklist: [
+      { key: 'queue', label: 'Read the requests' },
+      { key: 'purse', label: 'Look at the purse' },
+      { key: 'overview', label: 'See the overview' }
+    ]
+  },
   panels: [
     { key: 'overview', label: 'Overview', render: renderWelfareOverview },
     { key: 'queue', label: 'Requests', render: renderWelfareQueue },

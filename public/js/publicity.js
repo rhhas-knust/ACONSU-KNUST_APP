@@ -893,9 +893,25 @@ async function renderContentManagerLink(el) {
   `;
 }
 
+// Today: Publicity's week (today.js).
 initPortal({
   role: 'publicity',
   label: 'Publicity',
+  today: {
+    intro: 'What is waiting for Publicity this week.',
+    actions: [
+      { panel: 'eventQueue', label: 'Review events', count: async (get) => (await get('/api/publicity/events/queue')).length },
+      { panel: 'compose', label: 'Send an announcement' },
+      { panel: 'testimonies', label: 'Testimonies', count: async (get) => (await get('/api/publicity/overview')).testimoniesPending, one: 'to read', many: 'to read' },
+      { panel: 'scheduled', label: 'Scheduled announcements', count: async (get) => (await get('/api/publicity/overview')).scheduledPending, one: 'going out', many: 'going out' },
+      { panel: 'events', label: 'Events' }
+    ],
+    checklist: [
+      { key: 'compose', label: 'Send an announcement' },
+      { key: 'eventQueue', label: 'Look at events waiting for review' },
+      { key: 'testimonies', label: 'Read the testimonies' }
+    ]
+  },
   panels: [
     { key: 'overview', label: 'Overview', render: renderPublicityOverview },
     { key: 'compose', label: 'Send Announcement', render: renderCompose },

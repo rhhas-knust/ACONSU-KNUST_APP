@@ -46,6 +46,11 @@ async function checkAuth() {
   try {
     const me = await fetchJSON('/api/portal/me');
     const role = me.staff && me.staff.role;
+    // Past their days to set up a second step: that first, on its own page.
+    if (me.staff && me.staff.mustSetUpSecondStep) {
+      window.location.href = `/second-step.html?back=${encodeURIComponent(location.pathname)}`;
+      return;
+    }
     // Executives are deliberately not admitted here: this dashboard's panels
     // are all gated on isChapterAdminOrAbove, which excludes them, so they
     // used to land in a 22-panel shell where almost everything 401'd. Their
@@ -358,6 +363,7 @@ function expandGroupForPanel(name) {
 function openAdminPanel(name) {
   const btn = document.querySelector(`#adminNav button[data-panel="${name}"]`);
   if (btn) {
+    if (window.AconsuToday) AconsuToday.visited('admin', name);
     document.getElementById('adminNav').querySelectorAll('button[data-panel]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     expandGroupForPanel(name);
@@ -597,7 +603,7 @@ function subscribeOverviewStream(chapterId) {
   es.addEventListener('overview', (evt) => {
     const panel = document.getElementById('panel-overview');
     if (!panel || !panel.classList.contains('active') || es !== OVERVIEW_STREAM) return;
-    try { renderOverviewData(panel, JSON.parse(evt.data)); } catch (e) { /* wait for the next push */ }
+    try { renderOverviewData(document.getElementById('overviewBody') || panel, JSON.parse(evt.data)); } catch (e) { /* wait for the next push */ }
   });
 }
 
@@ -623,13 +629,57 @@ async function renderOverview() {
       </p>`;
     return;
   }
+  // Today first, then the dashboard under it. The live updates redraw only
+  // the dashboard, so the Today screen is not thrown away by each one.
+  el.innerHTML = `<div id="adminToday"></div><div id="overviewBody">${skeletonHtml()}</div>`;
+  renderAdminToday(document.getElementById('adminToday'));
+  const body = document.getElementById('overviewBody');
   try {
     const data = await fetchJSON('/api/admin/overview');
-    renderOverviewData(el, data);
+    renderOverviewData(body, data);
     subscribeOverviewStream(data.chapter && data.chapter.id);
   } catch (e) {
-    el.innerHTML = `<p class="empty-state">Could not load overview. ${escapeHtml(e.message || '')}</p>`;
+    body.innerHTML = `<p class="empty-state">Could not load overview. ${escapeHtml(e.message || '')}</p>`;
   }
+}
+
+// The chapter admin's week (today.js): five buttons over the dashboard, and
+// the first steps for a new admin. Counts are read from the routes the panels
+// use; a panel this account does not have is left off.
+function renderAdminToday(el) {
+  if (!window.AconsuToday || !el) return;
+  const shown = (key) => {
+    const btn = document.querySelector(`#adminNav button[data-panel="${key}"]`);
+    return !!btn && !btn.closest('[hidden]') && getComputedStyle(btn).display !== 'none';
+  };
+  AconsuToday.render(el, {
+    portal: 'admin',
+    intro: 'What is waiting for the chapter admin this week. The full dashboard is below.',
+    actions: [
+      { panel: 'joinRequests', label: 'Join requests', count: async (get) => (await get('/api/admin/join-requests')).filter(r => r.status === 'new').length, one: 'to answer', many: 'to answer' },
+      { panel: 'prayerRequests', label: 'Prayer requests', count: async (get) => (await get('/api/admin/prayer-requests')).filter(r => r.status === 'new').length },
+      { panel: 'contactMessages', label: 'Messages', count: async (get) => (await get('/api/admin/contact-messages')).filter(m => m.status !== 'replied').length, one: 'to answer', many: 'to answer' },
+      { panel: 'welfare', label: 'Welfare requests', count: async (get) => (await get('/api/welfare/requests')).filter(w => ['submitted', 'under_review'].includes(w.status)).length },
+      { panel: 'events', label: 'Add an event' }
+    ],
+    checklist: [
+      { key: 'chapterSettings', label: 'Set your chapter\'s service time and place' },
+      { key: 'staff', label: 'Create your leaders\' accounts' },
+      { key: 'members', label: 'Look through your members' },
+      { key: 'events', label: 'Add an event' }
+    ],
+    has: shown,
+    open: (key) => { openAdminPanel(key); window.scrollTo(0, 0); },
+    menuId: 'adminNav',
+    allTools: () => {
+      const nav = document.getElementById('adminNav');
+      nav.classList.add('open');
+      const backdrop = document.getElementById('adminSideBackdrop');
+      if (backdrop) backdrop.classList.add('open');
+      const first = nav.querySelector('button[data-panel]:not([data-panel="overview"])');
+      if (first) first.focus();
+    }
+  });
 }
 
 // ---------- resource field configs ----------
@@ -884,6 +934,7 @@ async function renderStaffAccounts() {
             <td>${u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : 'never'}</td>
             <td class="row-actions">
               ${mayEdit(u) ? `<button data-edit-staff="${u.id}">Edit</button>
+              ${u.secondStepOn || u.lockedMinutes ? `<button data-reset-step="${u.id}" data-name="${escapeHtml(u.name || u.username)}">${u.lockedMinutes ? 'Unlock' : 'Reset second step'}</button>` : ''}
               <button class="danger" data-delete-staff="${u.id}">Delete</button>` : '<span class="tiny muted">View only</span>'}
             </td>
           </tr>
@@ -893,6 +944,15 @@ async function renderStaffAccounts() {
   `;
 
   document.getElementById('addStaffBtn').addEventListener('click', () => openStaffForm(null));
+  // A lost phone, or an account resting after wrong tries (routes/second-step.js).
+  el.querySelectorAll('[data-reset-step]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm(`Reset ${btn.dataset.name}'s second step and unlock the account? They will set it up again when they next sign in, and are signed out now. This is recorded on their account.`)) return;
+    try {
+      await fetchJSON(`/api/admin/staff/${btn.dataset.resetStep}/second-step/reset`, { method: 'POST' });
+      showToast('Done. They can sign in with their password and set it up again.', 'success');
+      renderStaffAccounts();
+    } catch (err) { showToast(err.message, 'error'); }
+  }));
   el.querySelectorAll('[data-edit-staff]').forEach(btn => {
     btn.addEventListener('click', () => openStaffForm(users.find(u => u.id === btn.dataset.editStaff)));
   });
@@ -951,7 +1011,7 @@ async function openStaffForm(user) {
         </div>
       ` : ''}
       <div class="field"><label>${isEdit ? 'New Password (leave blank to keep the current one)' : 'Password'}</label>
-        <input type="text" id="stPassword" ${isEdit ? '' : 'required'} placeholder="At least 8 characters">
+        <input type="text" id="stPassword" ${isEdit ? '' : 'required'} placeholder="At least 12 characters">
         <small class="hint">Shown in plain text so you can copy it to the leader. It is stored hashed and can never be read back.</small>
       </div>
       ${isEdit ? `
@@ -3277,7 +3337,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   setMsg('', 'form-msg');
   try {
     const chapterId = (await chapterPick).value();
-    await fetchJSON('/api/portal/login', {
+    const r = await fetchJSON('/api/portal/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3286,6 +3346,27 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
         ...(chapterId ? { chapterId } : {})
       })
     });
+    // A second step set up: the six digits from their phone, then on as usual.
+    if (r && r.needsSecondStep) {
+      let recovery = false;
+      for (;;) {
+        const value = window.prompt(recovery
+          ? 'Type one of your recovery codes.'
+          : 'Type the six digits your authenticator app shows for ACONSU. (Lost your phone? Leave this empty and press OK to use a recovery code.)');
+        if (value === null) return;
+        if (!value.trim() && !recovery) { recovery = true; continue; }
+        try {
+          await fetchJSON('/api/portal/login/second-step', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(recovery ? { recoveryCode: value } : { code: value })
+          });
+          break;
+        } catch (err2) {
+          setMsg(err2.message || 'That code did not work.', 'form-msg error');
+          if (/password again|Too many/i.test(err2.message || '')) return;
+        }
+      }
+    }
     await checkAuth();
   } catch (err) {
     setMsg(err.message || 'Could not log in.', 'form-msg error');

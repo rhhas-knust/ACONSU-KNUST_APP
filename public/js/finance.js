@@ -778,9 +778,28 @@ async function renderGivingQueue(el) {
   }));
 }
 
+// Today: the Finance Office's week (today.js).
+const budgetsAt = (r, status) => (r.items || []).reduce((n, c) => n + ((c.counts || {})[status] || 0), 0);
+
 initPortal({
   role: 'finance',
   label: 'Finance Office',
+  today: {
+    intro: 'What is waiting for the Finance Office this week.',
+    actions: [
+      { panel: 'giving', label: 'Confirm giving', count: async (get) => (await get('/api/finance/giving-queue')).length, one: 'claim waiting', many: 'claims waiting' },
+      { panel: 'requests', label: 'Budget requests', count: async (get) => budgetsAt(await get('/api/budget/calls'), 'submitted'), one: 'to review', many: 'to review' },
+      { panel: 'ledger', label: 'Record money in the ledger' },
+      { panel: 'reports', label: 'Reports' },
+      { panel: 'budgets', label: 'Budgets' }
+    ],
+    checklist: [
+      { key: 'budgets', label: 'Set up this year\'s budget' },
+      { key: 'ledger', label: 'Record money received or spent' },
+      { key: 'giving', label: 'Confirm a giving claim' },
+      { key: 'reports', label: 'Look at a report' }
+    ]
+  },
   panels: [
     { key: 'overview', label: 'Overview', render: renderFinanceOverview },
     { key: 'budgets', label: 'Budgets', render: renderBudgets },

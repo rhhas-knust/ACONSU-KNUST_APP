@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Second step | ACONSU</title>
+<meta name="robots" content="noindex">
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<meta name="theme-color" content="#5B2C82">
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/portal.css">
+</head>
+<body>
+
+<div role="main" class="portal-login-wrap" style="display:flex;">
+  <div class="portal-login-card" id="ssPageCard">
+    <img class="mark" src="/images/logo.jpg" alt="ACONSU">
+    <h1>One more step</h1>
+    <p class="sub">Your account needs a second step at sign-in before it can be used. It takes two minutes, with your phone.</p>
+    <div id="ssHost"><p class="muted">Checking your sign-in...</p></div>
+    <p class="tiny muted" style="text-align:center; margin-top:16px;">Not you? <button type="button" class="link-btn" id="ssSignOut">Sign out</button></p>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script src="/js/portal.js"></script>
+<script src="/js/account.js"></script>
+<script src="/js/second-step-page.js"></script>
+</body>
+</html>

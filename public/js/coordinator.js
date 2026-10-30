@@ -267,8 +267,8 @@ function staffForm(existing, preselect) {
           <select id="sfDepartment"><option value="">Loading departments…</option></select>
         </div>`}
       <div class="field" id="sfPasswordWrap"><label for="sfPassword">${isEdit ? 'New Password (optional)' : 'Password'}</label>
-        <input type="password" id="sfPassword" minlength="8" autocomplete="new-password" ${isEdit ? '' : 'required'}>
-        <small class="hint">At least 8 characters.</small>
+        <input type="password" id="sfPassword" minlength="12" autocomplete="new-password" ${isEdit ? '' : 'required'}>
+        <small class="hint">At least 12 characters. A short phrase works well.</small>
       </div>
       <div style="display:flex; gap:10px; margin-top:22px;">
         <button type="submit" class="btn btn-primary">${isEdit ? 'Save Changes' : 'Create Account'}</button>
@@ -496,6 +496,7 @@ async function renderLeadershipAccounts(el) {
                     ${s.role === 'executive' && s.termEndsAt && new Date(s.termEndsAt) > new Date()
                       ? `<button data-endterm-staff="${s.id}">End term</button>` : ''}
                     <button data-edit-staff="${s.id}">Edit</button>
+                    ${s.secondStepOn || s.lockedMinutes ? `<button data-reset-step="${s.id}" data-name="${escapeHtml(s.name || s.username)}">${s.lockedMinutes ? 'Unlock' : 'Reset second step'}</button>` : ''}
                     <button data-toggle-staff="${s.id}" data-active="${s.active ? '1' : '0'}">${s.active ? 'Disable' : 'Enable'}</button>
                     <button data-delete-staff="${s.id}" class="danger">Remove</button>
                   `}
@@ -545,6 +546,15 @@ async function renderLeadershipAccounts(el) {
       showToast('Term renewed for this academic year', 'success');
       openPanel('accounts');
     } catch (err) { showToast(err.message || 'Could not renew this term.', 'error'); }
+  }));
+  // A lost phone, or an account resting after wrong tries (routes/second-step.js).
+  el.querySelectorAll('[data-reset-step]').forEach(btn => btn.addEventListener('click', async () => {
+    if (!confirm(`Reset ${btn.dataset.name}'s second step and unlock the account? They will set it up again when they next sign in, and are signed out now. This is recorded on their account.`)) return;
+    try {
+      await fetchJSON(`/api/admin/staff/${btn.dataset.resetStep}/second-step/reset`, { method: 'POST' });
+      showToast('Done. They can sign in with their password and set it up again.', 'success');
+      openPanel('accounts');
+    } catch (err) { showToast(err.message, 'error'); }
   }));
   el.querySelectorAll('[data-toggle-staff]').forEach(btn => btn.addEventListener('click', async () => {
     try {
@@ -737,9 +747,29 @@ async function renderCoordinatorDashboard(el) {
   el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.go)));
 }
 
+// Today: the Coordinator's week (today.js). Counts come from the routes the
+// panels themselves read.
+const budgetsAt = (r, status) => (r.items || []).reduce((n, c) => n + ((c.counts || {})[status] || 0), 0);
+
 initPortal({
   role: 'coordinator',
   label: 'Chapter Coordinator',
+  today: {
+    intro: 'What is waiting for you as Coordinator this week.',
+    actions: [
+      { panel: 'approvals', label: 'Approve money entries', count: async (get) => (await get('/api/coordinator/overview')).finance.pendingApprovals },
+      { panel: 'outlines', label: 'Semester outlines', count: async (get) => (await get('/api/coordinator/outlines')).waiting, one: 'waiting for you', many: 'waiting for you' },
+      { panel: 'accounts', label: 'Give new executives a login', count: async (get) => (await get('/api/coordinator/overview')).awaitingAppointment },
+      { panel: 'budgets', label: 'Budget requests', count: async (get) => { const r = await get('/api/budget/calls'); return r.canDecide ? budgetsAt(r, 'recommended') : null; }, one: 'to decide', many: 'to decide' },
+      { panel: 'announcements', label: 'Message the chapter' }
+    ],
+    checklist: [
+      { key: 'accounts', label: 'Check your leaders\' accounts' },
+      { key: 'offices', label: 'See who holds each office' },
+      { key: 'approvals', label: 'Look at what is waiting for your approval' },
+      { key: 'announcements', label: 'Send the chapter a message' }
+    ]
+  },
   panels: [
     { key: 'dashboard', label: 'Dashboard', render: renderCoordinatorDashboard },
     { key: 'offices', label: 'Offices & Leaders', render: renderOffices },

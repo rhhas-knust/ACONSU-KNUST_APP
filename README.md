@@ -772,3 +772,56 @@ What erasing does (`lib/eraseMember.js`, `PLAN` lists every record type):
 **Old things are cleared every day** (`lib/retention.js`): notifications, the record of texts sent and contact-form messages after 12 months, chat messages after 2 years. Each can be changed in days (`RETAIN_NOTIFICATIONS_DAYS`, `RETAIN_SMS_LOG_DAYS`, `RETAIN_CONTACT_MESSAGES_DAYS`, `RETAIN_CHAT_DAYS`; 0 keeps that kind for ever), and the privacy page states the same numbers (a test checks they match). It runs a minute after the app starts and then daily, under a lock in the database (`lib/jobLock.js`) so that when two copies of the app are running, only one does it.
 
 `test/privacy.js` reads every schema and fails if a field holding a member's id (any field with `memberId` in its name) is not covered by `PLAN`, so a new record type cannot be added and forgotten. Both actions ask for the password again and are limited to a few tries an hour (`PRIVACY_RATE_LIMIT_MAX`, default 5).
+
+## 29. Leaders' sign-in: a second step, rests after wrong tries, 12-character passwords
+
+**Second step.** After their password, a leader can be asked for the six-digit code an authenticator app on their phone shows (Google Authenticator, Microsoft Authenticator and the like; the standard time-based code, `lib/totp.js`, checked against the standard's own test values). It is set up on **My Account**: password again, scan the QR code, type the first code, save the ten recovery codes (each works once; only their hashes are kept). A code works for its 30 seconds and one step either side, and never twice.
+
+**Who needs it** (`lib/secondStep.js`): the National and Chapter Coordinators, chapter admins, Finance, Shepherding and Welfare accounts, and executives whose office reaches the books (President, Financial Secretary, Treasurer). Anyone else may turn it on, and off again.
+
+**Rolled out gently.** With `ENFORCE_LEADER_2FA` blank, the portal only asks, with a banner. Set it to `on` and each of those leaders gets 14 days (from that day, or from when their account was made), counted down in a banner; after that, signing in opens only the screen to set it up. Nobody is locked out on the day, and sessions already open carry on.
+
+**A lost phone.** Sign in with a recovery code. Out of codes: the Chapter Coordinator (or chapter admin, or National) presses **Reset second step** on the leadership accounts list. That is written on the account's own log with who did it, the holder is signed out, and they set it up again at their next sign-in. Nobody can reset their own.
+
+**Wrong tries.** Five wrong passwords or codes in a row and the account rests: a minute, then two, four, eight and so on up to an hour. This is on top of the limit per address. The account's log says so, the accounts list shows it, and **Unlock** there clears it.
+
+**12 characters.** A leader's password needs at least 12 characters wherever it is set (by them or for them). Existing shorter passwords keep working until they are changed. Members' passwords stay at 8.
+
+**Not covered:** the administrator login set in the server's settings (`ADMIN_USERNAME`/`ADMIN_PASSWORD`) has no account to hold a second step. Give it a long password and use a National Coordinator account for day-to-day work.
+
+## 30. Chapter walls in the data layer
+
+Every read or write through `lib/repo.js` on a record that holds people's data or a chapter's own work (members, leadership accounts, care records, the books, registers, welfare, giving, prayer requests, messages, groups, chat and the rest: `CHAPTER_SCOPED`) must say which chapter it is about, with a `chapterId` in its filter (or, for a create, in its data). A call that means every chapter says so with `repo.allChapters()` (National's totals, the scheduled jobs, public content when no chapter is chosen), and a member reaching their own record by the id in their signed-in session says `repo.ownRecord()`. Both are a symbol the database never sees. Anything else is refused with an error naming the place in the code.
+
+Not walled: the chapters themselves and what is union-wide or public by design (Alumni Connect and the alumni wall, monthly themes, events, sermons, pages, content, departments, the roster cards, founders, the council, notifications).
+
+National keeps its reach: totals and comparisons across chapters, and any one chapter's records once it is chosen, as `GOVERNANCE_TIER_REVIEW.md` describes; it does not see members of every chapter merged together.
+
+`test/chapter-wall.js` checks the rule, reads every data-layer call in the code without running it (458 on walled records) and fails if one leaves its chapter out, and checks a chapter admin cannot reach another chapter's records. The whole test suite runs with the wall on, so a route that turns out chapterless at run time fails its test. Wiring this in found and closed one real gap: a chapter admin could mark another chapter's prayer request answered by its id.
+
+If a page breaks in production with `Chapter guard` in the logs, set `CHAPTER_GUARD=warn` on Render to let it through while it is fixed (each place is logged once), then remove it.
+
+## 31. Sharing to WhatsApp, with link previews
+
+A Share button on every event, every sermon and every public prayer request, on the verse of the day, and Invite a friend on the home page and the profile (`public/js/share.js`). It opens the phone's own share sheet when it has one, which includes WhatsApp, and goes straight to WhatsApp otherwise. The link is the app's chosen address (`PUBLIC_BASE_URL`, given to the page by `GET /api/public/address`), or the page's own while there is none. No tracking parameter is ever added.
+
+A link to an event or sermon opens on that event or sermon, and when it is pasted into a chat the preview shows it: the shareable pages (`PAGES` in `routes/share.js`) are sent with Open Graph tags filled in, with the event's flyer as the picture. A draft or missing event gets the events page's own preview. `og:url` and the canonical link are only given once an address is chosen, so a preview never names the stand-in.
+
+Counts, not tracking (`lib/metrics.js`): each share adds one to that day's count for its kind, and the sign-up form adds one to "sign-ups started" the first time someone types in it. A row is a kind, a day and a number; nothing about who is kept. Only the keys in `KEYS` are stored. The National Health panel reads them.
+
+`test/share.js` checks the counts, the address and the previews (including that a draft never shows); `test/share-ui.js` checks the button in a browser.
+
+
+## 32. Today screens and first steps for leaders
+
+Every leaders' portal (Coordinator, Finance, Shepherding, Publicity, Welfare, Executive) opens on **Today**: at most five big buttons for what that office does each week, each showing how many are waiting where there is such a number ("1 Confirm giving: claim waiting"). Everything else is in the menu under **All tools**, folded away on a phone, with an All tools button on Today to open it. The chapter admin gets the same five buttons at the top of its dashboard. The Treasurer and the Financial Secretary still land on their money, as before; Today is first in their menu. The reminder about a starting password or a missing second step now shows on Today, so every leader sees it first.
+
+Under the buttons, a new leader gets **First steps in this office**: three to five screens to open, then the how-to video (`public/video/how-to-aconsu.mp4`). A step ticks itself off when its screen is opened, from the list or the menu, and the list can be hidden. It is kept on the account (`StaffUser.firstRun`, per portal; the env admin's on a `SystemState` row), so it follows the person to another phone (`routes/today.js`, `GET`/`POST /api/portal/first-run`).
+
+This is only a layout (`public/js/today.js`, each portal's `today` in its own script). No panel or permission changed. Every count is read from a route that portal's screens already read, so a count this account may not see is left off; `test/today.js` fails if a Today count reads any other route. `test/today-ui.js` signs into all seven at phone width.
+
+## 33. National's Health panel
+
+National Portal, **Health** (National only, `GET /api/national/health?days=7|28|90`, `routes/health-panel.js`): is the app doing its job? Sign-ups finished beside sign-ups started, members active in the last 7 days (opened the app signed in, from `lastActiveDate`), shares by kind, and giving claims by where they stand (waiting, confirmed, turned down), for the period asked for, week by week and chapter by chapter.
+
+Counts only. Shares and sign-ups started are the day counts in `lib/metrics.js` (union-wide; nothing about who); the rest are totals worked out from the records the app keeps anyway. No cookie, no outside service, and no name or id in the response (`test/share.js` checks). Sign-ups started are counted only from this release on, and the panel says so while finished outnumbers started.

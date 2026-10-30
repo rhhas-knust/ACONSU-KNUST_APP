@@ -100,7 +100,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   const officeMemberIds = {};
   for (const [role, user] of Object.entries({ finance: 'fin.ama', shepherding: 'shep.kojo', publicity: 'pub.esi', coordinator: 'coord.yaw' })) {
     officeMemberIds[user] = await registerMember(user, user.replace('.', '') + '@test.com');
-    r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password123', memberId: officeMemberIds[user] });
+    r = await call('admin', 'POST', '/api/admin/staff', { username: user, name: user, role, password: 'password1234', memberId: officeMemberIds[user] });
     check(`create ${role} account`, r.status === 200, r.data);
   }
   // The test chapter now has its own Coordinator, so the chapter is its own:
@@ -108,23 +108,23 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   // the main admin set the chapter up, as a chapter would ask it to: the
   // Coordinator asks once, for the length of the run. The rule itself is tested
   // in test/chapter-look.js.
-  r = await call('coord', 'POST', '/api/portal/login', { username: 'coord.yaw', password: 'password123' });
+  r = await call('coord', 'POST', '/api/portal/login', { username: 'coord.yaw', password: 'password1234' });
   r = await call('coord', 'POST', '/api/chapter-requests', { message: 'Please help set up our chapter.', days: 30 });
   check('the chapter asks the main admin for help setting it up', r.status === 200, r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.nomember', name: 'No Member', role: 'finance', password: 'password123' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.nomember', name: 'No Member', role: 'finance', password: 'password1234' });
   check('a chapter office account cannot be created without a member behind it', r.status === 400, r.data);
   // An executive is a promoted member, so the office can't be created out of
   // thin air — the promotion itself is exercised further down, once members
   // exist (see "executive portal + event workflow").
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nomember', name: 'No Member', role: 'executive', password: 'password123' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nomember', name: 'No Member', role: 'executive', password: 'password1234' });
   check('an executive account cannot be created without a member to promote', r.status === 400, r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.ama', name: 'dupe', role: 'finance', password: 'password123' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin.ama', name: 'dupe', role: 'finance', password: 'password1234' });
   check('duplicate username rejected', r.status === 400, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'weak', name: 'weak', role: 'finance', password: 'short' });
   check('short password rejected', r.status === 400, r.data);
 
   for (const [jar, user] of Object.entries({ fin: 'fin.ama', shep: 'shep.kojo', pub: 'pub.esi', coord: 'coord.yaw' })) {
-    r = await call(jar, 'POST', '/api/portal/login', { username: user, password: 'password123' });
+    r = await call(jar, 'POST', '/api/portal/login', { username: user, password: 'password1234' });
     check(`${user} signs in`, r.status === 200, r.data);
   }
   r = await call('bad', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'wrong' });
@@ -174,7 +174,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   // A member signed in on the same browser is signed out too, rather than
   // being left behind on a shared device.
-  r = await call('logoutTest2', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+  r = await call('logoutTest2', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password1234' });
   check('a staff account signs in', r.status === 200, r.data);
   r = await call('logoutTest2', 'POST', '/api/auth/logout');
   check('the member-side logout ends the session too', r.status === 200, r.data);
@@ -191,7 +191,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('a chapter-level role cannot read the national dashboard', r.status === 401, r.data);
   r = await call('coord', 'GET', '/api/national/dashboard');
   check('a Chapter Coordinator cannot read the national dashboard either', r.status === 401, r.data);
-  r = await call('fin', 'POST', '/api/admin/staff', { username: 'sneaky', name: 'sneaky', role: 'coordinator', password: 'password123' });
+  r = await call('fin', 'POST', '/api/admin/staff', { username: 'sneaky', name: 'sneaky', role: 'coordinator', password: 'password1234' });
   check('a non-national role cannot self-elevate a new account to coordinator', r.status === 403 || r.status === 401, r.data);
 
   console.log('\n== Phase 7–8 content and national management ==');
@@ -638,20 +638,20 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   // A position is required up front — an executive with no position is one
   // nothing in the system can reason about.
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nopos', name: 'No Position', role: 'executive', password: 'password123', memberId: amaMemberId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nopos', name: 'No Position', role: 'executive', password: 'password1234', memberId: amaMemberId });
   check('an executive cannot be created without a position', r.status === 400, r.data);
 
   // A portfolio holder runs a department; an officer never does. Both halves
   // of that rule are enforced, not just the first.
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nodept', name: 'No Dept', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'music_director' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nodept', name: 'No Dept', role: 'executive', password: 'password1234', memberId: amaMemberId, positionKey: 'music_director' });
   check('a portfolio holder must be given a department', r.status === 400, r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.baddept', name: 'Officer With Dept', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'president', department: deptId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.baddept', name: 'Officer With Dept', role: 'executive', password: 'password1234', memberId: amaMemberId, positionKey: 'president', department: deptId });
   check('an officer is refused a department, since they answer for the whole chapter', r.status === 400, r.data);
 
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password123', memberId: amaMemberId, positionKey: 'music_director', department: deptId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ama', name: 'Ama Exec', role: 'executive', password: 'password1234', memberId: amaMemberId, positionKey: 'music_director', department: deptId });
   check('executive account created by promoting that member', r.status === 200 && r.data.item.memberId === amaMemberId, r.data);
   check('the promoted executive is given a one-year term of office', !!r.data.item.termEndsAt && !!r.data.item.termYear, r.data.item);
-  r = await call('exec', 'POST', '/api/portal/login', { username: 'exec.ama', password: 'password123' });
+  r = await call('exec', 'POST', '/api/portal/login', { username: 'exec.ama', password: 'password1234' });
   check('executive signs in', r.status === 200, r.data);
 
   // Provisioning is one action: the roster card exists before they ever open
@@ -789,11 +789,11 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, { decision: 'approve', scope: 'chapter' });
   check('approving without naming a position is refused, rather than half-provisioning', r.status === 400, r.data);
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, {
-    decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password123'
+    decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password1234'
   });
   check('approving without naming a position is refused', r.status === 400, r.data);
   r = await call('admin', 'PATCH', `/api/admin/executive-applications/${memberId}`, {
-    decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password123', positionKey: 'president'
+    decision: 'approve', scope: 'chapter', username: 'exec.kwabena', password: 'password1234', positionKey: 'president'
   });
   check('chapter executive application is approved', r.status === 200 && r.data.item.executiveStatus === 'verified', r.data);
   check('the approved office is recorded on the member, from the position chosen',
@@ -812,7 +812,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   // The whole point of provisioning in one action: the approved executive can
   // sign in and already has a public roster card, with nothing done by hand.
-  r = await call('newExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  r = await call('newExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password1234' });
   check('the newly approved executive can sign straight in', r.status === 200, r.data);
   r = await call('newExec', 'GET', '/api/executive/me');
   check('their public roster card already exists', r.status === 200 && r.data.item && r.data.item.staffId, r.data);
@@ -932,12 +932,12 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   finRegForm.append('chapterId', chapterId);
   const finMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: finRegForm })).json()).member.id;
 
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.treasurer', name: 'Kojo Treasurer', role: 'executive', password: 'password123', memberId: treasMemberId, positionKey: 'treasurer' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.treasurer', name: 'Kojo Treasurer', role: 'executive', password: 'password1234', memberId: treasMemberId, positionKey: 'treasurer' });
   check('a Treasurer is appointed', r.status === 200, r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.finsec', name: 'Abena FinSec', role: 'executive', password: 'password123', memberId: finMemberId, positionKey: 'financial_secretary' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.finsec', name: 'Abena FinSec', role: 'executive', password: 'password1234', memberId: finMemberId, positionKey: 'financial_secretary' });
   check('a Financial Secretary is appointed', r.status === 200, r.data);
-  await call('treas', 'POST', '/api/portal/login', { username: 'exec.treasurer', password: 'password123' });
-  await call('finsec', 'POST', '/api/portal/login', { username: 'exec.finsec', password: 'password123' });
+  await call('treas', 'POST', '/api/portal/login', { username: 'exec.treasurer', password: 'password1234' });
+  await call('finsec', 'POST', '/api/portal/login', { username: 'exec.finsec', password: 'password1234' });
 
   // The Treasurer holds the money but never writes the ledger.
   r = await call('treas', 'GET', '/api/executive/finance/ledger');
@@ -1011,9 +1011,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   bsRegForm.append('password', 'secret123');
   bsRegForm.append('chapterId', chapterId);
   const bsMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: bsRegForm })).json()).member.id;
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.bible', name: 'Esi Bible', role: 'executive', password: 'password123', memberId: bsMemberId, positionKey: 'bible_studies_coordinator', department: deptId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.bible', name: 'Esi Bible', role: 'executive', password: 'password1234', memberId: bsMemberId, positionKey: 'bible_studies_coordinator', department: deptId });
   check('a Bible Studies Coordinator is appointed', r.status === 200, r.data);
-  await call('bible', 'POST', '/api/portal/login', { username: 'exec.bible', password: 'password123' });
+  await call('bible', 'POST', '/api/portal/login', { username: 'exec.bible', password: 'password1234' });
 
   const today = new Date().toISOString().slice(0, 10);
   r = await call('bible', 'POST', '/api/executive/daily-verses', { date: today, reference: 'Psalm 23:1', text: 'The Lord is my shepherd.' });
@@ -1057,7 +1057,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   // with a deadline a second away and letting it pass.
   const lapsed = fakeModels.StaffUser._docs.find(s => s.username === 'exec.kwabena');
   lapsed.termEndsAt = new Date(Date.now() + 1200);
-  r = await call('expiring', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  r = await call('expiring', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password1234' });
   check('an executive signs in while their term still has time to run', r.status === 200, r.data);
   r = await call('expiring', 'GET', '/api/executive/me');
   check('and works normally right up to the deadline', r.status === 200, r.data);
@@ -1066,12 +1066,12 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('the moment the term runs out, that live session loses its authority', r.status === 401, r.data);
 
   lapsed.termEndsAt = new Date(Date.now() - 86400000);
-  r = await call('lapsedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  r = await call('lapsedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password1234' });
   check('a lapsed executive is refused at login, and told why', r.status === 403 && /term of office has ended/.test(r.data.error || ''), r.data);
 
   r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { renewTerm: true });
   check('the coordinator renews the term for the new year', r.status === 200 && new Date(r.data.item.termEndsAt) > new Date(), r.data);
-  r = await call('renewedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  r = await call('renewedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password1234' });
   check('the renewed executive signs in again, same account and card', r.status === 200, r.data);
 
   // Appointing mid-year: the term runs to the same academic-year boundary as
@@ -1089,7 +1089,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('the coordinator ends their term early', r.status === 200, r.data);
   r = await call('renewedExec', 'GET', '/api/executive/me');
   check('their live session stops working at once, without signing out', r.status === 401, r.data);
-  r = await call('endedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  r = await call('endedExec', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password1234' });
   check('and they cannot sign back in', r.status === 403, r.data);
 
   // Sessions live in the database now and outlive a restart, so the record
@@ -1101,7 +1101,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   // Disabling an account reaches a live session the same way.
   r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { renewTerm: true });
-  r = await call('reinstated', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  r = await call('reinstated', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password1234' });
   check('reinstated once the coordinator renews the term', r.status === 200, r.data);
   r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { active: false });
   r = await call('reinstated', 'GET', '/api/executive/me');
@@ -1109,7 +1109,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   // A rename is not a loss of authority, so it must not sign anyone out.
   r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { active: true });
-  r = await call('renamed', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password123' });
+  r = await call('renamed', 'POST', '/api/portal/login', { username: 'exec.kwabena', password: 'password1234' });
   check('re-enabled and signed in again', r.status === 200, r.data);
   r = await call('admin', 'PUT', `/api/admin/staff/${lapsed.id}`, { name: 'Kwabena Renamed' });
   r = await call('renamed', 'GET', '/api/executive/me');
@@ -1292,7 +1292,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   asstRegForm.append('password', 'secret123');
   asstRegForm.append('chapterId', chapterId);
   const asstMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: asstRegForm })).json()).member.id;
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.asstmusic', name: 'Kofi Assistant', role: 'executive', password: 'password123', memberId: asstMemberId, positionKey: 'assistant_music_director', department: deptId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.asstmusic', name: 'Kofi Assistant', role: 'executive', password: 'password1234', memberId: asstMemberId, positionKey: 'assistant_music_director', department: deptId });
   check('an Assistant Head is appointed to the same department', r.status === 200, r.data);
   r = await call('member', 'GET', '/api/member/standing');
   check('the head is named, not their assistant',
@@ -1368,9 +1368,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     ushRegForm.append('password', 'secret123');
     ushRegForm.append('chapterId', chapterId);
     const ushMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: ushRegForm })).json()).member.id;
-    r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ushering', name: 'Yaw Usher', role: 'executive', password: 'password123', memberId: ushMemberId, positionKey: 'ushering_head', department: usheringId });
+    r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.ushering', name: 'Yaw Usher', role: 'executive', password: 'password1234', memberId: ushMemberId, positionKey: 'ushering_head', department: usheringId });
     check('an Ushering head is appointed', r.status === 200, r.data);
-    r = await call('ushead', 'POST', '/api/portal/login', { username: 'exec.ushering', password: 'password123' });
+    r = await call('ushead', 'POST', '/api/portal/login', { username: 'exec.ushering', password: 'password1234' });
     check('the Ushering head signs in', r.status === 200, r.data);
 
     r = await call('ushead', 'GET', '/api/executive/department/requests');
@@ -1506,7 +1506,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('private prayer requests never appear on the public wall', !r.data.some(p => p.request === 'A private matter'), r.data);
 
   r = await call('member', 'PATCH', `/api/prayer-requests/${wallItem.id}/answered`, { testimony: 'God answered!' });
-  check('a member who did not submit a request cannot mark it answered', r.status === 403, r.data);
+  // Not theirs, and not an office's: as far as they can tell it is not there.
+  check('a member who did not submit a request cannot mark it answered', r.status === 403 || r.status === 404, r.data);
   r = await call('shep', 'PATCH', `/api/prayer-requests/${wallItem.id}/answered`, { testimony: 'God answered!' });
   check('shepherding can mark it answered on behalf of an anonymous submitter', r.status === 200 && r.data.item.answered === true, r.data);
   r = await call('anon', 'GET', '/api/prayer-wall');
@@ -1601,9 +1602,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   console.log('\n== Welfare (section 33) ==');
   const welfMemberId = await registerMember('Efua Welfare', 'efua.welfare@test.com');
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'welf.efua', name: 'Efua Welfare', role: 'welfare', password: 'password123', memberId: welfMemberId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'welf.efua', name: 'Efua Welfare', role: 'welfare', password: 'password1234', memberId: welfMemberId });
   check('welfare officer account created', r.status === 200, r.data);
-  r = await call('welf', 'POST', '/api/portal/login', { username: 'welf.efua', password: 'password123' });
+  r = await call('welf', 'POST', '/api/portal/login', { username: 'welf.efua', password: 'password1234' });
   check('welfare officer signs in', r.status === 200, r.data);
 
   r = await call('member', 'POST', '/api/welfare/requests', { category: 'financial', description: 'Struggling with hostel fees this semester' });
@@ -1705,9 +1706,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('a national actor MUST specify a chapter once more than one exists', r.status === 400, r.data);
 
   const fin2MemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: (() => { const fd = new FormData(); fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png'); fd.append('name', 'Fin Two'); fd.append('email', 'fin2@test.com'); fd.append('password', 'secret123'); fd.append('chapterId', 'test-chapter-2'); return fd; })() })).json()).member.id;
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin2', name: 'fin2', role: 'finance', password: 'password123', chapterId: 'test-chapter-2', memberId: fin2MemberId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'fin2', name: 'fin2', role: 'finance', password: 'password1234', chapterId: 'test-chapter-2', memberId: fin2MemberId });
   check('finance account created for chapter 2', r.status === 200 && r.data.item.chapterId === 'test-chapter-2', r.data);
-  r = await call('fin2', 'POST', '/api/portal/login', { username: 'fin2', password: 'password123' });
+  r = await call('fin2', 'POST', '/api/portal/login', { username: 'fin2', password: 'password1234' });
   check('chapter 2 finance officer signs in', r.status === 200, r.data);
 
   r = await call('admin', 'POST', '/api/admin/pages', {
@@ -1748,9 +1749,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('chapter 2 sees its own 999 income, not chapter 1\'s books', r.data.totalIncome === 999, r.data);
 
   const shep2MemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: (() => { const fd = new FormData(); fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png'); fd.append('name', 'Shep Two'); fd.append('email', 'shep2@test.com'); fd.append('password', 'secret123'); fd.append('chapterId', 'test-chapter-2'); return fd; })() })).json()).member.id;
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'shep2', name: 'shep2', role: 'shepherding', password: 'password123', chapterId: 'test-chapter-2', memberId: shep2MemberId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'shep2', name: 'shep2', role: 'shepherding', password: 'password1234', chapterId: 'test-chapter-2', memberId: shep2MemberId });
   check('shepherding account created for chapter 2', r.status === 200, r.data);
-  r = await call('shep2', 'POST', '/api/portal/login', { username: 'shep2', password: 'password123' });
+  r = await call('shep2', 'POST', '/api/portal/login', { username: 'shep2', password: 'password1234' });
   check('chapter 2 shepherd signs in', r.status === 200, r.data);
   r = await call('shep2', 'GET', '/api/shepherd/members');
   check("chapter 2's member list does not include chapter 1's registered member",
@@ -1758,9 +1759,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   r = await call('shep2', 'POST', '/api/attendance/scan', { qrToken, date: '2026-08-16' });
   check("chapter 2 cannot check in chapter 1's member by QR code — chapter is verified, not just the code", r.status === 404, r.data);
 
-  r = await call('admin', 'POST', `/api/national/chapters/test-chapter-2/assign-coordinator`, { username: 'coord2', name: 'Coord Two', password: 'password123' });
+  r = await call('admin', 'POST', `/api/national/chapters/test-chapter-2/assign-coordinator`, { username: 'coord2', name: 'Coord Two', password: 'password1234' });
   check('national coordinator assigns chapter 2 its own Chapter Coordinator', r.status === 200, r.data);
-  r = await call('coord2', 'POST', '/api/portal/login', { username: 'coord2', password: 'password123' });
+  r = await call('coord2', 'POST', '/api/portal/login', { username: 'coord2', password: 'password1234' });
   check('chapter 2 coordinator signs in', r.status === 200, r.data);
   r = await call('coord2', 'GET', '/api/finance/summary');
   check("chapter 2's coordinator reads chapter 2's finances (999), never chapter 1's", r.status === 200 && r.data.totalIncome === 999, r.data);
@@ -1968,10 +1969,10 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   console.log('\n== delegation: a coordinator staffs their own chapter ==');
   const delegatedMemberId = await registerMember('Delegated Admin', 'delegated.admin@test.com');
   r = await call('coord', 'POST', '/api/admin/staff',
-    { username: 'delegated-admin', name: 'Delegated Admin', role: 'chapterAdmin', password: 'password123', memberId: delegatedMemberId });
+    { username: 'delegated-admin', name: 'Delegated Admin', role: 'chapterAdmin', password: 'password1234', memberId: delegatedMemberId });
   check('Chapter Coordinator appoints their own Chapter Admin', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
 
-  r = await call('delegated', 'POST', '/api/portal/login', { username: 'delegated-admin', password: 'password123' });
+  r = await call('delegated', 'POST', '/api/portal/login', { username: 'delegated-admin', password: 'password1234' });
   check('the appointed Chapter Admin can sign in', r.status === 200, r.data);
 
   r = await call('delegated', 'GET', '/api/admin/chapter-settings');
@@ -1997,12 +1998,12 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('but a Chapter Coordinator can pull it', coordReport.status === 200, coordReport.status);
 
   r = await call('coord', 'POST', '/api/admin/staff',
-    { username: 'nope', name: 'Nope', role: 'nationalCoordinator', password: 'password123' });
+    { username: 'nope', name: 'Nope', role: 'nationalCoordinator', password: 'password1234' });
   check('a coordinator still cannot mint a National Coordinator', r.status === 403, r.data);
 
   // Electing officers is the Coordinator's call, not the Chapter Admin's.
   r = await call('delegated', 'POST', '/api/admin/staff',
-    { username: 'exec.sneak', name: 'Sneak Exec', role: 'executive', password: 'password123', memberId });
+    { username: 'exec.sneak', name: 'Sneak Exec', role: 'executive', password: 'password1234', memberId });
   check('a Chapter Admin cannot promote a member to the executive body', r.status === 403, r.data);
 
   r = await call('coord2', 'GET', '/api/admin/staff');
@@ -2051,10 +2052,10 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     readinessCh.readiness.lastActivityAt === null, readinessCh);
 
   r = await call('admin', 'POST', '/api/national/chapters/readiness-ch/assign-coordinator',
-    { username: 'readiness-coord', name: 'Readiness Coordinator', password: 'password123' });
+    { username: 'readiness-coord', name: 'Readiness Coordinator', password: 'password1234' });
   check('national assigns the new chapter its own coordinator', r.status === 200 && r.data.chapter.coordinatorStaffId, r.data);
 
-  r = await call('readiness-coord', 'POST', '/api/portal/login', { username: 'readiness-coord', password: 'password123' });
+  r = await call('readiness-coord', 'POST', '/api/portal/login', { username: 'readiness-coord', password: 'password1234' });
   check('the new coordinator signs in', r.status === 200, r.data);
   const readinessFinMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: (() => {
     const fd = new FormData();
@@ -2064,7 +2065,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     return fd;
   })() })).json()).member.id;
   r = await call('readiness-coord', 'POST', '/api/admin/staff',
-    { username: 'readiness-fin', name: 'Readiness Finance', role: 'finance', password: 'password123', memberId: readinessFinMemberId });
+    { username: 'readiness-fin', name: 'Readiness Finance', role: 'finance', password: 'password1234', memberId: readinessFinMemberId });
   check('the coordinator staffs the finance office', r.status === 200, r.data);
 
   r = await call('admin', 'GET', '/api/national/dashboard');
@@ -2087,14 +2088,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   // The one body where the whole union sits together. A seat grants exactly
   // two things — reading the council and speaking in it — and nothing at all
   // about another chapter.
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'patron.nat', name: 'Nana Patron', role: 'patron', password: 'password123', chapterId: '__national__' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'patron.nat', name: 'Nana Patron', role: 'patron', password: 'password1234', chapterId: '__national__' });
   check('the National Patron is appointed', r.status === 200 && r.data.item.chapterId === '', r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'patron.ch', name: 'Chapter Patron', role: 'patron', password: 'password123', chapterId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'patron.ch', name: 'Chapter Patron', role: 'patron', password: 'password1234', chapterId });
   check('a Chapter Patron is appointed to their own chapter', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
-  r = await call('coord2', 'POST', '/api/admin/staff', { username: 'patron.sneak', name: 'Sneak', role: 'patron', password: 'password123', chapterId: '__national__' });
+  r = await call('coord2', 'POST', '/api/admin/staff', { username: 'patron.sneak', name: 'Sneak', role: 'patron', password: 'password1234', chapterId: '__national__' });
   check('a chapter coordinator cannot appoint the National Patron', r.status === 403, r.data);
 
-  await call('patron', 'POST', '/api/portal/login', { username: 'patron.nat', password: 'password123' });
+  await call('patron', 'POST', '/api/portal/login', { username: 'patron.nat', password: 'password1234' });
   r = await call('patron', 'GET', '/api/portal/me');
   check('the Patron is seated on the council', r.data.councilSeat === 'National Patron' && r.data.access.council.view === true, r.data.councilSeat);
 
@@ -2110,14 +2111,14 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   const presMemberId = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: presRegForm })).json()).member.id;
   // The President is a single seat, so a second President cannot be seated
   // beside the first: it has to be handed over. The earlier one's term ends here.
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password123', memberId: presMemberId, positionKey: 'president', chapterId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password1234', memberId: presMemberId, positionKey: 'president', chapterId });
   check('a second President cannot be seated while the first still holds the office', r.status === 409 && /seat is held/.test(r.data.error), r.data);
   const firstPresidentCard = fakeModels.Executive._docs.find(c => c.positionKey === 'president' && c.chapterId === chapterId);
   r = await call('admin', 'PUT', `/api/admin/staff/${firstPresidentCard.staffId}`, { endTerm: true });
   check('the first President\'s term is ended', r.status === 200, r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password123', memberId: presMemberId, positionKey: 'president', chapterId });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.president', name: 'Yaw President', role: 'executive', password: 'password1234', memberId: presMemberId, positionKey: 'president', chapterId });
   check('a sitting Chapter President is appointed', r.status === 200, r.data);
-  await call('pres', 'POST', '/api/portal/login', { username: 'exec.president', password: 'password123' });
+  await call('pres', 'POST', '/api/portal/login', { username: 'exec.president', password: 'password1234' });
 
   r = await call('pres', 'GET', '/api/portal/me');
   check('a Chapter President is seated by virtue of their position', r.data.councilSeat === 'Chapter President', r.data.councilSeat);
@@ -2488,16 +2489,16 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // An office account with no member behind it has no profile, no membership
     // number, and no way to show the holder where they stand.
     r = await call('admin', 'POST', '/api/admin/staff',
-      { username: 'ghost.office', name: 'Ghost', role: 'shepherding', password: 'password123', chapterId });
+      { username: 'ghost.office', name: 'Ghost', role: 'shepherding', password: 'password1234', chapterId });
     check('an office account cannot be opened without naming the member', r.status === 400, r.data);
     r = await call('admin', 'POST', '/api/admin/staff',
-      { username: 'real.office', name: 'Real Office', role: 'shepherding', password: 'password123', memberId, chapterId });
+      { username: 'real.office', name: 'Real Office', role: 'shepherding', password: 'password1234', memberId, chapterId });
     check('and is accepted once a member is named', r.status === 200 && r.data.item.memberId === memberId, r.data);
     // National Coordinators and Patrons belong to the union, not to a chapter,
     // so they remain the exception rather than being forced to hold a
     // membership somewhere.
     r = await call('admin', 'POST', '/api/admin/staff',
-      { username: 'nat.two', name: 'National Two', role: 'nationalCoordinator', password: 'password123' });
+      { username: 'nat.two', name: 'National Two', role: 'nationalCoordinator', password: 'password1234' });
     check('a National Coordinator is still allowed without one', r.status === 200, r.data);
   }
 
@@ -2627,7 +2628,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // Appointing them is what clears it — nothing has to remember to.
     r2 = await call('coord', 'POST', '/api/admin/staff', {
       username: 'exec.awaiting', name: 'Nana Awaiting', role: 'executive',
-      password: 'password123', memberId: waitingId, positionKey: 'general_secretary'
+      password: 'password1234', memberId: waitingId, positionKey: 'general_secretary'
     });
     check('the Coordinator appoints them', r2.status === 200, r2.data);
 
@@ -2685,11 +2686,11 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // The real proof: the exact payload each form now sends is accepted.
     const finMemberId = await registerMember('Kwesi Books', 'kwesi.books@test.com');
     let r2 = await call('coord', 'POST', '/api/admin/staff',
-      { username: 'fin.kwesi', name: 'Kwesi Books', role: 'finance', password: 'password123', memberId: finMemberId });
+      { username: 'fin.kwesi', name: 'Kwesi Books', role: 'finance', password: 'password1234', memberId: finMemberId });
     check('a Finance Officer can be appointed the way the form appoints one', r2.status === 200, r2.data);
 
     r2 = await call('coord', 'POST', '/api/admin/staff',
-      { username: 'fin.nobody', name: 'Nobody', role: 'finance', password: 'password123' });
+      { username: 'fin.nobody', name: 'Nobody', role: 'finance', password: 'password1234' });
     check('and one with no member behind it is still refused',
       r2.status === 400 && /member/i.test(r2.data.error), r2.data);
   }
@@ -3498,7 +3499,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // Signed in fresh here: the shared `coord` jar has been through a lot by
     // this point, and a refusal that was really an expired session would pass
     // this test while proving nothing.
-    r5 = await call('coordChurch', 'POST', '/api/portal/login', { username: 'coord.yaw', password: 'password123' });
+    r5 = await call('coordChurch', 'POST', '/api/portal/login', { username: 'coord.yaw', password: 'password1234' });
     check('a chapter coordinator is signed in to try it', r5.status === 200, r5.data);
     r5 = await call('coordChurch', 'GET', '/api/portal/me');
     check('and really is one', r5.status === 200 && r5.data.staff.role === 'coordinator', r5.data);
@@ -4554,9 +4555,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // and a chapter's tagline really could be rewritten from the National
     // account - it was, while this was being found.
     let r6 = await call('admin', 'POST', '/api/admin/staff',
-      { username: 'nat.oversight', name: 'National Oversight', role: 'nationalCoordinator', password: 'password123' });
+      { username: 'nat.oversight', name: 'National Oversight', role: 'nationalCoordinator', password: 'password1234' });
     check('a National Coordinator account exists to test with', r6.status === 200, r6.data);
-    r6 = await call('natOv', 'POST', '/api/portal/login', { username: 'nat.oversight', password: 'password123' });
+    r6 = await call('natOv', 'POST', '/api/portal/login', { username: 'nat.oversight', password: 'password1234' });
     check('and signs in', r6.status === 200, r6.data);
     r6 = await call('natOv', 'GET', '/api/portal/me');
     check('as national, holding no chapter of their own',
@@ -4597,13 +4598,13 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     const ovMemberId = await registerMember('ov.admin', 'ovadmin@test.com');
     r6 = await call('natOv', 'POST', '/api/admin/staff',
       { username: 'ov.chapteradmin', name: 'Oversight Chapter Admin', role: 'chapterAdmin',
-        password: 'password123', memberId: ovMemberId, chapterId });
+        password: 'password1234', memberId: ovMemberId, chapterId });
     check('and still issues the chapter admin\'s username and password', r6.status === 200, r6.data);
 
     // Discussions are a chapter's own. The chapter's admin reads them (that is
     // the moderation panel); National, with more than one chapter in play,
     // does not read individual conversations.
-    r6 = await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password123' });
+    r6 = await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password1234' });
     r6 = await call('ovAdmin', 'GET', '/api/chat/topics');
     check('the chapter admin\'s moderation panel lists its own chapter\'s discussions',
       r6.status === 200 && r6.data.length > 0 && r6.data.every(t => t.chapterId === chapterId), r6.data);
@@ -4621,7 +4622,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and so is a national executive', r6.status === 200, r6.data);
 
     // ---- the chapter runs itself ----
-    r6 = await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password123' });
+    r6 = await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password1234' });
     check('the chapter admin signs in', r6.status === 200, r6.data);
     r6 = await call('ovAdmin', 'PUT', '/api/admin/chapter-settings', { tagline: 'SET BY THE CHAPTER' });
     check('and sets the settings national was refused', r6.status === 200, r6.data);
@@ -4936,10 +4937,10 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     fdm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
     fdm.append('name', 'Other Admin'); fdm.append('email', 'otheradmin@test.com'); fdm.append('password', 'secret123'); fdm.append('chapterId', otherChapter);
     const otherMember = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fdm })).json()).member;
-    w = await call('admin', 'POST', '/api/admin/staff', { username: 'other.chapteradmin', name: 'Other Admin', role: 'chapterAdmin', password: 'password123', memberId: otherMember.id, chapterId: otherChapter });
+    w = await call('admin', 'POST', '/api/admin/staff', { username: 'other.chapteradmin', name: 'Other Admin', role: 'chapterAdmin', password: 'password1234', memberId: otherMember.id, chapterId: otherChapter });
     check('the other chapter has its own admin', w.status === 200, w.data);
-    await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
-    await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password123' });
+    await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password1234' });
+    await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password1234' });
 
     w = await call('ovAdmin', 'GET', '/api/admin/alumni');
     check('a chapter admin sees their own chapter\'s waiting requests, with the contact to check',
@@ -5460,7 +5461,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('a chapter\'s admin opens their own chapter\'s receipts and records, and not another chapter\'s',
       (await open('ovAdmin', f.receipt)).status === 200 && (await open('ovAdmin', f.pastoral)).status === 200 && (await open('ovAdmin', f.receiptOther)).status === 404, null);
     {
-      await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
+      await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password1234' });
       const r = [(await open('otherAdmin', f.receipt)).status, (await open('otherAdmin', f.pastoral)).status, (await open('otherAdmin', f.receiptOther)).status];
       check('another chapter\'s admin opens none of this chapter\'s, only their own', r.join() === '404,404,200', r);
     }
@@ -5517,9 +5518,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('the old session id no longer signs anybody in', (await stale.json()).member === null, null);
     w = await call('fix', 'GET', '/api/auth/me');
     check('while the new one does', w.data.member && w.data.member.email === 'fixation@test.com', w.data);
-    w = await call('anon', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+    w = await call('anon', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password1234' });
     const staffBefore = jars.anon;
-    w = await call('anon', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password123' });
+    w = await call('anon', 'POST', '/api/portal/login', { username: 'fin.ama', password: 'password1234' });
     check('a leadership account gets a new session id on sign-in as well', w.status === 200 && jars.anon !== staffBefore, [staffBefore, jars.anon]);
     jars.anon = '';
     const wrongPw = new FormData(); wrongPw.append('name', 'Short Pw'); wrongPw.append('email', 'short@test.com'); wrongPw.append('password', '1234567'); wrongPw.append('chapterId', chapterId);
@@ -5792,26 +5793,26 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // ---- a leader chooses their chapter when signing in ----
     {
       const login = (body) => call('pick', 'POST', '/api/portal/login', body);
-      let x = await login({ username: 'fin.ama', password: 'password123', chapterId });
+      let x = await login({ username: 'fin.ama', password: 'password1234', chapterId });
       check('a leader who chooses their own chapter signs in', x.status === 200, x.data);
       await call('pick', 'POST', '/api/portal/logout');
-      x = await login({ username: 'fin.ama', password: 'password123', chapterId: 'test-chapter-2' });
+      x = await login({ username: 'fin.ama', password: 'password1234', chapterId: 'test-chapter-2' });
       check('one who chooses another chapter is refused, in words', x.status === 403 && /not part of the chapter you chose/.test(x.data.error || ''), x.data);
       const me = await call('pick', 'GET', '/api/portal/me');
       check('and the attempt does not sign them in', !(me.data && me.data.staff), me.data);
-      x = await login({ username: 'fin.ama', password: 'password123', chapterId: 'national' });
+      x = await login({ username: 'fin.ama', password: 'password1234', chapterId: 'national' });
       check('a chapter account cannot sign in as the national office', x.status === 403, x.data);
-      x = await login({ username: 'fin.ama', password: 'password123', chapterId: { $ne: '' } });
+      x = await login({ username: 'fin.ama', password: 'password1234', chapterId: { $ne: '' } });
       check('and a chapter made of query operators is turned away before anything is looked up', x.status === 400 && !(x.data && x.data.success), x.data);
       x = await login({ username: 'fin.ama', password: 'wrong-password', chapterId: 'test-chapter-2' });
       const wrongPassword = x;
       x = await login({ username: 'no.such.person', password: 'wrong-password', chapterId });
       check('a wrong password answers the same whichever chapter was chosen, so the choice cannot be used to find a username',
         wrongPassword.status === 401 && x.status === 401 && wrongPassword.data.error === 'Invalid credentials' && x.data.error === 'Invalid credentials', [wrongPassword.data, x.data]);
-      x = await login({ username: 'fin.ama', password: 'password123' });
+      x = await login({ username: 'fin.ama', password: 'password1234' });
       check('leaving the choice out still signs in, so nothing that already works stops working', x.status === 200, x.data);
       await call('pick', 'POST', '/api/portal/logout');
-      x = await login({ username: 'fin.ama', password: 'password123', chapterId: '   ' });
+      x = await login({ username: 'fin.ama', password: 'password1234', chapterId: '   ' });
       check('and so does a blank one', x.status === 200, x.data);
       await call('pick', 'POST', '/api/portal/logout');
       x = await login({ username: 'admin', password: 'admin123', chapterId: 'national' });

@@ -1214,3 +1214,50 @@ body {
 .my-data-delete { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
 .my-data-delete summary { cursor: pointer; font-weight: 700; color: var(--bad-ink); min-height: 44px; display: flex; align-items: center; }
 .my-data-delete p { font-size: 0.87rem; color: var(--ink-soft); margin: 6px 0 12px; }
+
+/* ---------- sharing (share.js) ---------- */
+.share-btn { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+.share-icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.invite-strip { margin-top: 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.invite-strip p { margin: 0; color: var(--ink-soft); }
+
+/* ---------- Today: the first screen of a leaders' portal (js/today.js) ---------- */
+.today { margin-bottom: 26px; }
+.today-actions { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.today-action {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
+  min-height: 88px; padding: 14px 16px; text-align: left; cursor: pointer;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 10px;
+  font: inherit;
+}
+.today-action:hover { background: var(--lilac-light); }
+.today-action:focus-visible { outline: 3px solid var(--flame-gold); outline-offset: 2px; }
+.today-action .today-label { font-weight: 700; font-size: 1.02rem; }
+.today-action .today-count { font-family: var(--font-display, inherit); font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--ink-soft); }
+.today-action .today-count:empty, .today-action .today-waiting:empty { display: none; }
+.today-action.has-waiting .today-count { color: var(--brand); }
+.today-action .today-waiting { font-size: 0.85rem; }
+.today-all { display: none; margin-top: 14px; min-height: 44px; width: 100%; }
+.today-start { margin-top: 20px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.today-start-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.today-start-head h3 { margin: 0; }
+.today-start-head .btn { min-height: 44px; }
+.today-steps { list-style: none; margin: 10px 0 0; padding: 0; }
+.today-steps li + li { border-top: 1px solid var(--line); }
+.today-steps button, .today-steps a {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 2px;
+  background: none; border: none; text-align: left; font: inherit; color: var(--ink); cursor: pointer; text-decoration: none;
+}
+.today-steps button:hover span:last-child, .today-steps a:hover span:last-child { text-decoration: underline; }
+.today-tick {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: 2px solid var(--ink-soft); border-radius: 6px; font-weight: 800; color: var(--brand);
+}
+.today-steps li.done span { color: var(--ink-soft); }
+.today-steps li.done .today-tick { border-color: var(--brand); }
+/* On a phone the menu is folded away; this is the way into it. */
+@media (max-width: 960px) {
+  .today-all { display: block; }
+  .today-actions { grid-template-columns: 1fr; }
+  .today-action { min-height: 72px; }
+}

@@ -11,6 +11,8 @@ const bcrypt = require('bcryptjs');
 const { connectDB, createSessionStore, dbStatus, endMemberSessions: endStoredMemberSessions } = require('./lib/db');
 const eraseMember = require('./lib/eraseMember');
 const retention = require('./lib/retention');
+const secondStep = require('./lib/secondStep');
+const totp = require('./lib/totp');
 const repo = require('./lib/repo');
 const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
@@ -36,9 +38,13 @@ const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
+const { registerSecondStepRoutes } = require('./routes/second-step');
 const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
 const { registerShepherdListRoutes } = require('./routes/shepherd-list');
 const { registerPrivacyRoutes } = require('./routes/privacy');
+const { registerShareRoutes, sharePreviews } = require('./routes/share');
+const { registerTodayRoutes } = require('./routes/today');
+const { registerHealthRoutes } = require('./routes/health-panel');
 const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
 const listLink = require('./lib/listLink');
@@ -175,6 +181,9 @@ app.use(compression({
 // styles are checked with the server on every visit (they change when the app
 // is deployed); things that do not change are kept: fonts for a year, pictures
 // and icons for a week, the how-to video for a day.
+// The shareable pages carry a preview for when a link to them is pasted into
+// WhatsApp (routes/share.js); everything else is the plain file.
+app.use(sharePreviews({ repo, publicDir: path.join(__dirname, 'public') }));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, filePath) {
     if (/[\\/]fonts[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -444,7 +453,7 @@ function revokeStaffSessions(staffId) {
   if (!staffId) return Promise.resolve();
   const at = Date.now();
   rememberRevocation(staffId, at);
-  return repo.patchById('staffUsers', String(staffId), { sessionsRevokedAt: new Date(at) })
+  return repo.patchById('staffUsers', String(staffId), { sessionsRevokedAt: new Date(at) }, repo.allChapters())
     .catch(() => { /* the in-memory entry still holds for this process */ });
 }
 
@@ -453,7 +462,7 @@ function revokeStaffSessions(staffId) {
 async function loadStaffRevocations() {
   try {
     const cutoff = Date.now() - SESSION_MAX_AGE_MS;
-    const staff = await repo.getAll('staffUsers');
+    const staff = await repo.getAll('staffUsers', repo.allChapters());
     staff.forEach((user) => {
       if (!user.sessionsRevokedAt) return;
       const at = new Date(user.sessionsRevokedAt).getTime();
@@ -476,7 +485,7 @@ function revokeMemberSessions(memberId) {
   const now = at;
   MEMBER_REVOCATIONS.set(String(memberId), at);
   MEMBER_REVOCATIONS.forEach((ts, id) => { if (now - ts > SESSION_MAX_AGE_MS) MEMBER_REVOCATIONS.delete(id); });
-  repo.patchById('members', String(memberId), { sessionsRevokedAt: new Date(at) }).catch(() => { /* held in memory for this process */ });
+  repo.patchById('members', String(memberId), { sessionsRevokedAt: new Date(at) }, repo.allChapters()).catch(() => { /* held in memory for this process */ });
   return at;
 }
 
@@ -532,11 +541,15 @@ function isSessionRevoked(staff) {
 // other route it is as if nobody were signed in, so no route has to remember to
 // check: a guessed starting password reaches nothing.
 const FIRST_PASSWORD_PATHS = new Set(['/api/portal/me', '/api/portal/account', '/api/portal/first-password', '/api/portal/logout']);
+// The same for a leader past their 14 days with no second step, while it is
+// enforced: signing in works, and opens only the screen to set it up.
+const SECOND_STEP_SETUP_PATHS = new Set(['/api/portal/me', '/api/portal/account', '/api/portal/logout', '/api/portal/second-step', '/api/portal/second-step/begin', '/api/portal/second-step/confirm']);
 
 function currentStaff(req) {
   const staff = (req.session && req.session.staff) || null;
   if (isTermExpired(staff) || isSessionRevoked(staff)) return null;
   if (staff && staff.mustChangePassword && !FIRST_PASSWORD_PATHS.has(req.path)) return null;
+  if (staff && !staff.mustChangePassword && staff.mustSetUpSecondStep && !SECOND_STEP_SETUP_PATHS.has(req.path)) return null;
   return staff;
 }
 
@@ -717,6 +730,86 @@ function chapterConfidential(what) {
 // chapter decides, as it always has. It is checked only after the password has
 // been, so a wrong password still answers exactly as it did and the choice can
 // never be used to find out which chapter a username belongs to.
+// ---------- leader sign-in: the session, wrong tries, the second step ----------
+// The session a leader gets once they are who they say they are, by password
+// alone or by password and code.
+async function startStaffSession(req, user) {
+  // An executive's position is stamped into the session at sign-in rather
+  // than looked up per request: the office-portal guards are synchronous and
+  // run on every call, so a database read there would cost a query each
+  // time. A position change revokes the holder's sessions (see the reshuffle
+  // route), which is what stops a stamped value going stale.
+  let positionKey = '';
+  if (user.role === 'executive') {
+    const card = await models.Executive.findOne({ staffId: user.id, chapterId: user.chapterId || '' }).lean();
+    positionKey = positions.resolvePosition(
+      card && card.positionKey, card && card.role, !!(card && card.department)
+    ).key;
+  }
+  const standing = secondStep.standing({ ...user, positionKey }, { since: await leaderSecondStepSince() });
+  await freshSession(req);
+  req.session.staff = {
+    id: user.id, username: user.username, name: user.name || user.username,
+    role: user.role, chapterId: user.chapterId || '',
+    memberId: user.memberId || '',
+    positionKey,
+    termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
+    // Still on the starting password: the portal shows the "choose your own"
+    // screen and nothing else until it is done (see currentStaff).
+    mustChangePassword: !!user.mustChangePassword,
+    // Past the 14 days with no second step while it is enforced: the portal
+    // shows the screen to set it up and nothing else (see currentStaff).
+    mustSetUpSecondStep: standing.mustSetUpNow,
+    issuedAt: Date.now() // what a later revocation is measured against
+  };
+  models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
+}
+
+// When enforcement was switched on: a row of its own, made the first time the
+// server sees ENFORCE_LEADER_2FA on, removed when it is off, so switching it
+// off and on again starts a fresh 14 days.
+async function leaderSecondStepSince() {
+  if (!secondStep.enforced()) return null;
+  let row = await models.SystemState.findOne({ singleton: 'leader2fa' }).lean();
+  if (!row) {
+    await models.SystemState.create({ singleton: 'leader2fa', startedAt: new Date() }).catch(() => {});
+    row = await models.SystemState.findOne({ singleton: 'leader2fa' }).lean();
+  }
+  return row && row.startedAt ? new Date(row.startedAt) : new Date();
+}
+
+// The account's own record of what happened to its sign-in, newest last, the
+// last 50 kept. Shown to the holder on My Account.
+async function logSecurity(staffId, what, by) {
+  const account = await models.StaffUser.findOne({ id: staffId }).lean();
+  if (!account) return;
+  const log = [...(account.securityLog || []), { at: new Date(), what, by: by || '' }].slice(-50);
+  await models.StaffUser.updateOne({ id: staffId }, { $set: { securityLog: log } });
+}
+
+// A wrong password or code: counted, and after five in a row the account
+// rests (lib/secondStep.js). Returns the minutes it now rests for, or 0.
+async function recordWrongTry(user, what) {
+  const next = secondStep.afterWrongTry(user);
+  await models.StaffUser.updateOne({ id: user.id }, { $set: next });
+  if (!next.lockedUntil) return 0;
+  await logSecurity(user.id, `rested after ${next.failedSignIns} wrong tries in a row (last: ${what})`, 'system');
+  return secondStep.lockedFor(next);
+}
+
+async function clearWrongTries(user) {
+  if (user.failedSignIns || user.lockedUntil) {
+    await models.StaffUser.updateOne({ id: user.id }, { $set: { failedSignIns: 0, lockedUntil: null } });
+  }
+}
+
+// A leader's password is a key to other people's records, so it is longer than
+// a member's: 12 characters, wherever one is set (lib/passwords.js).
+const { LEADER_MIN_LENGTH: LEADER_MIN } = require('./lib/passwords');
+const LEADER_SHORT = `A leader's password needs at least ${LEADER_MIN} characters. A short phrase works well.`;
+
+const restingMessage = (minutes) => `Too many wrong tries on this account. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}, or ask your Chapter Coordinator to unlock it.`;
+
 const NATIONAL_CHOICE = 'national';
 function chosenChapter(body) {
   const raw = body && body.chapterId;
@@ -765,11 +858,21 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     }
 
     const user = await models.StaffUser.findOne({ username: String(username).toLowerCase().trim() });
+    // An account resting after too many wrong tries says so, rather than
+    // letting its holder keep typing into a wall.
+    const resting = user && user.active ? secondStep.lockedFor(user) : 0;
+    if (resting) return res.status(429).json({ error: restingMessage(resting) });
     // An unknown username used to answer measurably faster than a wrong
     // password (no hash to check), which tells a stranger which usernames exist.
     // A hash is always checked, so both take as long.
     const ok = await bcrypt.compare(String(password), (user && user.passwordHash) || DUMMY_HASH);
-    if (!user || !user.active || !ok) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user || !user.active || !ok) {
+      if (user && user.active) {
+        const locked = await recordWrongTry(user, 'password');
+        if (locked) return res.status(429).json({ error: restingMessage(locked) });
+      }
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
     // A lapsed term is not a wrong password - say so, so the outgoing
     // executive knows to ask their Coordinator rather than retyping.
     if (isTermExpired(user)) {
@@ -789,33 +892,72 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       });
     }
 
-    // An executive's position is stamped into the session at sign-in rather
-    // than looked up per request: the office-portal guards are synchronous and
-    // run on every call, so a database read there would cost a query each
-    // time. A position change revokes the holder's sessions (see the reshuffle
-    // route), which is what stops a stamped value going stale.
-    let positionKey = '';
-    if (user.role === 'executive') {
-      const card = await models.Executive.findOne({ staffId: user.id, chapterId: user.chapterId || '' }).lean();
-      positionKey = positions.resolvePosition(
-        card && card.positionKey, card && card.role, !!(card && card.department)
-      ).key;
+    // The password was right. With a second step set up, that is half of it:
+    // the session holds only "waiting for the code" until the code comes.
+    if (user.totpEnabledAt) {
+      await freshSession(req);
+      req.session.pendingSignIn = { staffId: user.id, at: Date.now() };
+      return res.json({ success: false, needsSecondStep: true });
     }
-
-    await freshSession(req);
-    req.session.staff = {
-      id: user.id, username: user.username, name: user.name || user.username,
-      role: user.role, chapterId: user.chapterId || '',
-      memberId: user.memberId || '',
-      positionKey,
-      termYear: user.termYear || '', termEndsAt: user.termEndsAt || null,
-      // Still on the starting password: the portal shows the "choose your own"
-      // screen and nothing else until it is done (see currentStaff).
-      mustChangePassword: !!user.mustChangePassword,
-      issuedAt: Date.now() // what a later revocation is measured against
-    };
-    models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
+    await clearWrongTries(user);
+    await startStaffSession(req, user);
     res.json({ success: true, staff: req.session.staff, mustChangePassword: !!user.mustChangePassword });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not sign you in right now. Please try again.' });
+  }
+});
+
+// The six-digit code from their authenticator app, or one of their recovery
+// codes, after the password. Good for five minutes after the password was.
+const SECOND_STEP_WINDOW_MS = 5 * 60 * 1000;
+app.post('/api/portal/login/second-step', loginLimiter, async (req, res) => {
+  try {
+    const pending = req.session && req.session.pendingSignIn;
+    if (!pending || Date.now() - pending.at > SECOND_STEP_WINDOW_MS) {
+      if (req.session) delete req.session.pendingSignIn;
+      return res.status(401).json({ error: 'That took too long. Sign in with your password again.' });
+    }
+    const user = await models.StaffUser.findOne({ id: pending.staffId }).lean();
+    if (!user || !user.active || !user.totpEnabledAt) {
+      delete req.session.pendingSignIn;
+      return res.status(401).json({ error: 'Sign in with your password again.' });
+    }
+    const resting = secondStep.lockedFor(user);
+    if (resting) return res.status(429).json({ error: restingMessage(resting) });
+
+    const { code, recoveryCode } = req.body || {};
+    let passed = false;
+    let usedRecovery = false;
+    if (recoveryCode) {
+      // Each recovery code works once: it is taken off the account in the same
+      // write that accepts it, so two tries with one code cannot both pass.
+      const h = totp.hashRecovery(recoveryCode);
+      if ((user.totpRecoveryHashes || []).includes(h)) {
+        const r = await models.StaffUser.updateOne({ id: user.id, totpRecoveryHashes: h }, { $pull: { totpRecoveryHashes: h } });
+        passed = usedRecovery = r.modifiedCount === 1;
+      }
+    } else {
+      const step = totp.verify(totp.open(user.totpSecretEnc), code, { lastStep: user.totpLastStep || 0 });
+      if (step) {
+        // Moving lastStep forward is what makes a code single-use, and doing it
+        // only where it is still behind stops the same code passing twice at once.
+        const r = await models.StaffUser.updateOne({ id: user.id, totpLastStep: { $lte: step - 1 } }, { $set: { totpLastStep: step } });
+        passed = r.modifiedCount === 1;
+      }
+    }
+    if (!passed) {
+      const locked = await recordWrongTry(user, 'second step');
+      if (locked) return res.status(429).json({ error: restingMessage(locked) });
+      return res.status(401).json({ error: recoveryCode ? 'That recovery code is not right, or has been used.' : 'That code is not right. Check the time on your phone is set automatically, or use a recovery code.' });
+    }
+    delete req.session.pendingSignIn;
+    await clearWrongTries(user);
+    if (usedRecovery) await logSecurity(user.id, `signed in with a recovery code (${Math.max(0, (user.totpRecoveryHashes || []).length - 1)} left)`, user.name || user.username);
+    await startStaffSession(req, user);
+    res.json({
+      success: true, staff: req.session.staff, mustChangePassword: !!user.mustChangePassword,
+      recoveryCodesLeft: usedRecovery ? Math.max(0, (user.totpRecoveryHashes || []).length - 1) : undefined
+    });
   } catch (e) {
     res.status(500).json({ error: 'Could not sign you in right now. Please try again.' });
   }
@@ -906,6 +1048,11 @@ async function resolvePublicChapterId(req) {
 // the public chapter-picker last selected on that browser. A national/admin
 // session with no chapter chosen sees everything, matching today's
 // behaviour. A genuinely anonymous visitor falls back to the public header.
+// Content anyone may see (published, or made public by the person who wrote
+// it): with no chapter chosen, every chapter's, as it always was. Said out
+// loud, so the chapter wall in lib/repo.js lets it through on purpose.
+const publicScope = (filter) => (repo.namesChapter(filter) ? filter : repo.allChapters(filter));
+
 function contentChapterFilter(req) {
   const scope = rolesLib.getActingScope(req);
   if (scope.kind === 'anonymous') {
@@ -1269,7 +1416,7 @@ app.post('/api/auth/reset-password', loginLimiter, async (req, res) => {
 app.get('/api/auth/me', async (req, res) => {
   if (!req.session || !req.session.memberId) return res.json({ member: null });
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.json({ member: null });
     // Only passwordHash was being stripped, so every page load also shipped the
     // member's password-reset token hash and their QR token to the browser.
@@ -1293,7 +1440,7 @@ function currentAcademicYearLabel() {
 
 app.put('/api/member/profile', requireMember, upload.single('profileImage'), async (req, res) => {
   try {
-    const existing = await repo.getById('members', req.session.memberId);
+    const existing = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!existing) return res.status(404).json({ error: 'Account not found' });
     let profileImageFileId = existing.profileImageFileId || '';
     if (req.file) {
@@ -1337,7 +1484,7 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
       birthdayMonth: month,
       birthdayDay: day
     };
-    const updated = await repo.updateById('members', req.session.memberId, { ...existing, ...updates });
+    const updated = await repo.updateById('members', req.session.memberId, { ...existing, ...updates }, repo.ownRecord());
     const { passwordHash, ...safe } = updated;
     res.json({ success: true, member: safe });
   } catch (e) {
@@ -1428,7 +1575,7 @@ const MEMBERSHIP_JOURNEY = [
 // events page everyone else sees.
 app.get('/api/member/events', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Member not found' });
 
     const all = await repo.getAll('eventRegistrations', { chapterId: member.chapterId || '' });
@@ -1520,7 +1667,7 @@ async function describeDepartmentForMember(found, chapterId) {
 
 app.get('/api/member/standing', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Member not found' });
 
     const stage = member.membershipStage || 'visitor';
@@ -1589,7 +1736,7 @@ app.get('/api/member/standing', requireMember, async (req, res) => {
 // a chapter they already belong to.
 app.get('/api/member/departments', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Member not found' });
     const chapterId = member.chapterId || '';
     const [all, myRequests] = await Promise.all([
@@ -1620,7 +1767,7 @@ app.get('/api/member/departments', requireMember, async (req, res) => {
 
 app.post('/api/member/departments/:id/request', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Member not found' });
     const chapterId = member.chapterId || '';
     // Scoped to the member's own chapter, so a department id from another
@@ -1658,7 +1805,7 @@ app.post('/api/member/departments/:id/request', requireMember, async (req, res) 
 
 app.delete('/api/member/departments/:id/request', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Member not found' });
     const chapterId = member.chapterId || '';
     const pending = await repo.getAll('departmentRequests', {
@@ -1676,13 +1823,13 @@ app.delete('/api/member/departments/:id/request', requireMember, async (req, res
 // back out does not.
 app.delete('/api/member/departments/:id', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Member not found' });
     const current = memberDepartmentIds(member);
     if (!current.includes(req.params.id)) {
       return res.status(400).json({ error: 'You are not serving in that department.' });
     }
-    await setMemberDepartments(member.id, current.filter(id => id !== req.params.id));
+    await setMemberDepartments(member.id, current.filter(id => id !== req.params.id), { chapterId: member.chapterId });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not update your departments.' });
@@ -1717,7 +1864,7 @@ app.get('/api/alumni/industries', requireMember, (req, res) => res.json(ALUMNI_I
 // because they opted in. No chapter-scoped record is reachable through it.
 app.get('/api/alumni', requireMember, async (req, res) => {
   try {
-    const me = await repo.getById('members', req.session.memberId);
+    const me = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!canBrowseAlumni(me)) {
       return res.status(403).json({ error: 'Alumni Connect opens once you are a full member of your chapter. Your Shepherd can tell you where you are.' });
     }
@@ -1728,7 +1875,7 @@ app.get('/api/alumni', requireMember, async (req, res) => {
 
     const rows = [];
     for (const p of profiles) {
-      const m = await repo.getById('members', p.memberId);
+      const m = await repo.getById('members', p.memberId, repo.allChapters()); // Alumni Connect is union-wide
       if (!m) continue; // the account went; the listing goes with it
       if (industry && p.industry !== industry) continue;
       if (mentoring && !p.openToMentoring) continue;
@@ -1780,7 +1927,7 @@ app.get('/api/alumni', requireMember, async (req, res) => {
 // Your own listing: yours to write, yours to take down.
 app.get('/api/member/alumni-profile', requireMember, async (req, res) => {
   try {
-    const me = await repo.getById('members', req.session.memberId);
+    const me = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!me) return res.status(404).json({ error: 'Member not found' });
     const mine = (await repo.getAll('alumniProfiles', { memberId: me.id }))[0] || null;
     res.json({
@@ -1796,7 +1943,7 @@ app.get('/api/member/alumni-profile', requireMember, async (req, res) => {
 
 app.put('/api/member/alumni-profile', requireMember, async (req, res) => {
   try {
-    const me = await repo.getById('members', req.session.memberId);
+    const me = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!me) return res.status(404).json({ error: 'Member not found' });
     // Stage is set by Shepherding, never self-declared, so a member cannot put
     // themselves in the alumni directory by claiming to have graduated.
@@ -1895,7 +2042,7 @@ async function canEnterRoom(member, room) {
 // Rooms this member could walk into right now.
 app.get('/api/rooms', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Member not found' });
     const rooms = await repo.getAll('meetingRooms', { chapterId: member.chapterId || '', open: true });
     const mine = [];
@@ -1981,8 +2128,8 @@ app.post('/api/rooms/:id/close', requireRoomHost, async (req, res) => {
 // The signalling channel. Held open for as long as the member is in the room:
 // the server pushes who else is here, and relays their offers and answers.
 app.get('/api/rooms/:id/events', requireMember, async (req, res) => {
-  const member = await repo.getById('members', req.session.memberId);
-  const room = await repo.getById('meetingRooms', req.params.id);
+  const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
+  const room = member ? await repo.getById('meetingRooms', req.params.id, { chapterId: member.chapterId }) : null;
   if (!(await canEnterRoom(member, room))) {
     return res.status(403).json({ error: 'This room is not open to you.' });
   }
@@ -2038,8 +2185,8 @@ app.get('/api/rooms/:id/events', requireMember, async (req, res) => {
 // in the same room. The server does not read it.
 app.post('/api/rooms/:id/signal', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
-    const room = await repo.getById('meetingRooms', req.params.id);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
+    const room = member ? await repo.getById('meetingRooms', req.params.id, { chapterId: member.chapterId }) : null;
     if (!(await canEnterRoom(member, room))) return res.status(403).json({ error: 'This room is not open to you.' });
 
     const peers = roomPeers(room.id);
@@ -2118,7 +2265,7 @@ app.get('/api/member/badges', requireMember, async (req, res) => {
 // in the app that's chapter-visible to some staff role.
 app.get('/api/member/sermon-notes', requireMember, async (req, res) => {
   try {
-    const notes = await repo.getAll('sermonNotes', { memberId: req.session.memberId });
+    const notes = await repo.getAll('sermonNotes', repo.ownRecord({ memberId: req.session.memberId }));
     res.json(notes.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
   } catch (e) {
     res.status(500).json({ error: 'Could not load your sermon notes' });
@@ -2127,7 +2274,7 @@ app.get('/api/member/sermon-notes', requireMember, async (req, res) => {
 
 app.post('/api/member/sermon-notes', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     const { sermonTitle, preacher, date, scripture, notes, summary, keyLessons, reflections } = req.body;
     const note = await repo.create('sermonNotes', {
       memberId: req.session.memberId, chapterId: member ? member.chapterId : '',
@@ -2143,7 +2290,7 @@ app.post('/api/member/sermon-notes', requireMember, async (req, res) => {
 
 app.put('/api/member/sermon-notes/:id', requireMember, async (req, res) => {
   try {
-    const filter = { memberId: req.session.memberId };
+    const filter = repo.ownRecord({ memberId: req.session.memberId });
     const existing = await repo.getById('sermonNotes', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Not found' });
     const { sermonTitle, preacher, date, scripture, notes, summary, keyLessons, reflections } = req.body;
@@ -2166,7 +2313,7 @@ app.put('/api/member/sermon-notes/:id', requireMember, async (req, res) => {
 
 app.delete('/api/member/sermon-notes/:id', requireMember, async (req, res) => {
   try {
-    await repo.removeById('sermonNotes', req.params.id, { memberId: req.session.memberId });
+    await repo.removeById('sermonNotes', req.params.id, repo.ownRecord({ memberId: req.session.memberId }));
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: 'Could not delete this sermon note' });
@@ -2213,7 +2360,7 @@ app.get('/api/notifications', async (req, res) => {
     // a single field here would have shown them only their primary one.
     let ownDepartments = [];
     if (req.session && req.session.memberId) {
-      const me = await repo.getById('members', req.session.memberId);
+      const me = await repo.getById('members', req.session.memberId, repo.ownRecord());
       ownDepartments = memberDepartmentIds(me);
     }
     const audience = { $or: [
@@ -2307,7 +2454,7 @@ app.post('/api/push/subscribe', formLimiter, async (req, res) => {
     const memberId = (req.session && req.session.memberId) || '';
     // Denormalized so a chapter-scoped push send doesn't need to join through
     // Member every time - see lib/push.js.
-    const owner = memberId ? await repo.getById('members', memberId) : null;
+    const owner = memberId ? await repo.getById('members', memberId, repo.ownRecord()) : null;
     await repo.create('pushSubscriptions', {
       endpoint: subscription.endpoint,
       keys: subscription.keys || {},
@@ -2641,7 +2788,7 @@ app.post('/api/forms/:id/submit', formLimiter, async (req, res) => {
       return res.status(400).json({ error: `Please fill in: ${missing.map((f) => f.label).join(', ')}` });
     }
     const memberId = (req.session && req.session.memberId) || '';
-    const member = memberId ? await repo.getById('members', memberId) : null;
+    const member = memberId ? await repo.getById('members', memberId, repo.ownRecord()) : null;
     const submission = await repo.create('formSubmissions', {
       chapterId: form.chapterId,
       formId: form.id,
@@ -2741,7 +2888,7 @@ app.get('/api/admin/forms/:id/submissions', requireContentManager, async (req, r
 // and staff, unlike most Phase 2 routes which were one or the other.
 async function resolveViewerChapterId(req) {
   if (req.session && req.session.memberId) {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     return member ? member.chapterId : '';
   }
   const scope = rolesLib.getActingScope(req);
@@ -2807,7 +2954,7 @@ async function attachDepartmentLeaders(departments) {
 ['departments', 'sermons', 'testimonies'].forEach((resource) => {
   app.get(`/api/${resource}`, async (req, res) => {
     try {
-      const items = await repo.getAll(resource, contentChapterFilter(req));
+      const items = await repo.getAll(resource, publicScope(contentChapterFilter(req)));
       // Only publish testimonies that have been approved by an admin.
       if (resource === 'testimonies') {
         return res.json(items.filter((t) => t.published));
@@ -3540,7 +3687,7 @@ app.post('/api/member/executive-interest', requireMember, async (req, res) => {
     if (!role || !department || !scope) {
       return res.status(400).json({ error: 'Role, department and scope are required' });
     }
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Member not found' });
     const updates = {
       executiveStatus: 'pending',
@@ -3549,7 +3696,7 @@ app.post('/api/member/executive-interest', requireMember, async (req, res) => {
       executiveScope: scope,
       isExecutive: false
     };
-    const updated = await repo.updateById('members', member.id, { ...member, ...updates });
+    const updated = await repo.updateById('members', member.id, { ...member, ...updates }, { chapterId: member.chapterId });
     const item = { id: updated.id, memberId: updated.id, chapterId: updated.chapterId, role: updated.executiveRole, department: updated.executiveDepartment, scope: updated.executiveScope, executiveStatus: updated.executiveStatus };
     res.json({ success: true, item });
   } catch (e) {
@@ -3635,7 +3782,7 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
       if (account) {
         account = await repo.patchById('staffUsers', account.id, {
           active: true, termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt()
-        });
+        }, { chapterId: account.chapterId });
       } else {
         // Left blank, the office's own login is issued (president.knust / president123).
         const officeLogin = !username && !password
@@ -3693,7 +3840,7 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
     if (decision === 'reject') {
       const held = await models.StaffUser.findOne({ memberId: member.id, role: 'executive' }).lean();
       if (held) {
-        await repo.patchById('staffUsers', held.id, { termEndsAt: new Date() });
+        await repo.patchById('staffUsers', held.id, { termEndsAt: new Date() }, { chapterId: held.chapterId });
         revokeStaffSessions(held.id);
       }
     }
@@ -3788,7 +3935,7 @@ app.patch('/api/admin/executives/:id/position', requireChapterCoordinator, async
         await repo.patchById('members', linkedMember.id, {
           executiveRole: position.label,
           executiveDepartment: departmentId
-        });
+        }, { chapterId: linkedMember.chapterId });
       }
     }
 
@@ -3802,8 +3949,9 @@ app.patch('/api/admin/executives/:id/position', requireChapterCoordinator, async
 // enriched with their member profile image/contact details for the visitors page.
 app.get('/api/public/leadership', async (req, res) => {
   try {
-    const staffUsers = await repo.getAll('staffUsers', {});
-    const members = await repo.getAll('members', {});
+    // Union-wide on purpose: the public roster of every chapter's coordinators.
+    const staffUsers = await repo.getAll('staffUsers', repo.allChapters());
+    const members = await repo.getAll('members', repo.allChapters());
     const memberMap = new Map(members.map(m => [m.id, m]));
     const leadership = [];
 
@@ -3941,7 +4089,7 @@ app.post('/api/prayer-requests', formLimiter, async (req, res) => {
 app.get('/api/prayer-wall', async (req, res) => {
   try {
     const filter = { ...contentChapterFilter(req), visibility: { $in: ['public', 'anonymous'] } };
-    const items = await repo.getAll('prayerRequests', filter);
+    const items = await repo.getAll('prayerRequests', publicScope(filter));
     res.json(items
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .map((p) => ({
@@ -3982,7 +4130,13 @@ app.post('/api/prayer-requests/:id/pray', requireMember, async (req, res) => {
 // the "who's allowed" check has to happen inside, not in the route guard.
 app.patch('/api/prayer-requests/:id/answered', async (req, res) => {
   try {
-    const request = await repo.getById('prayerRequests', req.params.id);
+    // Their own request, or (for an admin or Shepherding) one in their own
+    // chapter. It used to be found by id alone, so an admin of one chapter
+    // could close out another chapter's request.
+    const mine = req.session && req.session.memberId
+      ? await repo.getById('prayerRequests', req.params.id, repo.ownRecord({ memberId: req.session.memberId })) : null;
+    const request = mine || ((isChapterAdminOrAbove(req) || hasRole(req, 'shepherding'))
+      ? await repo.getById('prayerRequests', req.params.id, rolesLib.chapterFilter(req, { crossChapter: true })) : null);
     if (!request) return res.status(404).json({ error: 'Not found' });
     const isOwner = !!(req.session && req.session.memberId && request.memberId === req.session.memberId);
     if (!isOwner && !isChapterAdminOrAbove(req) && !hasRole(req, 'shepherding')) {
@@ -3993,7 +4147,7 @@ app.patch('/api/prayer-requests/:id/answered', async (req, res) => {
       answered: true,
       answeredAt: new Date(),
       testimony: req.body.testimony ? String(req.body.testimony).slice(0, 2000) : request.testimony
-    });
+    }, { chapterId: request.chapterId });
     res.json({ success: true, item: updated });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this request' });
@@ -4386,7 +4540,7 @@ app.post('/api/shepherd/records', requireShepherd, upload.single('image'), async
     let record;
     if (existing) {
       if (imageFileId && existing.imageFileId) gridfs.deleteFile(existing.imageFileId).catch(() => {});
-      record = await repo.updateById('shepherdingRecords', existing.id, { ...existing, ...fields });
+      record = await repo.updateById('shepherdingRecords', existing.id, { ...existing, ...fields }, { chapterId: existing.chapterId });
     } else {
       record = await repo.create('shepherdingRecords', fields, 'shep');
     }
@@ -4547,7 +4701,7 @@ app.get('/api/shepherd/attendance-history/:memberId', requireViewRole('shepherdi
 // no directly identifying information if seen out of context.
 app.get('/api/member/card', requireMember, async (req, res) => {
   try {
-    const member = await repo.getById('members', req.session.memberId);
+    const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Account not found' });
     if (!isActivatedMember(member)) {
       return res.json({
@@ -4583,6 +4737,9 @@ function requireAttendanceTaker(req, res, next) {
 }
 registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
+registerShareRoutes(app);
+registerTodayRoutes(app, { models, currentStaff });
+registerHealthRoutes(app, { repo, rolesLib });
 
 // ---------- Attendance / membership reports (section 13, 37) ----------
 // Generate -> Preview (the existing register screens) -> Download PDF.
@@ -5453,7 +5610,7 @@ async function issueOfficeLogin(chapterId, position, departmentId) {
     if (!holder) return { username, password: officeAccounts.startingPasswordFor(position.key) };
     if (holder.chapterId === chapterId && holder.role === 'executive' && isOver(holder)) {
       const stamp = String(holder.termYear || new Date().getFullYear()).replace(/[^0-9]/g, '') || 'old';
-      await repo.patchById('staffUsers', holder.id, { username: `${username}.ended.${stamp}.${String(holder.id).slice(-4)}` });
+      await repo.patchById('staffUsers', holder.id, { username: `${username}.ended.${stamp}.${String(holder.id).slice(-4)}` }, { chapterId: holder.chapterId });
       return { username, password: officeAccounts.startingPasswordFor(position.key) };
     }
   }
@@ -5620,7 +5777,7 @@ app.put('/api/executive/me', requireRole('executive'), upload.single('image'), a
         executiveDepartment: fields.department,
         executiveScope: member.executiveScope || 'chapter',
         executiveVerifiedAt: member.executiveVerifiedAt || new Date()
-      });
+      }, { chapterId: member.chapterId });
     }
     res.json({ success: true, item: record });
   } catch (e) {
@@ -5767,7 +5924,7 @@ app.post('/api/executive/department/requests/:id/decide', requireRole('executive
   if (decision === 'approved') {
     // Added to what they already serve in rather than replacing it - joining
     // the Choir does not take someone out of Ushering.
-    await setMemberDepartments(member.id, [...memberDepartmentIds(member), department.id]);
+    await setMemberDepartments(member.id, [...memberDepartmentIds(member), department.id], { chapterId: member.chapterId });
     createNotification(
       `You're in: ${department.name}`,
       `${staff.name || 'The department head'} accepted your request to serve in ${department.name}.`,
@@ -5936,6 +6093,7 @@ registerOfficeHolderRoutes(app, {
   officeAppointmentProblem, issueOfficeLogin, officeAccounts
 });
 registerAccountRoutes(app, { repo, models, bcrypt, rolesLib, positions, currentStaff, rememberRevocation });
+registerSecondStepRoutes(app, { models, bcrypt, currentStaff, requireChapterAdmin, rolesLib, actorName, revokeStaffSessions, logSecurity, leaderSecondStepSince, passwordLimiter: loginLimiter });
 
 // ---------- chapter attendance (Secretary, Assistant Secretary, Organiser) ----------
 app.get('/api/executive/chapter/attendance', requireRole('executive'), requireCapability(CAP.ATTENDANCE_CHAPTER, async (req, res, { staff }) => {
@@ -6170,7 +6328,7 @@ function requireWelfareReportReader(req, res, next) {
 app.get('/api/member/welfare-giving', requireMember, async (req, res) => {
   try {
     const memberId = req.session.memberId;
-    const member = await repo.getById('members', memberId);
+    const member = await repo.getById('members', memberId, repo.ownRecord());
     if (!member) return res.status(404).json({ error: 'Account not found' });
     const scope = { chapterId: member.chapterId };
 
@@ -6793,7 +6951,7 @@ app.get('/api/coordinator/overview', requireViewRole('coordinator'), async (req,
         unreadMessages: contactMessages.filter(m => m.status !== 'replied').length
       },
       welfare,
-      team: staff.map(({ passwordHash, ...s }) => s),
+      team: staff.map(secondStep.safeAccount),
       // Marked an Executive by Shepherding, still with no account of their
       // own. Counted from rows already read rather than asked for again.
       awaitingAppointment: members.filter(
@@ -6916,15 +7074,15 @@ app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNation
 
     let account;
     if (req.body.staffId) {
-      const staff = await repo.getById('staffUsers', req.body.staffId);
+      const staff = await repo.getById('staffUsers', req.body.staffId, { chapterId: chapter.id });
       if (!staff || staff.chapterId !== chapter.id) {
         return res.status(400).json({ error: 'That account does not belong to this chapter' });
       }
-      account = await repo.updateById('staffUsers', staff.id, { ...staff, role: 'coordinator' });
+      account = await repo.updateById('staffUsers', staff.id, { ...staff, role: 'coordinator' }, { chapterId: chapter.id });
     } else {
       const { username, name, password } = req.body;
       if (!username || !password) return res.status(400).json({ error: 'Username and password are required for a new account' });
-      if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+      if (password.length < LEADER_MIN) return res.status(400).json({ error: LEADER_SHORT });
       const clean = String(username).toLowerCase().trim();
       const dupe = await models.StaffUser.findOne({ username: clean });
       if (dupe) return res.status(400).json({ error: 'That username is already taken' });
@@ -6937,7 +7095,7 @@ app.post('/api/national/chapters/:id/assign-coordinator', rolesLib.requireNation
     const updatedChapter = await repo.updateById('chapters', chapter.id, {
       ...chapter, coordinatorStaffId: account.id, coordinatorName: account.name
     });
-    const { passwordHash, ...safeAccount } = account;
+    const safeAccount = secondStep.safeAccount(account);
     res.json({ success: true, chapter: updatedChapter, coordinator: safeAccount });
   } catch (e) {
     res.status(500).json({ error: 'Could not assign a coordinator' });
@@ -6956,9 +7114,9 @@ const READINESS_OFFICE_ROLES = ['finance', 'shepherding', 'publicity', 'welfare'
 app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) => {
   try {
     const [chapters, members, events, financeEntries, attendance, shepherdingRecords, executives, staffUsers] = await Promise.all([
-      repo.getAll('chapters'), repo.getAll('members'), repo.getAll('events'),
-      repo.getAll('financeEntries'), repo.getAll('attendanceRecords'),
-      repo.getAll('shepherdingRecords'), repo.getAll('executives'), repo.getAll('staffUsers')
+      repo.getAll('chapters'), repo.getAll('members', repo.allChapters()), repo.getAll('events'),
+      repo.getAll('financeEntries', repo.allChapters()), repo.getAll('attendanceRecords', repo.allChapters()),
+      repo.getAll('shepherdingRecords', repo.allChapters()), repo.getAll('executives'), repo.getAll('staffUsers', repo.allChapters())
     ]);
     const now = new Date();
     const byChapter = chapters.map((c) => {
@@ -7143,8 +7301,8 @@ app.put('/api/national/features', rolesLib.requireNational, async (req, res) => 
 app.get('/api/national/reports/overview', rolesLib.requireNational, async (req, res) => {
   try {
     const [chapters, members, events, attendance, welfare] = await Promise.all([
-      repo.getAll('chapters'), repo.getAll('members'), repo.getAll('events'),
-      repo.getAll('attendanceRecords'), repo.getAll('welfareRequests')
+      repo.getAll('chapters'), repo.getAll('members', repo.allChapters()), repo.getAll('events'),
+      repo.getAll('attendanceRecords', repo.allChapters()), repo.getAll('welfareRequests', repo.allChapters())
     ]);
     res.json(chapters.map((chapter) => ({
       chapterId: chapter.id, chapterName: chapter.name, status: chapter.status,
@@ -7181,8 +7339,8 @@ app.post('/api/national/announcements', rolesLib.requireNational, async (req, re
 app.post('/api/national/reports/snapshot', rolesLib.requireNational, async (req, res) => {
   try {
     const [chapters, members, events, financeEntries] = await Promise.all([
-      repo.getAll('chapters'), repo.getAll('members'), repo.getAll('events'),
-      repo.getAll('financeEntries')
+      repo.getAll('chapters'), repo.getAll('members', repo.allChapters()), repo.getAll('events'),
+      repo.getAll('financeEntries', repo.allChapters())
     ]);
     const chapterMetrics = chapters.map((c) => {
       const chMembers = members.filter(m => m.chapterId === c.id);
@@ -7246,7 +7404,7 @@ app.get('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req, { required: false });
     const users = await repo.getAll('staffUsers', filter);
-    res.json(users.map(({ passwordHash, ...safe }) => safe));
+    res.json(users.map(secondStep.safeAccount));
   } catch (e) {
     res.status(500).json({ error: 'Could not load leadership accounts' });
   }
@@ -7263,7 +7421,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     return res.status(400).json({ error: 'Username, role and password are required' });
   }
   if (!PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
-  if (!officeLogin && password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!officeLogin && password.length < LEADER_MIN) return res.status(400).json({ error: LEADER_SHORT });
   const scope = rolesLib.getActingScope(req);
   if (NATIONAL_ONLY_ROLES.includes(role) && !scope.isNational) {
     return res.status(403).json({ error: 'Only the National Coordinator can assign this role.' });
@@ -7312,7 +7470,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     if (!memberId) return res.status(400).json({ error: 'Choose which member this account belongs to, every chapter leader is a member of the chapter first.' });
     // Scoped to the chapter, so an account here can never be pinned to
     // somebody else's member.
-    promotedMember = await repo.getById('members', memberId, chapterId ? { chapterId } : undefined);
+    promotedMember = await repo.getById('members', memberId, chapterId ? { chapterId } : repo.allChapters());
     if (!promotedMember) return res.status(400).json({ error: 'That member is not in this chapter.' });
   }
   if (role === 'executive') {
@@ -7371,7 +7529,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
         executiveRole: position.label,
         executiveDepartment,
         executiveVerifiedAt: new Date()
-      });
+      }, { chapterId: promotedMember.chapterId });
       // The appointment is the milestone, so it is logged here - at the moment
       // the office is granted - rather than whenever they first open the
       // profile form, which they might never do.
@@ -7380,7 +7538,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
         type: 'executive_appointment', note: position.label, loggedBy: 'System'
       });
     }
-    const { passwordHash, ...safe } = user;
+    const safe = secondStep.safeAccount(user);
     // The office login is shown once, to be passed on. It works only until its
     // holder has chosen their own password.
     res.json({ success: true, item: safe, ...(officeLogin ? { issued: { username: clean, password } } : {}) });
@@ -7392,10 +7550,12 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
 app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
   const { name, role, password, active } = req.body;
   if (role && !PORTAL_ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role' });
-  if (password && password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (password && password.length < LEADER_MIN) return res.status(400).json({ error: LEADER_SHORT });
   const scope = rolesLib.getActingScope(req);
+  // Within the actor's own chapter; National's reach is every chapter.
+  const accountScope = scope.isNational ? repo.allChapters() : { chapterId: scope.chapterId };
   try {
-    const existing = await repo.getById('staffUsers', req.params.id);
+    const existing = await repo.getById('staffUsers', req.params.id, accountScope);
     if (!existing) return res.status(404).json({ error: 'Account not found' });
     if (!scope.isNational && existing.chapterId !== scope.chapterId) {
       return res.status(403).json({ error: 'That account belongs to a different chapter.' });
@@ -7436,7 +7596,7 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
         ? { mustChangePassword: true, startingPasswordExpiresAt: officeAccounts.startingPasswordExpiry() } : {}),
       ...(renewTerm ? { termYear: currentAcademicYearLabel(), termEndsAt: academicYearEndsAt() } : {}),
       ...(endTerm ? { termEndsAt: new Date() } : {})
-    });
+    }, accountScope);
     // Anything that takes authority away, or hands it to a different person,
     // has to reach the session they are using right now - not wait for them
     // to sign out. A rename is left alone: it changes nothing they can do.
@@ -7445,7 +7605,7 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
       || (role && role !== existing.role)
       || !!password;
     if (authorityChanged) revokeStaffSessions(existing.id);
-    const { passwordHash, ...safe } = updated;
+    const safe = secondStep.safeAccount(updated);
     res.json({ success: true, item: safe });
   } catch (e) {
     res.status(500).json({ error: 'Could not update this account' });
@@ -7454,8 +7614,10 @@ app.put('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
 
 app.delete('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
   const scope = rolesLib.getActingScope(req);
+  // Within the actor's own chapter; National's reach is every chapter.
+  const accountScope = scope.isNational ? repo.allChapters() : { chapterId: scope.chapterId };
   try {
-    const existing = await repo.getById('staffUsers', req.params.id);
+    const existing = await repo.getById('staffUsers', req.params.id, accountScope);
     if (!existing) return res.status(404).json({ error: 'Account not found' });
     if (!scope.isNational && existing.chapterId !== scope.chapterId) {
       return res.status(403).json({ error: 'That account belongs to a different chapter.' });
@@ -7463,7 +7625,7 @@ app.delete('/api/admin/staff/:id', requireChapterAdmin, async (req, res) => {
     if (!scope.isNational && NATIONAL_ONLY_ROLES.includes(existing.role)) {
       return res.status(403).json({ error: 'Only the National Coordinator can remove this role.' });
     }
-    await repo.removeById('staffUsers', req.params.id);
+    await repo.removeById('staffUsers', req.params.id, accountScope);
     // "Their sign-in stops working immediately" is what the confirmation
     // promises, so it has to be true of the session they hold right now.
     revokeStaffSessions(existing.id);
@@ -8619,12 +8781,12 @@ async function sendDueAnnouncements() {
 // ---------- automated onboarding messages (Phase 3) ----------
 async function processOnboardingTasks() {
   try {
-    const due = await repo.getAll('onboardingTasks', { status: 'scheduled' });
+    const due = await repo.getAll('onboardingTasks', repo.allChapters({ status: 'scheduled' }));
     for (const task of due.filter((t) => new Date(t.sendAt) <= new Date())) {
       try {
         const member = await repo.getById('members', task.memberId, { chapterId: task.chapterId });
         if (!member) {
-          await repo.updateById('onboardingTasks', task.id, { ...task, status: 'skipped', result: 'Member no longer exists.' });
+          await repo.updateById('onboardingTasks', task.id, { ...task, status: 'skipped', result: 'Member no longer exists.' }, { chapterId: task.chapterId });
           continue;
         }
         const chapter = task.chapterId ? await repo.getById('chapters', task.chapterId) : null;
@@ -8643,9 +8805,9 @@ async function processOnboardingTasks() {
           ...task,
           status: sent.sent ? 'sent' : (sent.skipped ? 'skipped' : 'failed'),
           result: sent.sent ? 'sent' : (sent.error || 'email not configured')
-        });
+        }, { chapterId: task.chapterId });
       } catch (e) {
-        await repo.updateById('onboardingTasks', task.id, { ...task, status: 'failed', result: e.message || 'failed' });
+        await repo.updateById('onboardingTasks', task.id, { ...task, status: 'failed', result: e.message || 'failed' }, { chapterId: task.chapterId });
       }
     }
   } catch (e) {
@@ -8663,9 +8825,9 @@ function daysBetween(today, isoDate) {
 async function checkRetentionAlerts() {
   try {
     const [members, records, alerts] = await Promise.all([
-      repo.getAll('members'),
-      repo.getAll('attendanceRecords'),
-      repo.getAll('retentionAlerts')
+      repo.getAll('members', repo.allChapters()),
+      repo.getAll('attendanceRecords', repo.allChapters()),
+      repo.getAll('retentionAlerts', repo.allChapters())
     ]);
     const latestByMember = new Map();
     records.forEach((record) => {
@@ -8706,10 +8868,10 @@ async function checkRetentionAlerts() {
             member.chapterId
           );
         } else if (open.daysAbsent !== daysAbsent) {
-          await repo.updateById('retentionAlerts', open.id, { ...open, daysAbsent, lastPresentDate });
+          await repo.updateById('retentionAlerts', open.id, { ...open, daysAbsent, lastPresentDate }, { chapterId: open.chapterId });
         }
       } else if (open) {
-        await repo.updateById('retentionAlerts', open.id, { ...open, status: 'resolved', notes: open.notes || 'Auto-resolved after attendance resumed.' });
+        await repo.updateById('retentionAlerts', open.id, { ...open, status: 'resolved', notes: open.notes || 'Auto-resolved after attendance resumed.' }, { chapterId: open.chapterId });
       }
     }
   } catch (e) {
@@ -8726,7 +8888,7 @@ const mapPlacesFound = new Map(); // short link -> the spot it led to, this run
 async function knownMapPlace(url) {
   if (mapPlacesFound.has(url)) return mapPlacesFound.get(url);
   for (const resource of MAP_RESOURCES) {
-    const hit = (await repo.getAll(resource, { mapUrl: url })).find((r) => r.mapPlace);
+    const hit = (await repo.getAll(resource, repo.allChapters({ mapUrl: url }))).find((r) => r.mapPlace);
     if (hit) return hit.mapPlace;
   }
   return null;
@@ -8737,7 +8899,7 @@ async function resolvePendingMapLinks() {
   mapResolveRunning = true;
   try {
     for (const resource of MAP_RESOURCES) {
-      const pending = (await repo.getAll(resource, { mapPlace: null }))
+      const pending = (await repo.getAll(resource, repo.allChapters({ mapPlace: null })))
         .filter((r) => r.mapUrl && (Date.now() - (mapLinkTried.get(r.mapUrl) || 0)) > 60 * 60 * 1000)
         .slice(0, 20);
       for (const r of pending) {
@@ -8745,7 +8907,7 @@ async function resolvePendingMapLinks() {
         const place = mapPlacesFound.get(r.mapUrl) || await maps.resolveMapPlace(r.mapUrl).catch(() => null);
         if (place) mapPlacesFound.set(r.mapUrl, place);
         // Only if the link has not been changed in the meantime.
-        if (place) await repo.patchById(resource, r.id, { mapPlace: place }, { mapUrl: r.mapUrl }).catch(() => {});
+        if (place) await repo.patchById(resource, r.id, { mapPlace: place }, repo.allChapters({ mapUrl: r.mapUrl })).catch(() => {});
       }
     }
   } finally {
@@ -8814,6 +8976,9 @@ connectDB()
   // get a window where it works again.
   .then(() => loadStaffRevocations())
   .then(() => loadMemberRevocations())
+  // Leaders' second step switched off: forget when it was switched on, so
+  // switching it on again starts a fresh 14 days for everyone.
+  .then(() => (secondStep.enforced() ? null : models.SystemState.deleteOne({ singleton: 'leader2fa' }).catch(() => {})))
   .then(() => {
     const httpServer = app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);

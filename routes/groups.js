@@ -12,18 +12,26 @@ function registerGroupRoutes(app, deps) {
     const chapterId = await resolveViewerChapterId(req);
     return !!(group && chapterId && group.chapterId === chapterId);
   };
+  // A group is only ever read from the viewer's own chapter, so one in another
+  // chapter is simply not found (lib/repo.js: the chapter wall).
+  const findGroup = async (req) => {
+    const chapterId = await resolveViewerChapterId(req);
+    return chapterId ? repo.getById('groups', req.params.id, { chapterId }) : null;
+  };
 
   app.get('/api/groups', async (req, res) => {
     try {
       const chapterId = await resolveViewerChapterId(req);
-      const groups = await repo.getAll('groups', chapterId ? { chapterId } : {});
+      // A public listing (names and how many are in each, never who): with no
+      // chapter chosen, every chapter's, as the other public pages do.
+      const groups = await repo.getAll('groups', chapterId ? { chapterId } : repo.allChapters());
       res.json(groups.map(({ memberIds, ...g }) => ({ ...g, memberCount: memberIds.length })));
     } catch (e) { res.status(500).json({ error: 'Could not load groups' }); }
   });
 
   app.get('/api/groups/:id', async (req, res) => {
     try {
-      const group = await repo.getById('groups', req.params.id);
+      const group = await findGroup(req);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       const canSeeRoster = isGroupMember(req, group) || isGroupLeaderOrAbove(req, group);
       let members = [];
@@ -88,7 +96,7 @@ function registerGroupRoutes(app, deps) {
 
   app.put('/api/groups/:id', requireMember, async (req, res) => {
     try {
-      const existing = await repo.getById('groups', req.params.id);
+      const existing = await findGroup(req);
       if (!await canAccessGroup(req, existing)) return res.status(404).json({ error: 'Group not found' });
       if (!isGroupLeaderOrAbove(req, existing)) return res.status(403).json({ error: 'Only the group leader can edit this group.' });
       const { description, meetingDay, meetingTime, meetingLocation, resources } = req.body;
@@ -98,14 +106,14 @@ function registerGroupRoutes(app, deps) {
         meetingLocation: meetingLocation !== undefined ? meetingLocation : existing.meetingLocation,
         ...(req.body.mapUrl !== undefined ? { mapUrl: req.body.mapUrl, mapPlace: req.body.mapPlace } : {}),
         resources: Array.isArray(resources) ? resources.filter((r) => r && r.title) : existing.resources
-      });
+      }, { chapterId: existing.chapterId });
       res.json({ success: true, item: updated });
     } catch (e) { res.status(500).json({ error: 'Could not update this group' }); }
   });
 
   app.post('/api/groups/:id/join', requireMember, async (req, res) => {
     try {
-      const group = await repo.getById('groups', req.params.id);
+      const group = await findGroup(req);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       await models.Group.updateOne({ id: req.params.id, chapterId: group.chapterId }, { $addToSet: { memberIds: req.session.memberId } });
       res.json({ success: true });
@@ -114,7 +122,7 @@ function registerGroupRoutes(app, deps) {
 
   app.post('/api/groups/:id/leave', requireMember, async (req, res) => {
     try {
-      const group = await repo.getById('groups', req.params.id);
+      const group = await findGroup(req);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       await models.Group.updateOne({ id: req.params.id, chapterId: group.chapterId }, { $pull: { memberIds: req.session.memberId } });
       res.json({ success: true });
@@ -123,7 +131,7 @@ function registerGroupRoutes(app, deps) {
 
   app.get('/api/groups/:id/posts', requireMember, async (req, res) => {
     try {
-      const group = await repo.getById('groups', req.params.id);
+      const group = await findGroup(req);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       if (!isGroupMember(req, group) && !isGroupLeaderOrAbove(req, group)) return res.status(403).json({ error: 'Join this group to see its posts.' });
       const posts = await repo.getAll('groupPosts', { groupId: req.params.id, chapterId: group.chapterId });
@@ -134,11 +142,11 @@ function registerGroupRoutes(app, deps) {
 
   app.post('/api/groups/:id/posts', requireMember, async (req, res) => {
     try {
-      const group = await repo.getById('groups', req.params.id);
+      const group = await findGroup(req);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       if (!isGroupMember(req, group) && !isGroupLeaderOrAbove(req, group)) return res.status(403).json({ error: 'Join this group to post.' });
       if (!req.body.body || !req.body.body.trim()) return res.status(400).json({ error: 'A message is required' });
-      const member = await repo.getById('members', req.session.memberId);
+      const member = await repo.getById('members', req.session.memberId, repo.ownRecord());
       const post = await repo.create('groupPosts', { chapterId: group.chapterId, groupId: group.id, authorMemberId: req.session.memberId,
         authorName: member ? member.name : '', body: req.body.body.trim(), isAnnouncement: !!req.body.isAnnouncement && isGroupLeaderOrAbove(req, group) }, 'gpost');
       res.json({ success: true, item: post });
@@ -147,7 +155,7 @@ function registerGroupRoutes(app, deps) {
 
   app.get('/api/groups/:id/meetings', requireMember, async (req, res) => {
     try {
-      const group = await repo.getById('groups', req.params.id);
+      const group = await findGroup(req);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       if (!isGroupMember(req, group) && !isGroupLeaderOrAbove(req, group)) return res.status(403).json({ error: 'Join this group to see its meetings.' });
       const meetings = await repo.getAll('groupMeetings', { groupId: req.params.id, chapterId: group.chapterId });
@@ -157,7 +165,7 @@ function registerGroupRoutes(app, deps) {
 
   app.post('/api/groups/:id/meetings', requireMember, async (req, res) => {
     try {
-      const group = await repo.getById('groups', req.params.id);
+      const group = await findGroup(req);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       if (!isGroupLeaderOrAbove(req, group)) return res.status(403).json({ error: 'Only the group leader can log a meeting.' });
       const { date, topic, location, mapUrl, attendeeMemberIds, notes } = req.body;
@@ -172,7 +180,7 @@ function registerGroupRoutes(app, deps) {
   // open quick sheet -> tap attendees -> save.
   app.post('/api/groups/:id/meetings/quick', requireMember, async (req, res) => {
     try {
-      const group = await repo.getById('groups', req.params.id);
+      const group = await findGroup(req);
       if (!await canAccessGroup(req, group)) return res.status(404).json({ error: 'Group not found' });
       if (!isGroupLeaderOrAbove(req, group)) return res.status(403).json({ error: 'Only the group leader can log attendance.' });
       const date = req.body.date || new Date().toISOString().slice(0, 10);

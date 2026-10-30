@@ -172,6 +172,13 @@ const LIST = [
   await a.click('#portalNav button[data-panel="attendance"]');
   await a.waitForSelector('#saveRegisterBtn');
   check('the register points to the check-in for Sundays', /Sunday Check-In/.test(await a.textContent('#panel-attendance')));
+  // The register opens on last Sunday and the check-in on today; they are the
+  // same day only on a Sunday. Open the register on the check-in's own day, as
+  // somebody at the door would, so this does not depend on the day it is run.
+  const ciDay = await b.inputValue('#ciDate');
+  await a.fill('#regDate', ciDay);
+  await a.click('#loadRegisterBtn');
+  await a.waitForFunction((d) => document.getElementById('regDate') && document.getElementById('regDate').value === d && document.getElementById('saveRegisterBtn'), ciDay);
   // Someone checked in at the door while the register is open here.
   await b.type('#ciSearch', 'akua');
   await b.waitForSelector('.ci-person');

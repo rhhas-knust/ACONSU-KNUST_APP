@@ -65,10 +65,10 @@ const { fakeModels } = require('./harness.js');
   // The first account of each chapter is the main admin's to make (the chapter
   // has nobody else yet); after that, the chapter's own Coordinator makes them.
   for (const [username, role, chapterId, by] of [['coord.k', 'coordinator', 'knust', 'admin'], ['admin.u', 'chapterAdmin', 'ucc', 'admin'], ['fin.k', 'finance', 'knust', 'coord.k']]) {
-    const r = await call(by, 'POST', '/api/admin/staff', { username, name: username, role, password: 'password123', memberId: await member(username, chapterId), chapterId });
+    const r = await call(by, 'POST', '/api/admin/staff', { username, name: username, role, password: 'password1234', memberId: await member(username, chapterId), chapterId });
     check(`${username} is created${by === 'admin' ? '' : ' by the chapter\'s own Coordinator'}`, r.status === 200, r.data);
     staffIds[username] = r.data.item && r.data.item.id;
-    await call(username, 'POST', '/api/portal/login', { username, password: 'password123' });
+    await call(username, 'POST', '/api/portal/login', { username, password: 'password1234' });
   }
   await call('member', 'POST', '/api/auth/login', { email: 'look1@test.com', password: 'secret123' });
 
@@ -121,7 +121,7 @@ const { fakeModels } = require('./harness.js');
   check('nor removing one', asked(r), r.data);
   r = await call('admin', 'PUT', `/api/shepherd/members/${plainK}`, { notes: 'x' });
   check('nor through the Shepherding portal', asked(r), r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'pub.k', name: 'pub.k', role: 'publicity', password: 'password123', memberId: plainK, chapterId: 'knust' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'pub.k', name: 'pub.k', role: 'publicity', password: 'password1234', memberId: plainK, chapterId: 'knust' });
   check('not a new leadership account for it', asked(r) && r.data.area === 'accounts', r.data);
   r = await call('admin', 'PUT', `/api/admin/staff/${staffIds['fin.k']}`, { password: 'Taken-Over-1' });
   check('not a password reset on one of its accounts, whatever chapter is chosen', asked(r), r.data);
@@ -135,9 +135,9 @@ const { fakeModels } = require('./harness.js');
   check('nor by naming a chapter in set-up inside the request while this one is chosen', asked(r), r.data);
   r = await call('admin', 'PUT', `/api/admin/executives/${cardK}`, { name: 'Renamed from above' });
   check('nor its executive cards', asked(r), r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'nat.two', name: 'Second National', role: 'nationalCoordinator', password: 'password123', memberId: await member('nat.two', 'legon') });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'nat.two', name: 'Second National', role: 'nationalCoordinator', password: 'password1234', memberId: await member('nat.two', 'legon') });
   check('a National Coordinator\'s account is the main admin\'s own, and still opens', r.status === 200, r.data);
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'admin.l', name: 'admin.l', role: 'chapterAdmin', password: 'password123', memberId: await member('admin.l', 'legon'), chapterId: 'legon' });
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'admin.l', name: 'admin.l', role: 'chapterAdmin', password: 'password1234', memberId: await member('admin.l', 'legon'), chapterId: 'legon' });
   check('and a chapter with nobody of its own yet is given its first admin', r.status === 200, r.data);
   const legonAdmin = r.data.item.id;
   r = await call('coord.k', 'PUT', `/api/admin/staff/${staffIds['fin.k']}`, { name: 'Finance Knust' });

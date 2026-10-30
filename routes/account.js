@@ -9,7 +9,7 @@
 // Two sign-ins are NOT accounts and cannot be changed here: the administrator
 // login and the legacy shepherding login both live in the server's settings.
 const rateLimit = require('express-rate-limit');
-const { passwordProblem } = require('../lib/passwords');
+const { passwordProblem, LEADER_MIN_LENGTH } = require('../lib/passwords');
 
 function registerAccountRoutes(app, deps) {
   const { repo, models, bcrypt, rolesLib, positions, currentStaff, rememberRevocation } = deps;
@@ -43,7 +43,7 @@ function registerAccountRoutes(app, deps) {
   async function signOutOthers(req, staffId) {
     const at = Date.now();
     rememberRevocation(staffId, at);
-    await repo.patchById('staffUsers', staffId, { sessionsRevokedAt: new Date(at) }).catch(() => { /* held in memory for this process */ });
+    await repo.patchById('staffUsers', staffId, { sessionsRevokedAt: new Date(at) }, repo.ownRecord()).catch(() => { /* held in memory for this process */ });
     req.session.staff.issuedAt = at + 1;
   }
 
@@ -106,11 +106,11 @@ function registerAccountRoutes(app, deps) {
       if (!await bcrypt.compare(currentPassword, account.passwordHash || '')) {
         return res.status(401).json({ error: 'Your current password is not right.' });
       }
-      const problem = passwordProblem(newPassword, { username: account.username, current: currentPassword });
+      const problem = passwordProblem(newPassword, { username: account.username, current: currentPassword, minLength: LEADER_MIN_LENGTH });
       if (problem) return res.status(400).json({ error: problem });
       await repo.patchById('staffUsers', account.id, {
         passwordHash: await bcrypt.hash(newPassword, 10), passwordChangedAt: new Date()
-      });
+      }, { chapterId: account.chapterId });
       await signOutOthers(req, account.id);
       res.json({ success: true });
     } catch (e) {
@@ -139,7 +139,7 @@ function registerAccountRoutes(app, deps) {
         }
       }
       if (typeof newPassword !== 'string' || !newPassword) return res.status(400).json({ error: 'Choose a new password.' });
-      const problem = passwordProblem(newPassword, { username: account.username });
+      const problem = passwordProblem(newPassword, { username: account.username, minLength: LEADER_MIN_LENGTH });
       if (problem) return res.status(400).json({ error: problem });
       if (await bcrypt.compare(newPassword, account.passwordHash || '')) {
         return res.status(400).json({ error: 'That is the starting password. Choose one of your own.' });
@@ -147,7 +147,7 @@ function registerAccountRoutes(app, deps) {
       await repo.patchById('staffUsers', account.id, {
         passwordHash: await bcrypt.hash(newPassword, 10), passwordChangedAt: new Date(),
         mustChangePassword: false, startingPasswordExpiresAt: null
-      });
+      }, { chapterId: account.chapterId });
       req.session.staff.mustChangePassword = false;
       await signOutOthers(req, account.id);
       res.json({ success: true });

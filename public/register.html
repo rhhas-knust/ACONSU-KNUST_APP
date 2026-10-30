@@ -191,6 +191,13 @@ document.getElementById('profileImage').addEventListener('change', (e) => {
   preview.style.display = 'block';
 });
 
+// Counted once a visit, the first time someone types into the form: only how
+// many sign-ups were started, to set beside how many were finished. Nothing
+// about who (routes/share.js, lib/metrics.js).
+document.getElementById('registerForm').addEventListener('input', () => {
+  try { navigator.sendBeacon('/api/metrics/signup-started'); } catch (e) { /* a lost count is fine */ }
+}, { once: true });
+
 document.getElementById('registerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('registerBtn');

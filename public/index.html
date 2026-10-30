@@ -195,6 +195,11 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       </div>
 
     </div>
+    <div class="invite-strip">
+      <p>Know someone who should be here? Send them the app.</p>
+      <button type="button" class="btn btn-outline share-btn" data-share="invite" data-share-title="ACONSU"
+        data-share-text="Come and join us at ACONSU: services, prayer, the Bible and friends on campus." data-share-path="/">Invite a friend</button>
+    </div>
   </div>
 </section>
 
@@ -287,6 +292,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js?v=7"></script>
+<script src="/js/share.js"></script>
 <script>
 (async function () {
   const settings = await initLayout('/index.html');
@@ -446,11 +452,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     
     // Share as text
     menu.querySelector('.share-menu-btn:nth-child(1)').addEventListener('click', () => {
-      shareContent({
-        title: 'Verse of the Day | ACONSU',
-        text: `${verseText}\n\nRead more on the ACONSU App`,
-        url: window.location.origin + '/bible.html'
-      });
+      AconsuShare.share({ kind: 'verse', title: 'Verse of the Day | ACONSU', text: `${verseText}\n\nRead more on the ACONSU App`, path: '/bible.html' });
       menu.remove();
     });
     
