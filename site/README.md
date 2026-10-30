@@ -99,7 +99,7 @@ heroImage: 'images/header.jpg',
 heroImageTone: 'dark',
 ```
 
-Blank keeps the purple-and-gold gradient, which is a perfectly good header —
+Blank keeps the navy-and-gold gradient, which is a perfectly good header —
 only use a photo if it is a good one.
 
 **What makes a good one:** wide rather than tall (it is cropped to a band),
@@ -111,7 +111,7 @@ a phone costs a fresher on campus data real money and several seconds — and it
 is the first thing on the page, so nothing else shows until it loads.
 
 `heroImageTone` decides the words, not the picture: `dark` puts the heading in
-white over a darkened photo and suits almost anything; `light` keeps the purple
+white over a darkened photo and suits almost anything; `light` keeps the navy
 heading and lays a pale wash over instead, for a very pale photo. The photo
 never goes on bare either way, so the heading stays readable whatever you
 photographed.

@@ -16,13 +16,16 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<meta name="theme-color" content="#0B1A43">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/theme.css" id="brandTheme">
+<script src="/js/brand.js"></script>
 <link rel="stylesheet" href="/css/portal.css">
 <style>
   .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin:16px 0; }
   .filter-btn { padding:6px 14px; border-radius:6px; border:1px solid var(--line); background:var(--surface); font-size:0.85rem; font-weight:600; cursor:pointer; color:var(--ink); transition:all 0.15s ease; }
-  .filter-btn.active, .filter-btn:hover { background:var(--purple-deep); color:#fff; border-color:var(--brand); }
-  .preview-box { display:flex; align-items:center; gap:12px; margin-top:8px; padding:10px; background:#f9f6fc; border-radius:8px; border:1px dashed var(--line); }
+  .filter-btn.active, .filter-btn:hover { background:var(--brand-deep); color:#fff; border-color:var(--brand); }
+  .preview-box { display:flex; align-items:center; gap:12px; margin-top:8px; padding:10px; background:var(--surface-2); border-radius:8px; border:1px dashed var(--line); }
   .preview-box img { width:60px; height:60px; object-fit:cover; border-radius:6px; }
 </style>
 </head>
@@ -272,7 +275,7 @@ function renderTable() {
       </td>
       <td>
         <span class="badge" style="font-size:0.75rem;">${escapeHtml(KIND_LABELS[i.kind] || i.kind)}</span>
-        ${i.isNational || !i.chapterId ? '<span class="badge" style="background:#5B2C82; color:#fff; font-size:0.7rem; margin-top:2px;">National</span>' : ''}
+        ${i.isNational || !i.chapterId ? '<span class="badge" style="background:var(--brand-deep); color:#fff; font-size:0.7rem; margin-top:2px;">National</span>' : ''}
       </td>
       <td>
         <strong>${escapeHtml(i.title)}</strong>

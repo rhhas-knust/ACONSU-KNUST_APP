@@ -62,7 +62,7 @@ async function renderFinanceOverview(el) {
           format: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : Math.round(v)),
           emptyMessage: 'No entries recorded yet. Add one from the Ledger.',
           legend: [
-            { label: 'Income', color: 'var(--purple-deep)' },
+            { label: 'Income', color: 'var(--brand-deep)' },
             { label: 'Expenses', color: 'var(--flame-gold)' }
           ]
         }
@@ -250,7 +250,7 @@ function openBudgetForm(budget) {
       </div>
       <div class="field"><label>Notes</label><input type="text" id="bNotes" value="${escapeHtml(budget?.notes || '')}" placeholder="Optional"></div>
 
-      <label style="display:block; font-weight:700; font-size:0.85rem; margin-bottom:6px; color:var(--purple-rich);">Budget Lines</label>
+      <label style="display:block; font-weight:700; font-size:0.85rem; margin-bottom:6px; color:var(--brand-strong);">Budget Lines</label>
       <p class="tiny muted" style="margin-bottom:10px;">Each line is one planned income source or spending area. Ledger entries booked to a line fill in the actual figure by themselves.</p>
       <div class="table-wrap" style="margin-bottom:12px;">
         <table class="portal-table" style="min-width:440px;">
@@ -591,16 +591,16 @@ async function renderReports(el) {
             ${INCOME_CATEGORIES.map(c => `
               <tr><td>Income: ${escapeHtml(c.label)}</td><td class="num">${money(summary.byIncomeCategory[c.value] || 0)}</td></tr>
             `).join('')}
-            <tr style="background:var(--lilac-light);">
+            <tr style="background:var(--tint-light);">
               <td><strong>Total Income</strong></td><td class="num"><strong>${money(summary.totalIncome)}</strong></td>
             </tr>
             ${Object.entries(summary.byExpenseCategory).sort((a, b) => b[1] - a[1]).map(([cat, amt]) => `
               <tr><td>Expense: ${escapeHtml(cat)}</td><td class="num">${money(amt)}</td></tr>
             `).join('') || '<tr><td class="muted">No expenses in this period</td><td class="num">-</td></tr>'}
-            <tr style="background:var(--lilac-light);">
+            <tr style="background:var(--tint-light);">
               <td><strong>Total Expenditure</strong></td><td class="num"><strong>${money(summary.totalExpense)}</strong></td>
             </tr>
-            <tr style="background:var(--purple-deep); color:#fff;">
+            <tr style="background:var(--brand-deep); color:#fff;">
               <td><strong>Net for the period</strong></td><td class="num"><strong>${money(summary.balance)}</strong></td>
             </tr>
           </tbody>
@@ -617,7 +617,7 @@ async function renderReports(el) {
           format: (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : Math.round(v)),
           emptyMessage: 'No entries in this period.',
           legend: [
-            { label: 'Income', color: 'var(--purple-deep)' },
+            { label: 'Income', color: 'var(--brand-deep)' },
             { label: 'Expenses', color: 'var(--flame-gold)' }
           ]
         }

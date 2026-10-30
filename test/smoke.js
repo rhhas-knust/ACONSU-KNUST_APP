@@ -3030,7 +3030,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       (r.data.heroPages || []).every(p => p.scene && typeof p.sceneDescription === 'string'), (r.data.heroPages || [])[0]);
   }
 
-  console.log('\n== a verse card is no longer one purple rectangle ==');
+  console.log('\n== a verse card is no longer one plain rectangle ==');
   {
     r = await call('anon', 'GET', '/api/verse-styles');
     check('the card backgrounds are listed', r.status === 200 && r.data.styles.length >= 5, r.data);
@@ -5731,12 +5731,13 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
         const w = fg.info.width;
         if (w !== 108 * k || fg.info.height !== 108 * k) sizesRight = false;
         if (fg.data[3] !== 0) cornersClear = false;          // the picture's own corner is empty: only the middle is the logo
-        // the colour of what is drawn: the logo is purple, pink and orange; the placeholder it replaced was blue
-        let r = 0, g = 0, b = 0, n = 0;
+        // the colour of what is drawn: the logo is navy with the orange flame in it; the placeholder it replaced was a plain flat blue with no flame
+        let n = 0, flame = 0;
         for (let i = 0; i < fg.data.length; i += 4) {
-          if (fg.data[i + 3] > 200 && (fg.data[i] < 225 || fg.data[i + 1] < 225 || fg.data[i + 2] < 225)) { r += fg.data[i]; g += fg.data[i + 1]; b += fg.data[i + 2]; n++; }
+          if (fg.data[i + 3] > 200 && (fg.data[i] < 225 || fg.data[i + 1] < 225 || fg.data[i + 2] < 225)) n++;
+          if (fg.data[i + 3] > 200 && fg.data[i] > 200 && fg.data[i + 1] > 90 && fg.data[i + 1] < 200 && fg.data[i + 2] < 110) flame++;
         }
-        if (n < w * w * 0.03 || !(r / n > g / n + 20 && b / n > g / n)) logoColours = false;
+        if (n < w * w * 0.03 || flame < w * w * 0.001) logoColours = false;
         for (const name of ['ic_launcher', 'ic_launcher_round']) {
           const m = await sharp(path.join(res, 'mipmap-' + d, name + '.png')).metadata();
           if (m.width !== 48 * k || m.height !== 48 * k) legacyRight = false;
@@ -5746,7 +5747,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       }
       check('the Android launcher icon is drawn at the right size for every screen density', sizesRight, null);
       check('and is the logo in the middle of an otherwise empty picture', cornersClear, null);
-      check('in the logo\'s own colours, not the blue placeholder it started with', logoColours, null);
+      check('in the logo\'s own colours (navy, with the orange flame), not the flat placeholder it started with', logoColours, null);
       check('older phones get the logo too, as a square and as a circle', legacyRight && roundClear, null);
       const adaptive = read('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml');
       check('a newer phone draws it over plain white, so the logo keeps its own background',

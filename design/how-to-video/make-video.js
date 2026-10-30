@@ -62,12 +62,12 @@ const STAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title
 @font-face{font-family:'Source Serif 4';font-weight:700;src:url('/fonts/source-serif-4-latin-700-normal.woff2') format('woff2')}
 html,body{margin:0;width:${W}px;height:${H}px;overflow:hidden;background:#fff;font-family:'Source Sans 3',system-ui,sans-serif}
 #screen{position:absolute;left:0;top:0;width:${W / SCALE}px;height:${APP_H}px;border:0;background:#fff;transform:scale(${SCALE});transform-origin:0 0}
-#cap{position:absolute;left:0;top:${APP_H * SCALE}px;width:${W}px;height:${H - APP_H * SCALE}px;box-sizing:border-box;padding:40px 52px 32px;background:#3A1B54;color:#fff;display:flex;flex-direction:column;justify-content:center}
+#cap{position:absolute;left:0;top:${APP_H * SCALE}px;width:${W}px;height:${H - APP_H * SCALE}px;box-sizing:border-box;padding:40px 52px 32px;background:#07102A;color:#fff;display:flex;flex-direction:column;justify-content:center}
 #bar{position:absolute;left:0;top:${APP_H * SCALE}px;height:8px;width:0;background:#E8971E}
 #step{font-size:28px;font-weight:600;color:#E4CDF0;letter-spacing:.01em;margin:0 0 12px;min-height:34px}
 #text{font-size:43px;line-height:1.26;font-weight:700;margin:0;transition:opacity .22s}
 #text.off{opacity:0}
-#finger{position:absolute;left:0;top:0;width:92px;height:92px;margin:-46px 0 0 -46px;border-radius:50%;box-sizing:border-box;background:rgba(255,255,255,.62);border:5px solid #5B2C82;box-shadow:0 4px 14px rgba(36,21,48,.35);opacity:0;transition:left .45s cubic-bezier(.4,0,.2,1),top .45s cubic-bezier(.4,0,.2,1),opacity .2s,transform .14s;pointer-events:none}
+#finger{position:absolute;left:0;top:0;width:92px;height:92px;margin:-46px 0 0 -46px;border-radius:50%;box-sizing:border-box;background:rgba(255,255,255,.62);border:5px solid #0B1A43;box-shadow:0 4px 14px rgba(36,21,48,.35);opacity:0;transition:left .45s cubic-bezier(.4,0,.2,1),top .45s cubic-bezier(.4,0,.2,1),opacity .2s,transform .14s;pointer-events:none}
 #finger.on{opacity:1}
 #finger.down{transform:scale(.72);background:rgba(232,151,30,.72)}
 #card{position:absolute;inset:0;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 70px;transition:opacity .5s}
@@ -122,7 +122,7 @@ async function seed(base) {
 }
 
 async function avatar(file) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="400" height="400" fill="#5B2C82"/><circle cx="200" cy="150" r="70" fill="#E4CDF0"/><path d="M60 400a140 140 0 0 1 280 0z" fill="#E4CDF0"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400"><rect width="400" height="400" fill="#0B1A43"/><circle cx="200" cy="150" r="70" fill="#E4CDF0"/><path d="M60 400a140 140 0 0 1 280 0z" fill="#E4CDF0"/></svg>`;
   await sharp(Buffer.from(svg)).png().toFile(file);
 }
 

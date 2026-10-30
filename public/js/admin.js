@@ -39,12 +39,14 @@ async function checkAuth() {
   try {
     const { isAdmin } = await fetchJSON('/api/admin/check');
     if (isAdmin) {
+      if (window.ACONSU_BRAND) window.ACONSU_BRAND.use('');
       ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
       return showAdminShell();
     }
   } catch (e) { /* fall through to the portal-login check below */ }
   try {
     const me = await fetchJSON('/api/portal/me');
+    if (window.ACONSU_BRAND) window.ACONSU_BRAND.use(me.chapter ? me.chapter.id : '');
     const role = me.staff && me.staff.role;
     // Past their days to set up a second step: that first, on its own page.
     if (me.staff && me.staff.mustSetUpSecondStep) {
@@ -749,7 +751,7 @@ async function renderResourcePanel(resource, fields, singular) {
         ${pageItems.map(item => `
           <tr>
             ${resource === 'departments' ? `<td>
-              <div style="width:74px; height:44px; border-radius:8px; overflow:hidden; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:var(--ink-faint);">
+              <div style="width:74px; height:44px; border-radius:8px; overflow:hidden; background:var(--tint-light); display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:var(--ink-faint);">
                 ${item.headerImageFileId ? `<img src="/api/files/${item.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">` : 'none'}
               </div>
             </td>` : ''}
@@ -916,7 +918,7 @@ async function renderStaffAccounts() {
         <div class="media-card" style="padding:14px;">
           <h4 style="margin:0 0 4px;">${r.label}</h4>
           <small class="hint" style="margin:0 0 8px;">${r.blurb}</small>
-          <a href="${r.href}" target="_blank" rel="noopener" style="font-size:0.8rem; font-weight:700; color:var(--purple-deep);">${r.href}</a>
+          <a href="${r.href}" target="_blank" rel="noopener" style="font-size:0.8rem; font-weight:700; color:var(--brand);">${r.href}</a>
           <div style="margin-top:6px; font-size:0.78rem; color:var(--ink-faint);">${users.filter(u => u.role === r.value).length} account(s)</div>
         </div>
       `).join('')}
@@ -1111,7 +1113,7 @@ async function openDepartmentImageModal(dept) {
       Landscape photos work best. Anything wider than it is tall.
     </p>
 
-    <div style="aspect-ratio:16/6; border-radius:12px; overflow:hidden; background:var(--lilac-light); display:flex; align-items:center; justify-content:center; margin-bottom:18px;">
+    <div style="aspect-ratio:16/6; border-radius:12px; overflow:hidden; background:var(--tint-light); display:flex; align-items:center; justify-content:center; margin-bottom:18px;">
       ${dept.headerImageFileId
         ? `<img src="/api/files/${dept.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">`
         : '<span style="color:var(--ink-faint); font-weight:700;">No header image yet</span>'}
@@ -2115,7 +2117,7 @@ async function renderExecutives() {
 function execCardHtml(e) {
   return `
     <div class="media-card">
-      <div class="thumb">${e.imageFileId ? `<img src="/api/files/${e.imageFileId}" alt="${escapeHtml(e.name)}">` : '<span style="font-family:var(--font-display); font-size:1.4rem; color:var(--purple-deep);">' + escapeHtml((e.name || '?').charAt(0)) + '</span>'}</div>
+      <div class="thumb">${e.imageFileId ? `<img src="/api/files/${e.imageFileId}" alt="${escapeHtml(e.name)}">` : '<span style="font-family:var(--font-display); font-size:1.4rem; color:var(--brand);">' + escapeHtml((e.name || '?').charAt(0)) + '</span>'}</div>
       <div class="info">
         <h4>${escapeHtml(e.name)}</h4>
         <small>${escapeHtml(e.role || '')}</small>
@@ -2239,7 +2241,7 @@ async function renderMediaLibrary() {
           <small class="hint">The heading sits on top of the picture, so this is what keeps it readable.</small>
         </div>
 
-        <div id="placementExplain" style="background:var(--lilac-light); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:0.85rem; color:var(--purple-rich); margin-bottom:18px;"></div>
+        <div id="placementExplain" style="background:var(--tint-light); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:0.85rem; color:var(--brand-strong); margin-bottom:18px;"></div>
 
         <div class="field-row">
           <div class="field">
@@ -2432,7 +2434,7 @@ function mediaCardHtml(f) {
       </div>
       <div class="info">
         <h4>${escapeHtml(f.title)}</h4>
-        <small style="display:block; color:var(--purple-deep); font-weight:700;">${escapeHtml(placementSummary(f))}</small>
+        <small style="display:block; color:var(--brand); font-weight:700;">${escapeHtml(placementSummary(f))}</small>
         <small>${f.category} · ${formatFileSize(f.length)}</small>
         <div class="row-actions" style="margin-top:8px;">
           <button class="danger" data-delete-file="${f.id}">Delete</button>
@@ -2471,7 +2473,7 @@ function formFieldRow(field) {
         <label>Options (one per line)</label>
         <textarea data-field-options rows="3">${escapeHtml((f.options || []).join('\n'))}</textarea>
       </div>
-      <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:700; color:var(--purple-rich);">
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:700; color:var(--brand-strong);">
         <input type="checkbox" data-field-required style="width:auto;" ${f.required ? 'checked' : ''}> Required
       </label>
       <button type="button" class="btn btn-outline btn-sm" data-remove-field style="margin-top:8px;">Remove Question</button>
@@ -2528,7 +2530,7 @@ async function openFormBuilder(form) {
           </select>
         </div>
       ` : ''}
-      <label style="display:block; font-weight:700; font-size:0.85rem; margin:14px 0 8px; color:var(--purple-rich);">Questions</label>
+      <label style="display:block; font-weight:700; font-size:0.85rem; margin:14px 0 8px; color:var(--brand-strong);">Questions</label>
       <div id="fieldRows">${fields.map((field) => formFieldRow(field)).join('')}</div>
       <button type="button" class="btn btn-outline btn-sm" id="addFieldBtn">+ Add Question</button>
       <div style="display:flex; gap:10px; margin-top:20px;">
@@ -2726,18 +2728,34 @@ async function renderSettings() {
           <input type="text" data-key="${f.key}" value="${escapeHtml(settings[f.key] || '')}">
         </div>
       `).join('')}
+      <div class="field">
+        <span class="field-label" id="brandColorLabel">App colour</span>
+        <p class="hint">The colour of buttons, headers and links across the national app. Chapters that have not chosen their own use this one.</p>
+        <div id="brandPickerMount" role="group" aria-labelledby="brandColorLabel"></div>
+      </div>
       <button type="submit" class="btn btn-primary btn-block">Save Settings</button>
       <div class="form-msg" id="settingsMsg"></div>
     </form>
   `;
+  const brandPicker = BrandPicker.mount(document.getElementById('brandPickerMount'), { value: settings.brandColor || '', fallback: '#0B1A43' });
   document.getElementById('settingsForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {};
     fields.forEach(f => { payload[f.key] = document.querySelector(`[data-key="${f.key}"]`).value; });
+    if (!brandPicker.isValid()) {
+      document.getElementById('settingsMsg').textContent = 'Type the app colour like #0B1A43, or pick one of the suggestions.';
+      document.getElementById('settingsMsg').className = 'form-msg error';
+      brandPicker.focus();
+      return;
+    }
+    payload.brandColor = brandPicker.value();
     try {
       await fetchJSON('/api/admin/settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
       });
+      if (window.ACONSU_BRAND) window.ACONSU_BRAND.use('');
+      const themeLink = document.getElementById('brandTheme');
+      if (themeLink) themeLink.setAttribute('href', '/theme.css?v=' + Date.now());
       document.getElementById('settingsMsg').textContent = 'Settings saved.';
       document.getElementById('settingsMsg').className = 'form-msg success';
     } catch (err) {
@@ -2785,6 +2803,12 @@ async function renderChapterSettings() {
             <span id="bannerUploadMsg" style="margin-left:10px; font-size:0.85rem; font-weight:700;"></span>
           </div>
         </div>
+      </div>
+
+      <div class="portal-card" style="margin-bottom:24px; background:var(--surface); border-radius:12px; padding:20px; border:1px solid var(--line);">
+        <h3 style="margin-bottom:8px;" id="chapterColorLabel">App colour</h3>
+        <p class="hint">The colour of buttons, headers and links when people use your chapter. Leave it on the national colour, or choose your own.</p>
+        <div id="chapterBrandMount" role="group" aria-labelledby="chapterColorLabel"></div>
       </div>
 
       <form class="form-card" id="chapterSettingsForm" style="max-width:780px; margin:0;">
@@ -3066,7 +3090,7 @@ async function renderChapterSettings() {
       const formData = new FormData();
       formData.append('image', file);
       msg.textContent = 'Uploading banner...';
-      msg.style.color = 'var(--purple-deep)';
+      msg.style.color = 'var(--brand-deep)';
       try {
         await fetchJSON('/api/admin/chapter-settings/banner', {
           method: 'POST',
@@ -3081,8 +3105,18 @@ async function renderChapterSettings() {
     });
 
     // Chapter settings save handler
+    const chapterBrand = BrandPicker.mount(document.getElementById('chapterBrandMount'), {
+      value: data.brandColor || '', inherit: true, fallback: data.nationalBrandColor || '#0B1A43'
+    });
     document.getElementById('chapterSettingsForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (!chapterBrand.isValid()) {
+        const m = document.getElementById('chapterSettingsMsg');
+        m.textContent = 'Type the app colour like #0B1A43, or pick one of the suggestions.';
+        m.className = 'form-msg error';
+        chapterBrand.focus();
+        return;
+      }
       const btn = document.getElementById('saveChapterSettingsBtn');
       const msg = document.getElementById('chapterSettingsMsg');
       btn.disabled = true;
@@ -3099,6 +3133,7 @@ async function renderChapterSettings() {
         mapUrl: document.getElementById('csMapUrl').value,
         tagline: document.getElementById('csTagline').value,
         verseOfTheWeek: document.getElementById('csVerse').value,
+        brandColor: chapterBrand.value(),
         serviceTimes: document.getElementById('csServiceTimes').value.split('\n').map(s => s.trim()).filter(Boolean),
         contact: {
           email: document.getElementById('csEmail').value,
@@ -3147,6 +3182,8 @@ async function renderChapterSettings() {
         msg.textContent = 'Chapter site settings saved successfully.';
         msg.className = 'form-msg success';
         showToast('Chapter settings saved.', 'success');
+        const themeLink = document.getElementById('brandTheme');
+        if (themeLink) themeLink.setAttribute('href', '/theme.css?chapter=' + encodeURIComponent(data.id || '') + '&v=' + Date.now());
       } catch (err) {
         msg.textContent = err.message || 'Could not save chapter settings.';
         msg.className = 'form-msg error';

@@ -44,6 +44,8 @@ const { registerShepherdListRoutes } = require('./routes/shepherd-list');
 const { registerPrivacyRoutes } = require('./routes/privacy');
 const { registerShareRoutes, sharePreviews } = require('./routes/share');
 const { registerTodayRoutes } = require('./routes/today');
+const brand = require('./lib/brand');
+const { registerThemeCss, registerBrandApi, brandFor } = require('./routes/brand');
 const { registerHealthRoutes } = require('./routes/health-panel');
 const { registerDoorCheckinRoutes } = require('./routes/door-checkin');
 const phoneLib = require('./lib/phone');
@@ -196,6 +198,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
     else if (/[\\/]video[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=86400');
   }
 }));
+// The colour palette, as a stylesheet (routes/brand.js). Before the session on purpose:
+// every page asks for it, and it needs no one to be signed in.
+registerThemeCss(app, { repo });
 app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
@@ -3363,11 +3368,12 @@ function sanitiseHeroArt(stored) {
 // of the move to ACONSU-KNUST stay on the server.
 const PUBLIC_GLOBAL_KEYS = [
   'fellowshipName', 'fullName', 'tagline', 'verseOfTheWeek', 'address', 'email', 'phone', 'whatsapp',
-  'instagram', 'facebook', 'youtube', 'twitter', 'tiktok', 'telegram', 'spotify', 'homeHeaderImageFileId'
+  'instagram', 'facebook', 'youtube', 'twitter', 'tiktok', 'telegram', 'spotify', 'homeHeaderImageFileId', 'brandColor'
 ];
 function publicGlobalSettings(globalSettings) {
   const out = {};
   PUBLIC_GLOBAL_KEYS.forEach((key) => { if (globalSettings[key] !== undefined) out[key] = globalSettings[key]; });
+  out.brandColor = brand.resolveBrand({ global: globalSettings });
   return out;
 }
 
@@ -3394,6 +3400,8 @@ function buildPublicSettings(globalSettings, chapter) {
     verseOfTheWeek: own(chapter.verseOfTheWeek),
     address: chapter.address || chapter.location || '',
     homeHeaderImageFileId: own(chapter.homeHeaderImageFileId),
+    // The colour this chapter has chosen, or the national one when it has not.
+    brandColor: brand.resolveBrand({ chapter, global: globalSettings }),
     // Every page already loads settings to draw its header and footer, so the
     // artwork map rides along with it rather than costing a request of its own.
     heroArt: sanitiseHeroArt(chapter.heroArt),
@@ -3520,14 +3528,15 @@ function splitVerseAndReference(raw) {
 // Each style carries its own backdrop and the ink that stays readable on it,
 // so a light card is a real option rather than dark text on a dark panel.
 const VERSE_CARD_STYLES = {
-  purple: {
-    label: 'Royal purple',
-    swatch: 'linear-gradient(135deg,#5B2C82,#3A1B54 55%,#241530)',
-    ink: '#FBF8FD', accent: '#E8971E', sub: '#EFE6F6', quote: '#E8971E', quoteOpacity: 0.22,
-    backdrop: (w, h) => `
+  // The app's own colour, whatever an admin has chosen (lib/brand.js).
+  brand: {
+    label: 'App colour',
+    swatch: (c) => `linear-gradient(135deg,${c.deep},${c.rich} 55%,${c.ink})`,
+    ink: '#FFFFFF', accent: '#F2B65C', sub: '#EEF1F8', quote: '#F2B65C', quoteOpacity: 0.22,
+    backdrop: (w, h, c) => `
       <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#5B2C82"/><stop offset="55%" stop-color="#3A1B54"/>
-        <stop offset="100%" stop-color="#241530"/></linearGradient></defs>
+        <stop offset="0%" stop-color="${c.deep}"/><stop offset="55%" stop-color="${c.rich}"/>
+        <stop offset="100%" stop-color="${c.ink}"/></linearGradient></defs>
       <rect width="${w}" height="${h}" fill="url(#g)"/>
       <circle cx="${w - 60}" cy="180" r="300" fill="#E8971E" opacity="0.07"/>
       <circle cx="40" cy="${h - 140}" r="240" fill="#E8971E" opacity="0.05"/>`
@@ -3546,12 +3555,12 @@ const VERSE_CARD_STYLES = {
   },
   night: {
     label: 'Midnight',
-    swatch: 'radial-gradient(120% 100% at 50% 18%,#2B2144,#161029 62%,#0B0715)',
-    ink: '#EDE7F5', accent: '#F0AE43', sub: '#C7BCD8', quote: '#F0AE43', quoteOpacity: 0.26,
+    swatch: 'radial-gradient(120% 100% at 50% 18%,#1B2747,#0E1630 62%,#060A18)',
+    ink: '#ECEFF8', accent: '#F0AE43', sub: '#C3CBE0', quote: '#F0AE43', quoteOpacity: 0.26,
     backdrop: (w, h) => `
       <defs><radialGradient id="g" cx="50%" cy="18%" r="92%">
-        <stop offset="0%" stop-color="#2B2144"/><stop offset="62%" stop-color="#161029"/>
-        <stop offset="100%" stop-color="#0B0715"/></radialGradient></defs>
+        <stop offset="0%" stop-color="#1B2747"/><stop offset="62%" stop-color="#0E1630"/>
+        <stop offset="100%" stop-color="#060A18"/></radialGradient></defs>
       <rect width="${w}" height="${h}" fill="url(#g)"/>
       ${[[140, 210, 3], [320, 130, 2], [880, 250, 3], [980, 520, 2], [180, 980, 2],
          [760, 1180, 3], [420, 1260, 2], [620, 96, 2], [1010, 880, 2]]
@@ -3592,15 +3601,28 @@ const VERSE_CARD_STYLES = {
       <rect x="60" y="60" width="${w - 120}" height="${h - 120}" fill="none" stroke="#C7A96B" stroke-width="1" opacity="0.4"/>`
   }
 };
-const DEFAULT_VERSE_STYLE = 'purple';
+const DEFAULT_VERSE_STYLE = 'brand';
+// What a link or a device remembers from before the style was renamed.
+const VERSE_STYLE_ALIASES = { purple: 'brand' };
 
 // Public: the share sheet asks for this so the pickers and the renderer cannot
 // drift apart on which cards exist.
-app.get('/api/verse-styles', (req, res) => {
+// The three tones of the app colour a verse card is drawn in.
+function brandTones(color) {
+  const p = brand.paletteFor(color);
+  return { deep: p.brand, rich: p.light['--brand-rich'], ink: p.light['--brand-ink'] };
+}
+// Which colour a request means: its chapter's own, else the national one.
+async function requestBrand(req) {
+  try { return await brandFor(repo, cleanText(req.query.chapterId) || publicChapterId(req)); } catch (e) { return brand.DEFAULT_BRAND; }
+}
+
+app.get('/api/verse-styles', async (req, res) => {
+  req.brandColor = await requestBrand(req);
   res.json({
     // The swatch is a CSS gradient, not a rendered card: a picker that showed
     // six real cards would download six full-size PNGs to let someone choose one.
-    styles: Object.entries(VERSE_CARD_STYLES).map(([value, s]) => ({ value, label: s.label, swatch: s.swatch })),
+    styles: Object.entries(VERSE_CARD_STYLES).map(([value, s]) => ({ value, label: s.label, swatch: typeof s.swatch === 'function' ? s.swatch(brandTones(req.brandColor)) : s.swatch })),
     defaultStyle: DEFAULT_VERSE_STYLE
   });
 });
@@ -3634,7 +3656,9 @@ app.get('/api/verse-image', verseImageLimiter, async (req, res) => {
 
     // An unknown style is answered with the default rather than an error: a
     // shared link with a stale style in it should still produce a card.
-    const style = VERSE_CARD_STYLES[String(req.query.style || '')] || VERSE_CARD_STYLES[DEFAULT_VERSE_STYLE];
+    const asked = String(req.query.style || '');
+    const style = VERSE_CARD_STYLES[VERSE_STYLE_ALIASES[asked] || asked] || VERSE_CARD_STYLES[DEFAULT_VERSE_STYLE];
+    const tones = brandTones(await requestBrand(req));
 
     const width = 1080, height = 1350;
     // Sized so a long verse still fits the panel rather than running off it.
@@ -3652,7 +3676,7 @@ app.get('/api/verse-image', verseImageLimiter, async (req, res) => {
 
     const svg = `
       <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-        ${style.backdrop(width, height)}
+        ${style.backdrop(width, height, tones)}
 
         <text x="${width / 2}" y="112" font-size="34" font-weight="700" fill="${style.accent}"
               text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
@@ -4842,6 +4866,7 @@ registerPhoneSigninRoutes(app, { models, rolesLib, freshSession, revokeMemberSes
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
 registerShareRoutes(app);
 registerTodayRoutes(app, { models, currentStaff });
+registerBrandApi(app, { requireChapterAdmin });
 registerHealthRoutes(app, { repo, rolesLib });
 
 // ---------- Attendance / membership reports (section 13, 37) ----------
@@ -8119,7 +8144,9 @@ app.get('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => 
     if (!chapterId) return res.status(400).json({ error: 'Choose which chapter to manage first.' });
     const chapter = await repo.getById('chapters', chapterId);
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
-    res.json(chapterSettingsResponse(chapter));
+    // The picker offers "use the national colour", so it needs to say which that is.
+    const nationalBrandColor = brand.resolveBrand({ global: await repo.getSettings() });
+    res.json({ ...chapterSettingsResponse(chapter), nationalBrandColor });
   } catch (e) {
     res.status(500).json({ error: 'Could not load chapter settings' });
   }
@@ -8141,6 +8168,11 @@ app.put('/api/admin/chapter-settings', requireChapterAdmin, async (req, res) => 
     if (hasOwn(req.body, 'mapUrl')) { next.mapUrl = req.body.mapUrl; next.mapPlace = req.body.mapPlace; } // checked on the way in
     if (hasOwn(req.body, 'tagline')) next.tagline = cleanText(req.body.tagline);
     if (hasOwn(req.body, 'verseOfTheWeek')) next.verseOfTheWeek = cleanText(req.body.verseOfTheWeek);
+    if (hasOwn(req.body, 'brandColor')) {
+      const color = cleanText(req.body.brandColor);
+      if (color && !brand.isHex(color)) return res.status(400).json({ error: 'Use a colour like #0B1A43 (a # and six letters or digits).' });
+      next.brandColor = color ? brand.normalise(color) : '';
+    }
     if (hasOwn(req.body, 'serviceTimes')) next.serviceTimes = cleanStringList(req.body.serviceTimes);
     if (hasOwn(req.body, 'contact')) {
       next.contact = mergeTextFields(chapter.contact, req.body.contact, [
@@ -8209,6 +8241,11 @@ app.put('/api/admin/settings', rolesLib.requireNational, async (req, res) => {
   // overwritten by a copy of the form sent back.
   const next = {};
   PUBLIC_GLOBAL_KEYS.forEach((key) => { if (hasOwn(req.body, key)) next[key] = cleanText(req.body[key]); });
+  if (hasOwn(req.body, 'brandColor')) {
+    const color = cleanText(req.body.brandColor);
+    if (color && !brand.isHex(color)) return res.status(400).json({ error: 'Use a colour like #0B1A43 (a # and six letters or digits).' });
+    next.brandColor = color ? brand.normalise(color) : '';
+  }
   await repo.setSettings(next);
   res.json({ success: true });
 });

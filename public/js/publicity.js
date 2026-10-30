@@ -42,7 +42,7 @@ function composerFields(audiences, opts) {
         </select>
       </div>
     </div>
-    <label style="display:block; font-weight:700; font-size:0.85rem; margin-bottom:8px; color:var(--purple-rich);">Channels</label>
+    <label style="display:block; font-weight:700; font-size:0.85rem; margin-bottom:8px; color:var(--brand-strong);">Channels</label>
     <div class="choice-grid" style="margin-bottom:18px;">
       <label class="choice selected">
         <input type="checkbox" id="chApp" checked>
@@ -717,7 +717,7 @@ function formFieldRow(field, i) {
         <label>Options (one per line)</label>
         <textarea data-field-options rows="3">${escapeHtml((f.options || []).join('\n'))}</textarea>
       </div>
-      <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:700; color:var(--purple-rich);">
+      <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; font-weight:700; color:var(--brand-strong);">
         <input type="checkbox" data-field-required style="width:auto;" ${f.required ? 'checked' : ''}> Required
       </label>
       <button type="button" class="btn btn-outline btn-sm" data-remove-field style="margin-top:8px;">Remove Question</button>
@@ -762,7 +762,7 @@ function openFormBuilder(form) {
       <div class="field"><label>Category</label>
         <select id="fCategory">${Object.entries(FORM_CATEGORY_LABELS).map(([v, l]) => `<option value="${v}" ${form?.category === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
       </div>
-      <label style="display:block; font-weight:700; font-size:0.85rem; margin:14px 0 8px; color:var(--purple-rich);">Questions</label>
+      <label style="display:block; font-weight:700; font-size:0.85rem; margin:14px 0 8px; color:var(--brand-strong);">Questions</label>
       <div id="fieldRows">${fields.map((f, i) => formFieldRow(f, i)).join('')}</div>
       <button type="button" class="btn btn-outline btn-sm" id="addFieldBtn">+ Add Question</button>
       <div style="display:flex; gap:10px; margin-top:20px;">
@@ -886,7 +886,7 @@ async function renderContentManagerLink(el) {
       </div>
     </div>
     <div class="portal-card" style="text-align:center; padding:40px 20px;">
-      <p style="font-size:1.1rem; font-weight:700; color:var(--purple-rich); margin-bottom:8px;">Manage Multimedia &amp; Chapter Resources</p>
+      <p style="font-size:1.1rem; font-weight:700; color:var(--brand-strong); margin-bottom:8px;">Manage Multimedia &amp; Chapter Resources</p>
       <p class="muted" style="max-width:500px; margin:0 auto 20px;">Upload e-book PDFs, publish YouTube/Facebook livestreams, post seminar previews, and curate "This Week at ACONSU" photo highlights.</p>
       <a href="/content-manager.html" class="btn btn-primary">Go to Content Manager</a>
     </div>

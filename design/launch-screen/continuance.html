@@ -627,7 +627,7 @@
             // measured step from ground toward lineage, so dark reads as old.
             drawSegment(a, b) {
                 const t = params.generations > 1 ? this.gen / (params.generations - 1) : 1;
-                const hue = lerpColor(color('#5B2C82'), lineage, pow(t, 0.85));
+                const hue = lerpColor(color('#0B1A43'), lineage, pow(t, 0.85));
                 // Fading in and out over a life keeps trails from ending abruptly.
                 const envelope = sin(PI * (this.age / this.life));
                 stroke(red(hue), green(hue), blue(hue), 8 + 26 * envelope * t);

@@ -39,7 +39,7 @@ window.CHAPTER = {
   heroImage: 'images/header.jpg',
 
   // 'dark' puts the heading in white over a darkened photo. 'light' keeps the
-  // purple heading and lays a pale wash over instead. Dark suits most photos;
+  // dark heading and lays a pale wash over instead. Dark suits most photos;
   // try light only if yours is very pale.
   // What the photo shows, for people who cannot see it.
   heroImageAlt: 'A group of ACONSU KNUST members standing together outdoors',

@@ -1,6 +1,6 @@
 /* The Alumni wall and the monthly theme, in the National portal and in a
    chapter's admin dashboard. Loaded by both, so it lives in neither. */
-.al-thumb { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; flex: none; background: var(--lilac-mid); }
+.al-thumb { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; object-position: 50% 20%; flex: none; background: var(--tint-mid); }
 .al-thumb.al-initial { display: inline-flex; align-items: center; justify-content: center; font-weight: 800; color: var(--brand); }
 .al-queue { display: grid; gap: 14px; margin-bottom: 26px; }
 .al-request { display: flex; gap: 16px; align-items: flex-start; background: var(--warn-bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }

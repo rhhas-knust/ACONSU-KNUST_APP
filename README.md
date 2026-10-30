@@ -495,7 +495,7 @@ Works with any standard SMTP provider — Gmail (using an [App Password](https:/
 
 ## 19. Design
 
-Palette pulled from the ACONSU crest: deep purple (`#5B2C82`) and rich plum (`#3A1B54`) as primary, a light lilac background, with the crest's flame rendered as a gold-to-red gradient accent on key call-to-action buttons and the homepage hero. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
+The app's colour is a deep navy (`#0B1A43`) with the crest's gold flame as the accent; see section 30 for how an admin changes it. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
 
 ## 20. Multi-chapter platform (Phase 2 of the ACONSU platform spec)
 
@@ -866,3 +866,14 @@ How the codes work (`lib/smsCode.js`, `routes/phone-signin.js`):
 
 Not tested here: a real text arriving on a real phone through mNotify.
 
+## 30. The app's colour (navy by default, and an admin can change it)
+
+The whole palette comes from **one colour**. The default is the navy `#0B1A43`.
+
+- **Who chooses.** The national admin sets the union's colour in **Global Settings, App colour**. A chapter admin can set their own in **Chapter Settings, App colour**, or leave it on "Use the national colour". A chapter that chooses nothing follows the national one.
+- **How.** Pick one of the suggestions (midnight navy, royal blue, teal, forest green, burgundy, violet, charcoal) or type any `#RRGGBB`. The page recolours as soon as you choose, so you see it before saving.
+- **It cannot be made unreadable.** `lib/brand.js` turns the colour into every colour the stylesheet uses, light and dark, and checks each text-on-background pair against WCAG 2.2 AA (4.5:1). A colour too light to carry white button text is darkened until it can, and the picker says so. `test/brand.js` tries 5,760 colours across every hue and fails if any palette comes out below AA.
+- **How it reaches a page.** Every page loads `/theme.css` (served by `routes/brand.js`, checked with the server each time) right after `style.css`; `public/js/brand.js` asks for the visitor's chapter's version as early as it can. `style.css` also carries the default palette as a fallback, kept in step by `node scripts/sync-brand-css.js` (a test fails if it drifts).
+- **Where it does not reach.** Things that are files, not pages, cannot follow an admin's choice: the installed app's icon and splash screen, the Android launcher icon, the manifest's browser-bar colour, the marketing site in `site/` (it is a separate static site), and the how-to video. These are the default navy. Changing the default means `DEFAULT_BRAND` in `lib/brand.js`, `node scripts/sync-brand-css.js`, and the files below.
+- **The emblem.** `scripts/recolor-brand.js` recoloured the crest and every icon from purple to navy (the flame and torch are untouched). The originals are in `design/brand-original/`; copy one back over its file to undo. The how-to video and its poster were not remade and still show the old colour.
+- **Verse cards.** The first card background is now "App colour", drawn in the viewer's chapter's colour. A shared link that still says `style=purple` gets it.

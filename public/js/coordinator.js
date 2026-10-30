@@ -95,7 +95,7 @@ async function renderCoordinatorDashboardBody(el) {
               <tr><td>Total income</td><td class="num">${money(finance.totalIncome)}</td></tr>
               <tr><td>Total expenditure</td><td class="num">${money(finance.totalExpense)}</td></tr>
               <tr><td>This month, net</td><td class="num">${money(finance.thisMonth.balance)}</td></tr>
-              <tr style="background:var(--lilac-light);"><td><strong>Balance</strong></td><td class="num"><strong>${money(finance.balance)}</strong></td></tr>
+              <tr style="background:var(--tint-light);"><td><strong>Balance</strong></td><td class="num"><strong>${money(finance.balance)}</strong></td></tr>
             </tbody>
           </table>
         </div>

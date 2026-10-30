@@ -9,11 +9,11 @@
     brand. Defining the same names here overrides them.
 -->
 <resources>
-    <color name="colorPrimary">#5B2C82</color>      <!-- purple-deep -->
-    <color name="colorPrimaryDark">#3A1B54</color>  <!-- purple-rich: the status bar -->
+    <color name="colorPrimary">#0B1A43</color>      <!-- brand-deep -->
+    <color name="colorPrimaryDark">#07102A</color>  <!-- brand-rich: the status bar -->
     <color name="colorAccent">#E8971E</color>       <!-- flame-gold -->
 
     <!-- The ground colour of the launch artwork. Used as the Android 12+
          splash background so there is no pale flash before it appears. -->
-    <color name="splashBackground">#241530</color>
+    <color name="splashBackground">#090D16</color>
 </resources>
