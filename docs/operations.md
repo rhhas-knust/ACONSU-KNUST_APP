@@ -120,3 +120,15 @@ A setting that is there but malformed (`PUBLIC_BASE_URL` with a path, a
 `COOKIE_DOMAIN` that is not a domain) is ignored, and `warnings` in
 `/api/health` says so. The step-by-step for the day a domain is bought is
 [when-you-have-a-domain.md](when-you-have-a-domain.md).
+
+## 6. Old records are cleared daily
+
+A job deletes notifications, the record of texts sent and contact-form
+messages older than 12 months, and chat messages older than 2 years. Change
+any of these with `RETAIN_NOTIFICATIONS_DAYS`, `RETAIN_SMS_LOG_DAYS`,
+`RETAIN_CONTACT_MESSAGES_DAYS` or `RETAIN_CHAT_DAYS` (days; 0 keeps for
+ever), and change the privacy page to match. When it removes anything, the
+log says `Retention: removed ...`. It takes a lock in the database first
+(the `systemstates` collection, row `lock:retention`), so two copies of the
+app running at once never both run it; a lock left by a copy that crashed
+lapses after 30 minutes.

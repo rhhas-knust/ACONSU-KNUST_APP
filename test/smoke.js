@@ -5606,7 +5606,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     w = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: withBox })).json();
     const boxed = (await fakeModels.Member.find({ email: 'withbox@test.com' }))[0];
     check('with it ticked the account is made', w.success === true && !!boxed, w);
-    check('and when they agreed, and to which wording, is kept', !!boxed && !!boxed.consentedAt && boxed.consentVersion === '2026-10-06', boxed && { at: boxed.consentedAt, v: boxed.consentVersion });
+    check('and when they agreed, and to which wording, is kept', !!boxed && !!boxed.consentedAt && boxed.consentVersion === '2026-10-30', boxed && { at: boxed.consentedAt, v: boxed.consentVersion });
     const reg = read('public/register.html');
     check('the form asks for it with a box that must be ticked, linked to both documents',
       /<input type="checkbox" id="agree" required>/.test(reg) && /href="\/terms\.html"/.test(reg) && /href="\/privacy\.html"/.test(reg), null);

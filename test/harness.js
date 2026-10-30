@@ -279,7 +279,7 @@ const fakeModels = {
   }),
   Notification: makeModel({ chapterId: '', source: 'admin' }),
   PushSubscription: makeModel({ chapterId: '' }),
-  SystemState: makeModel({ lastBirthdayNotifDate: '' }),
+  SystemState: makeModel({ lastBirthdayNotifDate: '' }, { unique: ['singleton'] }),
   ShepherdingRecord: makeModel({ chapterId: '', memberId: '', name: '', phone: '', email: '', level: '', programme: '', department: '', birthdayMonth: null, birthdayDay: null, origin: 'manual', linkedAt: null, linkedHow: '', linkedBy: '', mergedFromList: false, address: '', emergencyContact: '', attendanceStatus: 'new', lastContactDate: '', pastoralNotes: '', imageFileId: '' }),
   FinanceEntry: makeModel({ chapterId: '', method: 'cash', reference: '', payee: '', budgetId: '', budgetLineId: '', approvalStatus: 'recorded', approvedBy: '', receiptFileId: '', description: '', recordedBy: '', serviceDate: '', serviceType: '', origin: '' }),
   Budget: makeModel({ chapterId: '', status: 'draft', notes: '', lines: [], createdBy: '' }),

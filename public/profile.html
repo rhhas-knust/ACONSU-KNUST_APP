@@ -146,6 +146,27 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <button type="button" class="btn btn-outline btn-sm" id="alertsToggleBtn">Enable Alerts</button>
     </div>
 
+    <div class="form-card my-data" id="myDataCard" style="margin-top:24px;">
+      <h2 style="margin-bottom:6px;">Your data</h2>
+      <p class="my-data-hint">Download a copy of everything ACONSU holds about you, or delete your account for good. Type your password first, for either one.</p>
+      <div class="field">
+        <label for="myDataPassword">Your password</label>
+        <input type="password" id="myDataPassword" autocomplete="current-password">
+      </div>
+      <button type="button" class="btn btn-outline" id="exportBtn">Download my data</button>
+      <div class="form-msg" id="myDataMsg" role="alert"></div>
+      <details class="my-data-delete">
+        <summary>Delete my account</summary>
+        <p>This removes your account, your photo, your notes, requests and messages, and signs you out on every phone. Money you gave stays in the books without your name, and Sundays you came still count, without your name. It cannot be undone.</p>
+        <div class="field">
+          <label for="deleteConfirm">Type DELETE to confirm</label>
+          <input type="text" id="deleteConfirm" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        </div>
+        <button type="button" class="btn btn-danger" id="deleteAccountBtn">Delete my account for good</button>
+        <div class="form-msg" id="deleteMsg" role="alert"></div>
+      </details>
+    </div>
+
     <div style="text-align:center; margin-top:24px;">
       <button type="button" class="theme-toggle theme-toggle-onbrand" id="themeToggle" aria-label="Switch between light and dark"></button>
       <button class="btn btn-outline btn-sm" id="logoutBtn">Log Out</button>
@@ -158,6 +179,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js"></script>
+<script src="/js/my-data.js"></script>
 <script>
 let CURRENT_MEMBER = null;
 
