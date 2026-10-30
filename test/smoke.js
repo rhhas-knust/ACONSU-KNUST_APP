@@ -5974,6 +5974,8 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       check('CI stops on a known high-severity vulnerability instead of only reporting it', /npm audit --audit-level=high\s*\n/.test(ci) && !/npm audit[^\n]*\|\| true/.test(ci), null);
       check('and CI runs the browser suite too, and a failure there now fails the build',
         /browser:[\s\S]*?node test\/ux\.js/.test(ci) && !/continue-on-error/.test(ci), null);
+      check('on an Ubuntu its Playwright can install Chromium on, not whatever ubuntu-latest has become',
+        /browser:\s*\n\s*name: Browser suite\s*\n\s*runs-on: ubuntu-24\.04\s*\n/.test(ci) && /npm install --no-save playwright@1\.56\.1/.test(ci), null);
       check('and the code checker, which refuses a name used but never defined or a function defined twice',
         /npm run lint\s*\n/.test(ci) && pkg.scripts.lint === 'eslint .' && pkg.devDependencies.eslint, null);
       const readme = read('README.md');

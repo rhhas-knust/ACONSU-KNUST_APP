@@ -66,9 +66,14 @@ jobs:
   # sign-in and upload forms, in a real Chromium. It reported without blocking
   # until it had settled on GitHub's machines; it has, so a red browser suite
   # now fails the build like any other check.
+  #
+  # Pinned to Ubuntu 24.04, not ubuntu-latest: GitHub moved ubuntu-latest to
+  # 26.04, where Playwright 1.56.1 (the version this suite is run with locally)
+  # cannot install Chromium, so the job failed before running a single check.
+  # Move both together when Playwright is upgraded.
   browser:
     name: Browser suite
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
