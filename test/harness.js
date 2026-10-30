@@ -257,7 +257,9 @@ const fakeModels = {
   }),
   GivingIntent: makeModel({
     chapterId: '', memberId: '', memberName: '', purpose: 'other', method: 'momo', reference: '',
-    status: 'pending', matchedFinanceEntryId: '', reviewNotes: '', reviewedBy: ''
+    status: 'pending', matchedFinanceEntryId: '', reviewNotes: '', reviewedBy: '',
+    source: 'member', payerNumber: '', payerNetwork: '', receiptToken: '', amountReceived: null,
+    provider: 'manual', providerRef: '', needsReview: false
   }),
   RetentionAlert: makeModel({
     chapterId: '', memberId: '', memberName: '', daysAbsent: 0, lastPresentDate: '',

@@ -645,7 +645,7 @@ async function renderGivingQueue(el) {
     <div class="panel-head">
       <div>
         <h2>Giving Claims (${items.length})</h2>
-        <p class="sub">Members log what they sent via MoMo/bank. Check it landed, record the day it did, and the member is told. Or reconcile several as a batch, then approve with dual-control.</p>
+        <p class="sub">Members, and people giving without an account, say what they sent via MoMo or bank. Check it landed, record the day and the amount that arrived, and they are told. Or reconcile several as a batch, then approve with dual-control.</p>
       </div>
       <div class="panel-actions">
         <button class="btn btn-primary btn-sm" id="reconcileBatchBtn">Reconcile Selected as Batch</button>
@@ -658,7 +658,7 @@ async function renderGivingQueue(el) {
           ${items.map(g => `
             <tr>
               <td><input type="checkbox" data-batch-id="${g.id}" style="width:auto;"></td>
-              <td>${escapeHtml(g.memberName)}</td>
+              <td>${escapeHtml(g.memberName)}${g.source === 'guest' ? '<br><span class="tiny muted">No account</span>' : ''}${g.payerNumber ? `<br><span class="tiny muted">From ${escapeHtml(g.payerNumber)}${g.payerNetwork ? `, ${escapeHtml(g.payerNetwork)}` : ''}</span>` : ''}</td>
               <td>${incomeLabel(g.purpose)}</td>
               <td class="num">${money(g.amount)}</td>
               <td>${escapeHtml(g.method)}</td>
@@ -719,9 +719,11 @@ async function renderGivingQueue(el) {
       <p class="hint">${escapeHtml(btn.dataset.who || 'This member')} says they sent
         <strong>${money(btn.dataset.amount)}</strong>. Check the account, then record the day it landed.</p>
       <form id="confirmGiveForm">
-        <div class="field"><label>Date it arrived in the account</label>
+        <div class="field"><label for="cgDate">Date it arrived in the account</label>
           <input type="date" id="cgDate" value="${today}" max="${today}" required></div>
-        <div class="field"><label>Reference on the account (optional)</label>
+        <div class="field"><label for="cgAmount">Amount the account received (GH₵)</label>
+          <input type="text" id="cgAmount" inputmode="decimal" value="${escapeHtml(btn.dataset.amount || '')}" required></div>
+        <div class="field"><label for="cgRef">Reference on the account (optional)</label>
           <input type="text" id="cgRef" value="${escapeHtml(btn.dataset.ref || '')}"
             placeholder="MoMo transaction id, as the account shows it"></div>
         <div style="display:flex; gap:10px;">
@@ -738,11 +740,12 @@ async function renderGivingQueue(el) {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             receivedOn: document.getElementById('cgDate').value,
+            amountReceived: document.getElementById('cgAmount').value,
             reference: document.getElementById('cgRef').value
           })
         });
         closeModal();
-        showToast('Confirmed, the member has been told.', 'success');
+        showToast('Confirmed, and they have been told.', 'success');
         openPanel('giving');
       } catch (err) { showToast(err.message || 'Could not confirm this.', 'error'); }
     });

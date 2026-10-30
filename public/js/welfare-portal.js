@@ -129,7 +129,7 @@ function givingQueueHtml(queue) {
           <tbody>
             ${queue.map(g => `
               <tr>
-                <td>${escapeHtml(g.memberName || '\u2014')}</td>
+                <td>${escapeHtml(g.memberName || '\u2014')}${g.source === 'guest' ? '<br><span class="tiny muted">No account</span>' : ''}${g.payerNumber ? `<br><span class="tiny muted">From ${escapeHtml(g.payerNumber)}</span>` : ''}</td>
                 <td><strong>${cedis(g.amount)}</strong></td>
                 <td class="tiny muted">${escapeHtml(g.method || '')}</td>
                 <td class="tiny muted">${escapeHtml(g.reference || '\u2014')}</td>
@@ -220,9 +220,11 @@ async function renderWelfarePurse(el) {
       <p class="hint">${escapeHtml(btn.dataset.giveWho || 'This member')} says they sent
         <strong>${cedis(btn.dataset.giveAmount)}</strong>. Check the welfare account, then record the day it landed.</p>
       <form id="confirmGiveForm">
-        <div class="field"><label>Date it arrived in the account</label>
+        <div class="field"><label for="cgDate">Date it arrived in the account</label>
           <input type="date" id="cgDate" value="${today}" max="${today}" required></div>
-        <div class="field"><label>Reference on the account (optional)</label>
+        <div class="field"><label for="cgAmount">Amount the account received (GH₵)</label>
+          <input type="text" id="cgAmount" inputmode="decimal" value="${escapeHtml(btn.dataset.giveAmount || '')}" required></div>
+        <div class="field"><label for="cgRef">Reference on the account (optional)</label>
           <input type="text" id="cgRef" value="${escapeHtml(btn.dataset.giveRef || '')}"
             placeholder="MoMo transaction id, as the account shows it"></div>
         <div style="display:flex; gap:10px;">
@@ -239,11 +241,12 @@ async function renderWelfarePurse(el) {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             receivedOn: document.getElementById('cgDate').value,
+            amountReceived: document.getElementById('cgAmount').value,
             reference: document.getElementById('cgRef').value
           })
         });
         closeModal();
-        showToast('Confirmed, the member has been told.', 'success');
+        showToast('Confirmed, and they have been told.', 'success');
         openPanel('purse');
       } catch (err) { showToast(err.message || 'Could not confirm that.', 'error'); }
     });

@@ -1,3 +1,5 @@
+const { tellGuest, amountOf, NETWORKS } = require('./giving');
+
 // Scheduling, milestones, welfare and giving are grouped here because they
 // share the same member/staff chapter boundary.
 function registerMemberServiceRoutes(app, deps) {
@@ -131,7 +133,7 @@ function registerMemberServiceRoutes(app, deps) {
 
   app.get('/api/giving/chapter-info', requireMember, async (req, res) => { try { const member = await repo.getById('members', req.session.memberId, repo.ownRecord()); if (!member || !member.chapterId) return res.json({ configured: false }); const chapter = await repo.getById('chapters', member.chapterId); if (!chapter || !chapter.payment || !(chapter.payment.momoNumber || chapter.payment.bankAccountNumber)) return res.json({ configured: false }); res.json({ configured: true, payment: chapter.payment, chapterName: chapter.name, welfarePurposes: ['tithe'] }); } catch (e) { res.status(500).json({ error: 'Could not load giving details' }); } });
   app.post('/api/giving/intents', requireMember, async (req, res) => {
-    try { const member = await repo.getById('members', req.session.memberId, repo.ownRecord()); if (!member) return res.status(404).json({ error: 'Account not found' }); const { amount, purpose, method, reference } = req.body; if (!amount || Number(amount) <= 0) return res.status(400).json({ error: 'A valid amount is required' }); res.json({ success: true, item: await repo.create('givingIntents', { chapterId: member.chapterId, memberId: member.id, memberName: member.name, amount: Number(amount), purpose: ['momo', 'tithe', 'harvest', 'offertory', 'other'].includes(purpose) ? purpose : 'other', method: ['momo', 'bank', 'cash', 'other'].includes(method) ? method : 'momo', reference: reference || '', status: 'pending' }, 'give') }); } catch (e) { res.status(500).json({ error: 'Could not record this' }); }
+    try { const member = await repo.getById('members', req.session.memberId, repo.ownRecord()); if (!member) return res.status(404).json({ error: 'Account not found' }); const { purpose, method, reference } = req.body; const amount = amountOf(req.body.amount); if (!amount) return res.status(400).json({ error: 'A valid amount is required' }); res.json({ success: true, item: await repo.create('givingIntents', { chapterId: member.chapterId, memberId: member.id, memberName: member.name, source: 'member', amount, purpose: ['momo', 'tithe', 'harvest', 'offertory', 'other'].includes(purpose) ? purpose : 'other', method: ['momo', 'bank', 'cash', 'other'].includes(method) ? method : 'momo', reference: String(reference || '').slice(0, 60), payerNumber: String(req.body.payerNumber || '').slice(0, 30), payerNetwork: NETWORKS[req.body.payerNetwork] ? req.body.payerNetwork : '', status: 'pending' }, 'give') }); } catch (e) { res.status(500).json({ error: 'Could not record this' }); }
   });
   app.get('/api/giving/mine', requireMember, async (req, res) => { try { const items = await repo.getAll('givingIntents', repo.ownRecord({ memberId: req.session.memberId })); res.json(items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))); } catch (e) { res.status(500).json({ error: 'Could not load your giving history' }); } });
   // Tithe goes to Welfare's own account, so it is never in Finance's queue:
@@ -154,16 +156,21 @@ function registerMemberServiceRoutes(app, deps) {
       const receivedOn = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.receivedOn || '')) ? req.body.receivedOn : today;
       if (receivedOn > today) return res.status(400).json({ error: 'Money cannot have arrived in the future, check the date.' });
       const reference = String(req.body.reference || '').trim() || intent.reference || '';
+      // What the account shows, not what the giver typed: the books hold what
+      // arrived. The giver's figure stays on the gift beside it.
+      const received = req.body.amountReceived === undefined || req.body.amountReceived === '' ? intent.amount : amountOf(req.body.amountReceived);
+      if (!received) return res.status(400).json({ error: 'Type the amount the account received.' });
 
-      const entry = await repo.create('financeEntries', { chapterId: intent.chapterId, entryType: 'income', category: intent.purpose, amount: intent.amount, date: receivedOn, description: `Giving confirmed, ${intent.memberName}`, method: intent.method, reference, payee: intent.memberName, approvalStatus: 'approved', approvedBy: actorName(req), recordedBy: actorName(req) }, 'fin');
-      const updated = await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'confirmed', matchedFinanceEntryId: entry.id, reference, receivedOn, confirmedAt: new Date(), reviewedBy: actorName(req) }, filter);
+      const entry = await repo.create('financeEntries', { chapterId: intent.chapterId, entryType: 'income', category: intent.purpose, amount: received, date: receivedOn, description: `Giving confirmed, ${intent.memberName}${intent.source === 'guest' ? ' (no account)' : ''}`, method: intent.method, reference, payee: intent.memberName, approvalStatus: 'approved', approvedBy: actorName(req), recordedBy: actorName(req) }, 'fin');
+      const updated = await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'confirmed', matchedFinanceEntryId: entry.id, amountReceived: received, reference, receivedOn, confirmedAt: new Date(), reviewedBy: actorName(req) }, filter);
+      tellGuest(req, updated, 'confirmed').catch(() => {});
 
       // They gave and then heard nothing. The tithe path tells them; there is
       // no reason an offering should be quieter.
       if (intent.memberId) {
         createNotification(
           'Your giving was received',
-          `Finance confirmed GH\u20b5 ${Number(intent.amount).toFixed(2)} received on ${receivedOn}. Thank you.`,
+          `Finance confirmed GH\u20b5 ${Number(received).toFixed(2)} received on ${receivedOn}. Thank you.`,
           '/give.html', 'finance', intent.chapterId, { memberIds: [intent.memberId] }
         ).catch(() => {});
       }
@@ -177,6 +184,7 @@ function registerMemberServiceRoutes(app, deps) {
       if (!intent) return res.status(404).json({ error: 'Not found' });
       const notes = String(req.body.notes || '').trim();
       const item = await repo.updateById('givingIntents', req.params.id, { ...intent, status: 'rejected', reviewNotes: notes, reviewedBy: actorName(req) }, filter);
+      tellGuest(req, item, 'rejected').catch(() => {});
       // Silence after a rejection is worse than after a confirmation: they go
       // on thinking it went through.
       if (intent.memberId) {
@@ -253,8 +261,11 @@ function registerMemberServiceRoutes(app, deps) {
       }, filter)));
       // Confirmed in a batch is still confirmed. A member should not hear
       // about their gift only when it happened to be reconciled on its own.
-      for (const intent of intents) {
-        if (!intent.memberId) continue;
+      for (const [idx, intent] of intents.entries()) {
+        if (!intent.memberId) {
+          tellGuest(req, { ...intent, status: 'confirmed', matchedFinanceEntryId: entries[idx].id }, 'confirmed').catch(() => {});
+          continue;
+        }
         createNotification(
           'Your giving was received',
           `Finance confirmed GH\u20b5 ${Number(intent.amount).toFixed(2)} received on ${receivedOn}. Thank you.`,

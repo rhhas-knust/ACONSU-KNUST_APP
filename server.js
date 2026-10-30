@@ -49,6 +49,8 @@ const { registerDoorCheckinRoutes } = require('./routes/door-checkin');
 const phoneLib = require('./lib/phone');
 const memberAccount = require('./lib/memberAccount');
 const { registerPhoneSigninRoutes } = require('./routes/phone-signin');
+const { registerGivingRoutes, registerPaymentWebhook, tellGuest, amountOf } = require('./routes/giving');
+const payments = require('./lib/payments');
 const smsCode = require('./lib/smsCode');
 const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
@@ -163,6 +165,7 @@ const configuredFeatures = () => baseUrl.features({ mailReady: mailer.isConfigur
 {
   const waitingNow = baseUrl.waiting(configuredFeatures());
   if (waitingNow.length) console.log(`Waiting for configuration (the app works without them): ${waitingNow.join(', ')}. See docs/when-you-have-a-domain.md.`);
+  if (payments.problem()) console.warn(payments.problem());
 }
 
 app.use(helmet({
@@ -196,6 +199,11 @@ app.use(express.static(path.join(__dirname, 'public'), {
     else if (/[\\/]video[\\/]/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=86400');
   }
 }));
+// A payment provider's notifications are checked against their exact bytes,
+// so that one route reads the body itself, before the JSON parser below
+// (routes/giving.js). With manual giving, the only way there is, it accepts
+// nothing.
+registerPaymentWebhook(app, { repo, models, givingGoesToWelfare });
 app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
@@ -2503,6 +2511,8 @@ app.get('/api/health', async (req, res) => {
     uptimeSeconds: Math.round(process.uptime()),
     database,
     features,
+    // How giving is paid (lib/payments): manual for now.
+    giving: { provider: payments.current().name, mode: payments.mode() },
     waitingForConfiguration: baseUrl.waiting(features),
     checkedAt: new Date().toISOString()
   });
@@ -4839,6 +4849,7 @@ function requireAttendanceTaker(req, res, next) {
 registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
 registerDoorCheckinRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
 registerPhoneSigninRoutes(app, { models, rolesLib, freshSession, revokeMemberSessions, requireMember });
+registerGivingRoutes(app, { repo, requireChapterAdmin, givingGoesToWelfare });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
 registerShareRoutes(app);
 registerTodayRoutes(app, { models, currentStaff });
@@ -6508,12 +6519,15 @@ app.post('/api/welfare/giving/:id/confirm', requireWelfareOfficer, async (req, r
       return res.status(400).json({ error: 'Money cannot have arrived in the future, check the date.' });
     }
     const reference = cleanText(req.body.reference || '') || intent.reference || '';
+    // What the account shows, not what the giver typed (as Finance does).
+    const received = req.body.amountReceived === undefined || req.body.amountReceived === '' ? intent.amount : amountOf(req.body.amountReceived);
+    if (!received) return res.status(400).json({ error: 'Type the amount the account received.' });
 
     const entry = await repo.create('welfareEntries', {
       chapterId: intent.chapterId,
       entryType: 'income',
       category: intent.purpose,
-      amount: intent.amount,
+      amount: received,
       date: receivedOn,
       description: `Giving confirmed \u2014 ${intent.memberName}`,
       method: intent.method,
@@ -6524,9 +6538,10 @@ app.post('/api/welfare/giving/:id/confirm', requireWelfareOfficer, async (req, r
       recordedByMemberId: (currentStaff(req) || {}).memberId || ''
     }, 'wel');
     const updated = await repo.updateById('givingIntents', req.params.id, {
-      ...intent, status: 'confirmed', matchedWelfareEntryId: entry.id,
+      ...intent, status: 'confirmed', matchedWelfareEntryId: entry.id, amountReceived: received,
       reference, receivedOn, confirmedAt: new Date(), reviewedBy: actorName(req)
     }, filter);
+    tellGuest(req, updated, 'confirmed').catch(() => {});
 
     // The member gave and then heard nothing. Telling them it arrived is the
     // other half of the transaction, and it has to reach them rather than wait
@@ -6534,7 +6549,7 @@ app.post('/api/welfare/giving/:id/confirm', requireWelfareOfficer, async (req, r
     if (intent.memberId) {
       createNotification(
         'Your giving was received',
-        `Welfare confirmed GH\u20b5 ${Number(intent.amount).toFixed(2)} received on ${receivedOn}. Thank you.`,
+        `Welfare confirmed GH\u20b5 ${Number(received).toFixed(2)} received on ${receivedOn}. Thank you.`,
         '/give.html', 'welfare', intent.chapterId, { memberIds: [intent.memberId] }
       ).catch(() => {});
     }
@@ -6556,6 +6571,7 @@ app.patch('/api/welfare/giving/:id/reject', requireWelfareOfficer, async (req, r
     const item = await repo.updateById('givingIntents', req.params.id, {
       ...intent, status: 'rejected', reviewNotes: notes, reviewedBy: actorName(req)
     }, filter);
+    tellGuest(req, item, 'rejected').catch(() => {});
     // Silence after a rejection is worse than after a confirmation: the member
     // thinks it went through.
     if (intent.memberId) {

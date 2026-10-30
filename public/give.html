@@ -45,29 +45,45 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section style="padding-top:0;">
   <div class="container" style="max-width:640px;">
+    <!-- A receipt, opened from its own link (give.html?receipt=...). -->
+    <div class="form-card receipt-card" id="receiptCard" hidden tabindex="-1"></div>
+
+    <div class="field" id="chapterPick" hidden>
+      <label for="giveChapter">Your ACONSU chapter</label>
+      <select id="giveChapter"></select>
+    </div>
+
     <div id="payInfo"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
 
-    <form class="form-card" id="giveForm" style="display:none;">
-      <h2 style="margin-bottom:6px; font-size:1.2rem;">Log your gift</h2>
-      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">After sending via MoMo/bank using the details above, tell us here: Finance confirms it against the books.</p>
-      <div class="field"><label for="amount">Amount (GH₵)</label><input type="number" id="amount" min="0.01" step="0.01" required></div>
-      <div class="field"><label for="purpose">Purpose</label>
+    <form class="form-card" id="giveForm" hidden novalidate>
+      <h2 style="margin-bottom:6px; font-size:1.2rem;">Tell us what you sent</h2>
+      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">Send it first, with your own MoMo or bank app, to the account above. Then tell us here: the team checks the account and confirms it. You do not need an account to give.</p>
+      <div class="field"><label for="purpose">What is it for?</label>
         <select id="purpose">
-          <option value="tithe">Tithe</option><option value="offertory">Offertory</option>
-          <option value="harvest">Harvest</option><option value="momo">General (MoMo)</option><option value="other">Other</option>
+          <option value="offertory">Offering</option><option value="tithe">Tithe</option>
+          <option value="harvest">Harvest</option><option value="momo">General giving</option><option value="other">Other</option>
         </select>
       </div>
-      <div class="field"><label for="method">How did you send it?</label>
-        <select id="method"><option value="momo">Mobile Money</option><option value="bank">Bank Transfer</option><option value="cash">Cash</option><option value="other">Other</option></select>
+      <div class="field"><label for="amount">Amount you sent (GH₵)</label><input type="text" id="amount" inputmode="decimal" autocomplete="off" required></div>
+      <div class="field" data-guest><label for="giverName">Your name</label><input type="text" id="giverName" maxlength="80" autocomplete="name" autocapitalize="words"></div>
+      <div class="field"><label for="payerNumber">The number you sent it from<span data-member> (optional)</span></label><input type="tel" id="payerNumber" maxlength="30" autocomplete="tel" inputmode="tel" aria-describedby="payerHint"><small class="hint" id="payerHint" style="color:var(--ink-faint);">So the team can find it on the account's statement.</small></div>
+      <div class="field"><label for="payerNetwork">Network</label>
+        <select id="payerNetwork"><option value="">Choose one</option></select>
       </div>
-      <div class="field"><label for="reference">Transaction reference (optional)</label><input type="text" id="reference" placeholder="MoMo transaction ID, if you have it"></div>
+      <div class="field"><label for="method">How did you send it?</label>
+        <select id="method"><option value="momo">Mobile Money</option><option value="bank">Bank transfer</option><option value="cash">Cash</option><option value="other">Other</option></select>
+      </div>
+      <div class="field"><label for="reference">Transaction ID (optional)</label><input type="text" id="reference" maxlength="60" placeholder="From the confirmation text, if you have it"></div>
+      <div class="give-trap" aria-hidden="true"><label for="giveWebsite">Leave this empty</label><input type="text" id="giveWebsite" tabindex="-1" autocomplete="off"></div>
+      <label class="consent-line" data-guest><input type="checkbox" id="giveConsent">
+        <span>ACONSU may keep my name and number with my gift, in the chapter's books, and text me a receipt. <a href="/privacy.html" target="_blank" rel="noopener">How we use them</a>.</span></label>
       <p class="form-notice">Sent a wrong amount? Read <a href="/refunds.html">Giving and refunds</a>.</p>
-      <button type="submit" class="btn btn-flame btn-block" id="giveSubmitBtn">Submit</button>
-      <div class="form-msg" id="giveMsg"></div>
+      <button type="submit" class="btn btn-flame btn-block" id="giveSubmitBtn">I have sent it</button>
+      <div class="form-msg" id="giveMsg" role="status" aria-live="polite"></div>
     </form>
 
-    <div class="section-head" style="margin-top:40px;">
-      <h2>History</h2>
+    <div class="section-head" style="margin-top:40px;" id="historyHead" hidden>
+      <h2>Your giving</h2>
     </div>
     <div id="giveHistory"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
@@ -79,125 +95,197 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <script src="/js/main.js"></script>
 <script>
-// The raw keys are not English, and a badge reading "confirmed" is not an
-// acknowledgement. Somebody who gave wants to know it arrived, who says so and
-// when - so the row says that in words.
-const PURPOSE_LABELS = {
-  tithe: 'Tithe', offertory: 'Offertory', harvest: 'Harvest',
-  momo: 'General giving', other: 'Other'
-};
+// Giving, for anyone (Phase 6). The chapter's own account is shown; the giver
+// sends from their own phone and tells us here. A member's gifts are listed
+// below; someone without an account gets a receipt link of their own instead
+// (routes/giving.js). The amount they type is what they say they sent: the
+// team confirms what actually arrived.
+const PURPOSE_LABELS = { tithe: 'Tithe', offertory: 'Offering', harvest: 'Harvest', momo: 'General giving', other: 'Other' };
 const niceDate = (d) => {
   if (!d) return '';
   const dt = new Date(d);
   return isNaN(dt) ? String(d) : dt.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 };
+const cedis = (n) => `GH₵ ${Number(n || 0).toFixed(2)}`;
+const $ = (id) => document.getElementById(id);
+let MEMBER = null;
+let INFO = null;
+let GIVE_CHAPTER = '';   // the chapter whose account is on screen
 
 function giveStatusLine(g) {
   if (g.status === 'confirmed') {
     const who = g.reviewedBy ? ` by ${escapeHtml(g.reviewedBy)}` : '';
     const on = g.receivedOn ? ` on ${escapeHtml(niceDate(g.receivedOn))}` : '';
-    return `<span class="tiny" style="color:var(--ok-ink, var(--ok-ink)); font-weight:700;">Received${on}${who}</span>`;
+    const got = g.amountReceived && Number(g.amountReceived) !== Number(g.amount) ? `: ${cedis(g.amountReceived)} arrived` : '';
+    return `<span class="tiny" style="color:var(--ok-ink); font-weight:700;">Received${on}${who}${got}</span>`;
   }
   if (g.status === 'rejected') {
-    return `<span class="tiny" style="color:var(--bad-ink, #A93226); font-weight:700;">Not confirmed${g.reviewNotes ? ': ' + escapeHtml(g.reviewNotes) : ''}</span>`;
+    return `<span class="tiny" style="color:var(--bad-ink, #A93226); font-weight:700;">Not found in the account${g.reviewNotes || g.note ? ': ' + escapeHtml(g.reviewNotes || g.note) : ''}</span>`;
   }
-  return '<span class="tiny muted">Waiting to be confirmed against the account</span>';
+  return '<span class="tiny muted">Waiting for the team to check the account</span>';
+}
+
+// A receipt: what, how much, where it stands. The same card whether it is
+// shown straight after giving or opened later from its link.
+function showReceipt(r, link) {
+  const card = $('receiptCard');
+  const state = r.status === 'confirmed' ? 'Received' : r.status === 'rejected' ? 'Not found yet' : 'Waiting to be confirmed';
+  card.innerHTML = `
+    <p class="receipt-state receipt-${escapeHtml(r.status)}">${state}</p>
+    <h2>${r.firstName ? `Thank you, ${escapeHtml(r.firstName)}.` : 'Thank you.'}</h2>
+    <dl class="receipt-lines">
+      <dt>Chapter</dt><dd>${escapeHtml(r.chapterName)}</dd>
+      <dt>For</dt><dd>${escapeHtml(PURPOSE_LABELS[r.purpose] || 'Giving')}${r.toWelfare ? ' (to the Welfare account)' : ''}</dd>
+      <dt>You said you sent</dt><dd>${cedis(r.amount)}</dd>
+      ${r.status === 'confirmed' ? `<dt>The account received</dt><dd>${cedis(r.amountReceived || r.amount)}${r.receivedOn ? `, ${escapeHtml(niceDate(r.receivedOn))}` : ''}</dd>` : ''}
+      <dt>Told us</dt><dd>${escapeHtml(niceDate(r.loggedOn))}</dd>
+    </dl>
+    ${r.status === 'pending' ? '<p class="muted">The team checks the account and confirms it, usually within a few days. You will get a text when they do, where your chapter can send texts.</p>' : ''}
+    ${r.status === 'rejected' ? `<p class="muted">${r.note ? escapeHtml(r.note) + ' ' : ''}If you did send it, show the confirmation text to the finance team.</p>` : ''}
+    ${link ? `<div class="receipt-link"><p><strong>Keep this link</strong> to see when it arrives:</p><p class="tiny receipt-url">${escapeHtml(link)}</p>
+      <button type="button" class="btn btn-outline btn-sm" id="copyReceipt">Copy the link</button></div>` : ''}`;
+  card.hidden = false;
+  card.focus();
+  const copy = $('copyReceipt');
+  if (copy) copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(link); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'Select the link above to copy it'; }
+  });
 }
 
 async function loadHistory() {
-  const wrap = document.getElementById('giveHistory');
+  const wrap = $('giveHistory');
+  if (!MEMBER) { wrap.innerHTML = ''; return; }
+  $('historyHead').hidden = false;
   try {
     const items = await fetchJSON('/api/giving/mine');
     wrap.innerHTML = items.map(g => `
       <div class="give-history-row">
         <span>
-          ${escapeHtml(PURPOSE_LABELS[g.purpose] || g.purpose)}: GH₵ ${Number(g.amount).toFixed(2)}
+          ${escapeHtml(PURPOSE_LABELS[g.purpose] || g.purpose)}: ${cedis(g.amount)}
           <br>${giveStatusLine(g)}
         </span>
       </div>
-    `).join('') || '<p class="empty-state">No giving history yet.</p>';
+    `).join('') || '<p class="empty-state">No giving yet.</p>';
   } catch (e) {
-    wrap.innerHTML = '<p class="empty-state">Log in to see your giving history.</p>';
+    wrap.innerHTML = '<p class="empty-state">Could not load your giving.</p>';
   }
+}
+
+// Tithe goes to Welfare's own account. Telling somebody that in a footnote
+// while showing them the chapter number is how money ends up in the wrong
+// purse, so the number on screen changes with the purpose.
+function renderPayInfo() {
+  if (!INFO) return;
+  const toWelfare = (INFO.welfarePurposes || []).includes($('purpose').value);
+  const p = toWelfare ? INFO.welfare : INFO.general;
+  $('payInfo').innerHTML = `
+    <div class="pay-details">
+      <h2 style="margin-bottom:4px; font-size:1.2rem;">${escapeHtml(INFO.chapterName)}</h2>
+      ${toWelfare ? '<p class="pill amber" style="margin:6px 0 12px;">Tithe goes to the Welfare account</p>' : ''}
+      ${!toWelfare && INFO.label ? `<dt>Giving channel</dt><dd>${escapeHtml(INFO.label)}</dd>` : ''}
+      ${p.momoNumber
+        ? `<dt>${toWelfare ? 'Welfare Mobile Money' : 'Mobile Money'}</dt><dd>${escapeHtml(p.momoNumber)}${p.momoName ? ': ' + escapeHtml(p.momoName) : ''}</dd>`
+        : `<p class="empty-state" style="margin:8px 0;">${toWelfare
+            ? 'Welfare has not published its account yet. Ask the Welfare team before sending your tithe.'
+            : 'No Mobile Money number on file yet.'}</p>`}
+      ${p.bankName ? `<dt>Bank</dt><dd>${escapeHtml(p.bankName)}</dd>` : ''}
+      ${p.bankAccountNumber ? `<dt>Account</dt><dd>${escapeHtml(p.bankAccountName || '')} ${escapeHtml(p.bankAccountNumber)}</dd>` : ''}
+      <p style="font-size:0.8rem; color:var(--ink-faint); margin-top:14px;">You send it with your own MoMo or bank app. This page takes no payment itself.</p>
+    </div>`;
+}
+
+async function loadChapter(chapterId) {
+  INFO = null;
+  GIVE_CHAPTER = chapterId || '';
+  $('giveForm').hidden = true;
+  if (!chapterId) { $('payInfo').innerHTML = '<p class="empty-state">Choose your chapter to see where to give.</p>'; return; }
+  try {
+    INFO = await fetchJSON(`/api/giving/info?chapterId=${encodeURIComponent(chapterId)}`);
+  } catch (e) {
+    $('payInfo').innerHTML = '<p class="empty-state">Could not load the giving details right now.</p>';
+    return;
+  }
+  if (!INFO.configured) {
+    $('payInfo').innerHTML = `<p class="empty-state">${escapeHtml(INFO.chapterName || 'This chapter')} has not set up giving details yet. Check back soon.</p>`;
+    INFO = null;
+    return;
+  }
+  const nets = $('payerNetwork');
+  nets.innerHTML = '<option value="">Choose one</option>' + Object.entries(INFO.networks || {}).map(([k, v]) => `<option value="${escapeHtml(k)}">${escapeHtml(v)}</option>`).join('');
+  renderPayInfo();
+  $('giveForm').hidden = false;
 }
 
 (async function () {
   await initLayout('/give.html');
+  const params = new URLSearchParams(location.search);
+  const receipt = params.get('receipt');
+  if (receipt) {
+    try { showReceipt(await fetchJSON(`/api/giving/receipt/${encodeURIComponent(receipt)}`), ''); }
+    catch (e) { $('receiptCard').innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'There is no receipt at this link.')}</p>`; $('receiptCard').hidden = false; }
+  }
   const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
-  if (!authRes.member) {
-    document.getElementById('payInfo').innerHTML = '<p class="empty-state">Please <a href="/login.html">log in</a> to give.</p>';
-    document.getElementById('giveHistory').innerHTML = '';
-    return;
+  MEMBER = authRes.member;
+  // Someone without an account gives their name and agrees to it being kept;
+  // a member is known already.
+  document.querySelectorAll('[data-guest]').forEach(el => { el.hidden = !!MEMBER; });
+  document.querySelectorAll('[data-member]').forEach(el => { el.hidden = !MEMBER; });
+  if (MEMBER && MEMBER.phone) $('payerNumber').value = MEMBER.phone;
+  let chapterId = MEMBER ? MEMBER.chapterId : getSelectedChapterId();
+  if (!MEMBER) {
+    try {
+      const chapters = await fetchJSON('/api/chapters');
+      if (chapters.length > 1) {
+        const pick = $('giveChapter');
+        pick.innerHTML = '<option value="">Choose your chapter</option>' + chapters.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}</option>`).join('');
+        pick.value = chapters.some(c => c.id === chapterId) ? chapterId : '';
+        chapterId = pick.value;
+        $('chapterPick').hidden = false;
+        pick.addEventListener('change', () => { setSelectedChapterId(pick.value); loadChapter(pick.value); });
+      } else if (chapters.length === 1) chapterId = chapters[0].id;
+    } catch (e) { /* the selected chapter, if any, is enough */ }
   }
-  try {
-    const info = await fetchJSON('/api/giving/chapter-info');
-    if (!info.configured) {
-      document.getElementById('payInfo').innerHTML = '<p class="empty-state">Your chapter hasn\'t set up giving details yet. Check back soon.</p>';
-    } else {
-      const p = info.payment;
-      const welfarePurposes = info.welfarePurposes || [];
-
-      // Tithe goes to Welfare's own account. Telling somebody that in a
-      // footnote while showing them the chapter number is how money ends up in
-      // the wrong purse, so the number on screen changes with the purpose.
-      function renderPayInfo() {
-        const purpose = document.getElementById('purpose').value;
-        const toWelfare = welfarePurposes.includes(purpose);
-        const momoNumber = toWelfare ? p.welfareMomoNumber : p.momoNumber;
-        const momoName = toWelfare ? p.welfareMomoName : p.momoName;
-        document.getElementById('payInfo').innerHTML = `
-          <div class="pay-details">
-            <h2 style="margin-bottom:4px; font-size:1.2rem;">${escapeHtml(info.chapterName)}</h2>
-            ${toWelfare
-              ? `<p class="pill amber" style="margin:6px 0 12px;">Tithe goes to the Welfare account</p>`
-              : ''}
-            ${!toWelfare && p.provider ? `<dt>Giving Channel</dt><dd>${escapeHtml(p.provider)}</dd>` : ''}
-            ${momoNumber
-              ? `<dt>${toWelfare ? 'Welfare Mobile Money' : 'Mobile Money'}</dt><dd>${escapeHtml(momoNumber)}${momoName ? ': ' + escapeHtml(momoName) : ''}</dd>`
-              : `<p class="empty-state" style="margin:8px 0;">${toWelfare
-                  ? 'Welfare has not published its account yet. Ask the Welfare team before sending your tithe.'
-                  : 'No mobile money number on file yet.'}</p>`}
-            ${!toWelfare && p.bankName ? `<dt>Bank</dt><dd>${escapeHtml(p.bankName)}</dd>` : ''}
-            ${!toWelfare && p.bankAccountNumber ? `<dt>Account</dt><dd>${escapeHtml(p.bankAccountName || '')} ${escapeHtml(p.bankAccountNumber)}</dd>` : ''}
-            ${!toWelfare && p.donationDestination ? `<dt>General Giving</dt><dd>${escapeHtml(p.donationDestination)}</dd>` : ''}
-            ${!toWelfare && p.welfareDestination ? `<dt>Welfare Giving</dt><dd>${escapeHtml(p.welfareDestination)}</dd>` : ''}
-            <p style="font-size:0.8rem; color:var(--ink-faint); margin-top:14px;">Sent via your own MoMo/bank app. This page doesn't process payments directly.</p>
-          </div>
-        `;
-      }
-      document.getElementById('giveForm').style.display = 'block';
-      document.getElementById('purpose').addEventListener('change', renderPayInfo);
-      renderPayInfo();
-    }
-  } catch (e) {
-    document.getElementById('payInfo').innerHTML = '<p class="empty-state">Could not load giving details right now.</p>';
-  }
+  await loadChapter(chapterId);
+  $('purpose').addEventListener('change', renderPayInfo);
   loadHistory();
 })();
 
-document.getElementById('giveForm').addEventListener('submit', async (e) => {
+$('giveForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = document.getElementById('giveSubmitBtn');
-  const msg = document.getElementById('giveMsg');
+  const btn = $('giveSubmitBtn');
+  const msg = $('giveMsg');
+  const say = (text, focus) => { msg.textContent = text; msg.className = 'form-msg error'; if (focus) $(focus).focus(); };
+  const amount = Number(String($('amount').value).replace(/[^\d.]/g, ''));
+  if (!(amount > 0)) return say('Type the amount you sent, in cedis.', 'amount');
+  if (!MEMBER) {
+    if ($('giverName').value.trim().length < 2) return say('Type your name, so the team knows whose gift it is.', 'giverName');
+    if ($('payerNumber').value.replace(/\D/g, '').length < 9) return say('Type the phone number you sent it from.', 'payerNumber');
+    if (!$('giveConsent').checked) return say('Tick the box to say we may keep these details with your gift.', 'giveConsent');
+  }
   btn.disabled = true;
+  const body = {
+    amount, purpose: $('purpose').value, method: $('method').value, reference: $('reference').value,
+    payerNumber: $('payerNumber').value, payerNetwork: $('payerNetwork').value
+  };
   try {
-    await fetchJSON('/api/giving/intents', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount: document.getElementById('amount').value,
-        purpose: document.getElementById('purpose').value,
-        method: document.getElementById('method').value,
-        reference: document.getElementById('reference').value
-      })
-    });
-    msg.textContent = 'Thank you! Finance will confirm this against the books.';
-    msg.className = 'form-msg success';
-    showToast('Giving recorded, thank you!', 'success');
-    document.getElementById('giveForm').reset();
-    loadHistory();
+    if (MEMBER) {
+      await fetchJSON('/api/giving/intents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      msg.textContent = 'Thank you. The team will confirm it against the account, and you will be told here.';
+      msg.className = 'form-msg success';
+      $('giveForm').reset();
+      loadHistory();
+    } else {
+      const out = await fetchJSON('/api/giving/guest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, chapterId: GIVE_CHAPTER, name: $('giverName').value, consent: true, website: $('giveWebsite').value })
+      });
+      $('giveForm').hidden = true;
+      msg.textContent = '';
+      if (out.receipt) showReceipt(out.receipt, `${location.origin}/give.html?receipt=${out.receipt.token}`);
+      window.scrollTo(0, 0);
+    }
   } catch (err) {
-    msg.textContent = err.message || 'Could not record this.';
-    msg.className = 'form-msg error';
+    say(err.message || 'Could not record this.');
   } finally {
     btn.disabled = false;
   }
