@@ -281,6 +281,8 @@ const fakeModels = {
   PushSubscription: makeModel({ chapterId: '' }),
   SystemState: makeModel({ lastBirthdayNotifDate: '' }, { unique: ['singleton'] }),
   Metric: makeModel({ count: 0 }),
+  PhoneCode: makeModel({ codeHash: '', expiresAt: null, attempts: 0, sends: [], purgeAt: null }),
+  DoorCode: makeModel({ serviceType: 'sunday', active: true, uses: 0, createdBy: '', closedAt: null, closedBy: '' }, { unique: ['token'] }),
   ShepherdingRecord: makeModel({ chapterId: '', memberId: '', name: '', phone: '', email: '', level: '', programme: '', department: '', birthdayMonth: null, birthdayDay: null, origin: 'manual', linkedAt: null, linkedHow: '', linkedBy: '', mergedFromList: false, address: '', emergencyContact: '', attendanceStatus: 'new', lastContactDate: '', pastoralNotes: '', imageFileId: '' }),
   FinanceEntry: makeModel({ chapterId: '', method: 'cash', reference: '', payee: '', budgetId: '', budgetLineId: '', approvalStatus: 'recorded', approvedBy: '', receiptFileId: '', description: '', recordedBy: '', serviceDate: '', serviceType: '', origin: '' }),
   Budget: makeModel({ chapterId: '', status: 'draft', notes: '', lines: [], createdBy: '' }),
@@ -329,6 +331,9 @@ function stub(relPath, exports) {
   require.cache[full] = mod;
 }
 
+// The member email index's name (lib/models.js), which lib/memberAccount.js
+// looks for. Not enumerable, so nothing that walks the models sees it.
+Object.defineProperty(fakeModels, 'MEMBER_EMAIL_INDEX', { value: 'email_unique_when_set' });
 stub('lib/models.js', fakeModels);
 stub('lib/gridfs.js', fakeGridfs);
 // The double stands in for a healthy database by default, and can be told to
@@ -347,5 +352,22 @@ stub('lib/db.js', {
   createSessionStore: () => undefined,
   dbStatus: () => Promise.resolve(fakeDb.status())
 });
+
+// Signing up needs a phone number (Phase 5). The suites written before then
+// sign their people up with an email address only; each sign-up sent as a
+// form without a number is given one of its own here (020 1xx xxxx, a range no
+// test types by hand), so those suites keep testing what they were written to
+// test. test/signup.js tests the requirement itself, with JSON bodies, which
+// this leaves alone.
+const realFetch = global.fetch;
+let phoneSeq = 0;
+global.fetch = (url, opts) => {
+  if (opts && opts.method === 'POST' && /\/api\/auth\/register$/.test(String(url))
+      && opts.body instanceof FormData && !opts.body.get('phone')) {
+    phoneSeq += 1;
+    opts.body.set('phone', `0201${String(phoneSeq).padStart(6, '0')}`);
+  }
+  return realFetch(url, opts);
+};
 
 module.exports = { fakeDb, fakeModels, fakeGridfs };

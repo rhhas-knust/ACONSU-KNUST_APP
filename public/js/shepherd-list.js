@@ -15,6 +15,7 @@ function listLabel(p) {
   if (p.source !== 'visitor') return '';
   if (p.origin === 'import') return 'On the chapter list. No app account yet';
   if (p.origin === 'checkin') return 'New at the door. No account';
+  if (p.origin === 'qr') return 'Checked in with the visitor QR code. No account';
   return 'Visitor. No account';
 }
 
@@ -90,6 +91,12 @@ async function renderCheckIn(el) {
       <ul class="ci-list" id="ciList"></ul>
     </div>
 
+    <div class="portal-card door-code" id="doorCodeCard">
+      <h3>Visitor QR code</h3>
+      <p class="hint">Visitors scan it with their own phone, type their name and number, and are checked in to this service. It works only on the day chosen above.</p>
+      <div id="doorCodeBody"><p class="muted">Loading...</p></div>
+    </div>
+
     ${canEdit ? `
     <div class="portal-card">
       <h3>Scan a membership card</h3>
@@ -105,6 +112,7 @@ async function renderCheckIn(el) {
   const countEl = document.getElementById('ciCount');
   const listEl = document.getElementById('ciList');
   const say = (text, type) => setFormMsg('ciMsg', text, type || '');
+  drawDoorCode(document.getElementById('doorCodeBody'));
 
   function drawList() {
     countEl.textContent = String(present.size);
@@ -286,6 +294,89 @@ async function renderCheckIn(el) {
       say(err.message || 'Could not read that card.', 'error');
     }
   }, (text) => say(text, 'error'));
+}
+
+// ---------- the visitor QR code (routes/door-checkin.js) ----------
+// One code per service day, shown on a phone at the door or printed. Anyone
+// working the door can show it; Shepherding makes it, replaces it and turns
+// it off.
+async function drawDoorCode(body) {
+  if (!body) return;
+  const q = `date=${checkinState.date}&serviceType=${checkinState.serviceType}`;
+  let out;
+  try { out = await fetchJSON(`/api/shepherd/door-code?${q}`); } catch (e) { body.innerHTML = `<p class="muted">${escapeHtml(e.message)}</p>`; return; }
+  const code = out.code;
+  const day = shortDate(checkinState.date);
+  const service = CI_SERVICE_LABELS[checkinState.serviceType] || 'Service';
+  const make = (replace) => fetchJSON('/api/shepherd/door-code', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date: checkinState.date, serviceType: checkinState.serviceType, replace: !!replace })
+  });
+  if (!code) {
+    const past = checkinState.date < out.today;
+    body.innerHTML = past
+      ? '<p class="muted">That day has passed. A visitor code works only on its own day.</p>'
+      : PORTAL.canEdit
+        ? `<button type="button" class="btn btn-primary" id="doorMake">Make the visitor code for ${escapeHtml(service)}, ${escapeHtml(day)}</button><div class="form-msg" id="doorMsg" role="status"></div>`
+        : '<p class="muted">Shepherding has not made one for this service yet.</p>';
+    const btn = document.getElementById('doorMake');
+    if (btn) btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try { await make(false); drawDoorCode(body); } catch (e) { setFormMsg('doorMsg', e.message, 'error'); btn.disabled = false; }
+    });
+    return;
+  }
+  if (code.error) { body.innerHTML = `<p class="muted">${escapeHtml(code.error)}</p>`; return; }
+  body.innerHTML = `
+    <div class="door-code-show">
+      <img src="${code.qr}" alt="QR code for visitors to check in, ${escapeHtml(service)}, ${escapeHtml(day)}" width="240" height="240" id="doorQr">
+      <div>
+        <p><strong>${escapeHtml(service)}, ${escapeHtml(day)} only.</strong></p>
+        <p class="muted" id="doorUses">${code.uses} checked in with it so far.</p>
+        <p class="tiny muted door-url">${escapeHtml(code.url)}</p>
+        <div class="of-actions">
+          <button type="button" class="btn btn-primary" id="doorPrint">Show large or print</button>
+          ${PORTAL.canEdit ? `
+            <button type="button" class="btn btn-outline" id="doorReplace">Make a new code</button>
+            <button type="button" class="btn btn-outline" id="doorOff">Turn it off</button>` : ''}
+        </div>
+        <div class="form-msg" id="doorMsg" role="status"></div>
+      </div>
+    </div>`;
+  document.getElementById('doorPrint').addEventListener('click', () => {
+    const chapter = PORTAL.chapter ? PORTAL.chapter.name : 'ACONSU';
+    showModal(`
+      <div class="door-print">
+        <p class="door-print-chapter">${escapeHtml(chapter)}</p>
+        <h2>New here? Welcome.</h2>
+        <p>Scan this with your phone's camera to check in.</p>
+        <img src="${code.qr}" alt="QR code for visitors to check in" width="360" height="360">
+        <p class="door-print-when">${escapeHtml(service)}, ${escapeHtml(day)}</p>
+      </div>
+      <div class="of-actions door-print-actions">
+        <button type="button" class="btn btn-primary" id="doorPrintNow">Print</button>
+        <button type="button" class="btn btn-outline" id="doorPrintClose">Close</button>
+      </div>`, true);
+    document.getElementById('doorPrintClose').addEventListener('click', closeModal);
+    document.getElementById('doorPrintNow').addEventListener('click', () => {
+      document.body.classList.add('print-door-code');
+      window.print();
+      setTimeout(() => document.body.classList.remove('print-door-code'), 500);
+    });
+  });
+  const replace = document.getElementById('doorReplace');
+  if (replace) replace.addEventListener('click', async () => {
+    if (!confirm('Make a new code? The old one stops working at once, printed copies included.')) return;
+    try { await make(true); drawDoorCode(body); } catch (e) { setFormMsg('doorMsg', e.message, 'error'); }
+  });
+  const off = document.getElementById('doorOff');
+  if (off) off.addEventListener('click', async () => {
+    if (!confirm('Turn the visitor code off? Nobody will be able to check in with it.')) return;
+    try {
+      await fetchJSON(`/api/shepherd/door-code/${encodeURIComponent(code.id)}/close`, { method: 'POST' });
+      drawDoorCode(body);
+    } catch (e) { setFormMsg('doorMsg', e.message, 'error'); }
+  });
 }
 
 // The camera, for the QR code on a membership card. Not every browser can read

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Welcome | ACONSU</title>
+<meta name="description" content="Check in at an ACONSU service.">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<meta name="theme-color" content="#5B2C82">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="welcome-page">
+<!-- The page the visitor QR code at the door opens (routes/door-checkin.js).
+     On its own on purpose: a visitor's phone loads only this, with nothing
+     asking them to install anything. -->
+<header class="welcome-top">
+  <img src="/images/logo.jpg" alt="" width="44" height="44">
+  <span id="wcChapter">ACONSU</span>
+</header>
+
+<main id="main" class="welcome-main">
+  <div id="wcLoading" class="welcome-card"><p>Opening...</p></div>
+
+  <div id="wcClosed" class="welcome-card" hidden>
+    <h1>Welcome</h1>
+    <p id="wcClosedText"></p>
+    <p><a class="btn btn-outline" href="/visit.html">When and where we meet</a></p>
+  </div>
+
+  <form id="wcForm" class="welcome-card" novalidate hidden>
+    <h1>Welcome. We are glad you came.</h1>
+    <p class="welcome-sub" id="wcWhen"></p>
+    <div class="field">
+      <label for="wcName">Your name</label>
+      <input type="text" id="wcName" maxlength="80" autocomplete="name" autocapitalize="words" required>
+    </div>
+    <div class="field">
+      <label for="wcPhone">Phone or WhatsApp number</label>
+      <input type="tel" id="wcPhone" maxlength="30" autocomplete="tel" inputmode="tel" required>
+    </div>
+    <div class="field">
+      <label for="wcProgramme">What you study (optional)</label>
+      <input type="text" id="wcProgramme" maxlength="120">
+    </div>
+    <div class="field">
+      <label for="wcHall">Hall or hostel (optional)</label>
+      <input type="text" id="wcHall" maxlength="120">
+    </div>
+    <div class="field">
+      <label for="wcHeard">How did you hear about us? (optional)</label>
+      <select id="wcHeard"><option value="">Choose one</option></select>
+    </div>
+    <div class="welcome-trap" aria-hidden="true">
+      <label for="wcWebsite">Leave this empty</label>
+      <input type="text" id="wcWebsite" tabindex="-1" autocomplete="off">
+    </div>
+    <label class="consent-line">
+      <input type="checkbox" id="wcConsent" required>
+      <span>ACONSU Shepherding may keep these details to welcome me and keep in touch. I can ask for them to be removed at any time. <a href="/privacy.html" target="_blank" rel="noopener">How we use them</a>.</span>
+    </label>
+    <button type="submit" class="btn btn-primary btn-block" id="wcSend">Check me in</button>
+    <div class="form-msg" id="wcMsg" role="status" aria-live="polite"></div>
+  </form>
+
+  <div id="wcDone" class="welcome-card" hidden tabindex="-1">
+    <h1 id="wcThanks">Thank you. You are checked in.</h1>
+    <p>Someone from Shepherding may get in touch this week to say hello. Enjoy the service.</p>
+    <div class="welcome-links">
+      <a class="btn btn-outline" href="/visit.html">When and where we meet</a>
+      <a class="btn btn-outline" href="/events.html">What is coming up</a>
+      <a class="btn btn-outline" href="/index.html">The ACONSU website</a>
+    </div>
+    <p class="welcome-join">Want to be part of ACONSU? <a href="/register.html">Create a full account</a>. It is free, and you can do it later.</p>
+  </div>
+</main>
+
+<script src="/js/welcome.js"></script>
+</body>
+</html>

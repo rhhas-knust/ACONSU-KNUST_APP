@@ -825,3 +825,44 @@ This is only a layout (`public/js/today.js`, each portal's `today` in its own sc
 National Portal, **Health** (National only, `GET /api/national/health?days=7|28|90`, `routes/health-panel.js`): is the app doing its job? Sign-ups finished beside sign-ups started, members active in the last 7 days (opened the app signed in, from `lastActiveDate`), shares by kind, and giving claims by where they stand (waiting, confirmed, turned down), for the period asked for, week by week and chapter by chapter.
 
 Counts only. Shares and sign-ups started are the day counts in `lib/metrics.js` (union-wide; nothing about who); the rest are totals worked out from the records the app keeps anyway. No cookie, no outside service, and no name or id in the response (`test/share.js` checks). Sign-ups started are counted only from this release on, and the panel says so while finished outnumbers started.
+
+## 34. The visitor QR code at the door
+
+Shepherding makes a QR code for one service on one day (**Sunday Check-In**, Visitor QR code) and shows it on a phone or prints it. A visitor scans it with their own phone, which opens a short form in the browser (`public/welcome.html`, on its own: no app shell and no install prompt). They give their name and phone number (needed), what they study, their hall or hostel and how they heard about us (optional), and tick to agree that Shepherding may keep them. They are then checked in to that service, and the thank-you screen links to the website: when and where we meet, what is coming up, the home page, and Create a full account.
+
+- **Already on the list:** the same phone number with a name that agrees ("Ama" and "Ama Owusu") is that person, member or list record, checked in as themselves; nothing new is kept. This is the same rule as adding a newcomer at the door (`attendance.findOnList`). A known number with a name that does not agree is added as someone new rather than checking somebody else in. Members are still checked in at the door as before.
+- **Someone new** is added to the chapter's list as new (`origin: 'qr'`, `consentedAt`), with a note of the day and how they heard, for Shepherding to follow up.
+- **The answer is the same** either way, so the form cannot be used to find out who is on the list.
+- **The code** (`DoorCode`, chapter-walled) carries a random token, never an id. It works only on its own day, Shepherding can replace it (the old one stops at once) or turn it off, anyone working the door can show it, and only Shepherding makes it. Per-network limit `DOOR_CHECKIN_LIMIT_MAX` (default 60 per 10 minutes), at most 500 check-ins per code, and a hidden field that catches scripts.
+
+`test/door-checkin.js` (in `npm test`) and `test/door-ui.js` (two phones: Shepherding and a visitor).
+
+## 35. A shorter sign-up, signing in by phone, and the photo straight after
+
+Signing up asks for a **name, a phone number, the chapter, a password** and agreement to the Terms. An **email address is optional**. Programme, level, hall, birthday and "I have finished my studies" moved to the profile, which asks for them gently ("A few more details, when you have a minute", with Not now) and never requires them. The password stays required until a chapter's own SMS works (Phase 5b).
+
+- **The photo** is not on the form but is still required: sign-up goes straight to `photo.html` (take one or choose one), and until there is a photo every page of the app sends a signed-in member back there, remembering where they were going (`/api/auth/me` says `needsPhoto`; `POST /api/member/photo`). The privacy pages, the Terms and the photo step are let through.
+- **Signing in** takes a phone number (024..., +233 24..., 233 24..., all one number: `lib/phone.js`) or an email address. A wrong password and a number nobody has get the same answer. Accounts from before keep signing in with their email and password.
+- **One account per phone number** (Ghanaian mobile numbers) and per email address, among accounts that have one. A number from another country needs an email address to sign in with. The profile can no longer blank the number (it used to, whenever the form left it out), and changing it to another account's is refused.
+- **On start-up** (`lib/memberAccount.js`, in the background): the old member email index, which made an email compulsory, is replaced by one that is unique only among accounts with an email; and older accounts get the phone key they sign in with. Both only add and are done once; `scripts/member-accounts.js` does the same by hand, with a dry run first. `phoneKey` then follows `phone` on every save and update (schema hooks).
+
+`test/signup.js` (in `npm test`) and `test/signup-ui.js` (the whole journey on a phone). The older suites sign their people up with an email only; the test harness gives each such sign-up a phone number of its own.
+
+## 36. Codes by text: sign in, a new password, sign up without one
+
+Where a member's chapter can send texts (its own mNotify account, or the shared one in `MNOTIFY_API_KEY`), the sign-in page offers **Sign in with a code by text instead**, and **Forgot password?** takes a phone number and texts a code to choose a new password with (an email address still gets the link). Where it cannot, the pages say so plainly and offer the password and email instead (`GET /api/auth/sms-status`).
+
+**Signing up without a password** is offered only where the chapter has **its own** SMS account (the decision of 30 October): the sign-up form texts a code to the number, and the code takes the password's place. Such an account signs in with codes; its profile offers to set a first password without asking for an old one, and Download my data / Delete my account confirm with a code instead of the password.
+
+How the codes work (`lib/smsCode.js`, `routes/phone-signin.js`):
+- 6 digits, from a secure random source; only a keyed hash is stored (HMAC with `SESSION_SECRET`); 10 minutes; once; 5 wrong tries end it.
+- No more than 3 codes to one number in 15 minutes or 10 a day, counted whoever asks, plus a per-network limit (`SMS_CODE_LIMIT_MAX`, `SMS_CODE_TRY_LIMIT_MAX`).
+- **No account enumeration:** asking for a code gives the same answer, at the same speed, whether or not anyone has the number; nothing is sent unless someone does. A number shared by two older accounts cannot choose between them: email and password instead.
+- **Never in a log:** the SMS log records "ACONSU signin code (not kept)", not the code (Publicity can read that log). On a development machine (`NODE_ENV` not `production`) the code is also printed in the server console, to try it without texts; never in production.
+- A new password by code signs out every device that was signed in.
+- Ghanaian numbers only (`lib/phone.js`); a number from another country is never texted.
+
+`test/sms-codes.js` (in `npm test`) answers the SMS provider itself and reads the codes from the texts; `test/sms-ui.js` walks all three journeys on a phone.
+
+Not tested here: a real text arriving on a real phone through mNotify.
+

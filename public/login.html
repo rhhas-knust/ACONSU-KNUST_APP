@@ -32,21 +32,28 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <section style="padding-top:64px; padding-bottom:64px;">
   <div class="container">
-    <form class="form-card" id="loginForm">
+    <form class="form-card" id="loginForm" novalidate>
       <img src="/images/logo.jpg" alt="ACONSU" style="width:56px; height:56px; border-radius:50%; margin:0 auto 14px; display:block;">
       <h1 style="text-align:center; font-size:1.8rem;">Welcome back</h1>
       <p style="text-align:center; color:var(--ink-soft); margin-bottom:24px;">Log in to your ACONSU account.</p>
       <div class="field">
-        <label for="email">Email Address</label>
-        <input type="email" id="email" required>
+        <label for="email">Phone number or email</label>
+        <input type="text" id="email" autocomplete="username" inputmode="email" autocapitalize="off" spellcheck="false" required>
       </div>
-      <div class="field">
+      <div class="field" id="passwordField">
         <label for="password">Password</label>
-        <input type="password" id="password" required>
+        <input type="password" id="password" autocomplete="current-password" required>
       </div>
-      <p style="text-align:right; margin-bottom:16px;"><a href="/forgot-password.html" style="font-size:0.85rem; color:var(--brand); font-weight:700;">Forgot password?</a></p>
+      <div class="field" id="codeField" hidden>
+        <label for="smsCodeInput">The 6-digit code from the text</label>
+        <input type="text" id="smsCodeInput" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]*">
+      </div>
+      <p style="text-align:right; margin-bottom:16px;"><a href="/forgot-password.html" id="forgotLink" style="font-size:0.85rem; color:var(--brand); font-weight:700;">Forgot password?</a></p>
       <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log In</button>
-      <div class="form-msg" id="loginMsg"></div>
+      <div class="form-msg" id="loginMsg" role="status" aria-live="polite"></div>
+      <p class="login-switch" id="codeSwitchWrap" hidden>
+        <button type="button" class="photo-signout" id="codeSwitch">Sign in with a code by text instead</button>
+      </p>
       <p style="text-align:center; margin-top:18px; font-size:0.9rem; color:var(--ink-soft);">
         Don't have an account? <a href="/register.html" style="color:var(--brand); font-weight:700;">Sign up</a>
       </p>
@@ -60,25 +67,67 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 
 <script src="/js/main.js"></script>
 <script>
+// Two ways in: the password, or (where the chapter can send texts) a code
+// sent to the phone number. The second is offered only where it can work.
+let byCode = false;
+let codeSent = false;
+const $ = (id) => document.getElementById(id);
+function say(text, kind) { const m = $('loginMsg'); m.textContent = text; m.className = `form-msg ${kind || ''}`; }
+function showMode() {
+  $('passwordField').hidden = byCode;
+  $('password').required = !byCode;
+  $('codeField').hidden = !(byCode && codeSent);
+  $('forgotLink').hidden = byCode;
+  $('codeSwitch').textContent = byCode ? 'Sign in with my password instead' : 'Sign in with a code by text instead';
+  document.querySelector('label[for="email"]').textContent = byCode ? 'Your phone number' : 'Phone number or email';
+  $('loginBtn').textContent = !byCode ? 'Log In' : codeSent ? 'Sign in' : 'Send me a code';
+}
+
 (async function () {
   const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));
   if (authRes.member) { window.location.href = '/profile.html'; return; }
   await initLayout('/login.html');
+  const status = await fetchJSON(`/api/auth/sms-status?chapterId=${encodeURIComponent(getSelectedChapterId() || '')}`).catch(() => ({ codes: false }));
+  $('codeSwitchWrap').hidden = !status.codes;
 })();
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
+$('codeSwitch').addEventListener('click', () => { byCode = !byCode; codeSent = false; say(''); showMode(); });
+
+$('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('loginBtn');
   const msg = document.getElementById('loginMsg');
+  if (byCode) {
+    const post = (url, body) => fetchJSON(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    btn.disabled = true;
+    try {
+      if (!codeSent) {
+        const out = await post('/api/auth/sms/request', { phone: $('email').value, purpose: 'signin' });
+        codeSent = true; showMode();
+        say(out.message, 'success');
+        $('smsCodeInput').focus();
+      } else {
+        const out = await post('/api/auth/sms/signin', { phone: $('email').value, code: $('smsCodeInput').value });
+        window.location.href = out.needsPhoto ? '/photo.html' : '/profile.html';
+        return;
+      }
+    } catch (err) { say(err.message || 'Could not sign you in.', 'error'); }
+    btn.disabled = false;
+    return;
+  }
   btn.disabled = true; btn.textContent = 'Logging in...';
   try {
     await fetchJSON('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        email: document.getElementById('email').value,
+        identifier: document.getElementById('email').value,
         password: document.getElementById('password').value
       })
+    }).then((out) => {
+      // Signed up but never added a photo: that comes first.
+      if (out && out.needsPhoto) { window.location.href = '/photo.html'; return new Promise(() => {}); }
+      return out;
     });
     showToast('Welcome back!', 'success');
     window.location.href = '/profile.html';

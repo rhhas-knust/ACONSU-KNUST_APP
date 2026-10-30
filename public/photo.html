@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your Photo | ACONSU</title>
+<meta name="robots" content="noindex">
+<script>
+/* Set the theme before the first paint. A page that renders light and then
+   flips to dark is worse than one that never offered dark at all. Inline and
+   synchronous on purpose: an external file would arrive too late. */
+(function(){try{var t=localStorage.getItem('aconsu.theme');
+if(!t)t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#5B2C82">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ACONSU">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="has-side-rail">
+
+<a class="skip-link" href="#main">Skip to content</a>
+<header id="site-header"></header>
+<main id="main" tabindex="-1">
+
+<section style="padding-top:48px; padding-bottom:64px;">
+  <div class="container">
+    <form class="form-card photo-step" id="photoForm" novalidate>
+      <h1 id="photoTitle">One more step: your photo</h1>
+      <p class="photo-why">It goes on your membership card, and it helps the people who welcome you at church know you by name. Only your chapter's leaders and the people in your groups see it.</p>
+      <div class="photo-frame" aria-hidden="true"><img id="photoPreview" alt="" hidden><span id="photoEmpty">No photo yet</span></div>
+      <div class="photo-pick">
+        <input type="file" id="photoCamera" accept="image/*" capture="user" class="sr-only">
+        <label class="btn btn-primary" for="photoCamera">Take a photo</label>
+        <input type="file" id="photoFile" accept="image/*" class="sr-only">
+        <label class="btn btn-outline" for="photoFile">Choose a photo</label>
+      </div>
+      <p class="hint photo-tip">A clear picture of your face, on your own. No group photos or pictures of something else.</p>
+      <button type="submit" class="btn btn-primary btn-block" id="photoSave" disabled>Save my photo</button>
+      <div class="form-msg" id="photoMsg" role="status" aria-live="polite"></div>
+      <p class="photo-out"><button type="button" class="photo-signout" id="photoSignOut">Sign out</button></p>
+    </form>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer" id="site-footer"></footer>
+
+<script src="/js/main.js"></script>
+<script src="/js/photo.js"></script>
+</body>
+</html>

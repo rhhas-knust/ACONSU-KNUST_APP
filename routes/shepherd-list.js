@@ -252,22 +252,8 @@ function registerShepherdListRoutes(app, deps) {
       const name = peopleImport.tidyName(req.body.name);
       if (name.length < 2) return res.status(400).json({ error: 'Type their name.' });
       const phone = peopleImport.tidyPhone(req.body.phone).value;
-      const key = peopleImport.phoneKey(phone);
-      if (key) {
-        const [members, records] = await Promise.all([
-          repo.getAll('members', { chapterId }),
-          repo.getAll('shepherdingRecords', { chapterId, memberId: '' })
-        ]);
-        const same = (p) => peopleImport.phoneKey(p.phone) === key && peopleImport.namesAgree(name, p.name);
-        const member = members.find(same);
-        const record = !member && records.find(same);
-        if (member || record) {
-          const person = member
-            ? { memberId: member.id, recordId: '', name: member.name, member }
-            : { memberId: '', recordId: record.id, name: record.name };
-          return res.json({ ...(await checkIn(req, person, true)), wasOnList: true });
-        }
-      }
+      const onList = await attendance.findOnList({ chapterId, name, phone });
+      if (onList) return res.json({ ...(await checkIn(req, onList, true)), wasOnList: true });
       const record = await repo.create('shepherdingRecords', {
         chapterId, memberId: '', name, phone, origin: 'checkin', attendanceStatus: 'new',
         pastoralNotes: `First checked in on ${dayOf(req.body.date)}.`

@@ -39,7 +39,7 @@ module.exports = [
   },
   {
     // The server, its tests and its tools: Node, CommonJS.
-    files: ['*.js', 'lib/**/*.js', 'routes/**/*.js', 'test/**/*.js', 'site/tools/**/*.js'],
+    files: ['*.js', 'lib/**/*.js', 'routes/**/*.js', 'test/**/*.js', 'site/tools/**/*.js', 'scripts/**/*.js'],
     languageOptions: { ecmaVersion: 'latest', sourceType: 'commonjs', globals: { ...globals.node } }
   },
   {

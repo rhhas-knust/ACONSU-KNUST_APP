@@ -45,6 +45,11 @@ const { registerPrivacyRoutes } = require('./routes/privacy');
 const { registerShareRoutes, sharePreviews } = require('./routes/share');
 const { registerTodayRoutes } = require('./routes/today');
 const { registerHealthRoutes } = require('./routes/health-panel');
+const { registerDoorCheckinRoutes } = require('./routes/door-checkin');
+const phoneLib = require('./lib/phone');
+const memberAccount = require('./lib/memberAccount');
+const { registerPhoneSigninRoutes } = require('./routes/phone-signin');
+const smsCode = require('./lib/smsCode');
 const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
 const listLink = require('./lib/listLink');
@@ -1261,19 +1266,35 @@ const POLICY_VERSION = '2026-10-30';
 // registration (section 6), same upload pipeline as the profile-photo update
 // route below. Every new account starts life as a 'visitor': the Shepherding
 // workflow (section 7) is what moves someone from here to an active member.
+// Signing up asks for little: a name, a phone number, the chapter, a password
+// and agreement to the Terms. An email address is optional. Everything else
+// (programme, level, hall, birthday, whether they have finished their studies)
+// is on the profile, asked for gently and never required. The photo is not on
+// this form but is still required: the app asks for it straight after
+// (photo.html), before anything else opens.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const cleanEmail = (raw) => String(raw || '').toLowerCase().trim();
+
 app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), async (req, res) => {
-  const { name, email, password, phone, level, programme, hostel, department, chapterId, birthdayMonth, birthdayDay, memberKind, graduationYear } = req.body;
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Name, email and password are required' });
+  const { password, phone, level, programme, hostel, department, chapterId, birthdayMonth, birthdayDay, memberKind, graduationYear } = req.body;
+  const name = String(req.body.name || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const email = cleanEmail(req.body.email);
+  const phoneKey = phoneLib.ghanaKey(phone);
+  if (name.length < 2) return res.status(400).json({ error: 'Type your full name.' });
+  if (!String(phone || '').trim()) return res.status(400).json({ error: 'Type your phone number.' });
+  if (email && !EMAIL_RE.test(email)) return res.status(400).json({ error: 'That email address does not look right. Check it, or leave it empty.' });
+  // Signing in is by phone number or email, so one of them must be usable.
+  if (!phoneKey && !email) {
+    return res.status(400).json({ error: 'Type a Ghanaian phone number, like 024 412 3456. Using a number from another country? Add your email address too, and sign in with that.' });
   }
-  if (typeof password !== 'string' || password.length < 8) {
+  // A password, or (only where the chapter has its own SMS account) the code
+  // texted to the number instead (routes/phone-signin.js).
+  const byCode = !password && !!req.body.smsCode;
+  if (!byCode && (typeof password !== 'string' || password.length < 8)) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
   if (!chapterId) {
     return res.status(400).json({ error: 'Please select your ACONSU chapter' });
-  }
-  if (!req.file) {
-    return res.status(400).json({ error: 'A profile photo is required to register' });
   }
   // Agreeing to the Terms and the privacy policy is a step the person takes, not
   // something assumed from the account existing. It is also recorded: when, and
@@ -1294,19 +1315,31 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
     if (!chapter || chapter.status !== 'active') {
       return res.status(400).json({ error: 'Please choose a valid, active chapter' });
     }
-    const existing = await models.Member.findOne({ email: email.toLowerCase().trim() });
-    if (existing) return res.status(400).json({ error: 'An account with this email already exists' });
+    if (email && await models.Member.findOne({ email })) return res.status(400).json({ error: 'An account with this email already exists. Sign in instead.' });
+    if (phoneKey && await models.Member.findOne({ phoneKey })) return res.status(400).json({ error: 'An account with this phone number already exists. Sign in instead, or reset your password.' });
+    if (byCode) {
+      const config = await sms.resolveConfig(chapter.id);
+      if (!config || config.source !== 'chapter' || !phoneKey) return res.status(400).json({ error: 'Choose a password: this chapter signs up with one for now.' });
+      const ok = await smsCode.verify(phoneKey, 'signup', req.body.smsCode);
+      if (!ok.ok) return res.status(400).json({ error: smsCode.MESSAGES[ok.reason] });
+    }
 
-    const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
-    const profileImageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
-      category: 'member-profile', contentType: compressed.contentType, title: name, chapterId: chapter.id
-    }));
+    // An app still sending the photo with the form (an older version): kept.
+    let profileImageFileId = '';
+    if (req.file) {
+      const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+      profileImageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+        category: 'member-profile', contentType: compressed.contentType, title: name, chapterId: chapter.id
+      }));
+    }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    // No password at all when they proved the number with a code instead; they
+    // sign in with a code, and can choose a password on their profile later.
+    const passwordHash = byCode ? '' : await bcrypt.hash(password, 10);
     const member = await repo.create('members', {
       chapterId: chapter.id,
-      name, email: email.toLowerCase().trim(), passwordHash,
-      phone: phone || '', level: level || '', programme: programme || '', hostel: hostel || '',
+      name, ...(email ? { email } : {}), passwordHash,
+      phone: String(phone).trim().slice(0, 40), phoneKey, level: level || '', programme: programme || '', hostel: hostel || '',
       department: department || '',
       // Someone who has finished their studies says so when they sign up, and
       // the form asks them for a graduation year instead of a hostel. The
@@ -1328,23 +1361,38 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
     scheduleOnboardingTasks(member).catch(() => {});
     req.session.memberId = member.id;
     req.session.issuedAt = Date.now();
-    res.json({ success: true, member: { id: member.id, name: member.name, email: member.email, chapterId: member.chapterId } });
+    res.json({ success: true, needsPhoto: !profileImageFileId, member: { id: member.id, name: member.name, email: member.email || '', chapterId: member.chapterId } });
   } catch (e) {
     res.status(500).json({ error: 'Could not create account. Please try again.' });
   }
 });
 
+// Signing in with a phone number (any way it is typed) or an email address.
+// `email` is what older pages send; it may hold either.
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password are required' });
+  const who = String(req.body.identifier || req.body.email || '').trim();
+  const { password } = req.body;
+  if (!who || !password) return res.status(400).json({ error: 'Type your phone number (or email) and your password.' });
   try {
-    const member = await models.Member.findOne({ email: String(email).toLowerCase().trim() });
-    const match = await bcrypt.compare(String(password), (member && member.passwordHash) || DUMMY_HASH);
-    if (!member || !match) return res.status(401).json({ error: 'Invalid email or password' });
+    let member = null;
+    let match = false;
+    if (phoneLib.looksLikePhone(who)) {
+      // Older accounts can share a number: whichever of them this password opens.
+      const key = phoneLib.ghanaKey(who);
+      const candidates = key ? await models.Member.find({ phoneKey: key }) : [];
+      for (const m of candidates) {
+        if (await bcrypt.compare(String(password), m.passwordHash || DUMMY_HASH)) { member = m; match = true; break; }
+      }
+      if (!candidates.length) await bcrypt.compare(String(password), DUMMY_HASH);
+    } else {
+      member = await models.Member.findOne({ email: cleanEmail(who) });
+      match = await bcrypt.compare(String(password), (member && member.passwordHash) || DUMMY_HASH);
+    }
+    if (!member || !match) return res.status(401).json({ error: 'That phone number (or email) and password do not match.' });
     await freshSession(req);
     req.session.memberId = member.id;
     req.session.issuedAt = Date.now();
-    res.json({ success: true, member: { id: member.id, name: member.name, email: member.email } });
+    res.json({ success: true, needsPhoto: !member.profileImageFileId, member: { id: member.id, name: member.name, email: member.email || '' } });
   } catch (e) {
     res.status(500).json({ error: 'Could not log in. Please try again.' });
   }
@@ -1423,7 +1471,8 @@ app.get('/api/auth/me', async (req, res) => {
     // None of it is needed here: the digital card has its own endpoint, and the
     // reset token is credential material that should never leave the server.
     const { passwordHash, resetTokenHash, resetTokenExpires, qrToken, ...safe } = member;
-    res.json({ member: safe });
+    // Signed up without a photo: the app asks for it before anything else.
+    res.json({ member: { ...safe, needsPhoto: !member.profileImageFileId, hasPassword: !!passwordHash } });
   } catch (e) {
     res.json({ member: null });
   }
@@ -1455,6 +1504,29 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
     if ((month && !day) || (day && !month)) {
       return res.status(400).json({ error: 'Please provide both a birthday month and day, or leave both blank' });
     }
+    // The phone number signs them in: never blanked by a form that did not send
+    // it, and never one another account already has.
+    let phone = existing.phone || '';
+    let email = existing.email || '';
+    if (req.body.email !== undefined && cleanEmail(req.body.email) && cleanEmail(req.body.email) !== email) {
+      const next = cleanEmail(req.body.email);
+      if (!EMAIL_RE.test(next)) return res.status(400).json({ error: 'That email address does not look right.' });
+      if (await models.Member.findOne({ email: next, id: { $ne: existing.id } })) return res.status(400).json({ error: 'Another account already uses that email address.' });
+      email = next;
+    }
+    if (req.body.phone !== undefined) {
+      const typed = String(req.body.phone).trim().slice(0, 40);
+      const key = phoneLib.ghanaKey(typed);
+      if (!key && !email) {
+        return res.status(400).json({ error: typed
+          ? 'Type a Ghanaian phone number, like 024 412 3456, or add an email address to sign in with.'
+          : 'Your phone number is how you sign in. Keep one, or add an email address first.' });
+      }
+      if (key && key !== existing.phoneKey && await models.Member.findOne({ phoneKey: key, id: { $ne: existing.id } })) {
+        return res.status(400).json({ error: 'Another account already has this phone number.' });
+      }
+      phone = typed;
+    }
     const level = req.body.level !== undefined ? req.body.level : existing.level;
     const hostel = req.body.hostel !== undefined ? req.body.hostel : existing.hostel;
     // A real academic-year change (not just a typo fix) - snapshot where they
@@ -1468,7 +1540,13 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
     }
     const updates = {
       name: req.body.name || existing.name,
-      phone: req.body.phone || '',
+      phone,
+      phoneKey: phoneLib.ghanaKey(phone),
+      ...(email ? { email } : {}),
+      // Finished their studies? A claim, as at sign-up; the stage itself is
+      // Shepherding's to set.
+      ...(req.body.memberKind !== undefined ? { registeredAsAlumni: String(req.body.memberKind) === 'alumni' } : {}),
+      ...(req.body.graduationYear !== undefined ? { graduationYear: String(req.body.graduationYear).replace(/[^0-9]/g, '').slice(0, 4) } : {}),
       level,
       programme: req.body.programme !== undefined ? req.body.programme : existing.programme,
       hostel,
@@ -1492,15 +1570,38 @@ app.put('/api/member/profile', requireMember, upload.single('profileImage'), asy
   }
 });
 
+// The photo, asked for straight after signing up (photo.html), and changed
+// later from the profile.
+app.post('/api/member/photo', requireMember, upload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file || !/^image\//.test(req.file.mimetype || '')) return res.status(400).json({ error: 'Choose a photo of yourself.' });
+    const existing = await repo.getById('members', req.session.memberId, repo.ownRecord());
+    if (!existing) return res.status(404).json({ error: 'Account not found' });
+    const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+    const profileImageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+      category: 'member-profile', contentType: compressed.contentType, title: existing.name, chapterId: existing.chapterId
+    }));
+    await repo.patchById('members', existing.id, { profileImageFileId }, repo.ownRecord());
+    if (existing.profileImageFileId) gridfs.deleteFile(existing.profileImageFileId).catch(() => {});
+    res.json({ success: true, profileImageFileId });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save your photo. Please try again.' });
+  }
+});
+
 app.put('/api/member/password', requireMember, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both current and new password are required' });
   if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
   try {
     const member = await models.Member.findOne({ id: req.session.memberId });
     if (!member) return res.status(404).json({ error: 'Account not found' });
-    const match = await bcrypt.compare(currentPassword, member.passwordHash || '');
-    if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+    // An account that signed up with a code has no password yet: it chooses
+    // its first one without being asked for the old one.
+    if (member.passwordHash) {
+      if (!currentPassword) return res.status(400).json({ error: 'Both current and new password are required' });
+      const match = await bcrypt.compare(currentPassword, member.passwordHash);
+      if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+    }
     member.passwordHash = await bcrypt.hash(newPassword, 10);
     await member.save();
     // Every other device is signed out; this one, which has just proved it
@@ -4736,6 +4837,8 @@ function requireAttendanceTaker(req, res, next) {
   return res.status(401).json({ error: 'Not authenticated' });
 }
 registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
+registerDoorCheckinRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
+registerPhoneSigninRoutes(app, { models, rolesLib, freshSession, revokeMemberSessions, requireMember });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
 registerShareRoutes(app);
 registerTodayRoutes(app, { models, currentStaff });
@@ -8979,6 +9082,9 @@ connectDB()
   // Leaders' second step switched off: forget when it was switched on, so
   // switching it on again starts a fresh 14 days for everyone.
   .then(() => (secondStep.enforced() ? null : models.SystemState.deleteOne({ singleton: 'leader2fa' }).catch(() => {})))
+  // Accounts without an email address, and sign-in by phone for older ones
+  // (lib/memberAccount.js). In the background: it never holds the site up.
+  .then(() => { memberAccount.prepare().catch((e) => console.error('Member account preparation failed:', e.message)); })
   .then(() => {
     const httpServer = app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);

@@ -81,6 +81,14 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       </div>
     </div>
 
+    <div class="form-card complete-profile" id="completeProfile" hidden>
+      <h2>A few more details, when you have a minute</h2>
+      <p class="muted">They help Shepherding know you and celebrate you. None of them is required.</p>
+      <ul id="completeList"></ul>
+      <button type="button" class="btn btn-outline btn-sm" id="completeGo">Add them now</button>
+      <button type="button" class="photo-signout" id="completeLater">Not now</button>
+    </div>
+
     <h2 style="margin-bottom:14px;">Account Settings</h2>
     <div class="profile-tabs">
       <button data-tab="details" class="active">My Details</button>
@@ -93,16 +101,35 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <input type="text" id="name" required>
       </div>
       <div class="field">
-        <label for="email">Email Address</label>
-        <input type="email" id="email" disabled style="opacity:0.6;">
+        <label for="phone">Phone number</label>
+        <input type="tel" id="phone" autocomplete="tel" inputmode="tel" aria-describedby="phoneNote">
+        <small class="hint" id="phoneNote" style="color:var(--ink-faint);">You sign in with this.</small>
       </div>
       <div class="field">
-        <label for="phone">Phone Number</label>
-        <input type="tel" id="phone">
+        <label for="email">Email address (optional)</label>
+        <input type="email" id="email" autocomplete="email" aria-describedby="emailNote">
+        <small class="hint" id="emailNote" style="color:var(--ink-faint);">To sign in with it too, and for a password reset by email.</small>
       </div>
+      <fieldset class="field profile-kind">
+        <legend>Are you studying now, or have you finished?</legend>
+        <label><input type="radio" name="memberKind" value="student"> Studying</label>
+        <label><input type="radio" name="memberKind" value="alumni"> Finished</label>
+      </fieldset>
       <div class="field">
+        <label for="programme">What you study, or studied</label>
+        <input type="text" id="programme" maxlength="120" placeholder="e.g. BSc. Computer Science">
+      </div>
+      <div class="field" data-for-kind="student">
         <label for="level">Level / Year of Study</label>
         <input type="text" id="level">
+      </div>
+      <div class="field" data-for-kind="student">
+        <label for="hostel">Hall or hostel</label>
+        <input type="text" id="hostel" maxlength="120">
+      </div>
+      <div class="field" data-for-kind="alumni" hidden>
+        <label for="graduationYear">Year you finished</label>
+        <input type="text" id="graduationYear" inputmode="numeric" maxlength="4" placeholder="e.g. 2021">
       </div>
       <div class="field">
         <label>Birthday (month &amp; day only, no year is ever stored)</label>
@@ -120,7 +147,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         </div>
       </div>
       <div class="field">
-        <label for="profileImage">Profile Photo</label>
+        <label for="profileImage">Profile photo</label>
         <input type="file" id="profileImage" accept="image/*">
       </div>
       <button type="submit" class="btn btn-primary btn-block" id="detailsSubmitBtn">Save Changes</button>
@@ -128,7 +155,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
 
     <form class="form-card" id="passwordForm" style="display:none;">
-      <div class="field">
+      <p class="muted" id="firstPasswordNote" hidden>You signed up with a code by text, so there is no password yet. Choose one here if you would like to sign in with it too.</p>
+      <div class="field" id="currentPasswordWrap">
         <label for="currentPassword">Current Password</label>
         <input type="password" id="currentPassword" required>
       </div>
@@ -156,9 +184,17 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div class="form-card my-data" id="myDataCard" style="margin-top:24px;">
       <h2 style="margin-bottom:6px;">Your data</h2>
       <p class="my-data-hint">Download a copy of everything ACONSU holds about you, or delete your account for good. Type your password first, for either one.</p>
-      <div class="field">
+      <div class="field" id="myDataPasswordWrap">
         <label for="myDataPassword">Your password</label>
         <input type="password" id="myDataPassword" autocomplete="current-password">
+      </div>
+      <!-- An account with no password (signed up with a code) confirms with a code instead. -->
+      <div id="myDataCodeWrap" hidden>
+        <button type="button" class="btn btn-outline btn-sm" id="myDataSendCode">Text me a code</button>
+        <div class="field" style="margin-top:10px;">
+          <label for="myDataCode">The 6-digit code from the text</label>
+          <input type="text" id="myDataCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        </div>
       </div>
       <button type="button" class="btn btn-outline" id="exportBtn">Download my data</button>
       <div class="form-msg" id="myDataMsg" role="alert"></div>
@@ -201,6 +237,14 @@ let CURRENT_MEMBER = null;
   renderMyEvents();
   renderQuickPills();
   fillDetailsForm();
+  renderCompleteProfile();
+  // No password yet (signed up with a code): choosing the first one asks for no old one.
+  if (CURRENT_MEMBER.hasPassword === false) {
+    document.getElementById('currentPasswordWrap').hidden = true;
+    document.getElementById('currentPassword').required = false;
+    document.getElementById('firstPasswordNote').hidden = false;
+    document.getElementById('passwordSubmitBtn').textContent = 'Set my password';
+  }
   loadBadgesAndStreak();
   loadVolunteerAssignments();
 })();
@@ -422,6 +466,12 @@ function fillDetailsForm() {
   document.getElementById('email').value = CURRENT_MEMBER.email || '';
   document.getElementById('phone').value = CURRENT_MEMBER.phone || '';
   document.getElementById('level').value = CURRENT_MEMBER.level || '';
+  document.getElementById('programme').value = CURRENT_MEMBER.programme || '';
+  document.getElementById('hostel').value = CURRENT_MEMBER.hostel || '';
+  document.getElementById('graduationYear').value = CURRENT_MEMBER.graduationYear || '';
+  const kind = CURRENT_MEMBER.registeredAsAlumni ? 'alumni' : 'student';
+  document.querySelector(`input[name="memberKind"][value="${kind}"]`).checked = true;
+  showKindFields();
   const daySelect = document.getElementById('birthdayDay');
   for (let d = 1; d <= 31; d++) {
     const opt = document.createElement('option');
@@ -441,6 +491,41 @@ document.querySelectorAll('.profile-tabs button').forEach(btn => {
   });
 });
 
+// Studying: level and hall. Finished: the year. Only one set on screen.
+function showKindFields() {
+  const picked = document.querySelector('input[name="memberKind"]:checked');
+  const kind = picked ? picked.value : 'student';
+  document.querySelectorAll('[data-for-kind]').forEach((el) => { el.hidden = el.dataset.forKind !== kind; });
+}
+document.querySelectorAll('input[name="memberKind"]').forEach((r) => r.addEventListener('change', showKindFields));
+
+// Signing up asks only for a name and number; the rest is asked for here,
+// gently, and never required. "Not now" puts it away on this phone for a month.
+const COMPLETE_LATER_KEY = 'aconsu.profileLater';
+function renderCompleteProfile() {
+  const card = document.getElementById('completeProfile');
+  const m = CURRENT_MEMBER || {};
+  const missing = [
+    !m.programme && 'What you study',
+    !m.registeredAsAlumni && !m.level && 'Your level',
+    !m.registeredAsAlumni && !m.hostel && 'Your hall or hostel',
+    !(m.birthdayMonth && m.birthdayDay) && 'Your birthday (day and month only)'
+  ].filter(Boolean);
+  let later = 0;
+  try { later = Number(localStorage.getItem(COMPLETE_LATER_KEY)) || 0; } catch (e) { /* fine */ }
+  card.hidden = !missing.length || Date.now() - later < 30 * 24 * 60 * 60 * 1000;
+  document.getElementById('completeList').innerHTML = missing.map((t) => `<li>${escapeHtml(t)}</li>`).join('');
+}
+document.getElementById('completeGo').addEventListener('click', () => {
+  const first = ['programme', 'level', 'hostel', 'birthdayMonth'].map((id) => document.getElementById(id)).find((el) => el && !el.value && el.offsetParent);
+  document.getElementById('detailsForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (first) setTimeout(() => first.focus(), 300);
+});
+document.getElementById('completeLater').addEventListener('click', () => {
+  try { localStorage.setItem(COMPLETE_LATER_KEY, String(Date.now())); } catch (e) { /* fine */ }
+  document.getElementById('completeProfile').hidden = true;
+});
+
 document.getElementById('profileImage').addEventListener('change', (e) => {
   if (e.target.files.length) document.getElementById('detailsForm').requestSubmit();
 });
@@ -453,7 +538,13 @@ document.getElementById('detailsForm').addEventListener('submit', async (e) => {
   const formData = new FormData();
   formData.append('name', document.getElementById('name').value);
   formData.append('phone', document.getElementById('phone').value);
+  formData.append('email', document.getElementById('email').value);
   formData.append('level', document.getElementById('level').value);
+  formData.append('programme', document.getElementById('programme').value);
+  formData.append('hostel', document.getElementById('hostel').value);
+  const kindPicked = document.querySelector('input[name="memberKind"]:checked');
+  if (kindPicked) formData.append('memberKind', kindPicked.value);
+  formData.append('graduationYear', document.getElementById('graduationYear').value);
   formData.append('birthdayMonth', document.getElementById('birthdayMonth').value);
   formData.append('birthdayDay', document.getElementById('birthdayDay').value);
   const fileInput = document.getElementById('profileImage');
@@ -464,6 +555,7 @@ document.getElementById('detailsForm').addEventListener('submit', async (e) => {
     if (!res.ok) throw new Error(data.error || 'Could not save');
     CURRENT_MEMBER = data.member;
     renderProfileTopRow();
+    renderCompleteProfile();
     msg.textContent = 'Profile updated.';
     msg.className = 'form-msg success';
     showToast('Profile updated.', 'success');
@@ -493,6 +585,7 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
     msg.className = 'form-msg success';
     showToast('Password updated.', 'success');
     document.getElementById('passwordForm').reset();
+    if (CURRENT_MEMBER.hasPassword === false) { CURRENT_MEMBER.hasPassword = true; document.getElementById('currentPasswordWrap').hidden = false; document.getElementById('firstPasswordNote').hidden = true; }
   } catch (err) {
     msg.textContent = err.message;
     msg.className = 'form-msg error';
