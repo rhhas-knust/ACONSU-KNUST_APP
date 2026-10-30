@@ -1299,3 +1299,4 @@ body {
 .profile-kind legend { font-weight: 700; font-size: 0.85rem; margin-bottom: 6px; color: var(--brand-strong); }
 .profile-kind label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-right: 18px; font-weight: 600; }
 .profile-kind input { width: 20px; height: 20px; accent-color: var(--purple-deep); }
+.login-switch { text-align: center; margin-top: 14px; }

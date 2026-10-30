@@ -48,6 +48,8 @@ const { registerHealthRoutes } = require('./routes/health-panel');
 const { registerDoorCheckinRoutes } = require('./routes/door-checkin');
 const phoneLib = require('./lib/phone');
 const memberAccount = require('./lib/memberAccount');
+const { registerPhoneSigninRoutes } = require('./routes/phone-signin');
+const smsCode = require('./lib/smsCode');
 const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
 const listLink = require('./lib/listLink');
@@ -1285,7 +1287,10 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
   if (!phoneKey && !email) {
     return res.status(400).json({ error: 'Type a Ghanaian phone number, like 024 412 3456. Using a number from another country? Add your email address too, and sign in with that.' });
   }
-  if (typeof password !== 'string' || password.length < 8) {
+  // A password, or (only where the chapter has its own SMS account) the code
+  // texted to the number instead (routes/phone-signin.js).
+  const byCode = !password && !!req.body.smsCode;
+  if (!byCode && (typeof password !== 'string' || password.length < 8)) {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
   if (!chapterId) {
@@ -1312,6 +1317,12 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
     }
     if (email && await models.Member.findOne({ email })) return res.status(400).json({ error: 'An account with this email already exists. Sign in instead.' });
     if (phoneKey && await models.Member.findOne({ phoneKey })) return res.status(400).json({ error: 'An account with this phone number already exists. Sign in instead, or reset your password.' });
+    if (byCode) {
+      const config = await sms.resolveConfig(chapter.id);
+      if (!config || config.source !== 'chapter' || !phoneKey) return res.status(400).json({ error: 'Choose a password: this chapter signs up with one for now.' });
+      const ok = await smsCode.verify(phoneKey, 'signup', req.body.smsCode);
+      if (!ok.ok) return res.status(400).json({ error: smsCode.MESSAGES[ok.reason] });
+    }
 
     // An app still sending the photo with the form (an older version): kept.
     let profileImageFileId = '';
@@ -1322,7 +1333,9 @@ app.post('/api/auth/register', loginLimiter, upload.single('profileImage'), asyn
       }));
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    // No password at all when they proved the number with a code instead; they
+    // sign in with a code, and can choose a password on their profile later.
+    const passwordHash = byCode ? '' : await bcrypt.hash(password, 10);
     const member = await repo.create('members', {
       chapterId: chapter.id,
       name, ...(email ? { email } : {}), passwordHash,
@@ -1459,7 +1472,7 @@ app.get('/api/auth/me', async (req, res) => {
     // reset token is credential material that should never leave the server.
     const { passwordHash, resetTokenHash, resetTokenExpires, qrToken, ...safe } = member;
     // Signed up without a photo: the app asks for it before anything else.
-    res.json({ member: { ...safe, needsPhoto: !member.profileImageFileId } });
+    res.json({ member: { ...safe, needsPhoto: !member.profileImageFileId, hasPassword: !!passwordHash } });
   } catch (e) {
     res.json({ member: null });
   }
@@ -1578,13 +1591,17 @@ app.post('/api/member/photo', requireMember, upload.single('photo'), async (req,
 
 app.put('/api/member/password', requireMember, async (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both current and new password are required' });
   if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
   try {
     const member = await models.Member.findOne({ id: req.session.memberId });
     if (!member) return res.status(404).json({ error: 'Account not found' });
-    const match = await bcrypt.compare(currentPassword, member.passwordHash || '');
-    if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+    // An account that signed up with a code has no password yet: it chooses
+    // its first one without being asked for the old one.
+    if (member.passwordHash) {
+      if (!currentPassword) return res.status(400).json({ error: 'Both current and new password are required' });
+      const match = await bcrypt.compare(currentPassword, member.passwordHash);
+      if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+    }
     member.passwordHash = await bcrypt.hash(newPassword, 10);
     await member.save();
     // Every other device is signed out; this one, which has just proved it
@@ -4821,6 +4838,7 @@ function requireAttendanceTaker(req, res, next) {
 }
 registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
 registerDoorCheckinRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
+registerPhoneSigninRoutes(app, { models, rolesLib, freshSession, revokeMemberSessions, requireMember });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
 registerShareRoutes(app);
 registerTodayRoutes(app, { models, currentStaff });

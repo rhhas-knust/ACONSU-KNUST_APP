@@ -58,10 +58,21 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <option value="">Loading chapters…</option>
         </select>
       </div>
-      <div class="field">
+      <div class="field" id="passwordWrap">
         <label for="password">Choose a password</label>
         <input type="password" id="password" minlength="8" autocomplete="new-password" required aria-describedby="passwordHint">
         <small class="hint" id="passwordHint" style="color:var(--ink-faint);">At least 8 characters.</small>
+      </div>
+      <!-- Only where the chapter has its own SMS account (routes/phone-signin.js). -->
+      <div id="codeSignup" hidden>
+        <p class="login-switch"><button type="button" class="photo-signout" id="codeSignupSwitch">No password? Get a code by text instead</button></p>
+        <div id="codeSignupBox" hidden>
+          <button type="button" class="btn btn-outline btn-block" id="sendSignupCode">Text me a code</button>
+          <div class="field" style="margin-top:12px;">
+            <label for="signupCode">The 6-digit code from the text</label>
+            <input type="text" id="signupCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+          </div>
+        </div>
       </div>
       <div class="field">
         <label for="email">Email address (optional)</label>
@@ -110,7 +121,37 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   } catch (e) {
     chapterSelect.innerHTML = `<option value="">Could not load chapters</option>`;
   }
+  offerCode();
+  chapterSelect.addEventListener('change', offerCode);
 })();
+
+// Signing up with a code instead of a password: only for a chapter with its
+// own SMS account. Everywhere else the password stays.
+let withCode = false;
+async function offerCode() {
+  const chapterId = document.getElementById('chapterId').value;
+  const status = chapterId ? await fetchJSON(`/api/auth/sms-status?chapterId=${encodeURIComponent(chapterId)}`).catch(() => ({})) : {};
+  document.getElementById('codeSignup').hidden = !status.phoneOnlySignup;
+  if (!status.phoneOnlySignup && withCode) toggleCode();
+}
+function toggleCode() {
+  withCode = !withCode;
+  document.getElementById('passwordWrap').hidden = withCode;
+  document.getElementById('codeSignupBox').hidden = !withCode;
+  document.getElementById('codeSignupSwitch').textContent = withCode ? 'Choose a password instead' : 'No password? Get a code by text instead';
+}
+document.getElementById('codeSignupSwitch').addEventListener('click', toggleCode);
+document.getElementById('sendSignupCode').addEventListener('click', async () => {
+  const msg = document.getElementById('registerMsg');
+  try {
+    const out = await fetchJSON('/api/auth/sms/signup-code', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: document.getElementById('phone').value, chapterId: document.getElementById('chapterId').value })
+    });
+    msg.textContent = out.message; msg.className = 'form-msg success';
+    document.getElementById('signupCode').focus();
+  } catch (err) { msg.textContent = err.message; msg.className = 'form-msg error'; }
+});
 
 // Counted once a visit, the first time someone types into the form: only how
 // many sign-ups were started, to set beside how many were finished. Nothing
@@ -132,7 +173,8 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   if (v('name').length < 2) return say('Type your full name.', 'name');
   if (v('phone').replace(/\D/g, '').length < 9) return say('Type your phone number, like 024 412 3456.', 'phone');
   if (!v('chapterId')) return say('Choose your ACONSU chapter.', 'chapterId');
-  if (document.getElementById('password').value.length < 8) return say('Choose a password of at least 8 characters.', 'password');
+  if (!withCode && document.getElementById('password').value.length < 8) return say('Choose a password of at least 8 characters.', 'password');
+  if (withCode && v('signupCode').length !== 6) return say('Type the 6-digit code from the text. No text? Press Text me a code.', 'signupCode');
   if (!document.getElementById('agree').checked) return say('Tick the box to agree to the Terms and the Privacy policy.', 'agree');
   btn.disabled = true; btn.textContent = 'Creating account...';
   try {
@@ -141,7 +183,8 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     formData.append('name', v('name'));
     formData.append('phone', v('phone'));
     formData.append('email', v('email'));
-    formData.append('password', document.getElementById('password').value);
+    formData.append('password', withCode ? '' : document.getElementById('password').value);
+    if (withCode) formData.append('smsCode', v('signupCode'));
     formData.append('consent', 'true');
     // fetchJSON attaches an X-Chapter-Id header automatically; multipart
     // bodies must not get a manual Content-Type (the browser sets the

@@ -11,7 +11,7 @@
     "cap:sync": "npx cap sync",
     "cap:open:android": "npx cap open android",
     "cap:open:ios": "npx cap open ios",
-    "test": "node test/smoke.js && node test/offices.js && node test/account.js && node test/chapter-look.js && node test/maps.js && node test/global.js && node test/shepherd-list.js && node test/books.js && node test/domain.js && node test/privacy.js && node test/second-step.js && node test/chapter-wall.js && node test/share.js && node test/today.js && node test/door-checkin.js && node test/signup.js",
+    "test": "node test/smoke.js && node test/offices.js && node test/account.js && node test/chapter-look.js && node test/maps.js && node test/global.js && node test/shepherd-list.js && node test/books.js && node test/domain.js && node test/privacy.js && node test/second-step.js && node test/chapter-wall.js && node test/share.js && node test/today.js && node test/door-checkin.js && node test/signup.js && node test/sms-codes.js",
     "ux": "node test/ux.js",
     "lint": "eslint ."
   },

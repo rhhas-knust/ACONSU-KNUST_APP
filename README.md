@@ -848,3 +848,21 @@ Signing up asks for a **name, a phone number, the chapter, a password** and agre
 
 `test/signup.js` (in `npm test`) and `test/signup-ui.js` (the whole journey on a phone). The older suites sign their people up with an email only; the test harness gives each such sign-up a phone number of its own.
 
+## 36. Codes by text: sign in, a new password, sign up without one
+
+Where a member's chapter can send texts (its own mNotify account, or the shared one in `MNOTIFY_API_KEY`), the sign-in page offers **Sign in with a code by text instead**, and **Forgot password?** takes a phone number and texts a code to choose a new password with (an email address still gets the link). Where it cannot, the pages say so plainly and offer the password and email instead (`GET /api/auth/sms-status`).
+
+**Signing up without a password** is offered only where the chapter has **its own** SMS account (the decision of 30 October): the sign-up form texts a code to the number, and the code takes the password's place. Such an account signs in with codes; its profile offers to set a first password without asking for an old one, and Download my data / Delete my account confirm with a code instead of the password.
+
+How the codes work (`lib/smsCode.js`, `routes/phone-signin.js`):
+- 6 digits, from a secure random source; only a keyed hash is stored (HMAC with `SESSION_SECRET`); 10 minutes; once; 5 wrong tries end it.
+- No more than 3 codes to one number in 15 minutes or 10 a day, counted whoever asks, plus a per-network limit (`SMS_CODE_LIMIT_MAX`, `SMS_CODE_TRY_LIMIT_MAX`).
+- **No account enumeration:** asking for a code gives the same answer, at the same speed, whether or not anyone has the number; nothing is sent unless someone does. A number shared by two older accounts cannot choose between them: email and password instead.
+- **Never in a log:** the SMS log records "ACONSU signin code (not kept)", not the code (Publicity can read that log). On a development machine (`NODE_ENV` not `production`) the code is also printed in the server console, to try it without texts; never in production.
+- A new password by code signs out every device that was signed in.
+- Ghanaian numbers only (`lib/phone.js`); a number from another country is never texted.
+
+`test/sms-codes.js` (in `npm test`) answers the SMS provider itself and reads the codes from the texts; `test/sms-ui.js` walks all three journeys on a phone.
+
+Not tested here: a real text arriving on a real phone through mNotify.
+

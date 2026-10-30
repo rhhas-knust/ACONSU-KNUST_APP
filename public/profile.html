@@ -155,7 +155,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
 
     <form class="form-card" id="passwordForm" style="display:none;">
-      <div class="field">
+      <p class="muted" id="firstPasswordNote" hidden>You signed up with a code by text, so there is no password yet. Choose one here if you would like to sign in with it too.</p>
+      <div class="field" id="currentPasswordWrap">
         <label for="currentPassword">Current Password</label>
         <input type="password" id="currentPassword" required>
       </div>
@@ -183,9 +184,17 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <div class="form-card my-data" id="myDataCard" style="margin-top:24px;">
       <h2 style="margin-bottom:6px;">Your data</h2>
       <p class="my-data-hint">Download a copy of everything ACONSU holds about you, or delete your account for good. Type your password first, for either one.</p>
-      <div class="field">
+      <div class="field" id="myDataPasswordWrap">
         <label for="myDataPassword">Your password</label>
         <input type="password" id="myDataPassword" autocomplete="current-password">
+      </div>
+      <!-- An account with no password (signed up with a code) confirms with a code instead. -->
+      <div id="myDataCodeWrap" hidden>
+        <button type="button" class="btn btn-outline btn-sm" id="myDataSendCode">Text me a code</button>
+        <div class="field" style="margin-top:10px;">
+          <label for="myDataCode">The 6-digit code from the text</label>
+          <input type="text" id="myDataCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        </div>
       </div>
       <button type="button" class="btn btn-outline" id="exportBtn">Download my data</button>
       <div class="form-msg" id="myDataMsg" role="alert"></div>
@@ -229,6 +238,13 @@ let CURRENT_MEMBER = null;
   renderQuickPills();
   fillDetailsForm();
   renderCompleteProfile();
+  // No password yet (signed up with a code): choosing the first one asks for no old one.
+  if (CURRENT_MEMBER.hasPassword === false) {
+    document.getElementById('currentPasswordWrap').hidden = true;
+    document.getElementById('currentPassword').required = false;
+    document.getElementById('firstPasswordNote').hidden = false;
+    document.getElementById('passwordSubmitBtn').textContent = 'Set my password';
+  }
   loadBadgesAndStreak();
   loadVolunteerAssignments();
 })();
@@ -569,6 +585,7 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
     msg.className = 'form-msg success';
     showToast('Password updated.', 'success');
     document.getElementById('passwordForm').reset();
+    if (CURRENT_MEMBER.hasPassword === false) { CURRENT_MEMBER.hasPassword = true; document.getElementById('currentPasswordWrap').hidden = false; document.getElementById('firstPasswordNote').hidden = true; }
   } catch (err) {
     msg.textContent = err.message;
     msg.className = 'form-msg error';

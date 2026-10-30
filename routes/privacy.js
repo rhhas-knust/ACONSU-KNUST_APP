@@ -8,6 +8,7 @@
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const eraseMember = require('../lib/eraseMember');
+const smsCode = require('../lib/smsCode');
 
 function registerPrivacyRoutes(app, deps) {
   const { models, requireMember, eraseHooks } = deps;
@@ -25,11 +26,19 @@ function registerPrivacyRoutes(app, deps) {
     legacyHeaders: false
   });
 
+  // Their password, or for an account that has none (signed up with a code)
+  // the code just texted to their number (POST /api/member/confirm-code).
   async function confirmPassword(req, res) {
     const password = String((req.body && req.body.password) || '');
-    if (!password) { res.status(400).json({ error: 'Type your password to confirm it is you.' }); return null; }
+    const code = String((req.body && req.body.smsCode) || '');
     const member = await models.Member.findOne({ id: req.session.memberId }).lean();
     if (!member) { res.status(404).json({ error: 'Account not found' }); return null; }
+    if (code && member.phoneKey) {
+      const out = await smsCode.verify(member.phoneKey, 'confirm', code);
+      if (!out.ok) { res.status(401).json({ error: smsCode.MESSAGES[out.reason] }); return null; }
+      return member;
+    }
+    if (!password) { res.status(400).json({ error: member.passwordHash ? 'Type your password to confirm it is you.' : 'Ask for a code by text to confirm it is you.' }); return null; }
     if (!await bcrypt.compare(password, member.passwordHash || '')) {
       res.status(401).json({ error: 'That password is not right.' });
       return null;
