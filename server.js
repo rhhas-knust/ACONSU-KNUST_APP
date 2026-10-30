@@ -44,6 +44,7 @@ const { registerShepherdListRoutes } = require('./routes/shepherd-list');
 const { registerPrivacyRoutes } = require('./routes/privacy');
 const { registerShareRoutes, sharePreviews } = require('./routes/share');
 const { registerTodayRoutes } = require('./routes/today');
+const { registerHealthRoutes } = require('./routes/health-panel');
 const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
 const listLink = require('./lib/listLink');
@@ -4738,6 +4739,7 @@ registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requi
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
 registerShareRoutes(app);
 registerTodayRoutes(app, { models, currentStaff });
+registerHealthRoutes(app, { repo, rolesLib });
 
 // ---------- Attendance / membership reports (section 13, 37) ----------
 // Generate -> Preview (the existing register screens) -> Download PDF.

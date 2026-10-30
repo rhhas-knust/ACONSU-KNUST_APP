@@ -93,6 +93,42 @@ const metrics = require('../lib/metrics');
     && meta(p.html, 'og:url') === `https://app.aconsu.org/events.html?event=${live.id}` && p.html.includes('<link rel="canonical" href="https://app.aconsu.org/events.html">'), [meta(p.html, 'og:image'), meta(p.html, 'og:url')]);
   delete process.env.PUBLIC_BASE_URL;
 
+  console.log('\n== National\'s Health panel ==');
+  {
+    const ago = (d) => new Date(Date.now() - d * 24 * 60 * 60 * 1000);
+    const dayAgo = (d) => ago(d).toISOString().slice(0, 10);
+    await fakeModels.Chapter.create({ id: 'aconsu-knust', name: 'ACONSU KNUST' });
+    await fakeModels.Chapter.create({ id: 'aconsu-ucc', name: 'ACONSU UCC' });
+    await fakeModels.Member.create({ id: 'h1', chapterId: 'aconsu-knust', name: 'New and here', createdAt: ago(2), lastActiveDate: dayAgo(1) });
+    await fakeModels.Member.create({ id: 'h2', chapterId: 'aconsu-knust', name: 'Old and here', createdAt: ago(60), lastActiveDate: dayAgo(0) });
+    await fakeModels.Member.create({ id: 'h3', chapterId: 'aconsu-ucc', name: 'New, gone quiet', createdAt: ago(10), lastActiveDate: dayAgo(9) });
+    for (const [id, status, d] of [['p1', 'pending', 1], ['p2', 'confirmed', 3], ['p3', 'confirmed', 5], ['p4', 'rejected', 40]]) {
+      await fakeModels.GivingIntent.create({ id, chapterId: 'aconsu-ucc', status, purpose: 'offertory', amount: 10, createdAt: ago(d) });
+    }
+    // The stand-in database stamps its own creation date; put the real ones back.
+    const when = { h1: 2, h2: 60, h3: 10, p1: 1, p2: 3, p3: 5, p4: 40 };
+    [...fakeModels.Member._docs, ...fakeModels.GivingIntent._docs].forEach(doc => { if (when[doc.id] !== undefined) doc.createdAt = ago(when[doc.id]); });
+    let h = await fetch(BASE + '/api/national/health');
+    check('nobody signed in is shown it', h.status === 401);
+    const login = await post('/api/admin/login', { username: 'admin', password: 'admin123' });
+    const cookie = login.headers.getSetCookie().map(c => c.split(';')[0]).join('; ');
+    h = await (await fetch(BASE + '/api/national/health', { headers: { cookie } })).json();
+    check('the last 28 days by default', h.days === 28 && h.to === metrics.today(), [h.days, h.from, h.to]);
+    check('sign-ups started (counted) beside sign-ups finished (accounts made in the period)', h.signUps.started === 1 && h.signUps.completed === 2, h.signUps);
+    check('members active in the last 7 days, of all members', h.members.activeThisWeek === 2 && h.members.total === 3, h.members);
+    check('shares by kind', h.shares.event === 2 && h.shares.invite === 1 && h.shares.total === 3, h.shares);
+    check('giving claims by where they stand, in the period', h.payments.pending === 1 && h.payments.confirmed === 2 && h.payments.rejected === 0 && h.payments.total === 3, h.payments);
+    check('week by week, four of them, ending today', h.weeks.length === 4 && h.weeks[3].to === h.to && h.weeks[3].shares === 3 && h.weeks[3].started === 1 && h.weeks[3].completed === 1 && h.weeks[2].completed === 1, h.weeks);
+    const knust = h.chapters.find(c => c.id === 'aconsu-knust');
+    check('and chapter by chapter: members, active, joined', knust && knust.members === 2 && knust.activeThisWeek === 2 && knust.joined === 1, h.chapters);
+    const all = JSON.stringify(h);
+    check('with no name, id or address of anyone in it', !/New and here|Old and here|"h1"|"h2"|"p1"|@/.test(all));
+    h = await (await fetch(BASE + '/api/national/health?days=90', { headers: { cookie } })).json();
+    check('90 days reaches the older sign-up and the older claim', h.signUps.completed === 3 && h.payments.rejected === 1 && h.weeks.length === 13, [h.signUps, h.payments, h.weeks.length]);
+    h = await (await fetch(BASE + '/api/national/health?days=5000', { headers: { cookie } })).json();
+    check('a period it does not offer falls back to 28 days', h.days === 28);
+  }
+
   console.log('\n== the button ==');
   const js = fs.readFileSync(path.join(__dirname, '..', 'public', 'js', 'share.js'), 'utf8');
   check('it adds no tracking to a link (no utm_, no ref=, no id of who shared)', !/utm_|[?&]ref=|memberId|fbclid/i.test(js));

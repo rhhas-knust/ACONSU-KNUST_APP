@@ -819,3 +819,9 @@ Every leaders' portal (Coordinator, Finance, Shepherding, Publicity, Welfare, Ex
 Under the buttons, a new leader gets **First steps in this office**: three to five screens to open, then the how-to video (`public/video/how-to-aconsu.mp4`). A step ticks itself off when its screen is opened, from the list or the menu, and the list can be hidden. It is kept on the account (`StaffUser.firstRun`, per portal; the env admin's on a `SystemState` row), so it follows the person to another phone (`routes/today.js`, `GET`/`POST /api/portal/first-run`).
 
 This is only a layout (`public/js/today.js`, each portal's `today` in its own script). No panel or permission changed. Every count is read from a route that portal's screens already read, so a count this account may not see is left off; `test/today.js` fails if a Today count reads any other route. `test/today-ui.js` signs into all seven at phone width.
+
+## 33. National's Health panel
+
+National Portal, **Health** (National only, `GET /api/national/health?days=7|28|90`, `routes/health-panel.js`): is the app doing its job? Sign-ups finished beside sign-ups started, members active in the last 7 days (opened the app signed in, from `lastActiveDate`), shares by kind, and giving claims by where they stand (waiting, confirmed, turned down), for the period asked for, week by week and chapter by chapter.
+
+Counts only. Shares and sign-ups started are the day counts in `lib/metrics.js` (union-wide; nothing about who); the rest are totals worked out from the records the app keeps anyway. No cookie, no outside service, and no name or id in the response (`test/share.js` checks). Sign-ups started are counted only from this release on, and the panel says so while finished outnumbers started.

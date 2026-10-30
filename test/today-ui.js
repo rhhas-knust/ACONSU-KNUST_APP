@@ -128,6 +128,27 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   check(side[0] === 'Today' && side[1] === '[All tools]', 'Today first in the menu, then All tools', side);
   await f.context().close();
 
+  console.log('\n== National\'s Health panel ==');
+  {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const p = await ctx.newPage();
+    p.on('pageerror', e => errors.push(`national: ${e.message}`));
+    await p.goto(`${BASE}/national.html#health`, { waitUntil: 'networkidle' });
+    await p.fill('#portalUsername', 'admin'); await p.fill('#portalPassword', 'admin123'); await p.click('#portalLoginBtn');
+    await p.waitForSelector('#panel-health .stat-grid', { timeout: 10000 });
+    const cards = await p.$$eval('#panel-health .stat-card', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
+    check(cards.length === 4 && /Sign-ups finished/.test(cards[0]) && /Active this week/.test(cards[1]) && /Shares/.test(cards[2]) && /Giving claims/.test(cards[3]), 'sign-ups, active members, shares and giving, on one screen', cards);
+    check(/1 confirmed|0 confirmed/.test(cards[3]) && /1 waiting/.test(cards[3]), 'the giving claim waiting is counted', cards[3]);
+    await p.click('[data-health-days="90"]');
+    await p.waitForSelector('[data-health-days="90"][aria-pressed="true"]');
+    check(/last 90 days/.test(await p.textContent('#panel-health .sub')), 'and it reaches back 90 days on request');
+    const small = await p.$$eval('#panel-health button', els => els.filter(e => e.getBoundingClientRect().height < 44).map(e => e.textContent.trim()));
+    check(small.length === 0, 'its buttons are big enough to tap', small);
+    check(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'nothing runs off the side');
+    await p.screenshot({ path: path.join(SHOTS, 'national-health.png'), fullPage: true });
+    await ctx.close();
+  }
+
   check(errors.length === 0, 'no page errors', errors);
   await browser.close();
   console.log(failures ? `\n${failures} check(s) failed` : '\nall today checks passed');

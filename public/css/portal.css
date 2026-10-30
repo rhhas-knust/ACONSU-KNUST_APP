@@ -412,6 +412,9 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 
 /* the Sundays side by side (office-books.js): three narrow columns, made to fit a phone */
 table.portal-table.bk-sundays { min-width: 0; }
+/* National's Health panel: a few short columns of numbers, which fit a phone. */
+table.portal-table.hp-table { min-width: 0; }
+table.portal-table.hp-table th { white-space: normal; }
 
 /* ============================================================
    A table that turns into short cards on a phone (card-table):
