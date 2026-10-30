@@ -90,7 +90,7 @@ const BOOKS = [
   const t = await signIn('executive', tr.username, tr.password);
   check('lands on Account for Money, not their profile', await activePanel(t) === 'treasury', await activePanel(t));
   const menu = await t.$$eval('#portalNav > *', els => els.map(e => e.tagName === 'P' ? `[${e.textContent.trim()}]` : e.dataset.panel));
-  check('their money first in the menu, then everything else under its own heading', menu[0] === 'treasury' && menu[1] === 'finance' && menu[2] === '[Everything else]', menu);
+  check('their money first in the menu after Today, then everything else under its own heading', menu[0] === 'today' && menu[1] === 'treasury' && menu[2] === 'finance' && menu[3] === '[Everything else]', menu);
   check('the offering form is the first thing on the screen', await t.isVisible('#offeringForm'));
   await t.fill('#offAmount', '640.50');
   await t.fill('#offCounted', 'Abena');

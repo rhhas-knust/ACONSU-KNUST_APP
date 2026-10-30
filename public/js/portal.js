@@ -181,6 +181,7 @@ async function openPanel(key) {
   const panel = PORTAL.panels.find(p => p.key === key);
   if (!panel) return;
   PORTAL.active = key;
+  if (window.AconsuToday) AconsuToday.visited(PORTAL.role, key);
   document.querySelectorAll('#portalNav button').forEach(b => b.classList.toggle('active', b.dataset.panel === key));
   document.querySelectorAll('.portal-panel').forEach(p => p.classList.toggle('active', p.id === `panel-${key}`));
   const el = document.getElementById(`panel-${key}`);
@@ -362,15 +363,15 @@ async function showPortalOrLogin() {
     if (typeof PORTAL.resolvePanels === 'function') {
       try {
         const narrowed = await PORTAL.resolvePanels(PORTAL.allPanels);
-        if (Array.isArray(narrowed) && narrowed.length) PORTAL.panels = narrowed;
+        if (Array.isArray(narrowed) && narrowed.length) PORTAL.panels = withToday(narrowed);
       } catch (err) {
         // Falling back to the full list would show panels the server will
         // refuse; showing the profile alone at least leaves a usable portal.
         PORTAL.panels = PORTAL.allPanels.slice(0, 1);
       }
-      // The narrowed list, in its own order, says where they land, unless a
-      // link chose the panel.
-      if (!PORTAL.fromLink) PORTAL.active = PORTAL.panels[0].key;
+      // The narrowed list says where they land (Today, or a panel it marks
+      // `landing`), unless a link chose the panel.
+      if (!PORTAL.fromLink) PORTAL.active = (PORTAL.panels.find(p => p.landing) || PORTAL.panels[0]).key;
     }
     if (!PORTAL.panels.some(p => p.key === PORTAL.active)) PORTAL.active = PORTAL.panels[0].key;
     renderPortalChrome();
@@ -378,20 +379,55 @@ async function showPortalOrLogin() {
   }
 }
 
+// ---------- Today ----------
+// A portal that brings a `today` (its weekly actions and first steps, see
+// today.js) opens on it, with every other panel after it under "All tools".
+// Nothing is taken away: the same panels, in the same order, one tap further.
+function withToday(panels) {
+  if (!PORTAL.today || !window.AconsuToday || panels.some(p => p.key === 'today')) return panels;
+  const pick = (v) => (typeof v === 'function' ? v() : v);
+  const today = {
+    key: 'today',
+    label: 'Today',
+    // The reminder about a starting password or a missing second step goes
+    // on the screen every leader sees first.
+    render: (el) => AconsuToday.render(el, {
+      portal: PORTAL.role,
+      intro: pick(PORTAL.today.intro),
+      actions: pick(PORTAL.today.actions),
+      checklist: pick(PORTAL.today.checklist),
+      has: (key) => PORTAL.panels.some(p => p.key === key),
+      open: (key) => { openPanel(key); window.scrollTo(0, 0); },
+      menuId: 'portalNav',
+      allTools: () => {
+        const nav = document.getElementById('portalNav');
+        nav.classList.add('open');
+        const first = nav.querySelector('button:not([data-panel="today"])');
+        nav.scrollIntoView({ block: 'start' });
+        if (first) first.focus();
+      }
+    }).then(() => { if (window.PortalAccount) PortalAccount.nudge(el); })
+  };
+  // A portal that groups its own menu (the money offices) keeps its headings.
+  const grouped = panels.some(p => p.groupLabel);
+  return [today, ...panels.map((p, i) => (i === 0 && !grouped ? { ...p, groupLabel: 'All tools' } : p))];
+}
+
 // ---------- entry point ----------
 async function initPortal(config) {
   PORTAL.role = config.role;
   PORTAL.label = config.label;
-  PORTAL.panels = config.panels;
+  PORTAL.today = config.today || null;
+  PORTAL.panels = withToday(config.panels);
   PORTAL.allPanels = config.panels;
   PORTAL.resolvePanels = config.resolvePanels || null;
-  PORTAL.active = config.panels[0].key;
+  PORTAL.active = PORTAL.panels[0].key;
   // A link can open one panel straight away: shepherding.html#checkin is the
   // Sunday check-in, kept as a bookmark on the phones at the door, and
   // executive.html#treasury and #ledger are the Treasurer's and the Financial
   // Secretary's.
   const fromLink = window.location.hash.slice(1);
-  if (config.panels.some(p => p.key === fromLink)) { PORTAL.active = fromLink; PORTAL.fromLink = true; }
+  if (PORTAL.panels.some(p => p.key === fromLink)) { PORTAL.active = fromLink; PORTAL.fromLink = true; }
 
   document.getElementById('modalBackdrop').addEventListener('click', (e) => {
     if (e.target.id === 'modalBackdrop') closeModal();

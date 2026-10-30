@@ -1096,10 +1096,46 @@ const MONEY_FIRST = {
   financial_secretary: ['ledger', 'finance', 'budgetDesk']
 };
 
+// Today: the actions of whichever office this is (today.js), most pressing
+// first. Only the ones this office has a screen for are shown, five at most.
+const budgetsAt = (r, status) => (r.items || []).reduce((n, c) => n + ((c.counts || {})[status] || 0), 0);
+
 initPortal({
   role: 'executive',
   label: 'Executive',
   panels: EXEC_PANELS,
+  today: {
+    intro: 'What your office does each week.',
+    actions: [
+      { panel: 'ledger', label: 'Record what the Treasurer filed', count: async (get) => (await get('/api/executive/finance/ledger')).awaiting.length },
+      { panel: 'treasury', label: 'Account for money' },
+      { panel: 'budgetDecide', label: 'Budget decisions', count: async (get) => budgetsAt(await get('/api/budget/calls'), 'recommended'), one: 'to decide', many: 'to decide' },
+      { panel: 'budgetDesk', label: 'Budget requests' },
+      { panel: 'announceDesk', label: 'Sunday announcements' },
+      { panel: 'announceAnswer', label: 'My announcement' },
+      { panel: 'minutesDesk', label: 'Minutes' },
+      { panel: 'outline', label: 'Semester outline' },
+      { panel: 'budgetAnswer', label: 'Budget requests' },
+      { panel: 'followup', label: 'Follow-up' },
+      { panel: 'attendance', label: 'Take attendance' },
+      { panel: 'chapterAttend', label: 'Service attendance' },
+      { panel: 'announce', label: 'Message your department' },
+      { panel: 'events', label: 'My events' },
+      { panel: 'pulse', label: 'Chapter overview' },
+      { panel: 'profile', label: 'My profile' }
+    ],
+    checklist: [
+      { key: 'profile', label: 'Fill in your profile' },
+      { key: 'account', label: 'Check your sign-in details' },
+      { key: 'treasury', label: 'File money received or spent' },
+      { key: 'ledger', label: 'Record an entry in the books' },
+      { key: 'minutesDesk', label: 'Open the minutes' },
+      { key: 'announceDesk', label: 'Ask for Sunday announcements' },
+      { key: 'outline', label: 'Start the semester outline' },
+      { key: 'department', label: 'Look at your department' },
+      { key: 'events', label: 'Look at your events' }
+    ]
+  },
   // Runs once the session is known: asks the server which position this is and
   // keeps only the panels it grants. The profile panel is always kept, so an
   // executive whose position has not been set yet still lands somewhere that
@@ -1116,10 +1152,11 @@ initPortal({
     if (!granted.length) return all.filter(p => p.key === 'profile');
     // The two money offices land on their money, with the rest of the portal
     // after it under its own heading: the Treasurer on the offering and the
-    // filings, the Financial Secretary on the books.
+    // filings, the Financial Secretary on the books. Today is still first in
+    // their menu, one tap away.
     const first = MONEY_FIRST[(me.position || {}).key] || [];
     if (!first.length) return granted;
-    const lead = first.map(k => granted.find(p => p.key === k)).filter(Boolean);
+    const lead = first.map(k => granted.find(p => p.key === k)).filter(Boolean).map((p, i) => (i === 0 ? { ...p, landing: true } : p));
     const rest = granted.filter(p => !first.includes(p.key));
     return [...lead, ...rest.map((p, i) => (i === 0 ? { ...p, groupLabel: 'Everything else' } : p))];
   }

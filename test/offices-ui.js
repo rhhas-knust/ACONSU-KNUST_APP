@@ -120,6 +120,9 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   // ----------------------------------------------------------- the Coordinator --
   console.log('\n== the Chapter Coordinator approves it ==');
   const coord = await open('coord', 'coordinator');
+  await coord.waitForSelector('[data-today-open="outlines"] .today-count:not(:empty)');
+  check(/^1\s*Semester outlines\s*waiting for you$/.test((await coord.textContent('[data-today-open="outlines"]')).replace(/\s+/g, ' ').trim()), 'Today says one outline is waiting for them', await coord.textContent('[data-today-open="outlines"]'));
+  await nav(coord, 'Dashboard');
   await coord.waitForSelector('.of-waiting');
   check(/1 semester outline is waiting/.test(await coord.textContent('.of-waiting')), 'the dashboard says an outline is waiting');
   await coord.screenshot({ path: path.join(SHOTS, 'coordinator-waiting.png') });

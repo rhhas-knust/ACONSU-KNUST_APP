@@ -747,9 +747,29 @@ async function renderCoordinatorDashboard(el) {
   el.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.go)));
 }
 
+// Today: the Coordinator's week (today.js). Counts come from the routes the
+// panels themselves read.
+const budgetsAt = (r, status) => (r.items || []).reduce((n, c) => n + ((c.counts || {})[status] || 0), 0);
+
 initPortal({
   role: 'coordinator',
   label: 'Chapter Coordinator',
+  today: {
+    intro: 'What is waiting for you as Coordinator this week.',
+    actions: [
+      { panel: 'approvals', label: 'Approve money entries', count: async (get) => (await get('/api/coordinator/overview')).finance.pendingApprovals },
+      { panel: 'outlines', label: 'Semester outlines', count: async (get) => (await get('/api/coordinator/outlines')).waiting, one: 'waiting for you', many: 'waiting for you' },
+      { panel: 'accounts', label: 'Give new executives a login', count: async (get) => (await get('/api/coordinator/overview')).awaitingAppointment },
+      { panel: 'budgets', label: 'Budget requests', count: async (get) => { const r = await get('/api/budget/calls'); return r.canDecide ? budgetsAt(r, 'recommended') : null; }, one: 'to decide', many: 'to decide' },
+      { panel: 'announcements', label: 'Message the chapter' }
+    ],
+    checklist: [
+      { key: 'accounts', label: 'Check your leaders\' accounts' },
+      { key: 'offices', label: 'See who holds each office' },
+      { key: 'approvals', label: 'Look at what is waiting for your approval' },
+      { key: 'announcements', label: 'Send the chapter a message' }
+    ]
+  },
   panels: [
     { key: 'dashboard', label: 'Dashboard', render: renderCoordinatorDashboard },
     { key: 'offices', label: 'Offices & Leaders', render: renderOffices },

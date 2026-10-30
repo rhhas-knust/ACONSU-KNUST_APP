@@ -363,6 +363,7 @@ function expandGroupForPanel(name) {
 function openAdminPanel(name) {
   const btn = document.querySelector(`#adminNav button[data-panel="${name}"]`);
   if (btn) {
+    if (window.AconsuToday) AconsuToday.visited('admin', name);
     document.getElementById('adminNav').querySelectorAll('button[data-panel]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     expandGroupForPanel(name);
@@ -602,7 +603,7 @@ function subscribeOverviewStream(chapterId) {
   es.addEventListener('overview', (evt) => {
     const panel = document.getElementById('panel-overview');
     if (!panel || !panel.classList.contains('active') || es !== OVERVIEW_STREAM) return;
-    try { renderOverviewData(panel, JSON.parse(evt.data)); } catch (e) { /* wait for the next push */ }
+    try { renderOverviewData(document.getElementById('overviewBody') || panel, JSON.parse(evt.data)); } catch (e) { /* wait for the next push */ }
   });
 }
 
@@ -628,13 +629,57 @@ async function renderOverview() {
       </p>`;
     return;
   }
+  // Today first, then the dashboard under it. The live updates redraw only
+  // the dashboard, so the Today screen is not thrown away by each one.
+  el.innerHTML = `<div id="adminToday"></div><div id="overviewBody">${skeletonHtml()}</div>`;
+  renderAdminToday(document.getElementById('adminToday'));
+  const body = document.getElementById('overviewBody');
   try {
     const data = await fetchJSON('/api/admin/overview');
-    renderOverviewData(el, data);
+    renderOverviewData(body, data);
     subscribeOverviewStream(data.chapter && data.chapter.id);
   } catch (e) {
-    el.innerHTML = `<p class="empty-state">Could not load overview. ${escapeHtml(e.message || '')}</p>`;
+    body.innerHTML = `<p class="empty-state">Could not load overview. ${escapeHtml(e.message || '')}</p>`;
   }
+}
+
+// The chapter admin's week (today.js): five buttons over the dashboard, and
+// the first steps for a new admin. Counts are read from the routes the panels
+// use; a panel this account does not have is left off.
+function renderAdminToday(el) {
+  if (!window.AconsuToday || !el) return;
+  const shown = (key) => {
+    const btn = document.querySelector(`#adminNav button[data-panel="${key}"]`);
+    return !!btn && !btn.closest('[hidden]') && getComputedStyle(btn).display !== 'none';
+  };
+  AconsuToday.render(el, {
+    portal: 'admin',
+    intro: 'What is waiting for the chapter admin this week. The full dashboard is below.',
+    actions: [
+      { panel: 'joinRequests', label: 'Join requests', count: async (get) => (await get('/api/admin/join-requests')).filter(r => r.status === 'new').length, one: 'to answer', many: 'to answer' },
+      { panel: 'prayerRequests', label: 'Prayer requests', count: async (get) => (await get('/api/admin/prayer-requests')).filter(r => r.status === 'new').length },
+      { panel: 'contactMessages', label: 'Messages', count: async (get) => (await get('/api/admin/contact-messages')).filter(m => m.status !== 'replied').length, one: 'to answer', many: 'to answer' },
+      { panel: 'welfare', label: 'Welfare requests', count: async (get) => (await get('/api/welfare/requests')).filter(w => ['submitted', 'under_review'].includes(w.status)).length },
+      { panel: 'events', label: 'Add an event' }
+    ],
+    checklist: [
+      { key: 'chapterSettings', label: 'Set your chapter\'s service time and place' },
+      { key: 'staff', label: 'Create your leaders\' accounts' },
+      { key: 'members', label: 'Look through your members' },
+      { key: 'events', label: 'Add an event' }
+    ],
+    has: shown,
+    open: (key) => { openAdminPanel(key); window.scrollTo(0, 0); },
+    menuId: 'adminNav',
+    allTools: () => {
+      const nav = document.getElementById('adminNav');
+      nav.classList.add('open');
+      const backdrop = document.getElementById('adminSideBackdrop');
+      if (backdrop) backdrop.classList.add('open');
+      const first = nav.querySelector('button[data-panel]:not([data-panel="overview"])');
+      if (first) first.focus();
+    }
+  });
 }
 
 // ---------- resource field configs ----------

@@ -145,7 +145,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   };
   await signIn(ex, 'pres', 'Start-Pass-1');
   const labels = await ex.$$eval('#portalNav button', b => b.map(x => x.textContent.trim()));
-  check(labels[0] === 'My Profile' && labels[1] === 'My Account', 'the executive\'s menu has My Account next to My Profile: ' + labels.slice(0, 3).join(' | '));
+  check(labels[0] === 'Today' && labels[1] === 'My Profile' && labels[2] === 'My Account', 'the executive\'s menu opens on Today, with My Account next to My Profile: ' + labels.slice(0, 3).join(' | '));
   await ex.waitForSelector('.portal-panel.active .of-notice.warn');
   check(/starting password/.test(await ex.locator('.portal-panel.active .of-notice.warn').textContent()), 'the first page reminds them they are on the starting password');
   await ex.click('.portal-panel.active .of-notice.warn button');

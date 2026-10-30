@@ -811,3 +811,11 @@ Counts, not tracking (`lib/metrics.js`): each share adds one to that day's count
 
 `test/share.js` checks the counts, the address and the previews (including that a draft never shows); `test/share-ui.js` checks the button in a browser.
 
+
+## 32. Today screens and first steps for leaders
+
+Every leaders' portal (Coordinator, Finance, Shepherding, Publicity, Welfare, Executive) opens on **Today**: at most five big buttons for what that office does each week, each showing how many are waiting where there is such a number ("1 Confirm giving: claim waiting"). Everything else is in the menu under **All tools**, folded away on a phone, with an All tools button on Today to open it. The chapter admin gets the same five buttons at the top of its dashboard. The Treasurer and the Financial Secretary still land on their money, as before; Today is first in their menu. The reminder about a starting password or a missing second step now shows on Today, so every leader sees it first.
+
+Under the buttons, a new leader gets **First steps in this office**: three to five screens to open, then the how-to video (`public/video/how-to-aconsu.mp4`). A step ticks itself off when its screen is opened, from the list or the menu, and the list can be hidden. It is kept on the account (`StaffUser.firstRun`, per portal; the env admin's on a `SystemState` row), so it follows the person to another phone (`routes/today.js`, `GET`/`POST /api/portal/first-run`).
+
+This is only a layout (`public/js/today.js`, each portal's `today` in its own script). No panel or permission changed. Every count is read from a route that portal's screens already read, so a count this account may not see is left off; `test/today.js` fails if a Today count reads any other route. `test/today-ui.js` signs into all seven at phone width.
