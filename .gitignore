@@ -12,3 +12,10 @@ test-output.txt
 android/keystore.properties
 *.jks
 *.keystore
+
+# The website's alumni photos and theme flyers, fetched from the app at every
+# publish (site/tools/sync-feed.js). Never committed: the repository is public
+# and git keeps everything it is given, so someone taken off the alumni wall
+# would stay in its history.
+site/images/alumni/
+site/images/theme/

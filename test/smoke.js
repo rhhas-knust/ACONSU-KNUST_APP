@@ -5238,6 +5238,55 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     res = await run({ APP_URL: '' });
     check('with no app address set it does nothing at all', res.code === 0 && fs.readFileSync(feedPath, 'utf8') === good, res.out);
 
+    // 5b. The same, on a fresh checkout: the photos are never committed, so the
+    // folder has only the empty shipped feed. The live website's copy is carried over.
+    {
+      const published = siteDir;   // what the live site serves right now
+      let liveFeed = null;         // null: serve the real published feed
+      const live = http.createServer((req, rsp) => {
+        const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/site\//, '');
+        if (rel === 'data/feed.json') { rsp.setHeader('content-type', 'application/json'); return rsp.end(liveFeed ? JSON.stringify(liveFeed) : fs.readFileSync(feedPath)); }
+        const file = path.join(published, rel);
+        if (rel.startsWith('images/') && fs.existsSync(file)) { rsp.setHeader('content-type', 'image/jpeg'); return rsp.end(fs.readFileSync(file)); }
+        // Like the hostile app: a picture for anything else asked for, so only
+        // the script's own check of the path keeps it inside the site.
+        if (/escape/.test(rel)) { rsp.setHeader('content-type', 'image/jpeg'); return rsp.end(portrait); }
+        rsp.statusCode = 404; rsp.end('nope');
+      });
+      await new Promise(r => live.listen(0, '127.0.0.1', r));
+      const LIVE = `http://127.0.0.1:${live.address().port}/site`;
+      const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'aconsu-fresh-'));
+      fs.copyFileSync(path.join(siteDir, 'chapter.js'), path.join(fresh, 'chapter.js'));
+      fs.mkdirSync(path.join(fresh, 'data'));
+      fs.copyFileSync(path.join(siteSrc, 'data', 'feed.json'), path.join(fresh, 'data', 'feed.json'));
+      const freshFeed = () => JSON.parse(fs.readFileSync(path.join(fresh, 'data', 'feed.json'), 'utf8'));
+      res = await run({ APP_URL: 'http://127.0.0.1:1', LIVE_URL: LIVE, SITE_DIR: fresh });
+      const carried = freshFeed();
+      check('with the app asleep on a fresh checkout, the live website\'s copy is carried over', res.code === 0 && /carried over the live website/.test(res.out)
+        && fs.readFileSync(path.join(fresh, 'data', 'feed.json'), 'utf8') === good, { out: res.out.slice(0, 300) });
+      check('photos and flyers included, so the wall is published as it was',
+        carried.alumni.length >= 3 && carried.alumni.every(a => a.photo && fs.existsSync(path.join(fresh, a.photo))) && carried.theme.flyers.every(f => fs.existsSync(path.join(fresh, f))), carried.alumni);
+      liveFeed = { version: 1, weekKey: '2026-W40', month: '2026-10', theme: { title: 'T', flyers: ['images/theme/../../../escape.jpg', 'images/../escape.jpg'], prayerFlyers: ['/etc/escape.jpg'] },
+        spotlight: null, alumni: [{ id: 'a1', name: 'Mallory', photo: 'images/alumni/../../escape.jpg', contact: 'secret@example.com', about: 'z'.repeat(900) }] };
+      const fresh2 = fs.mkdtempSync(path.join(os.tmpdir(), 'aconsu-fresh-'));
+      fs.copyFileSync(path.join(siteDir, 'chapter.js'), path.join(fresh2, 'chapter.js'));
+      res = await run({ APP_URL: 'http://127.0.0.1:1', LIVE_URL: LIVE, SITE_DIR: fresh2 });
+      const odd = JSON.parse(fs.readFileSync(path.join(fresh2, 'data', 'feed.json'), 'utf8'));
+      check('a live copy naming a picture outside the two folders is not followed', odd.alumni[0].photo === '' && odd.theme.flyers.length === 0 && odd.theme.prayerFlyers.length === 0
+        && [os.tmpdir(), path.dirname(os.tmpdir())].every(d => fs.readdirSync(d).every(f => !/^escape/.test(f))), odd);
+      check('and only what the page shows is kept from it, at the usual lengths', !/secret@example\.com/.test(JSON.stringify(odd)) && odd.alumni[0].about.length === 400, odd.alumni[0]);
+      live.close();
+      const shipped = fs.readFileSync(path.join(siteSrc, 'data', 'feed.json'), 'utf8');
+      const fresh3 = fs.mkdtempSync(path.join(os.tmpdir(), 'aconsu-fresh-'));
+      fs.copyFileSync(path.join(siteDir, 'chapter.js'), path.join(fresh3, 'chapter.js'));
+      fs.mkdirSync(path.join(fresh3, 'data'));
+      fs.writeFileSync(path.join(fresh3, 'data', 'feed.json'), shipped);
+      res = await run({ APP_URL: 'http://127.0.0.1:1', LIVE_URL: 'http://127.0.0.1:1', SITE_DIR: fresh3 });
+      check('with the live website out of reach too, the publish still goes ahead with what is there', res.code === 0 && /live website's copy either/.test(res.out)
+        && fs.readFileSync(path.join(fresh3, 'data', 'feed.json'), 'utf8') === shipped, res.out);
+      [fresh, fresh2, fresh3].forEach(d => fs.rmSync(d, { recursive: true, force: true }));
+    }
+
     // 6. A hostile or broken answer.
     let served;
     const evil = http.createServer((req, rsp) => {
@@ -5309,8 +5358,13 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('the site is republished on a clock, so an approval reaches it with nobody pushing a commit', /schedule:\s*\n\s*- cron:/.test(wf), null);
     check('the copy runs before the images are shrunk and before anything is uploaded',
       wf.indexOf('sync-feed.js') > 0 && wf.indexOf('sync-feed.js') < wf.indexOf('shrink-images.js') && wf.indexOf('shrink-images.js') < wf.indexOf('upload-pages-artifact'), null);
-    check('what it saves is committed from the staged files, so new photos are not missed',
-      /git add site\/images site\/data/.test(wf) && /git diff --cached --quiet/.test(wf) && !/git diff --quiet -- site\/images/.test(wf), null);
+    check('a smaller hand-added picture is committed from the staged files, so a new one is not missed',
+      /git add site\/images\n/.test(wf) && /git diff --cached --quiet/.test(wf) && !/git diff --quiet -- site\/images/.test(wf), null);
+    const ignored = fs.readFileSync(path.join(__dirname, '..', '.gitignore'), 'utf8');
+    check('but the alumni photos, the flyers and the feed are never committed: the repository is public and keeps everything',
+      /^site\/images\/alumni\/$/m.test(ignored) && /^site\/images\/theme\/$/m.test(ignored) && !/git add[^\n]*site\/data/.test(wf), null);
+    check('and the copy is told the live website\'s address, to carry over when the app is asleep',
+      /LIVE_URL: \$\{\{ steps\.pages\.outputs\.base_url \}\}/.test(wf) && wf.indexOf('id: pages') < wf.indexOf('sync-feed.js'), null);
     check('and the tools folder is parse-checked before anything is published', /site\/tools\/\*\.js/.test(wf), null);
     check('a refused push back to main is a warning and never stops the publish',
       /git push origin HEAD:main; then/.test(wf) && /::warning::Could not save/.test(wf) && !/^\s*git push origin HEAD:main\s*$/m.test(wf), null);
