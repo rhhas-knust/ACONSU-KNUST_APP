@@ -102,6 +102,8 @@ Because content now lives in Atlas rather than local JSON files, you no longer n
 2. Add a free uptime monitor on `/api/health` (every 5 minutes). It keeps a free host awake and emails you if the app goes down.
 3. Find out whether your Atlas cluster has backups. A free one does not.
 
+**No domain yet?** Everything works on Render's own address. `/api/health` lists what is waiting for a setting (`waitingForConfiguration`), and [docs/when-you-have-a-domain.md](docs/when-you-have-a-domain.md) is the checklist for the day one is bought. The app's address lives in one setting, `PUBLIC_BASE_URL`; the website's, in the repository variable `APP_URL`.
+
 ## 4. A real firewall — Cloudflare (free)
 
 App code alone can't be a firewall — that protection has to sit in front of the server, at the network level. The straightforward way to get real protection (DDoS mitigation, a web application firewall, bot filtering) at no cost:
@@ -144,9 +146,11 @@ aconsu-app/
     booksImport.js         Bringing the books a chapter already keeps into the ledger
     attendance.js          Sunday check-in from several phones at once, and attendance rates
     globalMove.js          The one-time move of Global Settings into ACONSU-KNUST (docs/offices.md)
+    baseUrl.js             The app's address in one place, and what waits for a domain (docs/when-you-have-a-domain.md)
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
   migrate-multichapter.js One-time migration to the multi-chapter model — see section 20
   capacitor.config.json    Native app (iOS/Android) wrapper config
+  eslint.config.js         The code checker (`npm run lint`): mistakes, not style
   test/
     smoke.js               End-to-end test of the portals (`npm test`)
     offices.js             The executive offices' workflows: outline, budgets, minutes, hand-over (`npm test`)
@@ -162,6 +166,7 @@ aconsu-app/
     shepherd-ui.js         The same on a phone, with two phones at the door (needs Playwright)
     books.js               The Treasurer and Financial Secretary: accounts, old books, Sunday offering (`npm test`)
     books-ui.js            The same on a phone, and linking a list person to their account (needs Playwright)
+    domain.js              No domain yet: what works without one, and what switches on with it (`npm test`)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
@@ -591,6 +596,8 @@ The Phase 5–6 community routes now live in focused modules under `routes/` (`g
 This maintenance pass also closes direct-ID chapter-isolation checks for groups, chat topics/messages, and volunteer assignments. A logged-in member must now belong to the same chapter before any of those records can be read, joined, changed, reported, or responded to.
 
 The dependency upgrade moves Nodemailer to 9.x, Sharp to 0.35.x and Capacitor to 8.x. At the time of the upgrade, `npm audit --omit=dev` reported **0 vulnerabilities** and the complete smoke-test suite passed. Android/iOS builds should be synced and built in their native toolchains after pulling this update (`npm run cap:sync`); no payment, email, image, or app data migration is required.
+
+**Checks to run before pushing:** `npm test`, `npm run lint` (the code checker: a name used but never defined, a function defined twice, code that cannot run; never style) and, for anything on screen, `npm run ux`. CI runs all three, and each one fails the build.
 
 ## 24. Media & Content Hub (Phase 7 of the platform spec)
 

@@ -6,6 +6,17 @@ Paste everything below the line into a new Claude Code session on this repositor
 
 You are working in the ACONSU-KNUST_APP repository: an Express + MongoDB (Mongoose) PWA with a Capacitor Android shell, plain HTML/JS front end in `public/`, a static marketing site in `site/`, and a test suite run by `npm test` (plus a browser suite, `npm run ux`). Node 22.
 
+## Decisions already made (30 October 2026)
+
+These were settled with the owner and override the items below where they differ:
+
+- **Profile photo (item 1):** not on the sign-up form, but it is still required: it must be added straight after sign-up.
+- **Password at sign-up (item 1):** still required until the member's chapter has its own mNotify SMS account set up. Phone-only (SMS code) sign-up is offered only for chapters whose SMS works. SMS credentials are per chapter in this app (`lib/sms.js`, `resolveConfig`), with `MNOTIFY_API_KEY` only a shared fallback.
+- **Online giving (item 3):** manual only for now. Build the provider interface and the `manual` adapter; do **not** add Paystack or any other paid provider until the owner asks.
+- **Giving without an account (item 3):** allowed.
+- **The base-URL helper (domain section):** it is `lib/baseUrl.js`. Links sent out of the app (emails, texts) are never built from the request's Host header in production; that would allow password-reset poisoning. With no `PUBLIC_BASE_URL` they use Render's own `RENDER_EXTERNAL_URL`, and only a development machine falls back to the request or `localhost`.
+- **Alumni photos (item 9):** no photo has been committed yet, so there is no history to clean; stop the site refresh from committing them before the first alumnus is approved.
+
 ## Context
 
 An audit found the app is technically strong but has adoption and compliance gaps. Read these first, in this order, before touching code:

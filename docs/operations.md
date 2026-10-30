@@ -98,3 +98,25 @@ copy, so only do it when the live data is already lost or wrong.
    `Refusing to start in production` says which setting is missing.
 3. A change that broke something: Render keeps earlier deploys. **Deploys**, then
    an earlier one, then **Rollback**.
+
+## 5. What is waiting for a setting
+
+`/api/health` lists the parts of the app that need a setting before they
+switch on, under `features` (each with `on` and the setting it `needs`) and
+`waitingForConfiguration` (the names still off). The same list is printed once
+in the logs at start-up, starting `Waiting for configuration`. Waiting is
+normal: the app works without every one of them.
+
+| Name in `/api/health` | Switched on by | Without it |
+|---|---|---|
+| `publicAddress`, `searchEngines` | `PUBLIC_BASE_URL` | Links use Render's own address; no sitemap |
+| `linksInMessages` | `PUBLIC_BASE_URL` or Render's own address | No password reset emails in production (they are never built from the request's address) |
+| `email` | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` (and `MAIL_FROM`) | No email |
+| `pushNotifications` | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | No push notifications |
+| `androidAppLinks` | `ANDROID_ASSET_LINKS` | Links do not open in the Android app |
+| `sharedCookieDomain` | `COOKIE_DOMAIN` | Off on purpose; leave it unset |
+
+A setting that is there but malformed (`PUBLIC_BASE_URL` with a path, a
+`COOKIE_DOMAIN` that is not a domain) is ignored, and `warnings` in
+`/api/health` says so. The step-by-step for the day a domain is bought is
+[when-you-have-a-domain.md](when-you-have-a-domain.md).

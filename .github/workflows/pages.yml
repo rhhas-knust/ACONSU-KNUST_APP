@@ -22,7 +22,7 @@ on:
     - cron: '17 */3 * * *'
 
 # Pages needs pages/id-token; contents:write is for the shrink step committing
-# a resized photo back. Nothing else in this repo needs any of it, so they are
+# a resized hand-added picture back. Nothing else in this repo needs any of it, so they are
 # scoped to this workflow rather than granted repo-wide.
 permissions:
   contents: write
@@ -39,6 +39,12 @@ jobs:
   deploy:
     name: Publish site/ to GitHub Pages
     runs-on: ubuntu-latest
+    # The app's address, in one place for the whole publish: where the alumni
+    # and theme are fetched from, and the address written into the published
+    # pages (site/tools/app-address.js). Set the repository variable APP_URL
+    # the day the app moves to a domain; until then it is Render's address.
+    env:
+      APP_URL: ${{ vars.APP_URL || 'https://aconsu-knust-app.onrender.com' }}
     # The app sleeps on free hosting and takes up to a minute to wake; the sync
     # step below waits for it, so this is more generous than a plain publish.
     timeout-minutes: 15
@@ -78,17 +84,24 @@ jobs:
           done
           echo "site/*.js all parse"
 
+      # Early, for the published site's own address: the copy below falls back
+      # to what the live site shows when the app cannot be reached.
+      - id: pages
+        uses: actions/configure-pages@v5
+
       # Bring in this chapter's alumni, this week's celebrated alumnus and this
       # month's theme from the app, as plain files. The page never asks the app
       # itself (it sleeps, and a visitor must not wait for it); this is where
       # the waiting happens, where it costs nobody anything.
       #
-      # If the app cannot be reached this step changes nothing and still
-      # succeeds: the last good copy stays published. Set a repository variable
-      # called APP_URL to point it somewhere else.
+      # These files are published but never committed: the repository is
+      # public and keeps everything it is given, so an alumnus who asks to come
+      # off the wall would stay in its history. If the app cannot be reached,
+      # this step carries over the copy the live site shows now, and still
+      # succeeds: the last good wall stays published.
       - name: Fetch the alumni and monthly theme from the app
         env:
-          APP_URL: ${{ vars.APP_URL || 'https://aconsu-knust-app.onrender.com' }}
+          LIVE_URL: ${{ steps.pages.outputs.base_url }}
         run: node site/tools/sync-feed.js
 
       # Shrink BEFORE the upload, in the same run, so the small file is the one
@@ -98,38 +111,40 @@ jobs:
       - name: Shrink oversized images
         run: node site/tools/shrink-images.js
 
-      # Staged rather than diffed: the alumni photos are NEW files, which a
-      # plain `git diff` does not see, so the first version of this step would
-      # have said "nothing changed" and published photos that were never saved.
+      # Saves a hand-added picture the step above made smaller, so the next
+      # run does not shrink it again. Only site/images: the alumni and theme
+      # pictures are kept out by .gitignore and site/data is never added (see
+      # the copy step). Staged rather than diffed, so a new file is not missed.
       - name: Commit what changed
         run: |
-          git add site/images site/data
+          git add site/images
           if git diff --cached --quiet; then
             echo "nothing changed"
             exit 0
           fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Refresh alumni and theme from the app, and shrink oversized images
+          git commit -m "Shrink oversized images
 
-          Done automatically. The alumni and monthly theme are copied in from the
-          app (site/tools/sync-feed.js); images are only ever made smaller, and
-          anything already small enough is left exactly as it was."
+          Done automatically. Images are only ever made smaller, and anything
+          already small enough is left exactly as it was."
           # Somebody may have pushed while this ran. Saving the files back is a
-          # convenience (it is what keeps the last good copy if the app is asleep
-          # next time); it must never be the reason the site is not published, so a
-          # refused push - a protected branch, say - is a warning, not a failure.
+          # convenience; it must never be the reason the site is not published, so
+          # a refused push - a protected branch, say - is a warning, not a failure.
           if git pull --rebase --autostash origin main && git push origin HEAD:main; then
             echo "saved to main"
           else
             git rebase --abort 2>/dev/null || true
-            echo "::warning::Could not save the refreshed alumni and pictures back to the repository (is main protected against pushes?). They are published this time, but the repository still holds the older copy."
+            echo "::warning::Could not save the smaller pictures back to the repository (is main protected against pushes?). They are published this time, and will be shrunk again next time."
           fi
+
+      # After the save above, so it changes only the copy being published:
+      # the files in the repository keep the address they were written with.
+      - name: Point the pages at the app's address
+        run: node site/tools/app-address.js
 
       # The site is plain files: no build, nothing to go wrong between the
       # folder and the web.
-      - uses: actions/configure-pages@v5
-
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

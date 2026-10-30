@@ -341,7 +341,8 @@ window.CHAPTER = {
     chapterId: 'aconsu-knust',
     // Where "Ask to be listed" sends a request: the app's address. This is the
     // one thing on the page that talks to the app, and only when someone presses
-    // Send. Blank hides the form.
+    // Send. Blank hides the form. Leave the address as it is: when the app
+    // moves, the publish swaps it for the APP_URL setting (tools/app-address.js).
     requestUrl: 'https://aconsu-knust-app.onrender.com',
   },
 

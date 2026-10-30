@@ -435,8 +435,24 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   check('a QR token was generated for the digital membership card', !!r.data.item.qrToken, r.data.item);
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'worker' });
   check('lifecycle can advance from active to worker', r.status === 200 && r.data.item.membershipStage === 'worker', r.data);
-  r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'executive' });
-  check('lifecycle can advance from worker to executive', r.status === 200 && r.data.item.membershipStage === 'executive', r.data);
+  {
+    // Made an Executive with no account behind it: the chapter's Coordinator is
+    // told on their own devices. (This once never fired: a second function of
+    // the same name replaced the one it called. The code checker now catches that.)
+    const push = require('../lib/push');
+    const realSend = push.sendPushToAll;
+    const sent = [];
+    push.sendPushToAll = async (...args) => { sent.push(args); return { sent: 1, failed: 0 }; };
+    const chapterOf = fakeModels.Member._docs.find(m => m.id === memberId).chapterId;
+    fakeModels.StaffUser._docs.push({ id: 'coord-push-check', username: 'coord.pushcheck', name: 'Coord', role: 'coordinator', chapterId: chapterOf, memberId: graceId, active: true });
+    r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'executive' });
+    await new Promise(res => setTimeout(res, 50));
+    fakeModels.StaffUser._docs.splice(fakeModels.StaffUser._docs.findIndex(a => a.id === 'coord-push-check'), 1);
+    push.sendPushToAll = realSend;
+    check('lifecycle can advance from worker to executive', r.status === 200 && r.data.item.membershipStage === 'executive', r.data);
+    check('and the Coordinator is told, on their own devices, that an account is needed',
+      sent.length === 1 && /waiting for an account/.test(sent[0][0].title) && sent[0][1] === chapterOf && Array.isArray(sent[0][2]) && sent[0][2].includes(graceId), sent);
+  }
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'alumni' });
   check('lifecycle can advance from executive to alumni', r.status === 200 && r.data.item.membershipStage === 'alumni', r.data);
   r = await call('shep', 'PATCH', `/api/shepherd/members/${memberId}/stage`, { stage: 'active' });
@@ -2845,7 +2861,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       /\.dash-quick \.tile-grid \{[^}]*repeat\(3, 1fr\)/.test(css), null);
 
     check('the home dashboard leads with what is happening next',
-      /\.dash-events \{ order: 1; \}/.test(css) && /\.dash-verse  \{ order: 3; \}/.test(css), null);
+      /\.dash-events \{ order: 1; \}/.test(css) && /\.dash-verse {2}\{ order: 3; \}/.test(css), null);
   }
 
   console.log('\n== notifications, in the app rather than on another page ==');
@@ -3694,11 +3710,11 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     {
       const formJs = read('request.js');
       const formHtml = read('alumni-request.html');
-      const apiRefs = (html + js + formHtml).match(/\/api\/[A-Za-z0-9\/_-]*/g) || [];
+      const apiRefs = (html + js + formHtml).match(/\/api\/[A-Za-z0-9/_-]*/g) || [];
       check('the home page and its script call the app for nothing at all', apiRefs.length === 0, apiRefs);
       const fetches = (js.match(/\bfetch\(([^,)]*)/g) || []).map(f => f.replace(/\bfetch\(/, '').trim());
       check('the only thing the home page fetches is its own data file', fetches.length === 1 && fetches[0] === "'data/feed.json'", fetches);
-      const formApi = (formJs.match(/\/api\/[A-Za-z0-9\/_-]*/g) || []);
+      const formApi = (formJs.match(/\/api\/[A-Za-z0-9/_-]*/g) || []);
       check('the form page sends to two places and no more: the details, and the wall request',
         formApi.length === 2 && formApi.includes('/api/public/alumni-details') && formApi.includes('/api/public/alumni-requests'), formApi);
       const submit = formJs.indexOf("form.addEventListener('submit'");
@@ -5238,6 +5254,55 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     res = await run({ APP_URL: '' });
     check('with no app address set it does nothing at all', res.code === 0 && fs.readFileSync(feedPath, 'utf8') === good, res.out);
 
+    // 5b. The same, on a fresh checkout: the photos are never committed, so the
+    // folder has only the empty shipped feed. The live website's copy is carried over.
+    {
+      const published = siteDir;   // what the live site serves right now
+      let liveFeed = null;         // null: serve the real published feed
+      const live = http.createServer((req, rsp) => {
+        const rel = decodeURIComponent(req.url.split('?')[0]).replace(/^\/site\//, '');
+        if (rel === 'data/feed.json') { rsp.setHeader('content-type', 'application/json'); return rsp.end(liveFeed ? JSON.stringify(liveFeed) : fs.readFileSync(feedPath)); }
+        const file = path.join(published, rel);
+        if (rel.startsWith('images/') && fs.existsSync(file)) { rsp.setHeader('content-type', 'image/jpeg'); return rsp.end(fs.readFileSync(file)); }
+        // Like the hostile app: a picture for anything else asked for, so only
+        // the script's own check of the path keeps it inside the site.
+        if (/escape/.test(rel)) { rsp.setHeader('content-type', 'image/jpeg'); return rsp.end(portrait); }
+        rsp.statusCode = 404; rsp.end('nope');
+      });
+      await new Promise(r => live.listen(0, '127.0.0.1', r));
+      const LIVE = `http://127.0.0.1:${live.address().port}/site`;
+      const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'aconsu-fresh-'));
+      fs.copyFileSync(path.join(siteDir, 'chapter.js'), path.join(fresh, 'chapter.js'));
+      fs.mkdirSync(path.join(fresh, 'data'));
+      fs.copyFileSync(path.join(siteSrc, 'data', 'feed.json'), path.join(fresh, 'data', 'feed.json'));
+      const freshFeed = () => JSON.parse(fs.readFileSync(path.join(fresh, 'data', 'feed.json'), 'utf8'));
+      res = await run({ APP_URL: 'http://127.0.0.1:1', LIVE_URL: LIVE, SITE_DIR: fresh });
+      const carried = freshFeed();
+      check('with the app asleep on a fresh checkout, the live website\'s copy is carried over', res.code === 0 && /carried over the live website/.test(res.out)
+        && fs.readFileSync(path.join(fresh, 'data', 'feed.json'), 'utf8') === good, { out: res.out.slice(0, 300) });
+      check('photos and flyers included, so the wall is published as it was',
+        carried.alumni.length >= 3 && carried.alumni.every(a => a.photo && fs.existsSync(path.join(fresh, a.photo))) && carried.theme.flyers.every(f => fs.existsSync(path.join(fresh, f))), carried.alumni);
+      liveFeed = { version: 1, weekKey: '2026-W40', month: '2026-10', theme: { title: 'T', flyers: ['images/theme/../../../escape.jpg', 'images/../escape.jpg'], prayerFlyers: ['/etc/escape.jpg'] },
+        spotlight: null, alumni: [{ id: 'a1', name: 'Mallory', photo: 'images/alumni/../../escape.jpg', contact: 'secret@example.com', about: 'z'.repeat(900) }] };
+      const fresh2 = fs.mkdtempSync(path.join(os.tmpdir(), 'aconsu-fresh-'));
+      fs.copyFileSync(path.join(siteDir, 'chapter.js'), path.join(fresh2, 'chapter.js'));
+      res = await run({ APP_URL: 'http://127.0.0.1:1', LIVE_URL: LIVE, SITE_DIR: fresh2 });
+      const odd = JSON.parse(fs.readFileSync(path.join(fresh2, 'data', 'feed.json'), 'utf8'));
+      check('a live copy naming a picture outside the two folders is not followed', odd.alumni[0].photo === '' && odd.theme.flyers.length === 0 && odd.theme.prayerFlyers.length === 0
+        && [os.tmpdir(), path.dirname(os.tmpdir())].every(d => fs.readdirSync(d).every(f => !/^escape/.test(f))), odd);
+      check('and only what the page shows is kept from it, at the usual lengths', !/secret@example\.com/.test(JSON.stringify(odd)) && odd.alumni[0].about.length === 400, odd.alumni[0]);
+      live.close();
+      const shipped = fs.readFileSync(path.join(siteSrc, 'data', 'feed.json'), 'utf8');
+      const fresh3 = fs.mkdtempSync(path.join(os.tmpdir(), 'aconsu-fresh-'));
+      fs.copyFileSync(path.join(siteDir, 'chapter.js'), path.join(fresh3, 'chapter.js'));
+      fs.mkdirSync(path.join(fresh3, 'data'));
+      fs.writeFileSync(path.join(fresh3, 'data', 'feed.json'), shipped);
+      res = await run({ APP_URL: 'http://127.0.0.1:1', LIVE_URL: 'http://127.0.0.1:1', SITE_DIR: fresh3 });
+      check('with the live website out of reach too, the publish still goes ahead with what is there', res.code === 0 && /live website's copy either/.test(res.out)
+        && fs.readFileSync(path.join(fresh3, 'data', 'feed.json'), 'utf8') === shipped, res.out);
+      [fresh, fresh2, fresh3].forEach(d => fs.rmSync(d, { recursive: true, force: true }));
+    }
+
     // 6. A hostile or broken answer.
     let served;
     const evil = http.createServer((req, rsp) => {
@@ -5309,8 +5374,13 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('the site is republished on a clock, so an approval reaches it with nobody pushing a commit', /schedule:\s*\n\s*- cron:/.test(wf), null);
     check('the copy runs before the images are shrunk and before anything is uploaded',
       wf.indexOf('sync-feed.js') > 0 && wf.indexOf('sync-feed.js') < wf.indexOf('shrink-images.js') && wf.indexOf('shrink-images.js') < wf.indexOf('upload-pages-artifact'), null);
-    check('what it saves is committed from the staged files, so new photos are not missed',
-      /git add site\/images site\/data/.test(wf) && /git diff --cached --quiet/.test(wf) && !/git diff --quiet -- site\/images/.test(wf), null);
+    check('a smaller hand-added picture is committed from the staged files, so a new one is not missed',
+      /git add site\/images\n/.test(wf) && /git diff --cached --quiet/.test(wf) && !/git diff --quiet -- site\/images/.test(wf), null);
+    const ignored = fs.readFileSync(path.join(__dirname, '..', '.gitignore'), 'utf8');
+    check('but the alumni photos, the flyers and the feed are never committed: the repository is public and keeps everything',
+      /^site\/images\/alumni\/$/m.test(ignored) && /^site\/images\/theme\/$/m.test(ignored) && !/git add[^\n]*site\/data/.test(wf), null);
+    check('and the copy is told the live website\'s address, to carry over when the app is asleep',
+      /LIVE_URL: \$\{\{ steps\.pages\.outputs\.base_url \}\}/.test(wf) && wf.indexOf('id: pages') < wf.indexOf('sync-feed.js'), null);
     check('and the tools folder is parse-checked before anything is published', /site\/tools\/\*\.js/.test(wf), null);
     check('a refused push back to main is a warning and never stops the publish',
       /git push origin HEAD:main; then/.test(wf) && /::warning::Could not save/.test(wf) && !/^\s*git push origin HEAD:main\s*$/m.test(wf), null);
@@ -5390,7 +5460,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('a chapter\'s admin opens their own chapter\'s receipts and records, and not another chapter\'s',
       (await open('ovAdmin', f.receipt)).status === 200 && (await open('ovAdmin', f.pastoral)).status === 200 && (await open('ovAdmin', f.receiptOther)).status === 404, null);
     {
-      const lg = await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
+      await call('otherAdmin', 'POST', '/api/portal/login', { username: 'other.chapteradmin', password: 'password123' });
       const r = [(await open('otherAdmin', f.receipt)).status, (await open('otherAdmin', f.pastoral)).status, (await open('otherAdmin', f.receiptOther)).status];
       check('another chapter\'s admin opens none of this chapter\'s, only their own', r.join() === '404,404,200', r);
     }
@@ -5480,7 +5550,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     check('and what is stored for a file records what it is, not what the uploader said it was',
       /contentType: fileTypes\.storedType\(buffer, metadata && metadata\.contentType\)/.test(require('fs').readFileSync(require('path').join(__dirname, '..', 'lib', 'gridfs.js'), 'utf8'))
       && require('../lib/fileTypes').storedType(Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex'), 'text/html') === 'image/png', null);
-    const cacheable = (swSrc.match(/const CACHEABLE_API = \[([\s\S]*?)\];/) || [, ''])[1];
+    const cacheable = (swSrc.match(/const CACHEABLE_API = \[([\s\S]*?)\];/) || ['', ''])[1];
     check('the offline cache holds public content', ['/api/events', '/api/bible', '/api/public/'].every(p => cacheable.includes(`'${p}`)), cacheable);
     check('and never anything behind a sign-in',
       ['/api/admin', '/api/finance', '/api/shepherd', '/api/welfare', '/api/national', '/api/portal', '/api/member', '/api/auth', '/api/chat', '/api/executive/'].every(p => !cacheable.includes(`'${p}`)), cacheable);
@@ -5803,7 +5873,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       check('newest first, and the oldest are not in it', titles[0] === 'Bulk notice 45' && !titles.includes('Bulk notice 1'), titles.slice(0, 3));
 
       // chat: ten messages a minute from one member
-      const chatMember = await registerMember('Chatty Member', 'chatty@test.com');
+      await registerMember('Chatty Member', 'chatty@test.com');
       await call('chatty', 'POST', '/api/auth/login', { email: 'chatty@test.com', password: 'secret123' });
       x = await call('chatty', 'POST', '/api/chat/topics', { title: 'A busy topic' });
       const busyTopic = x.data.item && x.data.item.id;
@@ -5850,7 +5920,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
       // badges are drawn icons, and no emoji is left in what the server sends
       const badgeLogin = await call('phoneD', 'GET', '/api/member/badges');
-      const iconNames = [...read('public/js/main.js').match(/const BADGE_ICONS = \{([\s\S]*?)\n\};/)[1].matchAll(/^  (\w+):/gm)].map(m => m[1]);
+      const iconNames = [...read('public/js/main.js').match(/const BADGE_ICONS = \{([\s\S]*?)\n\};/)[1].matchAll(/^ {2}(\w+):/gm)].map(m => m[1]);
       check('every profile badge names one of the app\'s own drawn icons',
         badgeLogin.status === 200 && badgeLogin.data.badges.length === 8 && badgeLogin.data.badges.every(b => iconNames.includes(b.icon)), badgeLogin.data.badges && badgeLogin.data.badges.map(b => b.icon));
       const emojiPattern = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}]/u;
@@ -5902,8 +5972,12 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       const pkg = JSON.parse(read('package.json'));
       check('the app asks for Node 22, the version it is tested on, and not the end-of-life Node 20', pkg.engines && pkg.engines.node === '22.x', pkg.engines);
       check('CI stops on a known high-severity vulnerability instead of only reporting it', /npm audit --audit-level=high\s*\n/.test(ci) && !/npm audit[^\n]*\|\| true/.test(ci), null);
-      check('and CI runs the browser suite too, reporting without blocking until it has passed on GitHub',
-        /browser:[\s\S]*?continue-on-error: true[\s\S]*?node test\/ux\.js/.test(ci), null);
+      check('and CI runs the browser suite too, and a failure there now fails the build',
+        /browser:[\s\S]*?node test\/ux\.js/.test(ci) && !/continue-on-error/.test(ci), null);
+      check('on an Ubuntu its Playwright can install Chromium on, not whatever ubuntu-latest has become',
+        /browser:\s*\n\s*name: Browser suite\s*\n\s*runs-on: ubuntu-24\.04\s*\n/.test(ci) && /npm install --no-save playwright@1\.56\.1/.test(ci), null);
+      check('and the code checker, which refuses a name used but never defined or a function defined twice',
+        /npm run lint\s*\n/.test(ci) && pkg.scripts.lint === 'eslint .' && pkg.devDependencies.eslint, null);
       const readme = read('README.md');
       check('the README no longer promises backups the free plan does not give, and shows no real-looking database username',
         !/automatic backups/.test(readme) && /free \(M0\) cluster has none/.test(readme) && !/acousuadmin/.test(readme), null);

@@ -50,7 +50,7 @@ async function coordinatorWaitingCard() {
 
 async function renderCoordinatorDashboardBody(el) {
   const [data, waitingCard] = await Promise.all([fetchJSON('/api/coordinator/overview'), coordinatorWaitingCard()]);
-  const { finance, shepherding, publicity, engagement, welfare } = data;
+  const { finance, shepherding, publicity, engagement } = data;
   const budget = finance.activeBudget;
 
   el.innerHTML = `
@@ -280,7 +280,6 @@ function staffForm(existing, preselect) {
 
   const roleSelect = document.getElementById('sfRole');
   const blurb = document.getElementById('sfRoleBlurb');
-  const memberWrap = document.getElementById('sfMemberWrap');
   const memberSelect = document.getElementById('sfMemberId');
   const memberHint = document.getElementById('sfMemberHint');
   const positionWrap = document.getElementById('sfPositionWrap');

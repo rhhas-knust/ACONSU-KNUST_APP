@@ -297,9 +297,12 @@ app sleeps on free hosting and takes up to a minute to wake, and a visitor shoul
 not wait for that. Instead the *Landing site* workflow runs **every three hours**
 (and whenever the site changes), asks the app once — waiting for it to wake if it
 has to — and saves the answer as plain files next to the page:
-`data/feed.json`, and the photos in `images/alumni/` and `images/theme/`. If the
-app cannot be reached, nothing changes and the site is still published, so the
-last good copy stays up. To see a change straight away rather than within three
+`data/feed.json`, and the photos in `images/alumni/` and `images/theme/`. These
+are published but never saved into the repository: it is public, and git keeps
+everything it is given, so someone who asks to come off the wall would otherwise
+stay in its history. (The `data/feed.json` you see in the repository is the empty
+one a never-refreshed site shows.) If the app cannot be reached, the workflow
+carries over the copy the live site shows now, so the last good wall stays up. To see a change straight away rather than within three
 hours: GitHub → **Actions** → **Landing site** → **Run workflow**.
 
 You do not edit those files. They are rewritten on every refresh.
@@ -317,7 +320,9 @@ alumni: {
   the wall will be empty. (National portal → Chapters shows it.)
 - **`requestUrl`** is the app's address. It is the *only* place this page talks to
   the app, and only when someone presses **Send**. Blank it and the form goes away;
-  the wall still shows.
+  the wall still shows. Leave the address itself as it is: when the app moves to a
+  domain, set the repository variable `APP_URL` (Settings → Secrets and variables →
+  Actions → Variables) and the publish writes the new address into the pages.
 - Point the refresh at a different app by setting a repository variable called
   `APP_URL` (Settings → Secrets and variables → Actions → Variables).
 

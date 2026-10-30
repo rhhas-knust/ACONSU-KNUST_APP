@@ -27,6 +27,23 @@ jobs:
       - name: Run the smoke suite
         run: npm test
 
+  # The code checker (eslint.config.js): a name used but never defined, a
+  # function defined twice, code that can never run. Not style.
+  lint:
+    name: Code check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Check the code
+        run: npm run lint
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
@@ -46,15 +63,18 @@ jobs:
         run: npm audit --audit-level=high
 
   # The browser suite: keyboard order, tap sizes, sideways scroll, dark mode, the
-  # sign-in and upload forms, in a real Chromium. It runs on a developer's
-  # machine and in the cloud sandbox, but this job is new and has not yet run on
-  # GitHub's machines, so it reports without blocking. Once it has passed on
-  # main a few times, delete the `continue-on-error` line to make it count.
+  # sign-in and upload forms, in a real Chromium. It reported without blocking
+  # until it had settled on GitHub's machines; it has, so a red browser suite
+  # now fails the build like any other check.
+  #
+  # Pinned to Ubuntu 24.04, not ubuntu-latest: GitHub moved ubuntu-latest to
+  # 26.04, where Playwright 1.56.1 (the version this suite is run with locally)
+  # cannot install Chromium, so the job failed before running a single check.
+  # Move both together when Playwright is upgraded.
   browser:
     name: Browser suite
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
