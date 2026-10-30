@@ -37,7 +37,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     border: 1px solid var(--line);
     padding: 14px 18px; border-radius: var(--radius); margin: 18px 0;
   }
-  .policy table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; }
+  .policy table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.9rem; table-layout: fixed; }
+  .policy th, .policy td { overflow-wrap: anywhere; }
   .policy th, .policy td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .policy th { color: var(--brand); font-weight: 700; }
 </style>

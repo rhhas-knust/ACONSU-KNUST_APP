@@ -1302,3 +1302,22 @@ body {
 .profile-kind label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-right: 18px; font-weight: 600; }
 .profile-kind input { width: 20px; height: 20px; accent-color: var(--brand-deep); }
 .login-switch { text-align: center; margin-top: 14px; }
+
+/* ---------- tap targets: 44px, the size a thumb needs ---------- */
+.tool-btn { min-height: 44px; padding: 7px 14px; }
+.footer-grid a { display: flex; align-items: center; min-height: 44px; padding: 0; }
+.dash-head a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; }
+.consent-line { padding: 10px 0; margin: 0 0 6px; }
+.consent-line input { width: 24px; height: 24px; margin-top: 0; }
+
+/* ---------- the opening buttons on a phone ----------
+   Three buttons used to wrap and leave one alone on a line. The first step is the full width and
+   the two others share the line beneath it. */
+@media (max-width: 600px) {
+  .hero-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+  .hero-actions .btn-primary { grid-column: 1 / -1; }
+  .hero-actions .btn { width: 100%; justify-content: center; text-align: center; }
+}
+
+.tool-btn { min-width: 44px; justify-content: center; }
+.back-link { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 12px; }

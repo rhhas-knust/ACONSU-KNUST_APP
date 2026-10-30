@@ -374,7 +374,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const firstName = member ? member.name.split(' ')[0] : '';
-    const unread = await getUnreadNotificationCount();
 
     let streakHtml = '';
     if (member) {
@@ -390,10 +389,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
       <h2 style="margin-bottom:0;">${greeting}${firstName ? ', ' + escapeHtml(firstName) : ''}</h2>
       <div class="greeting-icons">
         ${streakHtml}
-        <a href="/notifications.html" class="bell-link" style="position:relative; color:var(--brand);" aria-label="Notifications">
-          ${svgIcon(ICON_BELL)}
-          ${unread > 0 ? `<span style="position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);"></span>` : ''}
-        </a>
       </div>
     `;
   } catch (e) { /* non-critical */ }
