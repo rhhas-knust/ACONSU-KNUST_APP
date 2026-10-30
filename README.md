@@ -147,6 +147,7 @@ aconsu-app/
     attendance.js          Sunday check-in from several phones at once, and attendance rates
     globalMove.js          The one-time move of Global Settings into ACONSU-KNUST (docs/offices.md)
     baseUrl.js             The app's address in one place, and what waits for a domain (docs/when-you-have-a-domain.md)
+    eraseMember.js         Erasing a member, and handing them everything held about them (section 28)
   migrate-to-mongo.js      One-time import of old local JSON data into Atlas
   migrate-multichapter.js One-time migration to the multi-chapter model — see section 20
   capacitor.config.json    Native app (iOS/Android) wrapper config
@@ -167,6 +168,7 @@ aconsu-app/
     books.js               The Treasurer and Financial Secretary: accounts, old books, Sunday offering (`npm test`)
     books-ui.js            The same on a phone, and linking a list person to their account (needs Playwright)
     domain.js              No domain yet: what works without one, and what switches on with it (`npm test`)
+    privacy.js             Download my data, Delete my account, and the admin's delete doing the same (`npm test`)
     harness.js             In-memory stand-in for MongoDB, used by the test
   data/                    Old local JSON files — kept only as the migration source
   public/
@@ -191,6 +193,7 @@ aconsu-app/
     js/shepherd-list.js     Shepherding: Sunday check-in at the door, and bringing the list in from CSV
     js/csv-import.js        The steps of bringing a CSV file in, shared by the list and the books
     js/office-books.js      The Treasurer's Sunday offering, the Sundays side by side, the books brought in
+    js/my-data.js           Profile: download my data, delete my account
     js/publicity.js         Publicity portal (announcements, SMS, testimonies)
     images/logo.jpg         ACONSU logo
 ```
@@ -749,3 +752,23 @@ How it works (`lib/maps.js`, `checkMapLink` in `server.js`):
 - The spot the app draws (`mapPlace`) is worked out on the server from the link and never taken from the request.
 - A short share link (`maps.app.goo.gl/...`) does not say where it points, so the server follows it in the background, one redirect at a time and only while every hop stays on a map service. Until then the page offers the link (and, for a chapter's meeting place, a map searched by its name and address). Set `MAP_LINK_RESOLVE=off` to stop the server following links (the tests do).
 - The page checks the link again before linking or framing it, and the content security policy lets a frame load only from Google.
+
+## 28. Your data: download it, or delete your account
+
+The privacy page promises that a member can have their account and personal information deleted. This is how that promise is kept.
+
+**On the profile page**, under **Your data**, a member types their password and can:
+- **Download my data**: one file with everything ACONSU holds about them (their profile, notes, requests, messages, giving, Sundays, care record, and what they sent before they had an account, found by their email or phone). Other people's names and ids are left out of shared records.
+- **Delete my account**: they also type DELETE. Their account goes, and with it what is theirs alone; they are signed out on every phone.
+
+**The chapter admin's Delete member** does exactly the same erasing. It used to remove only the member record and photo.
+
+What erasing does (`lib/eraseMember.js`, `PLAN` lists every record type):
+- deleted: their notes, forms, posts, messages, requests, registrations, care record, devices, photos, and what they sent without an account (matched by email or phone in their chapter);
+- kept without their name: money (the books must still add up), a Sunday mark (the count must stay right), a chat topic others wrote in;
+- they come off groups, meetings, prayer lists, and anyone they shepherded;
+- a leadership login linked to them is closed and signed out, and its roster card shows the office as vacant until it is handed over.
+
+**Old things are cleared every day** (`lib/retention.js`): notifications, the record of texts sent and contact-form messages after 12 months, chat messages after 2 years. Each can be changed in days (`RETAIN_NOTIFICATIONS_DAYS`, `RETAIN_SMS_LOG_DAYS`, `RETAIN_CONTACT_MESSAGES_DAYS`, `RETAIN_CHAT_DAYS`; 0 keeps that kind for ever), and the privacy page states the same numbers (a test checks they match). It runs a minute after the app starts and then daily, under a lock in the database (`lib/jobLock.js`) so that when two copies of the app are running, only one does it.
+
+`test/privacy.js` reads every schema and fails if a field holding a member's id (any field with `memberId` in its name) is not covered by `PLAN`, so a new record type cannot be added and forgotten. Both actions ask for the password again and are limited to a few tries an hour (`PRIVACY_RATE_LIMIT_MAX`, default 5).

@@ -8,7 +8,9 @@ const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const bcrypt = require('bcryptjs');
-const { connectDB, createSessionStore, dbStatus } = require('./lib/db');
+const { connectDB, createSessionStore, dbStatus, endMemberSessions: endStoredMemberSessions } = require('./lib/db');
+const eraseMember = require('./lib/eraseMember');
+const retention = require('./lib/retention');
 const repo = require('./lib/repo');
 const activityBus = require('./lib/activityBus');
 const gridfs = require('./lib/gridfs');
@@ -36,6 +38,7 @@ const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
 const { registerChapterRequestRoutes } = require('./routes/chapter-requests');
 const { registerShepherdListRoutes } = require('./routes/shepherd-list');
+const { registerPrivacyRoutes } = require('./routes/privacy');
 const { registerBooksRoutes } = require('./routes/books');
 const attendanceLib = require('./lib/attendance');
 const listLink = require('./lib/listLink');
@@ -495,6 +498,27 @@ function endRevokedMemberSession(req, res, next) {
     if (at && (!s.issuedAt || s.issuedAt <= at)) { delete s.memberId; delete s.issuedAt; }
   }
   next();
+}
+
+// What erasing a member needs from the server: their sessions, and those of
+// any leadership login linked to them, ended everywhere. Ended in this
+// process at once, deleted from the shared session store, and (for the
+// in-memory store a developer's machine and the tests run on) swept from it.
+function eraseHooks(req) {
+  return {
+    revokeMember: (id) => revokeMemberSessions(id),
+    revokeStaff: (id) => revokeStaffSessions(id),
+    endSessions: async ({ memberId }) => {
+      if (typeof endStoredMemberSessions === 'function') await endStoredMemberSessions(memberId).catch(() => 0);
+      const store = req.sessionStore;
+      if (!store || typeof store.all !== 'function') return;
+      await new Promise((resolve) => store.all((err, sessions) => {
+        if (err || !sessions || Array.isArray(sessions)) return resolve();
+        const mine = Object.entries(sessions).filter(([, s]) => s && String(s.memberId || '') === String(memberId));
+        Promise.all(mine.map(([sid]) => new Promise((done) => store.destroy(sid, () => done())))).then(() => resolve());
+      }));
+    }
+  };
 }
 
 function isSessionRevoked(staff) {
@@ -1083,7 +1107,7 @@ async function scheduleOnboardingTasks(member) {
 
 // The wording of the Terms of use and the Privacy policy a person agreed to when
 // they registered. Change it when either page changes in a way that matters.
-const POLICY_VERSION = '2026-10-06';
+const POLICY_VERSION = '2026-10-30';
 
 // ---------- member auth routes ----------
 // Registration is multipart now - a profile photo is compulsory for member
@@ -4558,6 +4582,7 @@ function requireAttendanceTaker(req, res, next) {
   return res.status(401).json({ error: 'Not authenticated' });
 }
 registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
+registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
 
 // ---------- Attendance / membership reports (section 13, 37) ----------
 // Generate -> Preview (the existing register screens) -> Download PDF.
@@ -7484,18 +7509,19 @@ app.put('/api/admin/members/:id', requireChapterAdmin, async (req, res) => {
   }
 });
 
+// Deleting a member is erasing them: the same routine as "Delete my account"
+// (lib/eraseMember.js), so the privacy page's promise holds whichever way it
+// happens. It used to remove the member record and photo and leave everything
+// else behind.
 app.delete('/api/admin/members/:id', requireChapterAdmin, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req, { required: false });
     const existing = await repo.getById('members', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Member not found' });
-    if (existing.profileImageFileId) {
-      gridfs.deleteFile(existing.profileImageFileId).catch(() => {});
-    }
-    await repo.removeById('members', req.params.id, filter);
-    res.json({ success: true });
+    const result = await eraseMember.erase(existing.id, eraseHooks(req));
+    res.json({ success: true, removed: result ? result.done : {} });
   } catch (e) {
-    res.status(500).json({ error: 'Could not delete member' });
+    res.status(500).json({ error: 'Could not finish deleting this member. Try again: whatever is left will be removed.' });
   }
 });
 
@@ -8828,6 +8854,11 @@ connectDB()
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
     sendDueAnnouncements();
     setInterval(sendDueAnnouncements, 60 * 1000); // a minute's precision is plenty for announcements
+    // Old notifications, SMS records, chat and contact messages (lib/retention.js).
+    // A minute after start, then daily; a lock in the database keeps it to one
+    // copy of the app when more than one is running.
+    setTimeout(() => retention.runDaily().catch(() => {}), 60 * 1000);
+    setInterval(() => retention.runDaily().catch(() => {}), 24 * 60 * 60 * 1000);
     processOnboardingTasks();
     setInterval(processOnboardingTasks, 60 * 1000);
     checkRetentionAlerts();

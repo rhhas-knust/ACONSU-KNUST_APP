@@ -874,6 +874,11 @@ function renderFooter(settings) {
 }
 
 async function initLayout(activePath) {
+  // Arrived straight after deleting their account (my-data.js): say it is done.
+  if (/[?&]deleted=1(&|$)/.test(location.search)) {
+    showToast('Your account has been deleted.', 'success');
+    history.replaceState(null, '', location.pathname);
+  }
   // Who is signed in comes first. It used to come second, after the chapter
   // chooser, so the moment a second chapter existed every member opening the app
   // on a new phone was asked "Choose your ACONSU chapter" before anything

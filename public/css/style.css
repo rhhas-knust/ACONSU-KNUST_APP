@@ -171,6 +171,7 @@ img { max-width: 100%; display: block; }
 .btn-outline { background: transparent; border-color: var(--brand); color: var(--brand); }
 .btn-flame { background: var(--flame-gold); color: #241530; }
 .btn-sm { min-height: 40px; padding: 8px 14px; font-size: 0.95rem; }
+.btn-danger { background: var(--bad-bg); border-color: var(--bad-ink); color: var(--bad-ink); }
 .btn-block { width: 100%; justify-content: center; }
 @media (hover: hover) and (pointer: fine) {
   .btn-primary:hover { background: var(--action-hover); }
@@ -1207,3 +1208,9 @@ body {
   border-radius: 12px; background: var(--surface-2);
 }
 .map-note { margin: 6px 0 0; font-size: 0.85rem; color: var(--ink-faint); }
+
+/* ---------- Your data (profile) ---------- */
+.my-data-hint { font-size: 0.87rem; color: var(--ink-soft); margin-bottom: 14px; }
+.my-data-delete { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 14px; }
+.my-data-delete summary { cursor: pointer; font-weight: 700; color: var(--bad-ink); min-height: 44px; display: flex; align-items: center; }
+.my-data-delete p { font-size: 0.87rem; color: var(--ink-soft); margin: 6px 0 12px; }
