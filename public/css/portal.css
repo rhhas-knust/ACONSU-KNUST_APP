@@ -459,3 +459,23 @@ table.portal-table.hp-table th { white-space: normal; }
 .ss-log { margin-top: 14px; }
 .ss-log summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .ss-log ul { margin: 6px 0 0 18px; font-size: 0.85rem; }
+
+/* ---------- the visitor QR code at the door (shepherd-list.js) ---------- */
+.door-code-show { display: flex; flex-wrap: wrap; gap: 18px; align-items: flex-start; }
+.door-code-show img { width: 240px; height: 240px; border-radius: 8px; border: 1px solid var(--line); }
+.door-code-show > div { flex: 1 1 220px; min-width: 0; }
+.door-code-show p { margin: 0 0 8px; }
+.door-url { overflow-wrap: anywhere; }
+.door-print { text-align: center; padding: 8px 0; }
+.door-print h2 { font-size: 1.8rem; margin: 6px 0; }
+.door-print img { width: min(360px, 80vw); height: auto; margin: 14px auto; display: block; }
+.door-print-chapter { font-weight: 800; color: var(--brand); margin: 0; }
+.door-print-when { font-weight: 700; }
+.door-print-actions { justify-content: center; }
+/* Printing the sheet: the sheet alone, on paper. */
+@media print {
+  body.print-door-code * { visibility: hidden; }
+  body.print-door-code .door-print, body.print-door-code .door-print * { visibility: visible; }
+  body.print-door-code .door-print { position: absolute; left: 0; top: 0; width: 100%; color: #000; }
+  body.print-door-code .door-print img { width: 12cm; }
+}

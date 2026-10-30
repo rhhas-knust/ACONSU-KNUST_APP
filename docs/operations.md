@@ -160,3 +160,13 @@ in the logs, naming the line. To keep the page working while it is fixed:
 Render, **Environment**, `CHAPTER_GUARD=warn`, save. The place is then
 logged once (`CHAPTER GUARD: ...`) and let through. Remove the setting once
 the fix is deployed.
+
+## 9. The visitor QR code at the door
+
+Shepherding makes it on **Sunday Check-In** (Visitor QR code), for the service and day chosen there, and shows it on a phone or prints it (Show large or print). A visitor scans it with their own phone's camera; it opens a short form in the browser (`/welcome.html`), not the app.
+
+- It works only on its own day. Make next Sunday's from Saturday if you want to print it; it opens nothing before that Sunday.
+- If a picture of it goes somewhere it should not, press **Make a new code**: the old one stops working at once, printed copies included. **Turn it off** stops it without making another.
+- On the free Render plan the app sleeps after 15 minutes. Open the Shepherding portal a few minutes before the service so the first visitor does not wait for it to wake.
+- If check-ins are refused with "Too many check-ins from this network", raise `DOOR_CHECKIN_LIMIT_MAX` (default 60 per 10 minutes per network).
+

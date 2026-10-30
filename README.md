@@ -825,3 +825,15 @@ This is only a layout (`public/js/today.js`, each portal's `today` in its own sc
 National Portal, **Health** (National only, `GET /api/national/health?days=7|28|90`, `routes/health-panel.js`): is the app doing its job? Sign-ups finished beside sign-ups started, members active in the last 7 days (opened the app signed in, from `lastActiveDate`), shares by kind, and giving claims by where they stand (waiting, confirmed, turned down), for the period asked for, week by week and chapter by chapter.
 
 Counts only. Shares and sign-ups started are the day counts in `lib/metrics.js` (union-wide; nothing about who); the rest are totals worked out from the records the app keeps anyway. No cookie, no outside service, and no name or id in the response (`test/share.js` checks). Sign-ups started are counted only from this release on, and the panel says so while finished outnumbers started.
+
+## 34. The visitor QR code at the door
+
+Shepherding makes a QR code for one service on one day (**Sunday Check-In**, Visitor QR code) and shows it on a phone or prints it. A visitor scans it with their own phone, which opens a short form in the browser (`public/welcome.html`, on its own: no app shell and no install prompt). They give their name and phone number (needed), what they study, their hall or hostel and how they heard about us (optional), and tick to agree that Shepherding may keep them. They are then checked in to that service, and the thank-you screen links to the website: when and where we meet, what is coming up, the home page, and Create a full account.
+
+- **Already on the list:** the same phone number with a name that agrees ("Ama" and "Ama Owusu") is that person, member or list record, checked in as themselves; nothing new is kept. This is the same rule as adding a newcomer at the door (`attendance.findOnList`). A known number with a name that does not agree is added as someone new rather than checking somebody else in. Members are still checked in at the door as before.
+- **Someone new** is added to the chapter's list as new (`origin: 'qr'`, `consentedAt`), with a note of the day and how they heard, for Shepherding to follow up.
+- **The answer is the same** either way, so the form cannot be used to find out who is on the list.
+- **The code** (`DoorCode`, chapter-walled) carries a random token, never an id. It works only on its own day, Shepherding can replace it (the old one stops at once) or turn it off, anyone working the door can show it, and only Shepherding makes it. Per-network limit `DOOR_CHECKIN_LIMIT_MAX` (default 60 per 10 minutes), at most 500 check-ins per code, and a hidden field that catches scripts.
+
+`test/door-checkin.js` (in `npm test`) and `test/door-ui.js` (two phones: Shepherding and a visitor).
+

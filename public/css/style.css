@@ -1261,3 +1261,18 @@ body {
   .today-actions { grid-template-columns: 1fr; }
   .today-action { min-height: 72px; }
 }
+
+/* ---------- the visitor QR code's form (welcome.html) ---------- */
+.welcome-page { background: var(--bg); }
+.welcome-top { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--purple-deep); color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 1.1rem; }
+.welcome-top img { border-radius: 50%; }
+.welcome-main { max-width: 520px; margin: 0 auto; padding: 20px 16px 48px; }
+.welcome-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px 18px; }
+.welcome-card h1 { font-size: 1.45rem; margin: 0 0 8px; }
+.welcome-sub { color: var(--ink-soft); margin: 0 0 18px; }
+.welcome-card .field input, .welcome-card .field select { min-height: 48px; font-size: 1rem; }
+.welcome-card .btn { min-height: 48px; }
+.welcome-links { display: grid; gap: 10px; margin: 18px 0; }
+.welcome-join { color: var(--ink-soft); }
+.welcome-join a { color: var(--brand); font-weight: 700; }
+.welcome-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
