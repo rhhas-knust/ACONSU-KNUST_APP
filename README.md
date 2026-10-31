@@ -919,3 +919,14 @@ The browser runs scripts from this app's own files and nothing else (`lib/securi
 - The service worker keeps the page scripts of the pages it keeps for offline use (`sw.js`, cache `aconsu-v38`).
 
 `test/csp.js` (in `npm test`: the policy, every inline script against the two fingerprints, no `on...=` in a page or in markup a script builds, no `javascript:` links, every page script present and loaded) and `test/csp-ui.js` (opens all 51 pages on a phone and the admin portal signed in, and checks the browser refused nothing and every page's script ran).
+
+## 42. The portals and the admin on a phone
+
+The leaders' portals and the admin are built for a desk, so a phone needs a few things of its own. All of them come from shared files, so a new panel gets them without asking.
+
+- **Wide tables become cards** (`public/js/main.js`, `stackWideTables`, and `.stack-table` in `style.css`). Below 640px, a table of four or more columns shows each row as a card: the first column (who or what the row is) as its title, then each value beside its column's name, then the row's buttons. The column names are copied onto the cells as tables are drawn, so no table is written twice. A table of three columns or fewer keeps its columns with tighter cells. A table that needs its columns side by side opts out with `data-keep-table`; the import preview does. The Executive portal's tables keep their own phone layout (`card-table`).
+- **Thumb-sized:** on a phone every button and field in a portal, the admin and their dialogs is at least 44px tall, and checkboxes 22px.
+- **The menus:** a portal's menu lies over the page under the header and scrolls on its own; a tap beside it or Escape closes it. The admin's menu button carries its three lines again (they went with the emoji in October and left an empty button) and the quick-actions button is labelled **Shortcuts**. Both menus tell a screen reader whether they are open.
+- **The header names the chapter once:** "ACONSU-KNUST", not "ACONSU: ACONSU-KNUST".
+
+`test/phone-ui.js` signs in to the admin, the chapter admin and every office's portal at 390px, opens all 121 panels, and fails on anything that slides sideways, a wide table that is not cards, or a button or field under 44px; it also checks a laptop still gets its tables.

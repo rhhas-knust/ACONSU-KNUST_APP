@@ -101,8 +101,13 @@ small.hint { color: var(--ink-faint); display:block; margin-top: 4px; }
 .upload-form { background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:20px; margin-bottom:24px; }
 .upload-form .field-row { display:grid; gap:12px; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); }
 @media (max-width: 960px) {
-  .mobile-nav-toggle, .mobile-actions-toggle { display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.28); background: rgba(255,255,255,0.12); color: #fff; border-radius: 8px; padding: 6px 10px; font-weight: 700; }
+  .mobile-nav-toggle, .mobile-actions-toggle { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border: 1px solid rgba(255,255,255,0.28); background: rgba(255,255,255,0.12); color: #fff; border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 0.85rem; font-weight: 700; }
   .cmd-trigger kbd { display: none; }
+  /* Thumb-sized on a phone: every button and field at least 44px tall. */
+  .cmd-trigger, .admin-side button, .admin-main .btn, .admin-main button, .modal .btn, .modal button,
+  .admin-main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]), .admin-main select,
+  .modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]), .modal select { min-height: 44px; }
+  .admin-main input[type="checkbox"], .admin-main input[type="radio"], .modal input[type="checkbox"], .modal input[type="radio"] { width: 22px; height: 22px; }
   .admin-layout { min-height: calc(100vh - 76px); }
   .admin-main { padding: 18px 14px 30px; }
   .admin-side { position: fixed; left: 0; top: 0; bottom: 0; width: min(86vw, 320px); max-height: none; transform: translateX(-102%); transition: transform 0.2s ease; z-index: 400; border-right: none; box-shadow: 8px 0 28px rgba(var(--brand-ink-rgb), 0.32); padding-top: 18px; }

@@ -314,8 +314,11 @@ async function showAdminShell() {
     fetchJSON('/api/admin/chapter-settings')
       .then(cs => {
         const name = cs.name || ADMIN_SCOPE.chapterId;
-        if (badge) badge.textContent = `${name}`;
-        if (brand) brand.textContent = `ACONSU: ${name}`;
+        // Named once: "ACONSU-KNUST", not "ACONSU: ACONSU-KNUST" with the same
+        // name again in the badge beside it, which crowded a phone's header.
+        const named = /^aconsu\b/i.test(name);
+        if (badge) badge.textContent = named ? 'Chapter admin' : `${name}`;
+        if (brand) brand.textContent = named ? name : `ACONSU: ${name}`;
       })
       .catch(() => {
         if (badge) badge.textContent = `${ADMIN_SCOPE.chapterId}`;
@@ -382,6 +385,8 @@ function closeMobileNav() {
   const backdrop = document.getElementById('adminSideBackdrop');
   if (nav) nav.classList.remove('open');
   if (backdrop) backdrop.classList.remove('open');
+  const btn = document.getElementById('mobileNavBtn');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
 }
 
 function initMobileAdminUi() {
@@ -390,16 +395,18 @@ function initMobileAdminUi() {
   const nav = document.getElementById('adminNav');
   const backdrop = document.getElementById('adminSideBackdrop');
   if (navBtn && nav && backdrop) {
+    navBtn.setAttribute('aria-expanded', 'false');
     navBtn.addEventListener('click', () => {
       nav.classList.toggle('open');
       backdrop.classList.toggle('open', nav.classList.contains('open'));
+      navBtn.setAttribute('aria-expanded', nav.classList.contains('open') ? 'true' : 'false');
     });
     backdrop.addEventListener('click', closeMobileNav);
   }
   if (actionsBtn) {
     actionsBtn.addEventListener('click', () => {
       showModal(`
-        <h3 style="margin-top:0;">Quick Actions</h3>
+        <h3 style="margin-top:0;">Shortcuts</h3>
         <div class="sheet-list">
           <div class="sheet-item"><button class="btn btn-primary btn-sm" data-mobile-action="members">Open Members</button></div>
           <div class="sheet-item"><button class="btn btn-primary btn-sm" data-mobile-action="events">Create Event</button></div>

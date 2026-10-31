@@ -395,12 +395,12 @@ async function renderShepMembers(el) {
         <tbody>
           ${pageItems.map(p => `
             <tr>
-              <td style="display:flex; align-items:center; gap:10px;">
+              <td><div style="display:flex; align-items:center; gap:10px;">
                 ${avatar(p)}
                 <span>${escapeHtml(p.name)}${p.source === 'visitor' ? `<br><small class="muted">${escapeHtml(listLabel(p))}</small>` : ''}
                   ${p.suggestion ? `<br><small class="link-hint">Possible app account: ${escapeHtml(p.suggestion.name)} (${LINK_HOW[p.suggestion.how]})</small>` : ''}
                   ${p.linkedHow ? `<br><small class="muted">On the chapter list, linked ${p.linkedHow === 'hand' ? 'by hand' : `by ${LINK_HOW[p.linkedHow]}`}</small>` : ''}</span>
-              </td>
+              </div></td>
               <td>${escapeHtml(p.email || '-')}${p.phone ? `<br>${escapeHtml(p.phone)}` : ''}</td>
               <td>${escapeHtml(deptName(p.department) || '-')}</td>
               <td>${birthdayLabel(p)}</td>

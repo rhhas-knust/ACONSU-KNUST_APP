@@ -247,6 +247,16 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
   .portal-topbar .who { gap: 8px; }
   .portal-topbar .who .btn { white-space: nowrap; }
   .portal-menu-toggle { min-width: 44px; min-height: 44px; }
+  /* Thumb-sized on a phone: every button and field at least 44px tall. */
+  .portal-main .btn, .portal-main button, .modal .btn, .modal button,
+  .portal-main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]), .portal-main select,
+  .modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]), .modal select { min-height: 44px; }
+  .portal-main input[type="checkbox"], .portal-main input[type="radio"], .modal input[type="checkbox"], .modal input[type="radio"] { width: 22px; height: 22px; }
+  .portal-side button { min-height: 44px; }
+  /* The register: the three marks on their own line under each name. */
+  .register-row { flex-wrap: wrap; }
+  .register-row .marks { flex: 1 1 100%; }
+  .mark-btn { flex: 1; min-height: 44px; font-size: 0.82rem; }
 }
 
 /* ============================================================
