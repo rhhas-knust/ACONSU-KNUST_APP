@@ -4448,9 +4448,9 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     const giveHtml = require('fs').readFileSync(
       require('path').join(__dirname, '..', 'public', 'give.html'), 'utf8');
     check('the giving page swaps the account to match the purpose',
-      /welfarePurposes\.includes\(purpose\)/.test(giveHtml), null);
+      /welfarePurposes( \|\| \[\]\))?\.includes\((purpose|\$\('purpose'\)\.value)\)/.test(giveHtml), null);
     check('and redraws it when the purpose changes, rather than once on load',
-      /getElementById\('purpose'\)\.addEventListener\('change', renderPayInfo\)/.test(giveHtml), null);
+      /(getElementById|\$)\('purpose'\)\.addEventListener\('change', renderPayInfo\)/.test(giveHtml), null);
     check('saying plainly where a tithe is going',
       /Tithe goes to the Welfare account/.test(giveHtml), null);
     check('and admitting when welfare has published no account yet',
@@ -4547,7 +4547,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       /id="cgDate"/.test(finJs) && /Date it arrived in the account/.test(finJs), null);
     check('and cannot pick a day in the future from the form either',
       /max="\$\{today\}"/.test(finJs), null);
-    check('the panel says the member gets told', /the member is told/.test(finJs), null);
+    check('the panel says the member gets told', /(the member is|they are) told/.test(finJs), null);
   }
 
   console.log('\n== National oversees chapters, it does not run them ==');

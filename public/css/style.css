@@ -1321,3 +1321,16 @@ body {
 
 .tool-btn { min-width: 44px; justify-content: center; }
 .back-link { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 12px; }
+/* ---------- giving: the receipt (give.html) ---------- */
+.receipt-card { margin-bottom: 24px; }
+.receipt-card h2 { font-size: 1.3rem; margin: 6px 0 12px; }
+.receipt-state { display: inline-block; margin: 0; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.85rem; background: var(--tint-light); color: var(--brand); }
+.receipt-state.receipt-confirmed { color: var(--ok-ink); }
+.receipt-state.receipt-rejected { color: var(--flame-red); }
+.receipt-lines { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 14px; }
+.receipt-lines dt { color: var(--ink-soft); }
+.receipt-lines dd { margin: 0; font-weight: 700; }
+.receipt-link { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+.receipt-url { overflow-wrap: anywhere; color: var(--ink-soft); }
+.receipt-link .btn { min-height: 44px; }
+.give-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }

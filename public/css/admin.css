@@ -131,3 +131,8 @@ small.hint { color: var(--ink-faint); display:block; margin-top: 4px; }
 .bp-note[data-kind="warn"] { color: var(--warn-ink); }
 .bp-note[data-kind="error"] { color: var(--bad-ink); }
 .bp-reset { justify-self: start; }
+/* How giving is paid (chapter settings, loadPaymentsSetup). */
+.payments-setup { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; background: var(--surface); }
+.payments-setup p { margin: 0 0 8px; }
+.payments-setup p:last-child { margin-bottom: 0; }
+.payments-url { overflow-wrap: anywhere; }

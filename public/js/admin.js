@@ -2766,6 +2766,23 @@ async function renderSettings() {
 }
 
 // ---------- Chapter-Scoped Site Settings (Phase 1) ----------
+// How giving is paid (routes/giving.js, lib/payments): the way in use and,
+// for a payment provider added later, the address to give it. Read only:
+// it is set on the server, not here.
+async function loadPaymentsSetup() {
+  const box = document.getElementById('paymentsSetup');
+  if (!box) return;
+  try {
+    const s = await fetchJSON('/api/admin/payments-setup');
+    box.innerHTML = s.provider === 'manual'
+      ? `<p><strong>Manual.</strong> People, with or without an account, send money with their own MoMo or bank app to the details below and say what they sent on the Give page. Finance (or Welfare, for tithe) checks the account and confirms what arrived. No payment provider is used, so there is nothing to connect.</p>${s.problem ? `<p class="hint">${escapeHtml(s.problem)}</p>` : ''}`
+      : `<p><strong>${escapeHtml(s.provider)}</strong>, ${s.mode === 'live' ? 'live: real money' : `sandbox: test payments only (live needs ${escapeHtml(s.liveNeeds)} on the server)`}.</p>
+         ${s.webhookUrl ? `<p>Paste this address into the provider's dashboard, for its payment notifications:</p><p class="payments-url"><code>${escapeHtml(s.webhookUrl)}</code></p>` : '<p class="hint">The app has no web address set yet, so there is no notification address to give the provider.</p>'}`;
+  } catch (e) {
+    box.innerHTML = '<p class="hint">Could not load how giving is paid.</p>';
+  }
+}
+
 async function renderChapterSettings() {
   const el = document.getElementById('panel-chapterSettings');
   el.innerHTML = skeletonHtml();
@@ -2936,7 +2953,8 @@ async function renderChapterSettings() {
           </div>
         </div>
 
-        <h3 style="margin:24px 0 16px;">Giving &amp; Mobile Money (For Member Claims)</h3>
+        <h3 style="margin:24px 0 16px;">Giving &amp; Mobile Money</h3>
+        <div class="payments-setup" id="paymentsSetup" role="status"><p class="hint">Loading how giving is paid...</p></div>
         <div class="field-row">
           <div class="field">
             <label>Payment Method Label</label>
@@ -3108,6 +3126,7 @@ async function renderChapterSettings() {
     const chapterBrand = BrandPicker.mount(document.getElementById('chapterBrandMount'), {
       value: data.brandColor || '', inherit: true, fallback: data.nationalBrandColor || '#0B1A43'
     });
+    loadPaymentsSetup();
     document.getElementById('chapterSettingsForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!chapterBrand.isValid()) {

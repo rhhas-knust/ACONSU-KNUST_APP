@@ -495,7 +495,7 @@ Works with any standard SMTP provider — Gmail (using an [App Password](https:/
 
 ## 19. Design
 
-The app's colour is a deep navy (`#0B1A43`) with the crest's gold flame as the accent; see section 30 for how an admin changes it. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
+The app's colour is a deep navy (`#0B1A43`) with the crest's gold flame as the accent; see section 38 for how an admin changes it. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
 
 ## 20. Multi-chapter platform (Phase 2 of the ACONSU platform spec)
 
@@ -866,7 +866,20 @@ How the codes work (`lib/smsCode.js`, `routes/phone-signin.js`):
 
 Not tested here: a real text arriving on a real phone through mNotify.
 
-## 30. The app's colour (navy by default, and an admin can change it)
+## 37. Giving, with or without an account (manual)
+
+Anyone can give (decisions of 30 October: manual only, no Paystack or other paid provider until the owner asks; giving without an account allowed). The Give page shows the chapter's own Mobile Money number (Welfare's for tithe), the giver sends from their own MoMo or bank app, then says what they sent and from which number and network.
+
+- **Without an account:** their name, the number they sent from, and agreement to keeping them with the gift. They get a **receipt on screen at once** and a **link of their own** (`give.html?receipt=...`) to see later whether it arrived; it shows only their first name, the amount and where it stands. Per-network limit `GIVING_GUEST_LIMIT_MAX` (default 10 an hour), a hidden field for scripts, Ghanaian numbers only.
+- **Finance (or Welfare, for tithe) confirm what arrived**, in the same queues as members' gifts (marked "No account", with the number). The confirm dialog asks for **the amount the account received**, filled in with what the giver said; the books hold what arrived, and the gift keeps both. A guest's receipt then goes to their number by **SMS** where the chapter can send texts; members are told in the app as before. Also in reconciliation batches.
+- **Provider interface** (`lib/payments`): `createCharge`, `verifyWebhook`, `parseEvent`, chosen by `PAYMENT_PROVIDER`. Only `manual` exists, which charges nothing and takes no notifications. A provider other than manual runs as a sandbox unless `PAYMENT_MODE=live`.
+- **The webhook route** (`POST /api/payments/webhook/:provider`) is ready for a provider added later and answers "not found" for manual. It reads the body itself, before the JSON parser, so the signature is checked against the exact bytes; refuses a wrong signature, a reference the app never gave out, and another chapter's; records a provider's retry once (claimed in one step); never counts a different amount (it waits for a person); and puts a paid gift in the books as **pending, `source: 'online'`**, for a person to approve, like any money in. Tested with a stand-in provider that exists only in `test/giving.js`.
+- **Payments setup** (chapter admin, Chapter Settings): how giving is paid, and for a provider later, the exact address to paste into its dashboard (from `lib/baseUrl.js`). `/api/health` reports the giving mode.
+
+`test/giving.js` (in `npm test`) and `test/give-ui.js` (a guest gives on a phone, Finance confirms, the receipt link updates).
+
+
+## 38. The app's colour (navy by default, and an admin can change it)
 
 The whole palette comes from **one colour**. The default is the navy `#0B1A43`.
 
