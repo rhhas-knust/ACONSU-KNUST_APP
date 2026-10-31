@@ -1377,3 +1377,17 @@ body {
   table.portal-table:not(.stack-table):not(.card-table):not(.imp-preview) th,
   table.portal-table:not(.stack-table):not(.card-table):not(.imp-preview) td { padding: 10px 8px; overflow-wrap: anywhere; }
 }
+
+/* ---------- the words over a header picture (public/js/hero-tone.js) ----------
+   The colour and the veil are worked out from the picture, or chosen by an admin
+   (Media Library, Header look), and set on the header as --hero-ink, --hero-on and
+   --hero-veil. Only the header's own words are touched, never a card inside it. */
+#heroBackgroundImage { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; }
+#heroBackgroundImage::after { content: ''; position: absolute; inset: 0; background: var(--hero-veil, transparent); }
+.hero[data-hero-look] .hero-art::after { background: var(--hero-veil); }
+.hero[data-hero-look] .hero-content > h1,
+.hero[data-hero-look] .hero-content > h2,
+.hero[data-hero-look] .hero-content > .lede,
+.hero[data-hero-look] .hero-content > p { color: var(--hero-ink); }
+.hero[data-hero-look] .hero-content > .hero-actions .btn-primary { background: var(--hero-ink); border-color: var(--hero-ink); color: var(--hero-on); }
+.hero[data-hero-look] .hero-content > .hero-actions .btn-outline { background: transparent; border-color: var(--hero-ink); color: var(--hero-ink); }

@@ -2931,8 +2931,21 @@ function sanitiseHeroArt(stored) {
   if (!stored || typeof stored !== 'object') return out;
   for (const [key, value] of Object.entries(stored)) {
     if (!heroArt.isHeroPage(key) || !value || !value.fileId) continue;
-    out[key] = { fileId: String(value.fileId), tone: value.tone === 'dark' ? 'dark' : 'light' };
+    out[key] = { fileId: String(value.fileId), tone: value.tone === 'dark' ? 'dark' : 'light', ...cleanHeaderLook(value) };
   }
+  return out;
+}
+
+// How the words over a header picture look: a text colour (#RRGGBB, or '' for
+// automatic) and how much the picture is darkened or lightened behind it
+// (0 to 85 percent, or null for automatic). Anything else is dropped, so a
+// stored value can only ever be a colour and a number.
+function cleanHeaderLook(raw) {
+  const out = { textColor: '', veil: null };
+  if (!raw || typeof raw !== 'object') return out;
+  if (brand.isHex(raw.textColor)) out.textColor = brand.normalise(raw.textColor);
+  const veil = raw.veil === '' || raw.veil === null || raw.veil === undefined ? NaN : Number(raw.veil);
+  if (Number.isFinite(veil)) out.veil = Math.max(0, Math.min(85, Math.round(veil)));
   return out;
 }
 
@@ -2947,6 +2960,7 @@ function publicGlobalSettings(globalSettings) {
   const out = {};
   PUBLIC_GLOBAL_KEYS.forEach((key) => { if (globalSettings[key] !== undefined) out[key] = globalSettings[key]; });
   out.brandColor = brand.resolveBrand({ global: globalSettings });
+  out.homeHeader = cleanHeaderLook(globalSettings.homeHeader);
   return out;
 }
 
@@ -2973,6 +2987,7 @@ function buildPublicSettings(globalSettings, chapter) {
     verseOfTheWeek: own(chapter.verseOfTheWeek),
     address: chapter.address || chapter.location || '',
     homeHeaderImageFileId: own(chapter.homeHeaderImageFileId),
+    homeHeader: cleanHeaderLook(chapter.homeHeader),
     // The colour this chapter has chosen, or the national one when it has not.
     brandColor: brand.resolveBrand({ chapter, global: globalSettings }),
     // Every page already loads settings to draw its header and footer, so the
@@ -7932,9 +7947,52 @@ async function heroPageTargets(req) {
     scene: page.scene,
     sceneDescription: heroArt.SCENES[page.scene] || '',
     fileId: current[page.key] ? current[page.key].fileId : '',
-    tone: current[page.key] ? current[page.key].tone : 'light'
+    tone: current[page.key] ? current[page.key].tone : 'light',
+    textColor: current[page.key] ? current[page.key].textColor : '',
+    veil: current[page.key] ? current[page.key].veil : null
   }));
 }
+
+// The home banner as the chapter being edited has it (or, with no chapter
+// chosen, as the union has it): the picture and how the words over it look.
+async function homeHeaderOf(req) {
+  const chapter = await heroArtChapter(req).catch(() => null);
+  const source = chapter || await repo.getSettings();
+  return { fileId: (source && source.homeHeaderImageFileId) || '', ...cleanHeaderLook(source && source.homeHeader) };
+}
+
+// Change how the words over a header picture look, without uploading again.
+// target is 'home-header' (the home banner) or the key of a page that has
+// artwork of its own.
+app.put('/api/admin/hero-look', requireContentManager, async (req, res) => {
+  try {
+    const look = cleanHeaderLook(req.body);
+    if (req.body && req.body.textColor && !brand.isHex(req.body.textColor)) return res.status(400).json({ error: 'Use a colour like #FFFFFF (a # and six letters or digits).' });
+    const target = String((req.body && req.body.target) || '');
+    if (target === 'home-header') {
+      const scopedChapterId = await resolveChapterIdForWrite(req, req.body.chapterId || req.query.chapterId);
+      if (scopedChapterId) {
+        const chapter = await repo.getById('chapters', scopedChapterId);
+        if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+        await repo.patchById('chapters', chapter.id, { homeHeader: look });
+      } else {
+        await repo.setSettings({ ...(await repo.getSettings()), homeHeader: look });
+      }
+      return res.json({ success: true, look });
+    }
+    if (!heroArt.isHeroPage(target)) return res.status(400).json({ error: 'Choose a header to change.' });
+    const chapter = await heroArtChapter(req, req.body.chapterId || req.query.chapterId);
+    if (!chapter) return res.status(400).json({ error: 'A chapter is required.' });
+    const next = sanitiseHeroArt(chapter.heroArt);
+    if (!next[target]) return res.status(404).json({ error: 'That page has no artwork of its own to restyle.' });
+    next[target] = { ...next[target], ...look };
+    if (req.body && (req.body.tone === 'dark' || req.body.tone === 'light')) next[target].tone = req.body.tone;
+    await repo.patchById('chapters', chapter.id, { heroArt: next });
+    res.json({ success: true, look: cleanHeaderLook(next[target]) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save how the header looks' });
+  }
+});
 
 // Take a chapter's artwork back off a page. The page returns to its built-in
 // scene rather than to nothing, which is why this is a removal and not a
@@ -7971,7 +8029,8 @@ app.get('/api/admin/image-placements', requireContentManager, async (req, res) =
       events: events.map(e => ({ id: e.id, name: e.title, hasFlyer: !!e.flyerFileId })),
       // Every page that carries a heading, and whether this chapter has
       // already dressed it, so the picker can say which are still built-in.
-      heroPages: await heroPageTargets(req)
+      heroPages: await heroPageTargets(req),
+      homeHeader: await homeHeaderOf(req)
     });
   } catch (e) {
     res.status(500).json({ error: 'Could not load placement options' });
@@ -8031,7 +8090,7 @@ app.post('/api/admin/uploads', requireContentManager, upload.single('file'), asy
       // Replacing a page's artwork drops the old file: nothing else points at
       // it, and a chapter should not pay storage for what it has replaced.
       if (next[targetId]) gridfs.deleteFile(next[targetId].fileId).catch(() => {});
-      next[targetId] = { fileId: String(fileId), tone: req.body.tone === 'dark' ? 'dark' : 'light' };
+      next[targetId] = { fileId: String(fileId), tone: req.body.tone === 'dark' ? 'dark' : 'light', ...cleanHeaderLook(req.body) };
       await repo.patchById('chapters', chapter.id, { heroArt: next });
       placedOn = (heroArt.pageByKey(targetId) || {}).label || targetId;
     } else if (placement === 'home-header') {
@@ -8040,14 +8099,14 @@ app.post('/api/admin/uploads', requireContentManager, upload.single('file'), asy
         const chapter = await repo.getById('chapters', scopedChapterId);
         if (chapter) {
           if (chapter.homeHeaderImageFileId) gridfs.deleteFile(chapter.homeHeaderImageFileId).catch(() => {});
-          await repo.patchById('chapters', scopedChapterId, { homeHeaderImageFileId: String(fileId) });
+          await repo.patchById('chapters', scopedChapterId, { homeHeaderImageFileId: String(fileId), homeHeader: cleanHeaderLook(req.body) });
           placedOn = `${chapter.name || chapter.id} home page header`;
         }
       }
       if (!placedOn) {
         const current = (await repo.getSettings()).homeHeaderImageFileId || '';
         if (current) gridfs.deleteFile(current).catch(() => {});
-        await repo.setSettings({ ...(await repo.getSettings()), homeHeaderImageFileId: String(fileId) });
+        await repo.setSettings({ ...(await repo.getSettings()), homeHeaderImageFileId: String(fileId), homeHeader: cleanHeaderLook(req.body) });
         placedOn = 'Home page header';
       }
     }

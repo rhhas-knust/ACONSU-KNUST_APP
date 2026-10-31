@@ -2265,6 +2265,53 @@ async function openRegistrationsModal(eventId, title) {
   }
 }
 
+// ---------- header look: restyle a header picture that is already up ----------
+async function initHeroLookEdit(placementData) {
+  const body = document.getElementById('heroLookEditBody');
+  if (!body) return;
+  const targets = [];
+  if (placementData.homeHeader && placementData.homeHeader.fileId) targets.push({ id: 'home-header', name: 'Home page banner', ...placementData.homeHeader });
+  (placementData.heroPages || []).filter(pg => pg.fileId).forEach(pg => targets.push({ id: pg.id, name: `${pg.name} page`, fileId: pg.fileId, textColor: pg.textColor, veil: pg.veil, tone: pg.tone }));
+  if (!targets.length) {
+    body.innerHTML = '<p class="hint">No header picture has been uploaded yet. Upload one above and choose its look there.</p>';
+    return;
+  }
+  body.innerHTML = `
+    <div class="field"><label for="heroLookTarget">Which header?</label>
+      <select id="heroLookTarget">${targets.map(t => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('')}</select></div>
+    <div id="heroLookEditMount"></div>
+    <button type="button" class="btn btn-primary" id="heroLookSave">Save header look</button>
+    <div class="form-msg" id="heroLookMsg"></div>`;
+  const select = document.getElementById('heroLookTarget');
+  let look = null;
+  async function load() {
+    const t = targets.find(x => x.id === select.value);
+    look = await HeroLook.mount(document.getElementById('heroLookEditMount'), { textColor: t.textColor || '', veil: t.veil === undefined ? null : t.veil });
+    if (look) await look.setImage(`/api/files/${encodeURIComponent(t.fileId)}`);
+  }
+  select.addEventListener('change', load);
+  await load();
+  document.getElementById('heroLookSave').addEventListener('click', async () => {
+    const msg = document.getElementById('heroLookMsg');
+    if (!look) return;
+    if (!look.ready()) { msg.textContent = 'The preview is still measuring the picture. Try again in a moment.'; msg.className = 'form-msg error'; return; }
+    const v = look.value();
+    if (!v.ok && !window.confirm(`With these choices the words would be hard to read (contrast ${v.ratio}:1, visitors need 4.5:1). Save anyway?`)) return;
+    try {
+      const body2 = { target: select.value, textColor: v.textColor, veil: v.veil, tone: v.tone };
+      if (ADMIN_SCOPE.isNational && ADMIN_SCOPE.chapterId) body2.chapterId = ADMIN_SCOPE.chapterId;
+      await fetchJSON('/api/admin/hero-look', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body2) });
+      const t = targets.find(x => x.id === select.value);
+      t.textColor = v.textColor; t.veil = v.veil;
+      msg.textContent = 'Saved. The header now looks like the preview.';
+      msg.className = 'form-msg success';
+    } catch (err) {
+      msg.textContent = err.message || 'Could not save.';
+      msg.className = 'form-msg error';
+    }
+  });
+}
+
 // ---------- media library ----------
 let mediaLibraryPage = 1;
 const MEDIA_PER_PAGE = 12;
@@ -2312,6 +2359,12 @@ async function renderMediaLibrary() {
           <small class="hint">The heading sits on top of the picture, so this is what keeps it readable.</small>
         </div>
 
+        <div class="field" id="heroLookWrap" style="display:none;">
+          <span class="field-label" id="heroLookLabel">Header look: the colour of the words, and how much the picture is darkened</span>
+          <p class="hint">Choose a picture first. The preview shows the heading over it, and tells you if it would be hard to read.</p>
+          <div id="heroLookMount" role="group" aria-labelledby="heroLookLabel"></div>
+        </div>
+
         <div id="placementExplain" style="background:var(--tint-light); border:1px solid var(--line); border-radius:8px; padding:12px 14px; font-size:0.85rem; color:var(--brand-strong); margin-bottom:18px;"></div>
 
         <div class="field-row">
@@ -2335,10 +2388,22 @@ async function renderMediaLibrary() {
           <label>File (images or PDF, up to 30MB)</label>
           <input type="file" id="uploadFile" required>
         </div>
+        <div class="field" id="uploadPreviewWrap" style="display:none;">
+          <span class="field-label">Preview. Check this is the right picture before you upload.</span>
+          <img id="uploadPreviewImg" class="upload-preview" alt="Preview of the chosen picture">
+        </div>
         <button type="submit" class="btn btn-primary" id="uploadSubmitBtn">Upload</button>
         <div class="form-msg" id="uploadMsg"></div>
       </form>
       ${!galleryBookPages.length ? '<small class="hint">Tip: create a Gallery or Bookshelf page under "Custom Pages" first, so photos can be placed on it.</small>' : ''}
+    </div>
+
+    <div class="upload-form" id="heroLookEditCard">
+      <h3 style="margin-bottom:6px;">Header look</h3>
+      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:16px;">
+        Change the colour of the words over a header picture, or how much the picture is darkened, without uploading it again.
+      </p>
+      <div id="heroLookEditBody"></div>
     </div>
 
     <h3 style="margin-bottom:14px;">All Files (${files.length})</h3>
@@ -2420,17 +2485,56 @@ async function renderMediaLibrary() {
     explain.innerHTML = `<strong>Where this goes:</strong> ${messages[value] || spec.description}`;
 
     // Only artwork that sits behind text needs to say which way it reads.
-    document.getElementById('toneFieldWrap').style.display = value === 'page-hero' ? 'block' : 'none';
+    // The old light-or-dark question is now the Header look control below, which
+    // answers it from the picture itself; the field stays only so the form keeps its shape.
+    document.getElementById('toneFieldWrap').style.display = 'none';
     if (value === 'page-hero') {
       const chosen = (placementData.heroPages || []).find(pg => pg.id === targetSelect.value);
       document.getElementById('uploadTone').value = (chosen && chosen.tone) || 'light';
     }
+    syncUploadPreview();
 
     // A department header is always a photo, never a document.
     if (['department-header', 'home-header', 'home-floating', 'executive-photo', 'page-hero'].includes(value)) {
       document.getElementById('uploadCategory').value = 'photo';
     }
   }
+
+  // ---- preview before upload ----
+  // Every picture is shown before it is sent. A header or page artwork is shown as
+  // the header itself, with the words over it and the contrast they give.
+  let uploadObjectUrl = '';
+  let uploadLook = null;
+  let uploadLookKey = '';
+  async function syncUploadPreview() {
+    const placement = document.getElementById('uploadPlacement').value;
+    const isHeader = placement === 'home-header' || placement === 'page-hero';
+    const input = document.getElementById('uploadFile');
+    const file = input.files && input.files[0];
+    const isImage = !!file && /^image\//.test(file.type);
+    const wrap = document.getElementById('uploadPreviewWrap');
+    const img = document.getElementById('uploadPreviewImg');
+    const lookWrap = document.getElementById('heroLookWrap');
+    if (uploadObjectUrl) { URL.revokeObjectURL(uploadObjectUrl); uploadObjectUrl = ''; }
+    if (isImage) uploadObjectUrl = URL.createObjectURL(file);
+    wrap.style.display = isImage && !isHeader ? 'block' : 'none';
+    if (isImage && !isHeader) img.src = uploadObjectUrl;
+    lookWrap.style.display = isHeader ? 'block' : 'none';
+    if (!isHeader) return;
+    // One control per target, so a page's own saved look starts it off.
+    const targetId = document.getElementById('uploadTarget').value;
+    const key = placement + ':' + targetId;
+    if (!uploadLook || uploadLookKey !== key) {
+      const saved = placement === 'page-hero'
+        ? ((placementData.heroPages || []).find(pg => pg.id === targetId) || {})
+        : (placementData.homeHeader || {});
+      uploadLook = await HeroLook.mount(document.getElementById('heroLookMount'), { textColor: saved.textColor || '', veil: saved.veil === undefined ? null : saved.veil });
+      uploadLookKey = key;
+    }
+    if (uploadLook) await uploadLook.setImage(isImage ? uploadObjectUrl : '');
+  }
+  document.getElementById('uploadFile').addEventListener('change', syncUploadPreview);
+  initHeroLookEdit(placementData);
 
   document.getElementById('uploadPlacement').addEventListener('change', refreshPlacementUI);
   document.getElementById('uploadTarget').addEventListener('change', refreshPlacementUI);
@@ -2442,8 +2546,23 @@ async function renderMediaLibrary() {
     const msg = document.getElementById('uploadMsg');
     const fileInput = document.getElementById('uploadFile');
     if (!fileInput.files.length) return;
-    btn.disabled = true; btn.textContent = 'Uploading...';
     const placement = document.getElementById('uploadPlacement').value;
+    const isHeader = placement === 'home-header' || placement === 'page-hero';
+    if (isHeader) {
+      if (!uploadLook || !uploadLook.hasImage()) {
+        msg.textContent = 'Choose a picture first. The preview shows how the header will look.';
+        msg.className = 'form-msg error';
+        return;
+      }
+      if (!uploadLook.ready()) {
+        msg.textContent = 'The preview is still measuring the picture. Try again in a moment.';
+        msg.className = 'form-msg error';
+        return;
+      }
+      const chosenLook = uploadLook.value();
+      if (!chosenLook.ok && !window.confirm(`With these choices the words would be hard to read (contrast ${chosenLook.ratio}:1, visitors need 4.5:1). Upload anyway?`)) return;
+    }
+    btn.disabled = true; btn.textContent = 'Uploading...';
     const formData = new FormData();
     formData.append('file', fileInput.files[0]);
     formData.append('category', document.getElementById('uploadCategory').value);
@@ -2451,7 +2570,12 @@ async function renderMediaLibrary() {
     formData.append('targetId', document.getElementById('uploadTarget').value || '');
     formData.append('title', document.getElementById('uploadTitle').value);
     formData.append('description', document.getElementById('uploadDescription').value);
-    if (placement === 'page-hero') formData.append('tone', document.getElementById('uploadTone').value);
+    if (isHeader && uploadLook) {
+      const chosenLook = uploadLook.value();
+      formData.append('textColor', chosenLook.textColor || '');
+      formData.append('veil', chosenLook.veil === null ? '' : String(chosenLook.veil));
+      formData.append('tone', chosenLook.tone);
+    }
     // This form posts raw FormData rather than going through fetchJSON, so the
     // selected chapter is not added to it for us. A placement that writes to a
     // chapter record has to name the chapter, or a national actor's upload has
