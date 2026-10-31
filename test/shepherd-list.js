@@ -354,6 +354,39 @@ const peopleImport = require('../lib/peopleImport');
   r = await call('shep.k', 'POST', `/api/shepherd/records/${r.data.record.id}/unlink`);
   check('and that link says why it cannot be undone', r.status === 409 && /folded/.test(r.data.error), r.data);
 
+  console.log('\n== changing what the list says about someone ==');
+  // Details and Care Notes are two forms for one record: each changes only what
+  // it sends, so saving one never blanks what the other holds.
+  const yawAfter = fakeModels.ShepherdingRecord._docs.find(x => x.id === yawList.recordId);
+  check('care notes saved for a linked account leave the list\'s own name and phone, so an unlink gets them back', yawAfter.name === 'Yaw Boateng' && yawAfter.phone === '0277777777', { name: yawAfter.name, phone: yawAfter.phone });
+  const amaId = fakeModels.ShepherdingRecord._docs.find(x => x.name === 'Ama Owusu' && x.chapterId === 'knust').id;
+  const careOnly = new FormData();
+  careOnly.append('recordId', amaId); careOnly.append('address', 'Hall 7, room 12'); careOnly.append('pastoralNotes', 'Sings alto.');
+  r = await call('shep.k', 'POST', '/api/shepherd/records', careOnly);
+  let amaRec = fakeModels.ShepherdingRecord._docs.find(x => x.id === amaId);
+  check('Care Notes for someone from the list saves without sending their name again', r.status === 200 && amaRec.address === 'Hall 7, room 12' && amaRec.pastoralNotes === 'Sings alto.', r.data);
+  check('and leaves their name, phone and level as they were', amaRec.name === 'Ama Owusu' && amaRec.phone === '0201112222' && amaRec.level === '300', amaRec);
+  const detailsOnly = new FormData();
+  Object.entries({ recordId: amaId, name: 'Ama Owusu-Mensah', phone: '0201113333', level: '400', programme: 'Nursing' }).forEach(([k, v]) => detailsOnly.append(k, v));
+  r = await call('shep.k', 'POST', '/api/shepherd/records', detailsOnly);
+  amaRec = fakeModels.ShepherdingRecord._docs.find(x => x.id === amaId);
+  check('Details changes the name, phone, level and programme the list brought in', r.status === 200 && amaRec.name === 'Ama Owusu-Mensah' && amaRec.phone === '0201113333' && amaRec.level === '400' && amaRec.programme === 'Nursing', amaRec);
+  check('and leaves the care notes as they were', amaRec.address === 'Hall 7, room 12' && amaRec.pastoralNotes === 'Sings alto.', amaRec);
+  r = await call('shep.k', 'GET', '/api/shepherd/members');
+  check('the people list shows the new details', r.data.some(x => x.recordId === amaId && x.name === 'Ama Owusu-Mensah' && x.phone === '0201113333'), r.data.find(x => x.recordId === amaId));
+  const emptied = new FormData();
+  emptied.append('recordId', amaId); emptied.append('name', '   ');
+  r = await call('shep.k', 'POST', '/api/shepherd/records', emptied);
+  check('a name cannot be emptied', r.status === 400 && fakeModels.ShepherdingRecord._docs.find(x => x.id === amaId).name === 'Ama Owusu-Mensah', r.data);
+  const noName = new FormData();
+  noName.append('pastoralNotes', 'No name given');
+  r = await call('shep.k', 'POST', '/api/shepherd/records', noName);
+  check('and someone new still needs one', r.status === 400, r.data);
+  const otherChapter = new FormData();
+  otherChapter.append('recordId', amaId); otherChapter.append('name', 'Taken over');
+  r = await call('shep.l', 'POST', '/api/shepherd/records', otherChapter);
+  check('another chapter cannot change this chapter\'s people, nor make a stray record trying', r.status === 404 && fakeModels.ShepherdingRecord._docs.find(x => x.id === amaId).name === 'Ama Owusu-Mensah' && !fakeModels.ShepherdingRecord._docs.some(x => x.name === 'Taken over'), r.data);
+
   console.log('\n== the main admin and a chapter that runs itself ==');
   await call('admin', 'POST', '/api/admin/staff', { username: 'coord.k', name: 'coord.k', role: 'coordinator', password: 'Start-Pass-1', chapterId: 'knust', memberId: await member('coord.k', 'knust') });
   r = await upload('admin', 'Name\nSomeone From Above\n', 'import', {}, { 'X-Chapter-Id': 'knust' });

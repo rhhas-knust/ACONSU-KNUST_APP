@@ -1517,3 +1517,40 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest && e.target.closest('button[data-href]');
   if (b && /^\/[^/]/.test(b.dataset.href)) location.href = b.dataset.href;
 });
+
+// On a phone a wide table in a leader's portal or the admin becomes a stack of
+// cards (style.css, .stack-table): each value is shown beside its column's
+// name, which is copied onto the cells here as tables are drawn, so no table
+// has to be written twice. Three columns or fewer fit a phone as they are;
+// some tables keep a phone layout of their own (card-table, hp-table,
+// bk-sundays) or need their columns side by side (imp-preview, or any table
+// marked data-keep-table).
+(function stackWideTables() {
+  const KEEP = '.card-table, .hp-table, .bk-sundays, .imp-preview, [data-keep-table]';
+  const width = (row) => [...row.cells].reduce((sum, cell) => sum + (cell.colSpan || 1), 0);
+  const label = (table) => {
+    if (table.matches(KEEP)) return;
+    let names;
+    if (table.tHead && table.tHead.rows.length) {
+      names = [...table.tHead.rows[0].cells].flatMap((th) => Array(th.colSpan || 1).fill(th.textContent.trim()));
+    } else {
+      // No headings: each value on its own line, with no name to put beside it.
+      const row = [...(table.tBodies[0] ? table.tBodies[0].rows : [])].find((r) => !(r.cells.length === 1 && r.cells[0].colSpan > 1));
+      names = row ? Array(width(row)).fill('') : [];
+    }
+    if (names.length < 4) return;
+    table.classList.add('stack-table');
+    [...table.tBodies].forEach((body) => [...body.rows].forEach((row) => {
+      let col = 0;
+      [...row.cells].forEach((cell) => {
+        if (!cell.hasAttribute('data-label')) cell.setAttribute('data-label', cell.colSpan > 1 ? '' : (names[col] || ''));
+        col += cell.colSpan || 1;
+      });
+    }));
+  };
+  let queued = false;
+  const run = () => { queued = false; document.querySelectorAll('.portal-main table, .admin-main table, .modal table').forEach(label); };
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(run); } };
+  new MutationObserver(queue).observe(document.documentElement, { childList: true, subtree: true });
+  queue();
+})();

@@ -4197,19 +4197,13 @@ app.get('/api/shepherd/members', requireShepherd, async (req, res) => {
 // or create a standalone record for a visitor who has no account (memberId left blank).
 app.post('/api/shepherd/records', requireShepherd, upload.single('image'), async (req, res) => {
   try {
-    const { recordId, memberId, name, phone, address, emergencyContact, attendanceStatus, lastContactDate, pastoralNotes } = req.body;
-    if (!memberId && !name) {
-      return res.status(400).json({ error: 'A name is required for a visitor record with no linked account' });
-    }
-
-    let imageFileId;
-    if (req.file) {
-      const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
-      imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
-        category: 'shepherding', contentType: compressed.contentType, title: name || memberId,
-        chapterId: rolesLib.chapterIdForWrite(req)
-      }));
-    }
+    const body = req.body || {};
+    const { recordId, memberId } = body;
+    // Two forms save here: Details (who they are) and Care Notes (how they are
+    // doing). Each field changes only when the form sends it, so saving one
+    // never blanks what the other holds.
+    const sent = (f) => typeof body[f] === 'string';
+    const name = sent('name') ? body.name.trim() : '';
 
     // Find the record to update: by its own id if given (visitor edits), otherwise
     // by memberId (linked-member edits), otherwise this is a brand new record.
@@ -4219,25 +4213,39 @@ app.post('/api/shepherd/records', requireShepherd, upload.single('image'), async
     let existing = null;
     if (recordId) {
       existing = await repo.getById('shepherdingRecords', recordId, scopeFilter);
+      if (!existing) return res.status(404).json({ error: 'That person is not on this chapter\'s list.' });
     } else if (memberId) {
       existing = (await repo.getAll('shepherdingRecords', scopeFilter)).find(r => r.memberId === memberId) || null;
     }
+    // Someone with no account is known here only by the name on the list.
+    const listOnly = !(existing ? existing.memberId : memberId);
+    if (listOnly && (sent('name') || !existing) && !name) {
+      return res.status(400).json({ error: 'A name is required for someone with no app account.' });
+    }
 
-    const fields = {
-      chapterId: rolesLib.chapterIdForWrite(req),
-      memberId: memberId || '',
-      name: name || '',
-      phone: phone || '',
-      address: address || '',
-      emergencyContact: emergencyContact || '',
-      attendanceStatus: attendanceStatus || 'new',
-      lastContactDate: lastContactDate || '',
-      pastoralNotes: pastoralNotes || ''
-    };
+    let imageFileId;
+    if (req.file) {
+      const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
+      imageFileId = String(await gridfs.uploadBuffer(compressed.buffer, req.file.originalname, {
+        category: 'shepherding', contentType: compressed.contentType, title: name || (existing && existing.name) || memberId,
+        chapterId: rolesLib.chapterIdForWrite(req)
+      }));
+    }
+
+    const fields = existing ? {} : { chapterId: rolesLib.chapterIdForWrite(req), memberId: memberId || '' };
+    ['address', 'emergencyContact', 'lastContactDate', 'pastoralNotes'].forEach((f) => {
+      if (sent(f)) fields[f] = body[f];
+    });
+    if (sent('attendanceStatus') && ['regular', 'irregular', 'inactive', 'new'].includes(body.attendanceStatus)) {
+      fields.attendanceStatus = body.attendanceStatus;
+    }
     if (imageFileId) fields.imageFileId = imageFileId;
-    // Someone with no account: the details their list carries, each changed
-    // only when the form sends it, so an older form cannot blank them.
-    if (!memberId) {
+    // Someone with no account: their name and phone, and the details their list
+    // carries. A record linked to an account keeps the list's own name and
+    // phone untouched, so an unlink gives them back.
+    if (listOnly) {
+      if (sent('name')) fields.name = name;
+      if (sent('phone')) fields.phone = body.phone.trim();
       ['email', 'level', 'programme', 'department'].forEach((f) => {
         if (typeof req.body[f] === 'string') fields[f] = req.body[f].trim().slice(0, 120);
       });

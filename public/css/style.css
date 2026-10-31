@@ -1224,7 +1224,8 @@ body {
 .invite-strip p { margin: 0; color: var(--ink-soft); }
 
 /* ---------- Today: the first screen of a leaders' portal (js/today.js) ---------- */
-.today { margin-bottom: 26px; }
+/* Its own spacing: the site-wide section padding (72px) is for the public pages. */
+.today { margin-bottom: 26px; padding: 0; }
 .today-actions { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 .today-action {
   display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;
@@ -1343,6 +1344,39 @@ body {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); font-size: 0.9rem; font-weight: 600;
 }
 @media (min-width: 1024px) { .outbox-line { bottom: 20px; } }
+
+/* ---------- a wide table on a phone (main.js, stackWideTables) ----------
+   Each row a card, each value beside its column's name: nothing slides
+   sideways, and every button in a row is big enough for a thumb. The first
+   column (who or what the row is) is the card's title. */
+@media (max-width: 640px) {
+  table.stack-table, table.portal-table.stack-table { min-width: 0; display: block; width: 100%; border-radius: 0; }
+  table.stack-table thead { display: none; }
+  table.stack-table tbody { display: block; }
+  table.stack-table tr, table.portal-table.stack-table tr { display: block; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  table.stack-table tbody tr:last-child { border-bottom: none; }
+  /* The column's name in a narrow column on the left, the value beside it,
+     laid out as it always is (a line break or a small note stays with it). */
+  table.stack-table td, table.portal-table.stack-table td {
+    display: block; position: relative; min-height: 1.4em; padding: 3px 0 3px calc(34% + 12px); border: none;
+    text-align: left; white-space: normal; overflow-wrap: anywhere; font-size: 0.9rem;
+  }
+  table.stack-table td::before {
+    content: attr(data-label); position: absolute; left: 0; top: 5px; width: 34%;
+    font-size: 0.74rem; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  table.stack-table td:first-child, table.portal-table.stack-table td:first-child { padding-left: 0; font-weight: 700; font-size: 0.98rem; padding-bottom: 6px; }
+  table.stack-table td[data-label=""], table.portal-table.stack-table td[data-label=""] { padding-left: 0; }
+  table.stack-table td:first-child::before, table.stack-table td[data-label=""]::before, table.stack-table td.row-actions::before { content: none; }
+  table.stack-table td.row-actions, table.portal-table.stack-table td.row-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0 0; }
+  table.stack-table td button, table.stack-table td .btn, table.stack-table td select, table.stack-table td input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
+  table.stack-table td.num, table.portal-table.stack-table td.num { text-align: left; }
+  /* A short table keeps its columns, but no longer holds a desktop width, and
+     its cells give up some padding so three columns fit a phone. */
+  table.portal-table:not(.imp-preview):not([data-keep-table]) { min-width: 0; }
+  table.portal-table:not(.stack-table):not(.card-table):not(.imp-preview) th,
+  table.portal-table:not(.stack-table):not(.card-table):not(.imp-preview) td { padding: 10px 8px; overflow-wrap: anywhere; }
+}
 
 /* ---------- the words over a header picture (public/js/hero-tone.js) ----------
    The colour and the veil are worked out from the picture, or chosen by an admin

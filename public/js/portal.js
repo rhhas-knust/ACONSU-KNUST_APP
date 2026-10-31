@@ -137,6 +137,20 @@ async function refreshPortalSession() {
   }
 }
 
+// The menu on a phone. It lies over the page just under the header, which
+// stays put, and scrolls on its own: in the page, scrolling down slid its first
+// items under the header, out of reach.
+function setPortalMenu(open) {
+  const nav = document.getElementById('portalNav');
+  const toggle = document.getElementById('portalMenuToggle');
+  if (open) {
+    const bar = document.querySelector('.portal-topbar');
+    if (bar) document.documentElement.style.setProperty('--portal-top', `${Math.round(bar.getBoundingClientRect().bottom)}px`);
+  }
+  nav.classList.toggle('open', open);
+  if (toggle) toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
 function renderPortalChrome() {
   const user = PORTAL.user;
   const whoLabel = user ? `${user.name} · ${user.role}` : (PORTAL.isAdmin ? 'Signed in as Admin' : '');
@@ -147,7 +161,10 @@ function renderPortalChrome() {
   // buried in a badge. Pages with no chapter concept of their own (national)
   // simply have no #portalBrandName element, so this is a no-op there.
   const brand = document.getElementById('portalBrandName');
-  if (brand) brand.textContent = PORTAL.chapter ? `ACONSU: ${PORTAL.chapter.name}` : 'ACONSU';
+  // A chapter called "ACONSU-KNUST" is not "ACONSU: ACONSU-KNUST": saying it
+  // twice wrapped the header onto three lines on a phone.
+  const chapterName = PORTAL.chapter ? PORTAL.chapter.name : '';
+  if (brand) brand.textContent = !chapterName ? 'ACONSU' : /^aconsu\b/i.test(chapterName) ? chapterName : `ACONSU: ${chapterName}`;
 
   const nav = document.getElementById('portalNav');
   // A panel can open a group of its own in the menu (`groupLabel`): the
@@ -158,7 +175,7 @@ function renderPortalChrome() {
   nav.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', () => {
       openPanel(btn.dataset.panel);
-      nav.classList.remove('open'); // collapse the mobile drawer after a choice
+      setPortalMenu(false); // collapse the mobile drawer after a choice
     });
   });
 
@@ -402,7 +419,7 @@ function withToday(panels) {
       menuId: 'portalNav',
       allTools: () => {
         const nav = document.getElementById('portalNav');
-        nav.classList.add('open');
+        setPortalMenu(true);
         const first = nav.querySelector('button:not([data-panel="today"])');
         nav.scrollIntoView({ block: 'start' });
         if (first) first.focus();
@@ -500,8 +517,17 @@ async function initPortal(config) {
     window.location.reload();
   });
 
-  document.getElementById('portalMenuToggle').addEventListener('click', () => {
-    document.getElementById('portalNav').classList.toggle('open');
+  const menuToggle = document.getElementById('portalMenuToggle');
+  menuToggle.setAttribute('aria-expanded', 'false');
+  menuToggle.addEventListener('click', () => setPortalMenu(!document.getElementById('portalNav').classList.contains('open')));
+  // A tap anywhere else, or Escape, closes it, as a menu over the page should.
+  // (A button that opens it, such as Today's "All tools", controls it too.)
+  document.addEventListener('click', (e) => {
+    const nav = document.getElementById('portalNav');
+    if (nav.classList.contains('open') && !nav.contains(e.target) && !e.target.closest('[aria-controls="portalNav"]')) setPortalMenu(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.getElementById('portalNav').classList.contains('open')) { setPortalMenu(false); menuToggle.focus(); }
   });
 
   showPortalOrLogin();
