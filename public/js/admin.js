@@ -35,12 +35,16 @@ document.getElementById('modalBackdrop').addEventListener('click', (e) => {
 // Chapter Admin or Chapter Coordinator account created under Leadership
 // Accounts (signed in the same way every other portal does). Both are
 // checked here so nothing about the legacy login has to change.
+// Who is signed in, for the card at the top of the side menu.
+let ADMIN_ME = null;
+
 async function checkAuth() {
   try {
     const { isAdmin } = await fetchJSON('/api/admin/check');
     if (isAdmin) {
       if (window.ACONSU_BRAND) window.ACONSU_BRAND.use('');
       ADMIN_SCOPE = { isNational: true, chapterId: '', role: 'admin', access: {} };
+      ADMIN_ME = { name: 'Administrator', roleLabel: 'National admin', chapterName: 'All chapters' };
       return showAdminShell();
     }
   } catch (e) { /* fall through to the portal-login check below */ }
@@ -64,11 +68,65 @@ async function checkAuth() {
         role: role || '',
         access: me.access || {}
       };
+      ADMIN_ME = {
+        name: (me.staff && me.staff.name) || '',
+        roleLabel: (me.staff && me.staff.roleLabel) || (me.isNational ? 'National' : ''),
+        chapterName: me.chapter ? me.chapter.name : (me.isNational ? 'All chapters' : '')
+      };
       return showAdminShell();
     }
   } catch (e) { /* not signed in either way */ }
   document.getElementById('loginWrap').style.display = 'flex';
   document.getElementById('adminShell').style.display = 'none';
+}
+
+// ---------- the card at the top of the side menu ----------
+function renderNavProfile() {
+  const nav = document.getElementById('adminNav');
+  if (!nav || nav.querySelector('.nav-profile') || !ADMIN_ME) return;
+  const initial = (ADMIN_ME.name || '?').trim().charAt(0).toUpperCase();
+  const card = document.createElement('div');
+  card.className = 'nav-profile';
+  card.innerHTML = `
+    <span class="nav-profile-mark" aria-hidden="true">${escapeHtml(initial)}</span>
+    <span class="nav-profile-text">
+      <strong>${escapeHtml(ADMIN_ME.name || 'Signed in')}</strong>
+      <span>${escapeHtml(ADMIN_ME.roleLabel || '')}</span>
+      ${ADMIN_ME.chapterName ? `<span class="nav-profile-chapter">${escapeHtml(ADMIN_ME.chapterName)}</span>` : ''}
+    </span>`;
+  nav.prepend(card);
+}
+
+// ---------- counts on the side menu ----------
+// What is waiting, on the item that deals with it. The same questions the
+// Today buttons ask (renderAdminToday), so the two can never disagree. An item
+// this account does not have, or a count that cannot be read, shows nothing.
+const NAV_COUNTS = {
+  joinRequests: async () => (await fetchJSON('/api/admin/join-requests')).filter(r => r.status === 'new').length,
+  prayerRequests: async () => (await fetchJSON('/api/admin/prayer-requests')).filter(r => r.status === 'new').length,
+  contactMessages: async () => (await fetchJSON('/api/admin/contact-messages')).filter(m => m.status !== 'replied').length,
+  welfare: async () => (await fetchJSON('/api/welfare/requests')).filter(w => ['submitted', 'under_review'].includes(w.status)).length
+};
+let navBadgeTimer = null;
+function refreshNavBadges() {
+  clearTimeout(navBadgeTimer);
+  navBadgeTimer = setTimeout(async () => {
+    for (const [panel, count] of Object.entries(NAV_COUNTS)) {
+      const btn = document.querySelector(`#adminNav button[data-panel="${panel}"]`);
+      if (!btn || btn.closest('[hidden]') || getComputedStyle(btn).display === 'none') continue;
+      let n = 0;
+      try { n = Number(await count()) || 0; } catch (e) { n = 0; }
+      let badge = btn.querySelector('.nav-count');
+      if (!n) { if (badge) badge.remove(); continue; }
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'nav-count';
+        btn.appendChild(badge);
+      }
+      badge.textContent = n > 99 ? '99+' : String(n);
+      badge.setAttribute('aria-label', `${n} waiting`);
+    }
+  }, 250);
 }
 
 // "National by default, chapter operations belong to chapters"
@@ -270,6 +328,7 @@ async function showAdminShell() {
   document.getElementById('adminShell').style.display = 'block';
 
   initAdminNav();
+  renderNavProfile();
   initMobileAdminUi();
   initCommandPalette();
   // Awaited so ADMIN_CHAPTERS is populated before the nav is pruned and the
@@ -279,6 +338,9 @@ async function showAdminShell() {
   await initLookGuard();
   applyNavScopeVisibility();
   initOversightMode();
+  refreshNavBadges();
+  setInterval(() => { if (!document.hidden) refreshNavBadges(); }, 120000);
+  window.addEventListener('focus', () => refreshNavBadges());
   // Asking for help is the chapter's; seeing the requests is National's.
   const askBtn = document.getElementById('navAskNationalBtn');
   const inboxBtn = document.getElementById('navChapterRequestsBtn');
@@ -374,6 +436,7 @@ function openAdminPanel(name) {
     if (panel) panel.classList.add('active');
     closeMobileNav();
     loadPanel(name);
+    refreshNavBadges();
   }
 }
 
@@ -519,8 +582,9 @@ function overviewActivityTime(value) {
 function panelLabel(panelKey) {
   const btn = document.querySelector(`#adminNav button[data-panel="${panelKey}"]`);
   if (btn) {
-    const icon = btn.querySelector('.nav-icon');
-    const text = (btn.textContent || '').replace(icon ? icon.textContent : '', '').trim();
+    const copy = btn.cloneNode(true);
+    copy.querySelectorAll('.nav-icon, .nav-count').forEach(n => n.remove());
+    const text = (copy.textContent || '').trim();
     if (text) return text;
   }
   return String(panelKey)
