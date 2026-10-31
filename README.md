@@ -495,7 +495,7 @@ Works with any standard SMTP provider — Gmail (using an [App Password](https:/
 
 ## 19. Design
 
-Palette pulled from the ACONSU crest: deep purple (`#5B2C82`) and rich plum (`#3A1B54`) as primary, a light lilac background, with the crest's flame rendered as a gold-to-red gradient accent on key call-to-action buttons and the homepage hero. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
+The app's colour is a deep navy (`#0B1A43`) with the crest's gold flame as the accent; see section 38 for how an admin changes it. Headings use Fraunces (serif, for warmth and gravity); body text uses Manrope (clean, easy to read on mobile).
 
 ## 20. Multi-chapter platform (Phase 2 of the ACONSU platform spec)
 
@@ -878,7 +878,19 @@ Anyone can give (decisions of 30 October: manual only, no Paystack or other paid
 
 `test/giving.js` (in `npm test`) and `test/give-ui.js` (a guest gives on a phone, Finance confirms, the receipt link updates).
 
-## 38. With no signal: the offline outbox
+## 38. The app's colour (navy by default, and an admin can change it)
+
+The whole palette comes from **one colour**. The default is the navy `#0B1A43`.
+
+- **Who chooses.** The national admin sets the union's colour in **Global Settings, App colour**. A chapter admin can set their own in **Chapter Settings, App colour**, or leave it on "Use the national colour". A chapter that chooses nothing follows the national one.
+- **How.** Pick one of the suggestions (midnight navy, royal blue, teal, forest green, burgundy, violet, charcoal) or type any `#RRGGBB`. The page recolours as soon as you choose, so you see it before saving.
+- **It cannot be made unreadable.** `lib/brand.js` turns the colour into every colour the stylesheet uses, light and dark, and checks each text-on-background pair against WCAG 2.2 AA (4.5:1). A colour too light to carry white button text is darkened until it can, and the picker says so. `test/brand.js` tries 5,760 colours across every hue and fails if any palette comes out below AA.
+- **How it reaches a page.** Every page loads `/theme.css` (served by `routes/brand.js`, checked with the server each time) right after `style.css`; `public/js/brand.js` asks for the visitor's chapter's version as early as it can. `style.css` also carries the default palette as a fallback, kept in step by `node scripts/sync-brand-css.js` (a test fails if it drifts).
+- **Where it does not reach.** Things that are files, not pages, cannot follow an admin's choice: the installed app's icon and splash screen, the Android launcher icon, the manifest's browser-bar colour, the marketing site in `site/` (it is a separate static site), and the how-to video. These are the default navy. Changing the default means `DEFAULT_BRAND` in `lib/brand.js`, `node scripts/sync-brand-css.js`, and the files below.
+- **The emblem.** `scripts/recolor-brand.js` recoloured the crest and every icon from purple to navy (the flame and torch are untouched). The originals are in `design/brand-original/`; copy one back over its file to undo. The how-to video and its poster were not remade and still show the old colour.
+- **Verse cards.** The first card background is now "App colour", drawn in the viewer's chapter's colour. A shared link that still says `style=purple` gets it.
+
+## 39. With no signal: the offline outbox
 
 Sunday check-in at the door, prayer requests and the contact form keep working without signal (BUILD_PROMPT_OPUS item 8). What cannot be sent is kept on the phone (IndexedDB, `public/js/outbox-core.js`), shown as **waiting to send** (a line at the foot of the page; a check-in shows it on the person's row), and sent by itself, **in the order it was made**, the moment the phone is back online: by the page (`public/js/outbox.js`), or by the service worker even if the page was closed (Background Sync, where the phone supports it).
 
@@ -889,14 +901,13 @@ Sunday check-in at the door, prayer requests and the contact form keep working w
 
 `test/outbox.js` (in `npm test`) and `test/outbox-ui.js` (a phone goes offline: a prayer request and three check-ins are kept, then sent once the phone is back; an answer lost on the way back still counts once). Not tested here: Background Sync with the page closed (needs a real phone).
 
-
-## 39. server.js, in smaller files
+## 40. server.js, in smaller files
 
 `server.js` is being taken apart into `routes/`, one area at a time, each moved **unchanged** (BUILD_PROMPT_OPUS item 9). Done so far: payments (`routes/giving.js`), a member's own account (`routes/member-account.js`: sign-up, sign-in, profile, photo, password, Download my data, Delete my account) and notifications (`routes/notifications.js`: the `createNotification` helper every part of the app uses, the feed, push subscriptions, the main admin's notification). Each file exports a `register...(app, deps)` function; what it still borrows from `server.js` (limiters, session helpers, upload settings) is passed in by name, so nothing is hidden.
 
 The smoke suite reads `server.js` and `routes/*` together, so a rule it checks is found wherever the route now lives. Moving a route changes nothing a person sees, which is what the full test run and the browser suites are for.
 
-## 40. Only the app's own scripts run
+## 41. Only the app's own scripts run
 
 The browser runs scripts from this app's own files and nothing else (`lib/securityHeaders.js`): no script written into a page runs, and no `onclick=` or other `on...=` attribute does either (`script-src-attr 'none'`). So text that slips into a page (a name, a prayer request, a post) can never run as code, even if a page forgot to escape it.
 

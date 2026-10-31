@@ -67,7 +67,7 @@ function renderTable() {
       </td>
       <td>
         <span class="badge" style="font-size:0.75rem;">${escapeHtml(KIND_LABELS[i.kind] || i.kind)}</span>
-        ${i.isNational || !i.chapterId ? '<span class="badge" style="background:#5B2C82; color:#fff; font-size:0.7rem; margin-top:2px;">National</span>' : ''}
+        ${i.isNational || !i.chapterId ? '<span class="badge" style="background:var(--brand-deep); color:#fff; font-size:0.7rem; margin-top:2px;">National</span>' : ''}
       </td>
       <td>
         <strong>${escapeHtml(i.title)}</strong>

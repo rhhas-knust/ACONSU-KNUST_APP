@@ -7,11 +7,11 @@
     "url": "https://aconsu-knust-app.onrender.com",
     "cleartext": false
   },
-  "backgroundColor": "#FDFBFF",
+  "backgroundColor": "#F9FAFD",
   "ios": {
     "contentInset": "automatic"
   },
   "android": {
-    "backgroundColor": "#FDFBFF"
+    "backgroundColor": "#F9FAFD"
   }
 }

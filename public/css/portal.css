@@ -5,7 +5,7 @@
    Loaded after style.css, which supplies the colour variables.
    ============================================================ */
 
-body { background: var(--lilac-light); font-family: var(--font-body); }
+body { background: var(--tint-light); font-family: var(--font-body); }
 
 /* ---------- login ---------- */
 .portal-login-wrap {
@@ -14,7 +14,7 @@ body { background: var(--lilac-light); font-family: var(--font-body); }
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: var(--lilac-light);
+  background: var(--tint-light);
 }
 .portal-login-card {
   background: var(--surface);
@@ -31,7 +31,7 @@ body { background: var(--lilac-light); font-family: var(--font-body); }
 /* ---------- shell ---------- */
 .portal-shell { display: none; }
 .portal-topbar {
-  background: var(--purple-rich);
+  background: var(--brand-rich);
   color: #fff;
   padding: 14px 24px;
   display: flex;
@@ -45,9 +45,9 @@ body { background: var(--lilac-light); font-family: var(--font-body); }
 .portal-topbar .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .portal-topbar .brand img { width: 36px; height: 36px; border-radius: 50%; flex: none; }
 .portal-topbar .brand b { font-family: var(--font-display); font-size: 1.02rem; display: block; }
-.portal-topbar .brand span { font-size: 0.74rem; color: #C9B3D8; letter-spacing: 0.04em; text-transform: uppercase; }
+.portal-topbar .brand span { font-size: 0.74rem; color: rgba(255,255,255,0.74); letter-spacing: 0.04em; text-transform: uppercase; }
 .portal-topbar .who { display: flex; align-items: center; gap: 12px; }
-.portal-topbar .who .name { font-size: 0.85rem; color: #E4CDF0; }
+.portal-topbar .who .name { font-size: 0.85rem; color: var(--tint-mid); }
 .portal-menu-toggle { display: none; background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
 
 .portal-layout { display: flex; min-height: calc(100vh - 64px); align-items: stretch; }
@@ -72,8 +72,8 @@ body { background: var(--lilac-light); font-family: var(--font-body); }
   border-left: 3px solid transparent;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.portal-side button:hover { background: var(--lilac-light); }
-.portal-side button.active { border-left-color: var(--flame-gold); color: var(--brand); background: var(--lilac-light); }
+.portal-side button:hover { background: var(--tint-light); }
+.portal-side button.active { border-left-color: var(--flame-gold); color: var(--brand); background: var(--tint-light); }
 .portal-side button .pill {
   margin-left: auto; background: var(--flame-red); color: #fff;
   border-radius: 4px; font-size: 0.68rem; padding: 1px 7px;
@@ -105,7 +105,7 @@ body { background: var(--lilac-light); font-family: var(--font-body); }
 .stat-card::after {
   content: ''; position: absolute; right: -30px; top: -30px;
   width: 90px; height: 90px; border-radius: 50%;
-  background: var(--lilac-light); opacity: 0.7; z-index: 0;
+  background: var(--tint-light); opacity: 0.7; z-index: 0;
 }
 .stat-card > * { position: relative; z-index: 1; }
 
@@ -122,7 +122,7 @@ table.portal-table th, table.portal-table td {
   font-size: 0.87rem; vertical-align: top;
 }
 table.portal-table th {
-  background: var(--lilac-light); text-transform: uppercase;
+  background: var(--tint-light); text-transform: uppercase;
   font-size: 0.7rem; letter-spacing: 0.06em; color: var(--brand); font-weight: 800;
 }
 table.portal-table tr:last-child td { border-bottom: none; }
@@ -131,11 +131,11 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 
 .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .row-actions button {
-  border: none; background: var(--lilac-mid); color: var(--brand-strong);
+  border: none; background: var(--tint-mid); color: var(--brand-strong);
   padding: 6px 11px; border-radius: 7px; font-size: 0.77rem; font-weight: 700;
   cursor: pointer; font-family: var(--font-body);
 }
-.row-actions button:hover { background: var(--purple-deep); color: #fff; }
+.row-actions button:hover { background: var(--brand-deep); color: #fff; }
 .row-actions button.danger { background: var(--bad-bg); color: var(--bad-ink); }
 .row-actions button.danger:hover { background: var(--flame-red); color: #fff; }
 
@@ -143,7 +143,7 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 .pill {
   display: inline-block; padding: 3px 10px; border-radius: 4px;
   font-size: 0.72rem; font-weight: 800; text-transform: capitalize;
-  background: var(--lilac-mid); color: var(--brand-strong); white-space: nowrap;
+  background: var(--tint-mid); color: var(--brand-strong); white-space: nowrap;
 }
 .pill.green, .pill.present, .pill.regular, .pill.income, .pill.active, .pill.sent, .pill.approved { background: var(--ok-bg); color: var(--ok-ink); }
 .pill.amber, .pill.excused, .pill.irregular, .pill.draft, .pill.scheduled, .pill.pending { background: var(--warn-bg); color: var(--warn-ink); }
@@ -161,22 +161,22 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
   border: 2px solid var(--line); border-radius: 12px; padding: 12px 14px;
   cursor: pointer; background: var(--surface); transition: border-color 0.15s ease, background 0.15s ease;
 }
-.choice:hover { border-color: var(--lilac-mid); }
+.choice:hover { border-color: var(--tint-mid); }
 .choice input { margin-top: 3px; width: auto; flex: none; }
-.choice.selected { border-color: var(--brand); background: var(--lilac-light); }
+.choice.selected { border-color: var(--brand); background: var(--tint-light); }
 .choice strong { display: block; font-size: 0.88rem; }
 .choice small { color: var(--ink-soft); font-size: 0.78rem; }
 
 /* ---------- planned vs actual bars ---------- */
-.meter { height: 9px; border-radius: 999px; background: var(--lilac-mid); overflow: hidden; margin-top: 6px; min-width: 90px; }
-.meter span { display: block; height: 100%; border-radius: 4px; background: var(--purple-deep); }
+.meter { height: 9px; border-radius: 999px; background: var(--tint-mid); overflow: hidden; margin-top: 6px; min-width: 90px; }
+.meter span { display: block; height: 100%; border-radius: 4px; background: var(--brand-deep); }
 .meter span.over { background: var(--flame-red); }
 .meter span.good { background: #2E7D4F; }
 
 /* ---------- simple bar chart ---------- */
 .bar-chart { display: flex; align-items: flex-end; gap: 10px; height: 160px; padding-top: 10px; }
 .bar-chart .bar-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; min-width: 0; }
-.bar-chart .bar { width: 100%; max-width: 46px; border-radius: 7px 7px 0 0; background: var(--purple-deep); min-height: 3px; }
+.bar-chart .bar { width: 100%; max-width: 46px; border-radius: 7px 7px 0 0; background: var(--brand-deep); min-height: 3px; }
 .bar-chart .bar.alt { background: var(--flame-gold); }
 .bar-chart .bar-label { font-size: 0.7rem; color: var(--ink-faint); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .bar-chart .bar-value { font-size: 0.72rem; font-weight: 800; color: var(--brand); }
@@ -203,14 +203,14 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 .mark-btn.on[data-status="absent"] { background: var(--bad-bg); border-color: var(--bad-ink); color: var(--flame-red); }
 .avatar-chip {
   width: 38px; height: 38px; border-radius: 50%; flex: none; overflow: hidden;
-  background: var(--lilac-mid); display: flex; align-items: center; justify-content: center;
+  background: var(--tint-mid); display: flex; align-items: center; justify-content: center;
   font-weight: 800; color: var(--brand); font-size: 0.9rem;
 }
 .avatar-chip img { width: 100%; height: 100%; object-fit: cover; }
 
 /* ---------- modal ---------- */
 .modal-backdrop {
-  display: none; position: fixed; inset: 0; background: rgba(36, 21, 48, 0.55);
+  display: none; position: fixed; inset: 0; background: rgba(var(--brand-ink-rgb), 0.55);
   align-items: center; justify-content: center; padding: 20px; z-index: 200;
 }
 .modal-backdrop.open { display: flex; }
@@ -251,7 +251,7 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 .of-steps { list-style: none; display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); padding: 0; margin: 0 0 22px; }
 .of-steps li { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: var(--surface); color: var(--ink-soft); font-size: 0.88rem; }
 .of-steps li.done { background: var(--ok-bg); color: var(--ok-ink); border-color: var(--ok-ink); }
-.of-steps li.now { border: 2px solid var(--brand); color: var(--ink); font-weight: 700; background: var(--lilac-light); }
+.of-steps li.now { border: 2px solid var(--brand); color: var(--ink); font-weight: 700; background: var(--tint-light); }
 .of-step-n { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; margin-bottom: 2px; }
 
 .of-notice { border: 1px solid var(--line); border-left-width: 5px; border-radius: 12px; padding: 12px 16px; margin: 0 0 18px; background: var(--surface); }
@@ -304,7 +304,7 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 .of-dl { display: grid; grid-template-columns: minmax(120px, 200px) 1fr; gap: 6px 16px; margin: 0 0 8px; }
 .of-dl dt { font-weight: 700; }
 .of-dl dd { margin: 0; }
-.of-item { border-left: 3px solid var(--lilac-mid); padding-left: 14px; margin: 0 0 12px; }
+.of-item { border-left: 3px solid var(--tint-mid); padding-left: 14px; margin: 0 0 12px; }
 .of-item p { margin: 0 0 4px; }
 .of-decision { color: var(--brand-strong); }
 .of-past { border: 1px solid var(--line); border-radius: 12px; padding: 4px 14px; margin-bottom: 10px; background: var(--surface); }
@@ -314,7 +314,7 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 
 /* the thread between the two secretaries */
 .of-thread { display: grid; gap: 10px; margin-bottom: 14px; }
-.of-comment { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: var(--lilac-light); }
+.of-comment { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: var(--tint-light); }
 .of-comment p { margin: 0 0 4px; }
 
 .of-answer { padding: 4px 0 12px; }
@@ -347,7 +347,7 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
   width: 100%; min-height: 54px; font-size: 1.15rem; padding: 12px 16px;
   border: 2px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
 }
-.ci-search:focus { border-color: var(--brand); outline: 3px solid var(--lilac-mid); outline-offset: 1px; }
+.ci-search:focus { border-color: var(--brand); outline: 3px solid var(--tint-mid); outline-offset: 1px; }
 /* minmax(0, 1fr) and min-width: 0 so a long line can never widen the list past the screen */
 .ci-results { list-style: none; padding: 0; margin: 10px 0 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .ci-results li { min-width: 0; }
@@ -364,7 +364,7 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
 .ci-person.is-in { cursor: default; border-color: var(--ok-ink); background: var(--ok-bg); }
 .ci-person.is-in .ci-action { background: transparent; color: var(--ok-ink); }
 .ci-new-line { margin: 12px 0 0; color: var(--ink-soft); }
-.ci-new { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 12px; background: var(--lilac-light); }
+.ci-new { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 12px; background: var(--tint-light); }
 .ci-new h3 { margin: 0 0 10px; }
 .ci-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; }
 .ci-list li { display: flex; align-items: center; gap: 10px; min-height: 44px; border-bottom: 1px solid var(--line); }

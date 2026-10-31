@@ -16,40 +16,42 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#5B2C82">
+<meta name="theme-color" content="#0B1A43">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/theme.css" id="brandTheme">
+<script src="/js/brand.js"></script>
 <style>
-  .profile-photo { width: 96px; height: 96px; border-radius: 50%; overflow: hidden; border: 3px solid var(--lilac-mid); background: var(--lilac-light); display:flex; align-items:center; justify-content:center; margin: 0 auto 12px; }
+  .profile-photo { width: 96px; height: 96px; border-radius: 50%; overflow: hidden; border: 3px solid var(--tint-mid); background: var(--tint-light); display:flex; align-items:center; justify-content:center; margin: 0 auto 12px; }
   .profile-photo img { width:100%; height:100%; object-fit:cover; }
   .profile-photo .initial { font-family: var(--font-display); font-size: 1.8rem; color: var(--brand); }
   .profile-tabs { display:flex; gap:10px; justify-content:center; margin-bottom:24px; flex-wrap:wrap; }
   .profile-tabs button { background:none; border:2px solid var(--line); border-radius:6px; padding:8px 18px; font-weight:700; font-size:0.85rem; cursor:pointer; color:var(--ink); }
-  .profile-tabs button.active { border-color: var(--brand); background: var(--purple-deep); color: #fff; }
+  .profile-tabs button.active { border-color: var(--brand); background: var(--brand-deep); color: #fff; }
 
   /* ---------- redesigned profile header ---------- */
   .profile-top-row { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:20px; }
   .profile-name h1 { font-size:1.7rem; margin-bottom:4px; }
   .profile-avatar-wrap { position:relative; flex:none; }
-  .profile-avatar { width:76px; height:76px; border-radius:50%; overflow:hidden; border:3px solid var(--lilac-mid); background:var(--lilac-light); display:flex; align-items:center; justify-content:center; }
+  .profile-avatar { width:76px; height:76px; border-radius:50%; overflow:hidden; border:3px solid var(--tint-mid); background:var(--tint-light); display:flex; align-items:center; justify-content:center; }
   .profile-avatar img { width:100%; height:100%; object-fit:cover; }
   .profile-avatar .initial { font-family:var(--font-display); font-size:1.6rem; color:var(--brand); }
-  .avatar-camera-btn { position:absolute; bottom:-2px; right:-2px; width:28px; height:28px; border-radius:50%; background:var(--purple-deep); color:#fff; border:2px solid #fff; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.85rem; }
+  .avatar-camera-btn { position:absolute; bottom:-2px; right:-2px; width:28px; height:28px; border-radius:50%; background:var(--brand-deep); color:#fff; border:2px solid #fff; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.85rem; }
   .quick-pills { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:22px; }
   /* Two to a row on a phone (four words do not fit across 390px), one row of four where there is room. */
   .quick-pill { flex:1 1 calc(50% - 10px); min-width:0; box-sizing:border-box; display:flex; align-items:center; justify-content:center; min-height:48px; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 8px; text-align:center; text-decoration:none; color:var(--ink); font-size:0.78rem; font-weight:700; }
   @media (min-width: 640px) { .quick-pill { flex-basis: 0; } }
   .quick-pill .qp-icon { font-size:1.3rem; display:block; margin-bottom:4px; }
-  .streak-card { background:var(--purple-rich); border-radius:var(--radius); padding:20px; color:#fff; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
+  .streak-card { background:var(--brand-rich); border-radius:var(--radius); padding:20px; color:#fff; display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; }
   .streak-card .streak-num { font-family:var(--font-display); font-size:2rem; font-weight:700; }
   .badges-section h3 { margin-bottom:14px; }
   .badges-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px,1fr)); gap:14px; margin-bottom:28px; }
   .badge-item { text-align:center; }
-  .badge-circle { width:56px; height:56px; border-radius:50%; background:var(--lilac-light); color:var(--brand); display:flex; align-items:center; justify-content:center; margin:0 auto 6px; opacity:0.5; }
+  .badge-circle { width:56px; height:56px; border-radius:50%; background:var(--tint-light); color:var(--brand); display:flex; align-items:center; justify-content:center; margin:0 auto 6px; opacity:0.5; }
   .badge-circle svg { width:26px; height:26px; }
   .badge-circle.earned { opacity:1; background:var(--flame-gold); color:var(--ink); }
   .badge-label { font-size:0.68rem; font-weight:700; color:var(--ink-soft); line-height:1.2; }

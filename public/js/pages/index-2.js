@@ -78,7 +78,6 @@
     const hour = new Date().getHours();
     const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
     const firstName = member ? member.name.split(' ')[0] : '';
-    const unread = await getUnreadNotificationCount();
 
     let streakHtml = '';
     if (member) {
@@ -94,10 +93,6 @@
       <h2 style="margin-bottom:0;">${greeting}${firstName ? ', ' + escapeHtml(firstName) : ''}</h2>
       <div class="greeting-icons">
         ${streakHtml}
-        <a href="/notifications.html" class="bell-link" style="position:relative; color:var(--brand);" aria-label="Notifications">
-          ${svgIcon(ICON_BELL)}
-          ${unread > 0 ? `<span style="position:absolute; top:-3px; right:-3px; width:9px; height:9px; border-radius:50%; background:var(--flame-red); border:2px solid var(--paper);"></span>` : ''}
-        </a>
       </div>
     `;
   } catch (e) { /* non-critical */ }
@@ -234,7 +229,7 @@
           </div>
           <div class="highlight-body">
             <h4 style="margin:0 0 4px; font-size:0.95rem; color:var(--brand);">${escapeHtml(h.title)}</h4>
-            <p style="margin:0; font-size:0.84rem; color:#6b527b; line-height:1.4;">${escapeHtml(h.summary || '')}</p>
+            <p style="margin:0; font-size:0.84rem; color:var(--ink-faint); line-height:1.4;">${escapeHtml(h.summary || '')}</p>
           </div>
         </a>
       `).join('');
@@ -304,7 +299,7 @@
         <a href="/group.html?id=${g.id}" class="card" style="text-decoration:none; color:inherit;">
           <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
             <h3 style="margin:0; font-size:1.1rem; color:var(--brand);">${escapeHtml(g.name)}</h3>
-            <span class="badge" style="background:var(--lilac-light); color:var(--brand);">${escapeHtml(g.type || 'Fellowship')}</span>
+            <span class="badge" style="background:var(--tint-light); color:var(--brand);">${escapeHtml(g.type || 'Fellowship')}</span>
           </div>
           <p style="color:var(--ink-soft); font-size:0.9rem; margin-bottom:12px;">${escapeHtml(g.description || 'Join this group for fellowship and spiritual growth.')}</p>
           <div style="font-size:0.82rem; color:var(--ink-faint); display:flex; gap:12px; flex-wrap:wrap;">

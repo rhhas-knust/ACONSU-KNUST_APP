@@ -24,7 +24,7 @@ The splash assets are **seed 860** with these parameters:
 | Trail Weight  | 1.0    |
 | Handover Glow | 0.45   |
 
-Colours are ACONSU's own: `#241530` ground, `#F6EEFB` lineage, `#E8971E`
+Colours are ACONSU's own: `#090D16` ground, `#F6EEFB` lineage, `#E8971E`
 handover. The same seed always reproduces the same image, so those values are
 enough to get the exact artwork back.
 

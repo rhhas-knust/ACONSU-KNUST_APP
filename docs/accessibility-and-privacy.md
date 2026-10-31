@@ -13,7 +13,7 @@ How it is checked:
 
 - **axe-core** (WCAG 2.0, 2.1, 2.2 A and AA, plus best practice) in a real browser, over every public page, the
   member pages, and the finance, shepherding, chapter admin, admin and national portals; phone and desktop; light and dark.
-- **Colour pairs**: every text colour and its background is chosen at 4.5:1 or better; status colours come in
+- **Colour pairs**: every text colour and its background is chosen at 4.5:1 or better, and the palette an admin's chosen colour produces is checked the same way (`lib/brand.js`, `test/brand.js`); status colours come in
   ink and background pairs (`--ok-ink` on `--ok-bg`, and so on).
 - **Keyboard**: a skip link on every page, visible focus ring (`--focus`, 3px), tables that scroll can be focused,
   every control has a name, field errors move focus to the field.

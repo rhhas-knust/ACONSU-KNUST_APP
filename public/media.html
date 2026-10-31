@@ -16,16 +16,18 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#5B2C82">
+<meta name="theme-color" content="#0B1A43">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/theme.css" id="brandTheme">
+<script src="/js/brand.js"></script>
 <style>
-  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--ink); }
-  .search-focus-card { border:2px solid var(--purple-deep); box-shadow:0 10px 24px rgba(91,44,130,0.12); }
+  .search-context { max-width:760px; margin:0 auto 18px; padding:14px 16px; border-radius:14px; background:rgba(var(--brand-rgb), 0.06); color:var(--ink); }
+  .search-focus-card { border:2px solid var(--brand-deep); box-shadow:0 10px 24px rgba(var(--brand-rgb), 0.12); }
 </style>
 </head>
 <body class="has-side-rail">

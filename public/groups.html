@@ -16,17 +16,19 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#5B2C82">
+<meta name="theme-color" content="#0B1A43">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/theme.css" id="brandTheme">
+<script src="/js/brand.js"></script>
 <style>
   .group-type-filter { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:24px; }
-  .group-type-filter button { border:2px solid var(--line); background:var(--surface); color:var(--ink-soft); padding:7px 16px; border-radius:6px; font-weight:700; font-size:0.82rem; cursor:pointer; }
-  .group-type-filter button.active { border-color:var(--brand); background:var(--purple-deep); color:#fff; }
+  .group-type-filter button { border:2px solid var(--line); background:var(--surface); color:var(--ink-soft); padding:7px 16px; min-height:44px; border-radius:6px; font-weight:700; font-size:0.82rem; cursor:pointer; }
+  .group-type-filter button.active { border-color:var(--brand); background:var(--brand-deep); color:#fff; }
   .group-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:14px; }
   .group-card h3 { margin:0 0 4px; }
   .group-card .meta { font-size:0.82rem; color:var(--ink-faint); margin-bottom:8px; }

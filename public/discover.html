@@ -16,13 +16,15 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#5B2C82">
+<meta name="theme-color" content="#0B1A43">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/theme.css" id="brandTheme">
+<script src="/js/brand.js"></script>
 <style>
   .discover-search { width:100%; max-width:100%; box-sizing:border-box; padding:14px 18px; border-radius:6px; border:1.5px solid var(--line); font-family:var(--font-body); font-size:0.95rem; background:var(--surface); color:var(--ink); margin-bottom:22px; }
   .discover-search::placeholder { color:var(--ink-faint); opacity:1; }
@@ -31,13 +33,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   /* minmax(0, 1fr), not 1fr: a column that cannot go below the width of its longest word pushed the tiles past the screen edge on a phone. */
   .discover-tiles { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-bottom:28px; }
   .discover-tile { min-width:0; overflow-wrap:anywhere; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:20px 16px; text-decoration:none; color:var(--ink); display:flex; align-items:center; gap:12px; font-weight:700; }
-  .discover-tile .dt-icon { width:40px; height:40px; border-radius:12px; background:var(--purple-deep); display:flex; align-items:center; justify-content:center; color:#fff; flex:none; }
+  .discover-tile .dt-icon { width:40px; height:40px; border-radius:12px; background:var(--brand-deep); display:flex; align-items:center; justify-content:center; color:#fff; flex:none; }
   .discover-tile .dt-icon svg { width:20px; height:20px; }
-  .discover-summary { margin-bottom:18px; padding:14px 16px; border-radius:14px; background:rgba(91,44,130,0.06); color:var(--ink); }
+  .discover-summary { margin-bottom:18px; padding:14px 16px; border-radius:14px; background:rgba(var(--brand-rgb), 0.06); color:var(--ink); }
   .discover-group { margin-bottom:20px; }
   .discover-group h3 { margin:0 0 10px; font-size:1rem; }
   .discover-result { display:block; padding:14px 4px; border-bottom:1px solid var(--line); text-decoration:none; color:inherit; }
-  .discover-result:hover { background:rgba(91,44,130,0.03); }
+  .discover-result:hover { background:rgba(var(--brand-rgb), 0.03); }
   .discover-result .dr-type { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--flame-gold); font-weight:800; }
 </style>
 </head>

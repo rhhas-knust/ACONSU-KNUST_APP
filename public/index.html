@@ -17,7 +17,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#5B2C82">
+<meta name="theme-color" content="#0B1A43">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,21 +25,21 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <style>
   /* ---------- opening the app ----------
-     The system draws its own splash first: a purple screen (manifest
+     The system draws its own splash first: a navy screen (manifest
      background_color) with the app icon. This picks that exact screen up and
      carries it, so the handoff is invisible and the logo appears to sit still
      and then spring. One motion rather than two screens.
 
-     It lives here, above the stylesheet link, so the purple is painted on the
+     It lives here, above the stylesheet link, so the navy is painted on the
      first frame. It also removes itself in CSS rather than in script, so a
-     failed or slow main.js can never leave someone staring at a purple wall. */
+     failed or slow main.js can never leave someone staring at a blank wall. */
   #appSplash {
     position: fixed; inset: 0; z-index: 9999;
-    background: #5B2C82;
+    background: #0B1A43;
     display: flex; align-items: center; justify-content: center;
     animation: splashOut 200ms ease-out 400ms forwards;
   }
-  /* The emblem's ring text is purple, so on a purple ground it would all but
+  /* The emblem's ring text is navy, so on a navy ground it would all but
      disappear. A soft glow behind it lifts the dark strokes without giving the
      mark an edge to sit on. Light behind the flame rather than a tile under
      it. Drawn here rather than baked into the file so it scales with the art. */
@@ -59,7 +59,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
   }
 
 .month-theme { border-radius:20px; padding:28px 26px; color:#fff; text-align:center;
-  background:var(--purple-rich); }
+  background:var(--brand-rich); }
 .month-theme .eyebrow { color:var(--flame-gold); margin-bottom:8px; }
 .month-theme h2 { color:#fff; margin:0 0 8px; }
 .month-theme .theme-scripture { color:#FFD79A; font-weight:800; margin:0 0 10px; }
@@ -80,7 +80,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 .alumni-teaser { display:flex; align-items:center; gap:16px; padding:14px 18px; border-radius:16px; text-decoration:none; color:inherit;
   background:var(--surface); border:1px solid var(--line); box-shadow:var(--shadow); }
 .alumni-teaser:hover { border-color:var(--brand); }
-.at-photo { width:56px; height:56px; border-radius:50%; overflow:hidden; flex:none; background:var(--lilac-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--brand); }
+.at-photo { width:56px; height:56px; border-radius:50%; overflow:hidden; flex:none; background:var(--tint-mid); display:flex; align-items:center; justify-content:center; font-weight:800; color:var(--brand); }
 .at-photo img { width:100%; height:100%; object-fit:cover; object-position:50% 20%; }
 .at-body { display:flex; flex-direction:column; min-width:0; }
 .at-eyebrow { font-size:0.72rem; font-weight:800; letter-spacing:0.12em; text-transform:uppercase; color:var(--flame-gold); }
@@ -90,6 +90,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </style>
 <script src="/js/pages/index.js"></script>
 <link rel="stylesheet" href="/css/style.css?v=8">
+<link rel="stylesheet" href="/theme.css" id="brandTheme">
+<script src="/js/brand.js"></script>
 <style>
   .live-stream-banner {
     background: #A12B20;
@@ -109,7 +111,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     transition: border-color 150ms ease-out;
   }
   @media (hover: hover) and (pointer: fine) { .highlight-card:hover { border-color: var(--brand); } }
-  .highlight-thumb { height: 160px; background: var(--lilac-light); overflow: hidden; position: relative; }
+  .highlight-thumb { height: 160px; background: var(--tint-light); overflow: hidden; position: relative; }
   .highlight-thumb img { width: 100%; height: 100%; object-fit: cover; }
   .highlight-body { padding: 14px 16px; }
 </style>

@@ -211,7 +211,7 @@ async function renderAttendance(el) {
                 <td class="num"><strong>${s.total}</strong></td>
                 ${PORTAL.canEdit ? `<td class="row-actions">
                   <button data-open-register="${s.date}" data-service="${s.serviceType}">Open</button>
-                  <a href="/api/shepherd/attendance/${s.date}/report.pdf?serviceType=${s.serviceType}" target="_blank" rel="noopener" style="border:none; background:var(--lilac-mid); color:var(--purple-rich); padding:6px 11px; border-radius:7px; font-size:0.77rem; font-weight:700; text-decoration:none;">PDF</a>
+                  <a href="/api/shepherd/attendance/${s.date}/report.pdf?serviceType=${s.serviceType}" target="_blank" rel="noopener" style="border:none; background:var(--tint-mid); color:var(--brand-strong); padding:6px 11px; border-radius:7px; font-size:0.77rem; font-weight:700; text-decoration:none;">PDF</a>
                   <button class="danger" data-delete-register="${s.id}">Delete</button>
                 </td>` : ''}
               </tr>

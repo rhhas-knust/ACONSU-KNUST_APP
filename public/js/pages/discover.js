@@ -128,7 +128,7 @@ function renderSearchResults(query, results) {
             <div class="dr-type">${escapeHtml(r.typeLabel || r.type || 'Result')}</div>
             <strong>${escapeHtml(r.title)}</strong>
             ${r.subtitle ? `<div style="font-size:0.85rem; color:var(--ink-soft);">${escapeHtml(r.subtitle)}</div>` : ''}
-            ${r.description ? `<div style="font-size:0.84rem; color:#7a6a87; margin-top:3px;">${escapeHtml(r.description).slice(0, 140)}</div>` : ''}
+            ${r.description ? `<div style="font-size:0.84rem; color:var(--ink-faint); margin-top:3px;">${escapeHtml(r.description).slice(0, 140)}</div>` : ''}
           </a>
         `).join('')}
       </section>

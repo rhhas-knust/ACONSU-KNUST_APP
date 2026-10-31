@@ -71,7 +71,7 @@ function renderAbout(body) {
 
 function openEditGroupForm() {
   const backdrop = document.createElement('div');
-  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;';
+  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(var(--brand-ink-rgb), 0.55); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;';
   backdrop.innerHTML = `
     <form class="form-card" id="editGroupForm" style="max-width:420px; width:100%; max-height:88vh; overflow-y:auto;">
       <h3>Edit Group</h3>
@@ -192,7 +192,7 @@ async function renderMeetings(body) {
 
 function openQuickAttendanceForm(body) {
   const backdrop = document.createElement('div');
-  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:300; display:flex; align-items:flex-end; justify-content:center; padding:0;';
+  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(var(--brand-ink-rgb), 0.55); z-index:300; display:flex; align-items:flex-end; justify-content:center; padding:0;';
   backdrop.innerHTML = `
     <form class="form-card" id="quickAttendanceForm" style="max-width:700px; width:100%; border-radius:16px 16px 0 0; max-height:85vh; overflow-y:auto; margin:0;">
       <h3>3-Tap Attendance</h3>
@@ -248,7 +248,7 @@ function openQuickAttendanceForm(body) {
 
 function openLogMeetingForm(body) {
   const backdrop = document.createElement('div');
-  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;';
+  backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(var(--brand-ink-rgb), 0.55); z-index:300; display:flex; align-items:center; justify-content:center; padding:20px;';
   backdrop.innerHTML = `
     <form class="form-card" id="meetingForm" style="max-width:420px; width:100%; max-height:88vh; overflow-y:auto;">
       <h3>Log a Meeting</h3>

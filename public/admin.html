@@ -16,13 +16,15 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#5B2C82">
+<meta name="theme-color" content="#0B1A43">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/theme.css" id="brandTheme">
+<script src="/js/brand.js"></script>
 <link rel="stylesheet" href="/css/admin.css">
 <link rel="stylesheet" href="/css/church-life.css">
 </head>
@@ -131,7 +133,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
           <button data-panel="reports" data-scope="chapter"><span class="nav-icon"></span> Reports &amp; PDF Export</button>
           <button data-panel="askNational" id="navAskNationalBtn" style="display:none;"><span class="nav-icon"></span> Ask National for Help</button>
           <button data-panel="chapterRequests" id="navChapterRequestsBtn" style="display:none;"><span class="nav-icon"></span> Chapter Requests</button>
-          <button type="button" id="navNationalBtn" data-href="/national.html" style="color:var(--brand); background:var(--lilac-light); font-weight:800; display:none;"><span class="nav-icon"></span> National Portal</button>
+          <button type="button" id="navNationalBtn" data-href="/national.html" style="color:var(--brand); background:var(--tint-light); font-weight:800; display:none;"><span class="nav-icon"></span> National Portal</button>
           <button data-panel="settings" id="navGlobalSettingsBtn" style="display:none;"><span class="nav-icon"></span> Global Settings</button>
         </div>
       </div>
@@ -194,6 +196,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <script src="/js/church-life-ui.js"></script>
 <script src="/js/leader-chapter.js"></script>
 <script src="/js/chapter-requests.js"></script>
+<script src="/js/brand-picker.js"></script>
 <script src="/js/admin.js"></script>
 </body>
 </html>

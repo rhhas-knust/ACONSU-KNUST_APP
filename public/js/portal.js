@@ -127,6 +127,7 @@ async function refreshPortalSession() {
     PORTAL.user = data.staff;
     PORTAL.isAdmin = data.isAdmin;
     PORTAL.chapter = data.chapter;
+    if (window.ACONSU_BRAND) window.ACONSU_BRAND.use(data.chapter ? data.chapter.id : '');
     const access = (data.access && data.access[PORTAL.role]) || { view: false, edit: false };
     PORTAL.canEdit = access.edit;
     return access.view;
