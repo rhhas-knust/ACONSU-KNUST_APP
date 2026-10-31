@@ -419,7 +419,7 @@ function withToday(panels) {
       menuId: 'portalNav',
       allTools: () => {
         const nav = document.getElementById('portalNav');
-        nav.classList.add('open');
+        setPortalMenu(true);
         const first = nav.querySelector('button:not([data-panel="today"])');
         nav.scrollIntoView({ block: 'start' });
         if (first) first.focus();
@@ -521,9 +521,10 @@ async function initPortal(config) {
   menuToggle.setAttribute('aria-expanded', 'false');
   menuToggle.addEventListener('click', () => setPortalMenu(!document.getElementById('portalNav').classList.contains('open')));
   // A tap anywhere else, or Escape, closes it, as a menu over the page should.
+  // (A button that opens it, such as Today's "All tools", controls it too.)
   document.addEventListener('click', (e) => {
     const nav = document.getElementById('portalNav');
-    if (nav.classList.contains('open') && !nav.contains(e.target) && !menuToggle.contains(e.target)) setPortalMenu(false);
+    if (nav.classList.contains('open') && !nav.contains(e.target) && !e.target.closest('[aria-controls="portalNav"]')) setPortalMenu(false);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.getElementById('portalNav').classList.contains('open')) { setPortalMenu(false); menuToggle.focus(); }
