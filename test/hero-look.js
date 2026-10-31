@@ -118,6 +118,21 @@ function check(label, cond, detail) {
   r = await call('admin', 'GET', '/api/admin/image-placements?chapterId=knust');
   check('the Media Library is told each header\'s current look', r.data.homeHeader && r.data.homeHeader.fileId && (r.data.heroPages.find(p => p.id === 'bible') || {}).textColor === '#FFFFFF', r.data.homeHeader);
 
+  console.log('\n== the banner in Chapter Settings ==');
+  const banner = (extra) => {
+    const fd = new FormData();
+    fd.append('image', new Blob([png], { type: 'image/png' }), 'b.png');
+    Object.entries(extra || {}).forEach(([k, v]) => fd.append(k, v));
+    return call('admin', 'POST', '/api/admin/chapter-settings/banner?chapterId=knust', fd, null, true);
+  };
+  r = await banner({ textColor: '#ffd700', veil: '50' });
+  check('the Chapter Settings banner upload keeps the colour and veil chosen with it', r.status === 200 && r.data.item.homeHeader && r.data.item.homeHeader.textColor === '#FFD700' && r.data.item.homeHeader.veil === 50, r.data);
+  r = await banner({});
+  check('an upload that says nothing about colour leaves the chosen look as it was', r.status === 200 && r.data.item.homeHeader.textColor === '#FFD700', r.data.item && r.data.item.homeHeader);
+  const adminSrc = read('public/js/admin.js');
+  check('Chapter Settings previews the banner with the words over it, and can save the colour on its own',
+    /chapterBannerLook/.test(adminSrc) && /saveChapterBannerLookBtn/.test(adminSrc) && /Nothing is uploaded until you press Upload New Banner/.test(adminSrc));
+
   console.log(failures ? `\n${failures} FAILURES` : '\nall hero-look checks passed');
   process.exit(failures ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

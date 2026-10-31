@@ -3002,19 +3002,19 @@ async function renderChapterSettings() {
         </div>
       </div>
 
-      <div class="portal-card" style="margin-bottom:24px; background:#fff; border-radius:12px; padding:20px; border:1px solid var(--line);">
-        <h3 style="margin-bottom:8px;">Chapter Homepage Banner</h3>
-        <p class="hint">Upload a high-resolution hero photo for your chapter's homepage. It will be compressed and displayed across the app and web.</p>
-        <div style="display:flex; gap:20px; align-items:center; flex-wrap:wrap; margin-top:14px;">
-          <div style="width:260px; height:120px; border-radius:10px; overflow:hidden; background:#eee; display:flex; align-items:center; justify-content:center; border:1px solid var(--line);">
-            ${data.homeHeaderImageFileId ? `<img src="/api/files/${data.homeHeaderImageFileId}" style="width:100%; height:100%; object-fit:cover;" alt="Chapter Banner">` : '<span style="color:#888; font-size:0.85rem;">No banner set</span>'}
-          </div>
-          <div>
-            <input type="file" id="chapterBannerFile" accept="image/*" style="margin-bottom:10px; display:block;">
-            <button type="button" class="btn btn-outline btn-sm" id="uploadChapterBannerBtn">Upload New Banner</button>
-            <span id="bannerUploadMsg" style="margin-left:10px; font-size:0.85rem; font-weight:700;"></span>
-          </div>
+      <div class="portal-card" style="margin-bottom:24px; background:var(--surface); border-radius:12px; padding:20px; border:1px solid var(--line);">
+        <h3 style="margin-bottom:8px;" id="chapterBannerLabel">Chapter Homepage Banner</h3>
+        <p class="hint">The picture across the top of your chapter's home page. Choose a picture to see it with the heading over it before you upload, and choose the colour of the words.</p>
+        <div class="field" style="margin-top:14px;">
+          <label for="chapterBannerFile">New banner picture</label>
+          <input type="file" id="chapterBannerFile" accept="image/*">
         </div>
+        <div id="chapterBannerLook" role="group" aria-labelledby="chapterBannerLabel"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;">
+          <button type="button" class="btn btn-primary btn-sm" id="uploadChapterBannerBtn">Upload New Banner</button>
+          ${data.homeHeaderImageFileId ? '<button type="button" class="btn btn-outline btn-sm" id="saveChapterBannerLookBtn">Save text colour only</button>' : ''}
+        </div>
+        <p id="bannerUploadMsg" role="status" style="margin:10px 0 0; font-size:0.9rem; font-weight:700;"></p>
       </div>
 
       <div class="portal-card" style="margin-bottom:24px; background:var(--surface); border-radius:12px; padding:20px; border:1px solid var(--line);">
@@ -3290,30 +3290,62 @@ async function renderChapterSettings() {
       }
     }
 
-    // Banner upload handler
+    // Banner: preview with the words over it, the colour of the words, then upload.
+    const bannerSaved = data.homeHeader || {};
+    const bannerLook = await HeroLook.mount(document.getElementById('chapterBannerLook'), {
+      textColor: bannerSaved.textColor || '', veil: bannerSaved.veil === undefined ? null : bannerSaved.veil
+    });
+    let bannerObjectUrl = '';
+    if (bannerLook && data.homeHeaderImageFileId) await bannerLook.setImage(`/api/files/${encodeURIComponent(data.homeHeaderImageFileId)}`);
+    const bannerMsg = (text, kind) => {
+      const m = document.getElementById('bannerUploadMsg');
+      m.textContent = text;
+      m.style.color = kind === 'error' ? 'var(--bad-ink)' : kind === 'ok' ? 'var(--ok-ink)' : 'var(--ink-soft)';
+    };
+    const bannerLookIsReadable = (verb) => {
+      if (!bannerLook) return true;
+      if (!bannerLook.ready()) { bannerMsg('The preview is still measuring the picture. Try again in a moment.', 'error'); return false; }
+      const v = bannerLook.value();
+      return v.ok || window.confirm(`With these choices the words would be hard to read (contrast ${v.ratio}:1, visitors need 4.5:1). ${verb} anyway?`);
+    };
+    document.getElementById('chapterBannerFile').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (bannerObjectUrl) URL.revokeObjectURL(bannerObjectUrl);
+      bannerObjectUrl = file && /^image\//.test(file.type) ? URL.createObjectURL(file) : '';
+      if (bannerLook) await bannerLook.setImage(bannerObjectUrl || (data.homeHeaderImageFileId ? `/api/files/${encodeURIComponent(data.homeHeaderImageFileId)}` : ''));
+      bannerMsg(file ? 'This is a preview. Nothing is uploaded until you press Upload New Banner.' : '');
+    });
     document.getElementById('uploadChapterBannerBtn').addEventListener('click', async () => {
-      const fileInput = document.getElementById('chapterBannerFile');
-      const file = fileInput.files[0];
-      const msg = document.getElementById('bannerUploadMsg');
-      if (!file) {
-        msg.textContent = 'Please choose an image file first.';
-        msg.style.color = 'var(--bad-ink)';
-        return;
-      }
+      const file = document.getElementById('chapterBannerFile').files[0];
+      if (!file) { bannerMsg('Please choose an image file first.', 'error'); return; }
+      if (!bannerLookIsReadable('Upload')) return;
       const formData = new FormData();
       formData.append('image', file);
-      msg.textContent = 'Uploading banner...';
-      msg.style.color = 'var(--brand-deep)';
+      if (bannerLook) {
+        const v = bannerLook.value();
+        formData.append('textColor', v.textColor || '');
+        formData.append('veil', v.veil === null ? '' : String(v.veil));
+      }
+      bannerMsg('Uploading banner...');
       try {
-        await fetchJSON('/api/admin/chapter-settings/banner', {
-          method: 'POST',
-          body: formData
-        });
+        await fetchJSON('/api/admin/chapter-settings/banner', { method: 'POST', body: formData });
         showToast('Banner uploaded successfully.', 'success');
         renderChapterSettings();
       } catch (err) {
-        msg.textContent = err.message || 'Upload failed.';
-        msg.style.color = 'var(--bad-ink)';
+        bannerMsg(err.message || 'Upload failed.', 'error');
+      }
+    });
+    const saveLookBtn = document.getElementById('saveChapterBannerLookBtn');
+    if (saveLookBtn) saveLookBtn.addEventListener('click', async () => {
+      if (!bannerLook) return;
+      if (document.getElementById('chapterBannerFile').files[0]) { bannerMsg('You have chosen a new picture. Press Upload New Banner to use it with these colours.', 'error'); return; }
+      if (!bannerLookIsReadable('Save')) return;
+      const v = bannerLook.value();
+      try {
+        await fetchJSON('/api/admin/hero-look', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: 'home-header', textColor: v.textColor, veil: v.veil, chapterId: data.id }) });
+        bannerMsg('Saved. The banner now looks like the preview.', 'ok');
+      } catch (err) {
+        bannerMsg(err.message || 'Could not save.', 'error');
       }
     });
 
