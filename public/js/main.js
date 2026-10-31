@@ -948,13 +948,43 @@ function applyHeroArtwork(settings) {
   // than a blank rectangle, and much better than dark text on a dark image
   // because the tone was flipped before the veil under it existed.
   const probe = new Image();
-  probe.onload = () => {
+  probe.onload = async () => {
     layer.style.backgroundImage = `url('${url}')`;
     hero.dataset.artTone = own.tone === 'dark' ? 'dark' : 'light';
+    // The words over it take the colour the chapter chose, or whichever reads
+    // best on this picture, before the picture is shown.
+    await applyHeroLook(hero, url, own);
     hero.prepend(layer);
     requestAnimationFrame(() => layer.classList.add('is-loaded'));
   };
   probe.src = url;
+}
+
+// The colour of the words over a header picture, and the veil that keeps them
+// readable (public/js/hero-tone.js). `look` is { textColor, veil }: either may be
+// blank, which means "work it out from the picture".
+let heroToneLoading = null;
+function loadHeroTone() {
+  if (window.HeroTone) return Promise.resolve();
+  if (!heroToneLoading) {
+    heroToneLoading = new Promise((resolve) => {
+      const s = document.createElement('script');
+      s.src = '/js/hero-tone.js';
+      s.onload = resolve;
+      s.onerror = resolve;
+      document.head.appendChild(s);
+    });
+  }
+  return heroToneLoading;
+}
+async function applyHeroLook(hero, url, look) {
+  try {
+    await loadHeroTone();
+    if (!window.HeroTone) return;
+    const luma = await window.HeroTone.measure(url);
+    const chosen = look || {};
+    window.HeroTone.apply(hero, window.HeroTone.plan({ luma, textColor: chosen.textColor, veil: chosen.veil }));
+  } catch (e) { /* the page keeps its plain header */ }
 }
 
 function formatFileSize(bytes) {
