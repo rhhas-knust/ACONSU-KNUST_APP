@@ -1334,3 +1334,12 @@ body {
 .receipt-url { overflow-wrap: anywhere; color: var(--ink-soft); }
 .receipt-link .btn { min-height: 44px; }
 .give-trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+/* ---------- the offline outbox (outbox.js): how many are waiting to send ---------- */
+.outbox-line {
+  position: fixed; left: 12px; right: 12px; bottom: 76px; z-index: 900;
+  max-width: 520px; margin: 0 auto; padding: 12px 14px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-left: 4px solid var(--flame-gold); border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); font-size: 0.9rem; font-weight: 600;
+}
+@media (min-width: 1024px) { .outbox-line { bottom: 20px; } }

@@ -1,7 +1,12 @@
 // ACONSU service worker - enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v35';
+const CACHE_NAME = 'aconsu-v37';
+
+// The offline outbox's store and sender (outbox-core.js): what a page could
+// not send without signal is sent from here when the phone is back online,
+// even if the page has been closed by then.
+importScripts('/js/outbox-core.js');
 
 const APP_SHELL = [
   '/index.html',
@@ -53,6 +58,47 @@ const APP_SHELL = [
   '/js/main.js',
   '/js/brand.js',
   '/js/share.js',
+  '/js/outbox-core.js',
+  '/js/outbox.js',
+  // Each page's own script (public/js/pages), so the pages above still work offline.
+  '/js/pages/404.js',
+  '/js/pages/about.js',
+  '/js/pages/alumni-2.js',
+  '/js/pages/alumni.js',
+  '/js/pages/bible-study.js',
+  '/js/pages/bible.js',
+  '/js/pages/card.js',
+  '/js/pages/chat.js',
+  '/js/pages/contact.js',
+  '/js/pages/content.js',
+  '/js/pages/cookies.js',
+  '/js/pages/department.js',
+  '/js/pages/departments.js',
+  '/js/pages/discover.js',
+  '/js/pages/events.js',
+  '/js/pages/forgot-password.js',
+  '/js/pages/give.js',
+  '/js/pages/group.js',
+  '/js/pages/groups.js',
+  '/js/pages/how-to.js',
+  '/js/pages/index-2.js',
+  '/js/pages/index.js',
+  '/js/pages/login.js',
+  '/js/pages/media.js',
+  '/js/pages/meet.js',
+  '/js/pages/more.js',
+  '/js/pages/notifications.js',
+  '/js/pages/page.js',
+  '/js/pages/prayer.js',
+  '/js/pages/privacy.js',
+  '/js/pages/profile.js',
+  '/js/pages/refunds.js',
+  '/js/pages/register.js',
+  '/js/pages/reset-password.js',
+  '/js/pages/sermon-notes.js',
+  '/js/pages/terms.js',
+  '/js/pages/visit.js',
+  '/js/pages/welfare.js',
   '/images/logo.jpg',
   '/manifest.json',
   '/icons/icon-72.png',
@@ -230,6 +276,18 @@ self.addEventListener('message', (event) => {
       )
     )
   );
+});
+
+// Back online: send what is waiting, in order, and tell any open page.
+function flushOutbox() {
+  return self.AconsuOutboxCore.flush()
+    .then((result) => self.clients.matchAll({ includeUncontrolled: true }).then((list) => {
+      list.forEach((c) => c.postMessage({ type: 'OUTBOX_SENT', result: { sent: result.sent.length, refused: result.refused.length, left: result.left } }));
+    }))
+    .catch(() => {});
+}
+self.addEventListener('sync', (event) => {
+  if (event.tag === self.AconsuOutboxCore.TAG) event.waitUntil(flushOutbox());
 });
 
 self.addEventListener('push', (event) => {

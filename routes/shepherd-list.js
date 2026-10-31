@@ -14,6 +14,9 @@ const peopleImport = require('../lib/peopleImport');
 const attendance = require('../lib/attendance');
 const listLink = require('../lib/listLink');
 const { rejectOperatorKeys } = require('../lib/requestGuard');
+// A phone at the door that lost signal sends its check-ins again when it is
+// back (public/js/outbox.js); each carries a key, so none is done twice.
+const { idempotent } = require('../lib/idempotency');
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -209,7 +212,7 @@ function registerShepherdListRoutes(app, deps) {
 
   // The QR code on a member's card (section 13). It carries a token, never
   // their id, and is looked up within this chapter only.
-  app.post('/api/attendance/scan', requireAttendanceTaker, async (req, res) => {
+  app.post('/api/attendance/scan', requireAttendanceTaker, idempotent(), async (req, res) => {
     try {
       const chapterId = chapterOf(req);
       const { qrToken } = req.body;
@@ -221,7 +224,7 @@ function registerShepherdListRoutes(app, deps) {
   });
 
   // By name: an account holder (memberId) or someone on the list (recordId).
-  app.post('/api/attendance/mark', requireAttendanceTaker, async (req, res) => {
+  app.post('/api/attendance/mark', requireAttendanceTaker, idempotent(), async (req, res) => {
     try {
       const chapterId = chapterOf(req);
       if (!req.body.memberId && !req.body.recordId) return res.status(400).json({ error: 'Choose who to check in' });
@@ -232,7 +235,7 @@ function registerShepherdListRoutes(app, deps) {
   });
 
   // A tap on the wrong name, taken back.
-  app.post('/api/attendance/unmark', requireAttendanceTaker, async (req, res) => {
+  app.post('/api/attendance/unmark', requireAttendanceTaker, idempotent(), async (req, res) => {
     try {
       const chapterId = chapterOf(req);
       if (!req.body.memberId && !req.body.recordId) return res.status(400).json({ error: 'Choose whose check-in to take back' });
@@ -245,7 +248,7 @@ function registerShepherdListRoutes(app, deps) {
   // Someone at the door who is not on the list yet: they are added to it (as
   // new, for Shepherding to follow up) and checked in, in one go. A phone
   // number already on the list is that person, checked in instead of added.
-  app.post('/api/attendance/newcomer', requireAttendanceTaker, async (req, res) => {
+  app.post('/api/attendance/newcomer', requireAttendanceTaker, idempotent(), async (req, res) => {
     try {
       const chapterId = chapterOf(req);
       if (!chapterId) return res.status(403).json({ error: 'Open your chapter first.' });

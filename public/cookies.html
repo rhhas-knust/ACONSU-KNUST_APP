@@ -74,6 +74,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <tr><td>Selected chapter</td><td>This browser's local storage</td><td>Shows the chapter you picked</td><td>Until you clear site data</td></tr>
         <tr><td>Leadership sign-in chapter</td><td>This browser's local storage</td><td>Remembers the chapter you chose last time you signed in to a leadership office</td><td>Until you clear site data</td></tr>
         <tr><td>Install and offline copy</td><td>Browser cache (service worker)</td><td>Lets the app open offline. Only public pages and public lists are kept, never anything behind a sign-in.</td><td>Until a new version replaces it or you clear site data</td></tr>
+        <tr><td>Waiting to send</td><td>This browser's IndexedDB</td><td>A prayer request, a message or a check-in at the door made with no signal is kept here until the phone is back online, then sent and removed. A line on the page says how many are waiting.</td><td>Until it is sent, or you clear site data</td></tr>
         <tr><td>Notification subscription</td><td>Your browser's push service</td><td>Only if you turn notifications on. Turn them off in your profile.</td><td>Until you turn them off</td></tr>
       </tbody>
     </table>
@@ -100,10 +101,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js"></script>
-<script>
-(async () => {
-  await initLayout('/cookies.html');
-})();
-</script>
+<script src="/js/pages/cookies.js"></script>
 </body>
 </html>

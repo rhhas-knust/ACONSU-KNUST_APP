@@ -878,7 +878,6 @@ Anyone can give (decisions of 30 October: manual only, no Paystack or other paid
 
 `test/giving.js` (in `npm test`) and `test/give-ui.js` (a guest gives on a phone, Finance confirms, the receipt link updates).
 
-
 ## 38. The app's colour (navy by default, and an admin can change it)
 
 The whole palette comes from **one colour**. The default is the navy `#0B1A43`.
@@ -890,3 +889,31 @@ The whole palette comes from **one colour**. The default is the navy `#0B1A43`.
 - **Where it does not reach.** Things that are files, not pages, cannot follow an admin's choice: the installed app's icon and splash screen, the Android launcher icon, the manifest's browser-bar colour, the marketing site in `site/` (it is a separate static site), and the how-to video. These are the default navy. Changing the default means `DEFAULT_BRAND` in `lib/brand.js`, `node scripts/sync-brand-css.js`, and the files below.
 - **The emblem.** `scripts/recolor-brand.js` recoloured the crest and every icon from purple to navy (the flame and torch are untouched). The originals are in `design/brand-original/`; copy one back over its file to undo. The how-to video and its poster were not remade and still show the old colour.
 - **Verse cards.** The first card background is now "App colour", drawn in the viewer's chapter's colour. A shared link that still says `style=purple` gets it.
+
+## 39. With no signal: the offline outbox
+
+Sunday check-in at the door, prayer requests and the contact form keep working without signal (BUILD_PROMPT_OPUS item 8). What cannot be sent is kept on the phone (IndexedDB, `public/js/outbox-core.js`), shown as **waiting to send** (a line at the foot of the page; a check-in shows it on the person's row), and sent by itself, **in the order it was made**, the moment the phone is back online: by the page (`public/js/outbox.js`), or by the service worker even if the page was closed (Background Sync, where the phone supports it).
+
+- **Never twice:** each queued request carries an `Idempotency-Key` made once on the phone. The server (`lib/idempotency.js`) keeps the first answer to each key for a day and gives it again, with `Idempotent-Replay: true`, without doing the work again; a second copy arriving while the first is still being handled is told to try again (409). So a request that reached the server but whose answer was lost on a bad connection still counts once. Keys are per person, method and path; requests without one are handled as before. Used on `/api/prayer-requests`, `/api/contact` and the door's `/api/attendance/mark`, `unmark`, `newcomer` and `scan`.
+- **Order:** while anything is waiting, new submissions queue behind it. Something the server turns down for good (a 4xx) is taken out and reported; no signal, a busy or sleeping server (409, 429, 5xx) waits for the next try.
+- At the door, a check-in made offline has no Undo until it is sent; the screen catches up with the server once everything has gone.
+- The leaders' portals are not kept for offline opening (they never were): this covers the signal dropping while the check-in screen is open, which is what happens in a full hall.
+
+`test/outbox.js` (in `npm test`) and `test/outbox-ui.js` (a phone goes offline: a prayer request and three check-ins are kept, then sent once the phone is back; an answer lost on the way back still counts once). Not tested here: Background Sync with the page closed (needs a real phone).
+
+## 40. server.js, in smaller files
+
+`server.js` is being taken apart into `routes/`, one area at a time, each moved **unchanged** (BUILD_PROMPT_OPUS item 9). Done so far: payments (`routes/giving.js`), a member's own account (`routes/member-account.js`: sign-up, sign-in, profile, photo, password, Download my data, Delete my account) and notifications (`routes/notifications.js`: the `createNotification` helper every part of the app uses, the feed, push subscriptions, the main admin's notification). Each file exports a `register...(app, deps)` function; what it still borrows from `server.js` (limiters, session helpers, upload settings) is passed in by name, so nothing is hidden.
+
+The smoke suite reads `server.js` and `routes/*` together, so a rule it checks is found wherever the route now lives. Moving a route changes nothing a person sees, which is what the full test run and the browser suites are for.
+
+## 41. Only the app's own scripts run
+
+The browser runs scripts from this app's own files and nothing else (`lib/securityHeaders.js`): no script written into a page runs, and no `onclick=` or other `on...=` attribute does either (`script-src-attr 'none'`). So text that slips into a page (a name, a prayer request, a post) can never run as code, even if a page forgot to escape it.
+
+- **Every page's own script is a file**, `public/js/pages/<page>.js`, loaded at the foot of the page as before. A button that used to go somewhere with `onclick=` now carries `data-href="/page.html"` (handled in `main.js`); one that opened a panel carries `data-open-panel` (`portal.js`). Buttons drawn by a script get their listener from that script.
+- **Two exceptions, each allowed by its exact fingerprint (sha256) and nothing else:** the few lines at the top of every page that set light or dark before the page is drawn (they must run before anything loads), and the offline page's few lines (it is shown when nothing can load). If either is changed, the browser refuses it until the fingerprint in `lib/securityHeaders.js` is changed to match. To work out the new one: `node -e "const s=require('fs').readFileSync('public/index.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1]; console.log(require('crypto').createHash('sha256').update(s).digest('base64'))"` (use `offline.html` and its second script for the other). `test/csp.js` fails, and names the page, if any page carries an inline script that matches neither.
+- Styles still allow inline style: a style cannot run code, and the pages carry a lot of it.
+- The service worker keeps the page scripts of the pages it keeps for offline use (`sw.js`, cache `aconsu-v37`).
+
+`test/csp.js` (in `npm test`: the policy, every inline script against the two fingerprints, no `on...=` in a page or in markup a script builds, no `javascript:` links, every page script present and loaded) and `test/csp-ui.js` (opens all 51 pages on a phone and the admin portal signed in, and checks the browser refused nothing and every page's script ran).
