@@ -10,7 +10,12 @@
   // not set one.
   const homeHeaderId = settings.homeHeaderImageFileId || '';
   if (homeHeaderId && !((settings.heroArt || {}).home || {}).fileId) {
-    heroBackgroundEl.style.backgroundImage = `url('/api/files/${homeHeaderId}')`;
+    const bannerUrl = `/api/files/${homeHeaderId}`;
+    // The words over the banner take the colour the admin chose, or whichever
+    // reads best on this picture, before the picture is shown.
+    await applyHeroLook(document.getElementById('homeHero'), bannerUrl, settings.homeHeader);
+    heroBackgroundEl.style.backgroundImage = `url('${bannerUrl}')`;
+    heroBackgroundEl.classList.add('has-banner');
   }
   if (settings.verseOfTheWeek) {
     const verseStripEl = document.getElementById('verseStrip');
