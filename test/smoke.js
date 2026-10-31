@@ -6,6 +6,21 @@
 //   npm test              — the full suite
 //   SMOKE_SLOW=1 npm test — also waits out the 60s scheduled-send tick
 const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
+
+// A page as the browser runs it: its HTML and its own script(s) in
+// public/js/pages, where each page's script lives so the browser can refuse
+// script written into a page (lib/securityHeaders.js). A check on what a page
+// does then finds the code wherever it is kept.
+function readPublic(f) {
+  const fsx = require('fs');
+  const pathx = require('path');
+  const root = pathx.join(__dirname, '..', 'public');
+  const text = fsx.readFileSync(pathx.join(root, f), 'utf8');
+  if (!f.endsWith('.html')) return text;
+  const own = [...text.matchAll(/<script src="\/js\/pages\/([\w-]+\.js)"><\/script>/g)]
+    .map(m => fsx.readFileSync(pathx.join(root, 'js', 'pages', m[1]), 'utf8'));
+  return [text, ...own].join('\n');
+}
 // Registration now needs the box ticked. Every account the suite makes ticks it,
 // the way the form does, unless a test is deliberately leaving it out.
 {
@@ -2243,9 +2258,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   console.log('\n== PWA: installability and what happens with no network ==');
   {
-    const fs = require('fs');
-    const path = require('path');
-    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const pub = readPublic;
 
     const manifest = JSON.parse(pub('manifest.json'));
     // The implicit manifest id is start_url. If a declared id ever disagrees with
@@ -2429,7 +2442,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // The page itself, and the worker that must not touch its stream.
     const fs = require('fs');
     const path = require('path');
-    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const pub = readPublic;
     const meetPage = await fetch(BASE + '/meet.html');
     check('the ACONSU Rooms page is served', meetPage.status === 200, meetPage.status);
     check('and is reachable from the app', pub('more.html').includes('/meet.html'));
@@ -2574,9 +2587,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   }
 
   {
-    const fs = require('fs');
-    const path = require('path');
-    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const pub = readPublic;
     const page = await fetch(BASE + '/alumni.html');
     check('the Alumni Connect page is served', page.status === 200, page.status);
     check('and is reachable from the app, not just by typing the URL',
@@ -2797,7 +2808,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   {
     const fs = require('fs');
     const path = require('path');
-    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const pub = readPublic;
     const main = pub('js/main.js');
     const css = pub('css/style.css');
 
@@ -2905,7 +2916,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   {
     const fs = require('fs');
     const path = require('path');
-    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const pub = readPublic;
     const css = pub('css/style.css');
     const home = pub('index.html');
     const bible = pub('bible.html');
@@ -3126,9 +3137,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   console.log('\n== the two admin portals are one portal ==');
   {
-    const fs = require('fs');
-    const path = require('path');
-    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const pub = readPublic;
     const chapterHtml = pub('chapter.html');
     const adminHtml = pub('admin.html');
 
@@ -3239,7 +3248,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
   {
     const fs = require('fs');
     const path = require('path');
-    const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const pub = readPublic;
     const css = pub('css/style.css');
     const portalCss = pub('css/portal.css');
     const adminCss = pub('css/admin.css');
@@ -3602,9 +3611,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
 
   console.log('\n== the founders read the same on the app as on the site ==');
   {
-    const fs6 = require('fs');
-    const path6 = require('path');
-    const pub = (f) => fs6.readFileSync(path6.join(__dirname, '..', 'public', f), 'utf8');
+    const pub = readPublic;
     const aboutHtml = pub('about.html');
     const appCss = pub('css/style.css');
 
@@ -4210,7 +4217,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     // The same maker's line the app carries, read from the app rather than
     // retyped, so the two cannot drift apart.
     {
-      const appMark = fs.readFileSync(path.join(__dirname, '..', 'public', 'admin.html'), 'utf8')
+      const appMark = readPublic('admin.html')
         .match(/<div class="app-watermark">([^<]+)<\/div>/);
       const siteMark = html.match(/<div class="app-watermark">([^<]+)<\/div>/);
       check('the site carries the same maker\'s line as the app',
@@ -4425,14 +4432,12 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       !String(r4.data.totalReceived).includes('300') && r4.data.totalReceived < 300, r4.data.totalReceived);
 
     // ---- the words a member actually reads ----
-    const welfareHtml = require('fs').readFileSync(
-      require('path').join(__dirname, '..', 'public', 'welfare.html'), 'utf8');
+    const welfareHtml = readPublic('welfare.html');
     check('the welfare page has a section for what welfare received from them',
       /id="myWelfareGiving"/.test(welfareHtml) && /api\/member\/welfare-giving/.test(welfareHtml), null);
     check('and spells the categories out rather than printing the raw keys',
       /semester_dues: 'Semester welfare dues'/.test(welfareHtml), null);
-    const giveHtml0 = require('fs').readFileSync(
-      require('path').join(__dirname, '..', 'public', 'give.html'), 'utf8');
+    const giveHtml0 = readPublic('give.html');
     check('the giving page says it was received rather than showing a status word',
       /Received\$\{on\}\$\{who\}/.test(giveHtml0), null);
     check('and spells the purposes out too',
@@ -4445,8 +4450,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       /max="\$\{today\}"/.test(welPortal), null);
 
     // The page has to show the right number, or the routing is only on paper.
-    const giveHtml = require('fs').readFileSync(
-      require('path').join(__dirname, '..', 'public', 'give.html'), 'utf8');
+    const giveHtml = readPublic('give.html');
     check('the giving page swaps the account to match the purpose',
       /welfarePurposes( \|\| \[\]\))?\.includes\((purpose|\$\('purpose'\)\.value)\)/.test(giveHtml), null);
     check('and redraws it when the purpose changes, rather than once on load',
@@ -5595,7 +5599,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
     const fs = require('fs');
     const path = require('path');
     const root = path.join(__dirname, '..');
-    const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+    const read = (p) => (/^public\/[\w-]+\.html$/.test(p) ? readPublic(p.slice('public/'.length)) : fs.readFileSync(path.join(root, p), 'utf8'));
     const files = (dir, ext) => fs.readdirSync(path.join(root, dir)).filter(f => f.endsWith(ext)).map(f => path.join(dir, f));
 
     // ---- registration is an agreement, and it is recorded ----
@@ -5702,7 +5706,7 @@ const { fakeModels, fakeDb, fakeGridfs } = require('./harness.js');
       const res = await fetch(BASE + '/index.html');
       const csp = res.headers.get('content-security-policy') || '';
       check('every page is sent with a Content-Security-Policy', csp.length > 100, csp.slice(0, 60));
-      check('which allows scripts only from the app itself', /script-src 'self' 'unsafe-inline'/.test(csp) && !/script-src[^;]*https?:/.test(csp), csp);
+      check('which allows scripts only from the app itself, and none written into a page (bar two fixed fingerprints)', /script-src 'self'( 'sha256-[A-Za-z0-9+/=]+'){2};/.test(csp) && !/script-src[^;]*(unsafe-inline|https?:)/.test(csp) && /script-src-attr 'none'/.test(csp), csp);
       check('forbids plugins, and framing by other sites, and posting to other sites', /object-src 'none'/.test(csp) && /frame-ancestors 'self'/.test(csp) && /form-action 'self'/.test(csp), csp);
       check('and lets a page frame only YouTube (no-cookie), Facebook and Google\'s map', /frame-src https:\/\/www\.youtube-nocookie\.com https:\/\/www\.facebook\.com https:\/\/www\.google\.com https:\/\/maps\.google\.com(;|$)/.test(csp), csp);
       check('connections go back to the app only', /connect-src 'self'(;|$)/.test(csp), csp);

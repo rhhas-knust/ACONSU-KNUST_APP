@@ -889,3 +889,20 @@ Sunday check-in at the door, prayer requests and the contact form keep working w
 
 `test/outbox.js` (in `npm test`) and `test/outbox-ui.js` (a phone goes offline: a prayer request and three check-ins are kept, then sent once the phone is back; an answer lost on the way back still counts once). Not tested here: Background Sync with the page closed (needs a real phone).
 
+
+## 39. server.js, in smaller files
+
+`server.js` is being taken apart into `routes/`, one area at a time, each moved **unchanged** (BUILD_PROMPT_OPUS item 9). Done so far: payments (`routes/giving.js`), a member's own account (`routes/member-account.js`: sign-up, sign-in, profile, photo, password, Download my data, Delete my account) and notifications (`routes/notifications.js`: the `createNotification` helper every part of the app uses, the feed, push subscriptions, the main admin's notification). Each file exports a `register...(app, deps)` function; what it still borrows from `server.js` (limiters, session helpers, upload settings) is passed in by name, so nothing is hidden.
+
+The smoke suite reads `server.js` and `routes/*` together, so a rule it checks is found wherever the route now lives. Moving a route changes nothing a person sees, which is what the full test run and the browser suites are for.
+
+## 40. Only the app's own scripts run
+
+The browser runs scripts from this app's own files and nothing else (`lib/securityHeaders.js`): no script written into a page runs, and no `onclick=` or other `on...=` attribute does either (`script-src-attr 'none'`). So text that slips into a page (a name, a prayer request, a post) can never run as code, even if a page forgot to escape it.
+
+- **Every page's own script is a file**, `public/js/pages/<page>.js`, loaded at the foot of the page as before. A button that used to go somewhere with `onclick=` now carries `data-href="/page.html"` (handled in `main.js`); one that opened a panel carries `data-open-panel` (`portal.js`). Buttons drawn by a script get their listener from that script.
+- **Two exceptions, each allowed by its exact fingerprint (sha256) and nothing else:** the few lines at the top of every page that set light or dark before the page is drawn (they must run before anything loads), and the offline page's few lines (it is shown when nothing can load). If either is changed, the browser refuses it until the fingerprint in `lib/securityHeaders.js` is changed to match. To work out the new one: `node -e "const s=require('fs').readFileSync('public/index.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1]; console.log(require('crypto').createHash('sha256').update(s).digest('base64'))"` (use `offline.html` and its second script for the other). `test/csp.js` fails, and names the page, if any page carries an inline script that matches neither.
+- Styles still allow inline style: a style cannot run code, and the pages carry a lot of it.
+- The service worker keeps the page scripts of the pages it keeps for offline use (`sw.js`, cache `aconsu-v37`).
+
+`test/csp.js` (in `npm test`: the policy, every inline script against the two fingerprints, no `on...=` in a page or in markup a script builds, no `javascript:` links, every page script present and loaded) and `test/csp-ui.js` (opens all 51 pages on a phone and the admin portal signed in, and checks the browser refused nothing and every page's script ran).

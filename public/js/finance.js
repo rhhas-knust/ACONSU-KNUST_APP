@@ -117,7 +117,7 @@ async function renderFinanceOverview(el) {
       <div class="portal-card">
         <h3>No budget set up yet</h3>
         <p class="hint">A budget lets you plan income and spending for a term or academic year, then track what actually happens against the plan.</p>
-        ${PORTAL.canEdit ? '<button class="btn btn-primary btn-sm" onclick="openPanel(\'budgets\')">Create the first budget</button>' : ''}
+        ${PORTAL.canEdit ? '<button class="btn btn-primary btn-sm" data-open-panel="budgets">Create the first budget</button>' : ''}
       </div>
     `}
   `;

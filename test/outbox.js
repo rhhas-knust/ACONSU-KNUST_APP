@@ -98,7 +98,12 @@ const { fakeModels } = require('./harness.js');
   check('kept a day, then cleared by the database (a TTL index)', fakeModels.IdempotencyKey._docs.every(d => d.expireAt && new Date(d.expireAt) - Date.now() <= 24 * 60 * 60 * 1000 + 1000));
 
   console.log('\n== the pages ==');
-  const pub = (f) => fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+  // A page with its own script (js/pages/X.js) is read together with it.
+  const pub = (f) => {
+    const text = fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8');
+    const own = path.join(__dirname, '..', 'public', 'js', 'pages', f.replace(/\.html$/, '.js'));
+    return f.endsWith('.html') && fs.existsSync(own) ? text + fs.readFileSync(own, 'utf8') : text;
+  };
   check('prayer, contact and check-in send through the outbox', /AconsuOutbox\.send/.test(pub('prayer.html')) && /AconsuOutbox\.send/.test(pub('contact.html')) && /AconsuOutbox\.send/.test(pub('js/shepherd-list.js')));
   check('and load it, its store first', ['prayer.html', 'contact.html', 'shepherding.html'].every(f => { const s = pub(f); return s.indexOf('/js/outbox-core.js') > 0 && s.indexOf('/js/outbox-core.js') < s.indexOf('/js/outbox.js'); }));
   const sw = pub('sw.js');

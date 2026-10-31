@@ -505,3 +505,10 @@ async function initPortal(config) {
 
   showPortalOrLogin();
 }
+
+// A button in a panel that opens another panel (data-open-panel), in place of
+// an onclick written into the page.
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('[data-open-panel]');
+  if (b && typeof openPanel === 'function') openPanel(b.dataset.openPanel);
+});
