@@ -66,6 +66,12 @@ function check(label, cond, detail) {
   const pages = listing('public', '.html').filter(f => !/offline\.html$/.test(f));
   const unthemed = pages.filter(f => { const t = read(f); const a = t.search(/href="\/css\/style\.css/); const b = t.indexOf('href="/theme.css"'); return !(a >= 0 && b > a && /src="\/js\/brand\.js"/.test(t) && /name="theme-color" content="#0B1A43"/.test(t)); });
   check(`every page (${pages.length}) loads /theme.css after style.css, loads brand.js, and has the navy browser-bar colour`, unthemed.length === 0, unthemed);
+  // admin.js draws the colour picker in Global Settings and Chapter Settings,
+  // so every page that loads it must load the picker first. The chapter
+  // admin's page once did not: "Could not load chapter settings: BrandPicker
+  // is not defined".
+  const noPicker = pages.filter(f => { const t = read(f); const a = t.indexOf('src="/js/admin.js"'); const b = t.indexOf('src="/js/brand-picker.js"'); return a >= 0 && !(b >= 0 && b < a); });
+  check('every page that loads admin.js loads the colour picker before it (admin and chapter)', noPicker.length === 0 && pages.filter(f => read(f).includes('src="/js/admin.js"')).length >= 2, noPicker);
   const manifest = JSON.parse(read('public/manifest.json'));
   check('the installed app\'s splash and bar are the navy too', manifest.theme_color === '#0B1A43' && manifest.background_color === '#0B1A43');
 
