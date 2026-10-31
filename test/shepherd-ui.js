@@ -101,6 +101,52 @@ const LIST = [
   check('they are on the Members list, tidied, and marked as from the chapter list', /Kofi Mensah/.test(table) && /On the chapter list/.test(table) && !/KOFI/.test(table), table.slice(0, 300));
   check('no sideways scrolling on the Members list', await noSideways(a));
 
+  console.log('\n== changing what the list says about someone ==');
+  const amaRow = () => a.locator('#panel-members tr', { hasText: 'Ama Owusu' });
+  check('someone from the list has a Details button, as someone with an app account does', await amaRow().locator('button', { hasText: 'Details' }).count() === 1);
+  await amaRow().locator('button', { hasText: 'Details' }).click();
+  await a.waitForSelector('#listDetailsForm');
+  check('it opens with what the list says, ready to correct', await a.inputValue('#cName') === 'Ama Owusu' && await a.inputValue('#cPhone') === '0201112222' && await a.inputValue('#cLevel') === '300');
+  await a.fill('#cPhone', '0201113333');
+  await a.fill('#cLevel', '400');
+  await a.click('#listDetailsForm button[type="submit"]');
+  await a.waitForFunction(() => !document.getElementById('modalBackdrop').classList.contains('open'));
+  await a.waitForSelector('#panel-members >> text=0201113333');
+  const amaRec = () => fakeModels.ShepherdingRecord._docs.find(d => d.name === 'Ama Owusu');
+  check('saving changes the phone and level, and the list shows the new number', amaRec().phone === '0201113333' && amaRec().level === '400', amaRec());
+  await amaRow().locator('button', { hasText: 'Care Notes' }).click();
+  await a.waitForSelector('#careForm');
+  check('Care Notes asks only how they are doing, and says where the details are', !(await a.$('#careForm #cName')) && /under .Details./.test(await a.textContent('#careForm')));
+  await a.fill('#cNotes', 'Wants to join the choir.');
+  await a.click('#careForm button[type="submit"]');
+  await a.waitForFunction(() => !document.getElementById('modalBackdrop').classList.contains('open'));
+  await a.waitForTimeout(300);
+  check('and saving it keeps the details just changed', amaRec().phone === '0201113333' && amaRec().level === '400' && amaRec().pastoralNotes === 'Wants to join the choir.', amaRec());
+
+  console.log('\n== the menu on a phone ==');
+  check('the header names the chapter once ("ACONSU KNUST", not "ACONSU: ACONSU KNUST")', await a.textContent('#portalBrandName') === 'ACONSU KNUST', await a.textContent('#portalBrandName'));
+  const logout = await a.$eval('#portalLogoutBtn', el => el.getBoundingClientRect().height);
+  check('and Log Out fits on one line', logout <= 48, logout);
+  await a.evaluate(() => window.scrollTo(0, 600));
+  await a.click('#portalMenuToggle');
+  await a.waitForTimeout(150);
+  const placed = await a.evaluate(() => {
+    const bar = document.querySelector('.portal-topbar').getBoundingClientRect();
+    const first = document.querySelector('#portalNav button').getBoundingClientRect();
+    return { first: Math.round(first.top), bar: Math.round(bar.bottom), y: Math.round(window.scrollY) };
+  });
+  check('opened after scrolling down, its first item is just under the header, not hidden behind it', placed.y > 0 && placed.first >= placed.bar - 1 && placed.first < placed.bar + 60, placed);
+  check('and a screen reader is told it is open', await a.getAttribute('#portalMenuToggle', 'aria-expanded') === 'true');
+  await a.keyboard.press('Escape');
+  check('Escape closes it, back on the menu button', !(await a.isVisible('#portalNav')) && await a.evaluate(() => document.activeElement.id === 'portalMenuToggle'));
+  await a.click('#portalMenuToggle');
+  await a.evaluate(() => document.getElementById('portalMain').click());
+  check('and so does a tap on the page beside it', !(await a.isVisible('#portalNav')) && await a.getAttribute('#portalMenuToggle', 'aria-expanded') === 'false');
+  await a.click('#portalMenuToggle');
+  await a.click('#portalNav button[data-panel="today"]');
+  const todayPad = await a.$eval('section.today', el => getComputedStyle(el).paddingTop);
+  check('Today starts at the top of the page, without the public pages\' 72px of section padding', todayPad === '0px', todayPad);
+
   // ------------------------------------------------------------ the door --
   console.log('\n== Sunday check-in ==');
   const b = await signIn(phone, '#checkin');

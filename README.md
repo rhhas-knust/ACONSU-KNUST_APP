@@ -437,6 +437,8 @@ Any number of phones can work the door at once, all signed in to the Shepherding
 
 **Members** — everyone with an ACONSU account appears automatically with their details pulled live from their account; visitors without accounts can be added by hand. Shepherding can now **edit a member's details** (name, phone, level, department, birthday) — they're the office that finds out a number has changed. Email and password stay with the member, since changing an email from someone else's screen is how people get locked out. Alongside that sits the pastoral layer only shepherding keeps: address, emergency contact, attendance pattern, last contact date and private notes.
 
+Someone with no app account (brought in from the list, added at the door or by hand) has the same two buttons: **Details** corrects their name, phone, email, level, programme, department and birthday, and **Care Notes** keeps the pastoral layer. Each form changes only what it shows, so saving one never blanks the other; once they are linked to an account, the list's own name and phone are kept untouched, so an Unlink gives them back.
+
 **Messages** — everything sent through the app's contact form arrives here, with a reply-by-email button and a handled/unhandled state. A copy is emailed to the shepherding address set under Site Settings (falling back to the main contact address).
 
 ### Publicity
@@ -914,6 +916,6 @@ The browser runs scripts from this app's own files and nothing else (`lib/securi
 - **Every page's own script is a file**, `public/js/pages/<page>.js`, loaded at the foot of the page as before. A button that used to go somewhere with `onclick=` now carries `data-href="/page.html"` (handled in `main.js`); one that opened a panel carries `data-open-panel` (`portal.js`). Buttons drawn by a script get their listener from that script.
 - **Two exceptions, each allowed by its exact fingerprint (sha256) and nothing else:** the few lines at the top of every page that set light or dark before the page is drawn (they must run before anything loads), and the offline page's few lines (it is shown when nothing can load). If either is changed, the browser refuses it until the fingerprint in `lib/securityHeaders.js` is changed to match. To work out the new one: `node -e "const s=require('fs').readFileSync('public/index.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1]; console.log(require('crypto').createHash('sha256').update(s).digest('base64'))"` (use `offline.html` and its second script for the other). `test/csp.js` fails, and names the page, if any page carries an inline script that matches neither.
 - Styles still allow inline style: a style cannot run code, and the pages carry a lot of it.
-- The service worker keeps the page scripts of the pages it keeps for offline use (`sw.js`, cache `aconsu-v37`).
+- The service worker keeps the page scripts of the pages it keeps for offline use (`sw.js`, cache `aconsu-v38`).
 
 `test/csp.js` (in `npm test`: the policy, every inline script against the two fingerprints, no `on...=` in a page or in markup a script builds, no `javascript:` links, every page script present and loaded) and `test/csp-ui.js` (opens all 51 pages on a phone and the admin portal signed in, and checks the browser refused nothing and every page's script ran).

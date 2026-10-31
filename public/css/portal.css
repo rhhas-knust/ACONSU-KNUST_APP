@@ -232,9 +232,21 @@ table.portal-table td.num, table.portal-table th.num { text-align: right; font-v
     width: 100%; border-right: none; border-bottom: 1px solid var(--line);
     display: none; padding: 8px 0 14px;
   }
-  .portal-side.open { display: block; }
+  .portal-side.open {
+    display: block;
+    position: fixed; left: 0; right: 0; top: var(--portal-top, 64px); z-index: 59;
+    max-height: calc(100vh - var(--portal-top, 64px)); max-height: calc(100dvh - var(--portal-top, 64px));
+    overflow-y: auto; overscroll-behavior: contain;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+  }
   .portal-main { padding: 20px 16px 56px; }
   .portal-topbar .who .name { display: none; }
+  .portal-topbar { padding: 10px 14px; gap: 10px; }
+  .portal-topbar .brand { gap: 10px; }
+  .portal-topbar .brand b { font-size: 0.95rem; line-height: 1.2; }
+  .portal-topbar .who { gap: 8px; }
+  .portal-topbar .who .btn { white-space: nowrap; }
+  .portal-menu-toggle { min-width: 44px; min-height: 44px; }
 }
 
 /* ============================================================

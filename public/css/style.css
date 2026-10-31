@@ -1224,7 +1224,8 @@ body {
 .invite-strip p { margin: 0; color: var(--ink-soft); }
 
 /* ---------- Today: the first screen of a leaders' portal (js/today.js) ---------- */
-.today { margin-bottom: 26px; }
+/* Its own spacing: the site-wide section padding (72px) is for the public pages. */
+.today { margin-bottom: 26px; padding: 0; }
 .today-actions { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 .today-action {
   display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;

@@ -409,6 +409,7 @@ async function renderShepMembers(el) {
               ${PORTAL.canEdit ? `<td class="row-actions">
                 <button data-care="${personKey(p)}">Care Notes</button>
                 ${p.source === 'member' ? `<button data-details="${p.memberId}">Details</button>` : ''}
+                ${p.source === 'visitor' && p.recordId ? `<button data-list-details="${p.recordId}">Details</button>` : ''}
                 <button data-history="${personKey(p)}">History</button>
                 ${p.source === 'visitor' ? `<button data-link="${p.recordId}">Link to account</button>` : ''}
                 ${p.canUnlink ? `<button data-unlink="${p.recordId}">Unlink</button>` : ''}
@@ -444,6 +445,9 @@ async function renderShepMembers(el) {
   });
   el.querySelectorAll('[data-details]').forEach(btn => {
     btn.addEventListener('click', () => openMemberDetailsForm(people.find(p => p.memberId === btn.dataset.details), departments));
+  });
+  el.querySelectorAll('[data-list-details]').forEach(btn => {
+    btn.addEventListener('click', () => openListDetailsForm(people.find(p => p.recordId === btn.dataset.listDetails && p.source === 'visitor'), departments));
   });
   el.querySelectorAll('[data-history]').forEach(btn => {
     btn.addEventListener('click', () => openAttendanceHistory(people.find(p => personKey(p) === btn.dataset.history)));
@@ -586,17 +590,13 @@ function openMemberDetailsForm(person, departments) {
   });
 }
 
-// The pastoral layer that only shepherding keeps: address, next of kin, how
-// they're doing, and what was said last time.
-function openCareForm(person, departments) {
-  const isVisitor = !person || person.source === 'visitor';
-  showModal(`
-    <h3>${person ? `Care Notes: ${escapeHtml(person.name)}` : 'Add a Visitor'}</h3>
-    <form id="careForm">
-      ${isVisitor ? `
-        <div class="field"><label>Full Name</label><input type="text" id="cName" value="${escapeHtml(person?.name || '')}" required></div>
+// Who someone on the list is: what Shepherding knows of a person with no app
+// account. Used to add someone by hand, and by Details to correct them.
+function listDetailsFields(person, departments) {
+  return `
+        <div class="field"><label for="cName">Full Name</label><input type="text" id="cName" value="${escapeHtml(person?.name || '')}" required></div>
         <div class="field-row">
-          <div class="field"><label>Phone</label><input type="tel" id="cPhone" value="${escapeHtml(person?.phone || '')}"></div>
+          <div class="field"><label for="cPhone">Phone</label><input type="tel" id="cPhone" value="${escapeHtml(person?.phone || '')}"></div>
           <div class="field"><label for="cEmail">Email</label><input type="email" id="cEmail" value="${escapeHtml(person?.email || '')}"></div>
         </div>
         <div class="field-row">
@@ -618,7 +618,63 @@ function openCareForm(person, departments) {
           </div>
           <div class="field"><label for="cBDay">Birthday Day</label><input type="number" id="cBDay" min="1" max="31" value="${person?.birthdayDay || ''}"></div>
         </div>
-      ` : '<p class="tiny muted" style="margin-bottom:16px;">Name, phone and photo come from their account. Edit those under “Details”.</p>'}
+  `;
+}
+
+function appendListDetails(formData) {
+  formData.append('name', document.getElementById('cName').value);
+  formData.append('phone', document.getElementById('cPhone').value);
+  formData.append('email', document.getElementById('cEmail').value);
+  formData.append('level', document.getElementById('cLevel').value);
+  formData.append('programme', document.getElementById('cProgramme').value);
+  formData.append('department', document.getElementById('cDepartment').value);
+  formData.append('birthdayMonth', document.getElementById('cBMonth').value);
+  formData.append('birthdayDay', document.getElementById('cBDay').value);
+}
+
+// Details for someone on the list (brought in from the chapter's list, added
+// at the door, or by hand): their name, phone and the rest, kept apart from the
+// care notes, which this form leaves as they are.
+function openListDetailsForm(person, departments) {
+  showModal(`
+    <h3>Edit ${escapeHtml(person.name)}</h3>
+    <p class="tiny muted" style="margin-bottom:16px;">They have no app account, so these are the details Shepherding keeps for them. If they open an account, link it and their own details take over.</p>
+    <form id="listDetailsForm">
+      ${listDetailsFields(person, departments)}
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save Details</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="listDetailsMsg" role="alert"></div>
+    </form>
+  `);
+  document.getElementById('listDetailsForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append('recordId', person.recordId);
+    appendListDetails(formData);
+    try {
+      const res = await fetch('/api/shepherd/records', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not save');
+      closeModal();
+      showToast('Details saved.', 'success');
+      openPanel('members');
+    } catch (err) {
+      setFormMsg('listDetailsMsg', err.message, 'error');
+    }
+  });
+}
+
+// The pastoral layer that only shepherding keeps: address, next of kin, how
+// they're doing, and what was said last time.
+function openCareForm(person, departments) {
+  const isNew = !person;
+  const isVisitor = isNew || person.source === 'visitor';
+  showModal(`
+    <h3>${person ? `Care Notes: ${escapeHtml(person.name)}` : 'Add a Visitor'}</h3>
+    <form id="careForm">
+      ${isNew ? listDetailsFields(person, departments) : `<p class="tiny muted" style="margin-bottom:16px;">${isVisitor ? 'Their name, phone and what the list says about them are under “Details”.' : 'Name, phone and photo come from their account. Edit those under “Details”.'}</p>`}
       <div class="field"><label>Address / Hall</label><input type="text" id="cAddress" value="${escapeHtml(person?.address || '')}"></div>
       <div class="field"><label>Emergency Contact</label><input type="text" id="cEmergency" value="${escapeHtml(person?.emergencyContact || '')}"></div>
       <div class="field"><label>Attendance Pattern</label>
@@ -640,16 +696,10 @@ function openCareForm(person, departments) {
   document.getElementById('careForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData();
-    if (isVisitor) {
-      formData.append('name', document.getElementById('cName').value);
-      formData.append('phone', document.getElementById('cPhone').value);
-      formData.append('email', document.getElementById('cEmail').value);
-      formData.append('level', document.getElementById('cLevel').value);
-      formData.append('programme', document.getElementById('cProgramme').value);
-      formData.append('department', document.getElementById('cDepartment').value);
-      formData.append('birthdayMonth', document.getElementById('cBMonth').value);
-      formData.append('birthdayDay', document.getElementById('cBDay').value);
-      if (person?.recordId) formData.append('recordId', person.recordId);
+    if (isNew) {
+      appendListDetails(formData);
+    } else if (isVisitor) {
+      formData.append('recordId', person.recordId);
     } else {
       formData.append('memberId', person.memberId);
     }
