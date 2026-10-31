@@ -16,23 +16,25 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#5B2C82">
+<meta name="theme-color" content="#0B1A43">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="ACONSU">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/theme.css" id="brandTheme">
+<script src="/js/brand.js"></script>
 <style>
   .prayer-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
   .prayer-card p.request-text { margin:8px 0 12px; color:var(--ink); line-height:1.5; }
   .prayer-card .row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
   .prayer-card .who { font-weight:700; font-size:0.85rem; color:var(--brand); }
-  .pray-btn { border:2px solid var(--purple-deep); background:var(--surface); color:var(--brand); border-radius:6px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
-  .pray-btn.done { background:var(--purple-deep); color:#fff; }
+  .pray-btn { border:2px solid var(--brand-deep); background:var(--surface); color:var(--brand); border-radius:6px; padding:7px 16px; font-weight:700; font-size:0.82rem; cursor:pointer; }
+  .pray-btn.done { background:var(--brand-deep); color:#fff; }
   .pray-count { font-size:0.78rem; color:var(--ink-faint); }
   .answered-badge { display:inline-block; background:var(--ok-bg); color:var(--ok-ink); font-size:0.72rem; font-weight:800; padding:3px 10px; border-radius:6px; margin-bottom:8px; }
-  .testimony-box { background:var(--lilac-light); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:0.85rem; font-style:italic; color:var(--ink-soft); }
+  .testimony-box { background:var(--tint-light); border-radius:10px; padding:10px 12px; margin-top:8px; font-size:0.85rem; font-style:italic; color:var(--ink-soft); }
   .mine-actions { margin-top:10px; }
 </style>
 </head>

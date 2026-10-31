@@ -68,7 +68,7 @@ function showSlowBanner(isUpload) {
     <span></span>
   `;
   el.lastElementChild.textContent = message;
-  el.style.cssText = 'position:fixed; left:16px; right:16px; top:16px; z-index:395; background:#3A1B54; color:#fff; border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:11px; box-shadow:0 12px 30px rgba(0,0,0,0.26); max-width:440px; margin:0 auto; font-family:Manrope,sans-serif; font-size:0.84rem; font-weight:600;';
+  el.style.cssText = 'position:fixed; left:16px; right:16px; top:16px; z-index:395; background:var(--brand-rich); color:#fff; border-radius:12px; padding:12px 16px; display:flex; align-items:center; gap:11px; box-shadow:0 12px 30px rgba(0,0,0,0.26); max-width:440px; margin:0 auto; font-family:Manrope,sans-serif; font-size:0.84rem; font-weight:600;';
   if (!document.getElementById('aconsuSpinKeyframes')) {
     const style = document.createElement('style');
     style.id = 'aconsuSpinKeyframes';
@@ -118,10 +118,10 @@ function setSelectedChapterId(id) {
 function showChapterPicker(chapters) {
   return new Promise((resolve) => {
     const backdrop = document.createElement('div');
-    backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.55); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px;';
+    backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(var(--brand-ink-rgb), 0.55); z-index:500; display:flex; align-items:center; justify-content:center; padding:20px;';
     backdrop.innerHTML = `
-      <div style="background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:var(--font-body);">
-        <h3 style="margin:0 0 6px; font-family:'Fraunces',serif; color:var(--purple-deep,#3A1B54);">Choose your ACONSU chapter</h3>
+      <div style="background:var(--surface); color:var(--ink); border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; font-family:var(--font-body);">
+        <h3 style="margin:0 0 6px; font-family:'Fraunces',serif; color:var(--heading);">Choose your ACONSU chapter</h3>
         <p style="color:var(--ink-soft); font-size:0.9rem; margin:0 0 18px;">This app now serves several ACONSU chapters. Pick yours to continue. You can change this later from your profile.</p>
         <div id="chapterPickList" style="display:flex; flex-direction:column; gap:10px;"></div>
       </div>
@@ -826,7 +826,7 @@ function renderFooter(settings) {
       <div class="footer-grid">
         <div>
           <p class="footer-title">ACONSU</p>
-          <p style="color:#E2D3EE; font-size:0.95rem;">${escapeHtml(s.fullName || "The Apostles' Continuation Students Union")}</p>
+          <p style="color:rgba(255,255,255,0.86); font-size:0.95rem;">${escapeHtml(s.fullName || "The Apostles' Continuation Students Union")}</p>
           <div class="social-row">${socialLinksHtml(s)}</div>
         </div>
         <div>
@@ -859,7 +859,7 @@ function renderFooter(settings) {
             const where = s.address || s.meetingPlace || '';
             const map = safeMapUrl(s.mapUrl);
             if (map) return `<a href="${escapeHtml(map)}" target="_blank" rel="noopener noreferrer">${escapeHtml(where || 'Find us on the map')}</a>`;
-            return where ? `<span style="display:block; padding:6px 0; color:#E2D3EE; font-size:0.95rem;">${escapeHtml(where)}</span>` : '';
+            return where ? `<span style="display:block; padding:6px 0; color:rgba(255,255,255,0.86); font-size:0.95rem;">${escapeHtml(where)}</span>` : '';
           })()}
           ${s.email ? `<a href="mailto:${s.email}">${escapeHtml(s.email)}</a>` : ''}
           ${s.phone ? `<a href="tel:${s.phone}">${escapeHtml(s.phone)}</a>` : ''}
@@ -868,7 +868,7 @@ function renderFooter(settings) {
       <div class="footer-bottom">
         <span>&copy; ${new Date().getFullYear()} ACONSU. All Rights Reserved.</span>
       </div>
-      <div style="text-align:center; padding-top:10px; font-size:0.85rem; color:#CDB9DA;">Powered by HasTech Solutions</div>
+      <div style="text-align:center; padding-top:10px; font-size:0.85rem; color:rgba(255,255,255,0.74);">Powered by HasTech Solutions</div>
     </div>
   `;
 }
@@ -917,6 +917,7 @@ async function initLayout(activePath) {
   renderSideNav(activePath, customPages, member);
   try {
     const settings = await fetchJSON('/api/settings');
+    if (window.ACONSU_BRAND) window.ACONSU_BRAND.fromSettings(settings);
     renderFooter(settings);
     applyHeroArtwork(settings);
     await renderVerseOfDay(settings);
@@ -1061,7 +1062,7 @@ function showIosInstallSheet() {
       <li>Tap <strong>Add</strong></li>
     </ol>
   `;
-  sheet.style.cssText = 'position:fixed; left:16px; right:16px; bottom:16px; z-index:390; background:#3A1B54; color:#fff; border-radius:16px; padding:16px 18px; box-shadow:0 16px 40px rgba(0,0,0,0.32); max-width:420px; margin:0 auto; font-family:Manrope,sans-serif;';
+  sheet.style.cssText = 'position:fixed; left:16px; right:16px; bottom:16px; z-index:390; background:var(--brand-rich); color:#fff; border-radius:16px; padding:16px 18px; box-shadow:0 16px 40px rgba(0,0,0,0.32); max-width:420px; margin:0 auto; font-family:Manrope,sans-serif;';
   document.body.appendChild(sheet);
 
   document.getElementById('iosInstallDismiss').addEventListener('click', () => {
@@ -1097,11 +1098,11 @@ function showInstallBanner() {
       </div>
     </div>
     <div style="display:flex; gap:8px; flex-shrink:0;">
-      <button id="installBtn" style="background:#fff; color:var(--brand-strong); border:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Install</button>
+      <button id="installBtn" style="background:#fff; color:var(--brand-rich); border:none; padding:8px 16px; border-radius:6px; font-weight:700; font-size:0.85rem; cursor:pointer;">Install</button>
       <button id="dismissInstallBtn" style="background:none; color:#fff; border:none; font-size:1.2rem; cursor:pointer; opacity:0.8;">&times;</button>
     </div>
   `;
-  banner.style.cssText = 'position:fixed; left:16px; right:16px; bottom:16px; z-index:390; background:#3A1B54; color:#fff; border-radius:14px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 16px 40px rgba(0,0,0,0.28); max-width:480px; margin:0 auto; font-family:Manrope,sans-serif;';
+  banner.style.cssText = 'position:fixed; left:16px; right:16px; bottom:16px; z-index:390; background:var(--brand-rich); color:#fff; border-radius:14px; padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; box-shadow:0 16px 40px rgba(0,0,0,0.28); max-width:480px; margin:0 auto; font-family:Manrope,sans-serif;';
   document.body.appendChild(banner);
 
   document.getElementById('installBtn').addEventListener('click', async () => {
@@ -1131,7 +1132,7 @@ function ensureToastHost() {
 function showToast(message, type) {
   const host = ensureToastHost();
   const toast = document.createElement('div');
-  const bg = type === 'error' ? '#A93226' : type === 'success' ? 'var(--ok-ink)' : '#3A1B54';
+  const bg = type === 'error' ? '#A93226' : type === 'success' ? 'var(--ok-ink)' : 'var(--brand-rich)';
   toast.textContent = message;
   toast.style.cssText = `background:${bg}; color:#fff; padding:14px 18px; border-radius:10px; font-family:var(--font-body); font-weight:600; font-size:0.9rem; box-shadow:0 12px 28px rgba(0,0,0,0.2); opacity:0; transform:translateY(12px); transition:opacity 0.25s ease, transform 0.25s ease;`;
   host.appendChild(toast);
@@ -1221,7 +1222,7 @@ function rememberedVerseStyle() {
 
 async function pickVerseCardStyle() {
   let styles = [];
-  let fallback = 'purple';
+  let fallback = 'brand';
   try {
     const data = await fetchJSON('/api/verse-styles');
     styles = data.styles || [];
@@ -1234,11 +1235,11 @@ async function pickVerseCardStyle() {
   const chosen = rememberedVerseStyle();
   return new Promise((resolve) => {
     const backdrop = document.createElement('div');
-    backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(36,21,48,0.58); z-index:9999; display:flex; align-items:flex-end; justify-content:center; padding:0;';
+    backdrop.style.cssText = 'position:fixed; inset:0; background:rgba(var(--brand-ink-rgb), 0.58); z-index:9999; display:flex; align-items:flex-end; justify-content:center; padding:0;';
     backdrop.innerHTML = `
-      <div role="dialog" aria-label="Choose a background" style="background:#fff; width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px)); font-family:var(--font-body);">
+      <div role="dialog" aria-label="Choose a background" style="background:var(--surface); color:var(--ink); width:100%; max-width:480px; border-radius:18px 18px 0 0; padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px)); font-family:var(--font-body);">
         <h3 style="margin:0 0 4px; font-family:'Fraunces',serif; font-size:1.15rem; color:var(--brand-strong);">Choose a background</h3>
-        <p style="margin:0 0 16px; font-size:0.85rem; color:#6b5878;">Your choice is remembered for next time.</p>
+        <p style="margin:0 0 16px; font-size:0.85rem; color:var(--ink-faint);">Your choice is remembered for next time.</p>
         <div id="verseStyleGrid" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px;"></div>
         <button type="button" id="verseStyleCancel" class="btn btn-outline btn-sm" style="width:100%; margin-top:16px;">Cancel</button>
       </div>
@@ -1250,9 +1251,9 @@ async function pickVerseCardStyle() {
       const btn = document.createElement('button');
       btn.type = 'button';
       const isChosen = style.value === chosen;
-      btn.style.cssText = `border:2px solid ${isChosen ? '#5B2C82' : 'transparent'}; background:none; padding:0; cursor:pointer; border-radius:12px; overflow:hidden; display:block;`;
+      btn.style.cssText = `border:2px solid ${isChosen ? 'var(--brand-deep)' : 'transparent'}; background:none; padding:0; cursor:pointer; border-radius:12px; overflow:hidden; display:block;`;
       const chip = document.createElement('span');
-      chip.style.cssText = `display:block; height:74px; border-radius:9px; background:${style.swatch || '#5B2C82'};`;
+      chip.style.cssText = `display:block; height:74px; border-radius:9px; background:${style.swatch || 'var(--brand-deep)'};`;
       const name = document.createElement('span');
       name.style.cssText = 'display:block; font-size:0.72rem; font-weight:700; color:var(--brand-strong); padding:6px 2px 4px; text-align:center;';
       name.textContent = style.label;

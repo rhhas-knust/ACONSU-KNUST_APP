@@ -24,7 +24,7 @@
     ['Body text', '--ink', '--bg'], ['Secondary text', '--ink-soft', '--bg'], ['Muted text, hints', '--ink-faint', '--bg'],
     ['Headings', '--heading', '--bg'], ['Links and brand text', '--brand', '--bg'], ['Gold as text', '--accent', '--bg'],
     ['Body on a tinted band', '--ink', '--surface-2'], ['Muted on a tinted band', '--ink-faint', '--surface-2'],
-    ['Button label', '#FFFFFF', '--purple-deep'], ['Light button', '--purple-ink', '#FFFFFF'],
+    ['Button label', '#FFFFFF', '--brand-deep'], ['Light button', '--brand-ink', '#FFFFFF'],
     ['OK', '--ok', '--ok-bg'], ['Waiting', '--warn', '--warn-bg'], ['Error', '--bad', '--bad-bg'], ['Information', '--info', '--info-bg']
   ];
   var pairsEl = document.getElementById('pairs');
