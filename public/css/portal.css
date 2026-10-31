@@ -479,3 +479,6 @@ table.portal-table.hp-table th { white-space: normal; }
   body.print-door-code .door-print { position: absolute; left: 0; top: 0; width: 100%; color: #000; }
   body.print-door-code .door-print img { width: 12cm; }
 }
+
+/* A check-in kept on the phone with no signal (outbox.js). */
+.ci-waiting { color: var(--ink); font-weight: 700; border-left: 3px solid var(--flame-gold); padding-left: 6px; }

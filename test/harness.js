@@ -65,6 +65,16 @@ function applyUpdate(doc, update) {
 // whose code relies on the database refusing a second document with the same
 // value (a register made by two phones at once): create() then refuses one as
 // MongoDB does, with code 11000.
+// When a document was made. Two made one after the other never share a
+// millisecond here, so "newest first" has one answer: on a fast machine a loop of
+// saves otherwise lands several in the same millisecond, and the order between
+// them was left to chance (a check that passed on one CI run and failed the next).
+let lastCreated = 0;
+function createdStamp() {
+  lastCreated = Math.max(Date.now(), lastCreated + 1);
+  return new Date(lastCreated).toISOString();
+}
+
 function makeModel(defaults, { unique = [] } = {}) {
   const docs = [];
   let counter = 0;
@@ -143,14 +153,15 @@ function makeModel(defaults, { unique = [] } = {}) {
     create(data) {
       const taken = unique.find(f => data[f] !== undefined && docs.some(d => d[f] === data[f]));
       if (taken) return Promise.reject(Object.assign(new Error(`E11000 duplicate key error: ${taken}`), { code: 11000 }));
-      const doc = { _id: `oid${++counter}`, ...defaults, ...data, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const created = createdStamp();
+      const doc = { _id: `oid${++counter}`, ...defaults, ...data, createdAt: created, updatedAt: created };
       docs.push(doc);
       return Promise.resolve(clone(doc));
     },
     findOneAndUpdate(query, update, opts) {
       let doc = docs.find(x => matches(x, query));
       if (!doc && opts && opts.upsert) {
-        doc = { _id: `oid${++counter}`, ...defaults, ...query, createdAt: new Date().toISOString() };
+        doc = { _id: `oid${++counter}`, ...defaults, ...query, createdAt: createdStamp() };
         docs.push(doc);
       }
       if (!doc) return result(null);
@@ -283,6 +294,7 @@ const fakeModels = {
   PushSubscription: makeModel({ chapterId: '' }),
   SystemState: makeModel({ lastBirthdayNotifDate: '' }, { unique: ['singleton'] }),
   Metric: makeModel({ count: 0 }),
+  IdempotencyKey: makeModel({ state: 'working', status: 0, body: null }, { unique: ['id'] }),
   PhoneCode: makeModel({ codeHash: '', expiresAt: null, attempts: 0, sends: [], purgeAt: null }),
   DoorCode: makeModel({ serviceType: 'sunday', active: true, uses: 0, createdBy: '', closedAt: null, closedBy: '' }, { unique: ['token'] }),
   ShepherdingRecord: makeModel({ chapterId: '', memberId: '', name: '', phone: '', email: '', level: '', programme: '', department: '', birthdayMonth: null, birthdayDay: null, origin: 'manual', linkedAt: null, linkedHow: '', linkedBy: '', mergedFromList: false, address: '', emergencyContact: '', attendanceStatus: 'new', lastContactDate: '', pastoralNotes: '', imageFileId: '' }),

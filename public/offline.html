@@ -130,24 +130,24 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 </main>
 
 <script>
-  var statusEl = document.getElementById('status');
+var statusEl = document.getElementById('status');
 
-  document.getElementById('retryBtn').addEventListener('click', function () {
-    location.reload();
-  });
+document.getElementById('retryBtn').addEventListener('click', function () {
+  location.reload();
+});
 
-  // When the device comes back, say so and reload on its own - someone who
-  // walked back into signal shouldn't have to work out that they should tap
-  // anything.
-  window.addEventListener('online', function () {
-    statusEl.textContent = 'Back online. Reloading…';
-    statusEl.className = 'status back';
-    setTimeout(function () { location.reload(); }, 700);
-  });
+// When the device comes back, say so and reload on its own - someone who
+// walked back into signal shouldn't have to work out that they should tap
+// anything.
+window.addEventListener('online', function () {
+  statusEl.textContent = 'Back online. Reloading…';
+  statusEl.className = 'status back';
+  setTimeout(function () { location.reload(); }, 700);
+});
 
-  if (navigator.onLine) {
-    statusEl.textContent = 'Your device says it has a connection, but the page could not be reached.';
-  }
+if (navigator.onLine) {
+  statusEl.textContent = 'Your device says it has a connection, but the page could not be reached.';
+}
 </script>
 </body>
 </html>

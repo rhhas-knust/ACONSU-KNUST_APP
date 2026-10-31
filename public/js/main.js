@@ -1479,3 +1479,11 @@ document.addEventListener('click', (e) => {
   button.setAttribute('aria-expanded', open ? 'true' : 'false');
   button.textContent = open ? 'Hide the map' : 'Show the map here';
 });
+
+// A button that goes to another page (data-href), where a link would not fit
+// the menu it sits in. In place of an onclick written into the page, which
+// the browser refuses (lib/securityHeaders.js).
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('button[data-href]');
+  if (b && /^\/[^/]/.test(b.dataset.href)) location.href = b.dataset.href;
+});

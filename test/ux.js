@@ -96,7 +96,10 @@ async function website(browser) {
 
   // the opening needs no script and nothing is stuck invisible after scrolling the whole page
   const h = await pg.evaluate(() => document.documentElement.scrollHeight);
-  for (let y = 0; y < h; y += 350) { await pg.evaluate(y => window.scrollTo(0, y), y); await pg.waitForTimeout(80); }
+  // In steps, each one instant: the site scrolls smoothly, and on a slow machine a
+  // smooth scroll can pass a section between two frames, which says more about
+  // the machine than the page.
+  for (let y = 0; y < h; y += 350) { await pg.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), y); await pg.waitForTimeout(80); }
   await pg.waitForTimeout(1000);
   const stuck = await pg.evaluate(() => [...document.querySelectorAll('main *')].filter(e => getComputedStyle(e).opacity === '0' && e.getBoundingClientRect().height > 0).map(e => e.className || e.tagName));
   check(stuck.length === 0, 'after scrolling the whole page nothing is left invisible', stuck.slice(0, 4));
