@@ -407,6 +407,7 @@ initPortal({
     { key: 'overview', label: 'Overview', render: renderWelfareOverview },
     { key: 'queue', label: 'Requests', render: renderWelfareQueue },
     { key: 'purse', label: 'The Purse', render: renderWelfarePurse },
+    { key: 'givers', label: 'Tithe Cards', render: (el) => GivingCards.renderPanel(el, { url: '/api/welfare/giving-cards', title: 'Tithe Cards', intro: 'One card for each person who pays tithe into the Welfare account, with every payment of theirs.', file: 'tithe-cards' }) },
     { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]
 });

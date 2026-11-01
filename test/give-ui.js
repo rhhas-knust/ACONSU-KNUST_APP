@@ -104,6 +104,44 @@ const check = (label, ok, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   const later = await p.textContent('#receiptCard');
   check('opened later, it says received, and how much arrived', /Received/.test(later) && /GH₵ 45\.00/.test(later), later);
 
+  console.log('\n== giving cards ==');
+  // Two harvest gifts from the same number: the offering above is on no card.
+  for (const amount of ['30', '20']) {
+    await fetch(`${BASE}/api/giving/guest`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chapterId: 'aconsu-knust', name: 'Kwame Visitor', payerNumber: '0245551234', payerNetwork: 'mtn', amount, purpose: 'harvest', consent: true }) });
+  }
+  await p.goto(link, { waitUntil: 'networkidle' });
+  await p.waitForSelector('#receiptCard .giver-card');
+  const guestCard = await p.textContent('#receiptCard .giver-card');
+  check('the receipt link also opens their giving card: both harvest gifts from that number, the offering not on it', /GH₵ 50\.00 waiting/.test(guestCard) && /Every gift \(2\)/.test(guestCard) && !/Offering/.test(guestCard), guestCard);
+  check('with no phone number on it', !/555 ?1234/.test(guestCard));
+  check('and it fits the phone', await noSideways());
+  await f.evaluate(() => window.openPanel('givers'));
+  await f.waitForSelector('#panel-givers .giver-card');
+  const finCards = await f.textContent('#panel-givers');
+  check('Finance has a card for the guest, by name and number, with what is waiting', /Kwame Visitor/.test(finCards) && /No account · 0245551234/.test(finCards) && /GH₵ 50\.00 waiting/.test(finCards), finCards.slice(0, 400));
+  await f.fill('#giverSearch', '999');
+  check('a search that matches nobody says so', /Nobody by that name or number/.test(await f.textContent('#giverGrid')));
+  await f.fill('#giverSearch', '5551');
+  check('and searching a few digits of the number finds them', /Kwame Visitor/.test(await f.textContent('#giverGrid')));
+  check('the cards can be downloaded for the records', await f.isVisible('#giverCsv'));
+
+  const mctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  // With a photo: a new account is asked for one before anything else.
+  const reg = await mctx.request.post(`${BASE}/api/auth/register`, { multipart: { name: 'Abena Member', phone: '0201234567', chapterId: 'aconsu-knust', password: 'secret123', consent: 'true', profileImage: { name: 'me.png', mimeType: 'image/png', buffer: Buffer.from('p') } } });
+  check('a member signs up', reg.ok(), await reg.text());
+  await mctx.request.post(`${BASE}/api/giving/intents`, { data: { amount: '60', purpose: 'tithe', payerNumber: '0201234567', payerNetwork: 'mtn' } });
+  await mctx.request.post(`${BASE}/api/giving/intents`, { data: { amount: '10', purpose: 'offertory', payerNumber: '0201234567', payerNetwork: 'mtn' } });
+  const m = await mctx.newPage();
+  m.on('pageerror', e => errors.push(e.message));
+  await m.goto(`${BASE}/give.html#givingCard`, { waitUntil: 'networkidle' });
+  await m.waitForSelector('#giveHistory .giver-card');
+  const own = await m.textContent('#giveHistory .giver-card');
+  check('a member sees their own giving card on the Give page: the tithe waiting, the offering not on it', /Abena Member/.test(own) && /GH₵ 60\.00 waiting/.test(own) && !/Offering/.test(own), own);
+  check('the offering is still listed among everything they told us about', /Offering: GH₵ 10\.00/.test(await m.textContent('#giveHistory')));
+  await m.goto(`${BASE}/profile.html`, { waitUntil: 'networkidle' });
+  check('Profile links to it', await m.locator('a[href="/give.html#givingCard"]').count() === 1);
+  await mctx.close();
+
   console.log('\n== payments setup ==');
   const a = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
   a.on('pageerror', e => errors.push(e.message));

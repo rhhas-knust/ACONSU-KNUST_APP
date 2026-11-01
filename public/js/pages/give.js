@@ -62,15 +62,20 @@ async function loadHistory() {
   if (!MEMBER) { wrap.innerHTML = ''; return; }
   $('historyHead').hidden = false;
   try {
-    const items = await fetchJSON('/api/giving/mine');
-    wrap.innerHTML = items.map(g => `
+    // Their giving card (offerings left out), then every claim as it stands,
+    // offerings and ones not found included, so nothing they sent goes unseen.
+    const [card, items] = await Promise.all([fetchJSON('/api/giving/my-card'), fetchJSON('/api/giving/mine')]);
+    wrap.innerHTML = `
+      ${card.count ? GivingCards.cardHtml({ ...card, name: MEMBER.name }, { open: true }) : '<p class="empty-state">No giving on your card yet.</p>'}
+      ${items.length ? `<h3 class="give-claims-head">Every gift you have told us about</h3>${items.map(g => `
       <div class="give-history-row">
         <span>
           ${escapeHtml(PURPOSE_LABELS[g.purpose] || g.purpose)}: ${cedis(g.amount)}
           <br>${giveStatusLine(g)}
         </span>
       </div>
-    `).join('') || '<p class="empty-state">No giving yet.</p>';
+    `).join('')}` : ''}`;
+    if (location.hash === '#givingCard') $('givingCard').focus();
   } catch (e) {
     wrap.innerHTML = '<p class="empty-state">Could not load your giving.</p>';
   }
@@ -126,7 +131,12 @@ async function loadChapter(chapterId) {
   const params = new URLSearchParams(location.search);
   const receipt = params.get('receipt');
   if (receipt) {
-    try { showReceipt(await fetchJSON(`/api/giving/receipt/${encodeURIComponent(receipt)}`), ''); }
+    try {
+      showReceipt(await fetchJSON(`/api/giving/receipt/${encodeURIComponent(receipt)}`), '');
+      // Their card: every gift sent from the same number.
+      const card = await fetchJSON(`/api/giving/receipt/${encodeURIComponent(receipt)}/card`).catch(() => null);
+      if (card && card.count > 1) $('receiptCard').insertAdjacentHTML('beforeend', `<h3 class="give-claims-head">Your giving card</h3><p class="tiny muted">Everything sent from the same number, apart from offerings.</p>${GivingCards.cardHtml(card)}`);
+    }
     catch (e) { $('receiptCard').innerHTML = `<p class="empty-state">${escapeHtml(e.message || 'There is no receipt at this link.')}</p>`; $('receiptCard').hidden = false; }
   }
   const authRes = await fetchJSON('/api/auth/me').catch(() => ({ member: null }));

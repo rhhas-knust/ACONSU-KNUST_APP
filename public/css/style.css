@@ -1391,3 +1391,24 @@ body {
 .hero[data-hero-look] .hero-content > p { color: var(--hero-ink); }
 .hero[data-hero-look] .hero-content > .hero-actions .btn-primary { background: var(--hero-ink); border-color: var(--hero-ink); color: var(--hero-on); }
 .hero[data-hero-look] .hero-content > .hero-actions .btn-outline { background: transparent; border-color: var(--hero-ink); color: var(--hero-ink); }
+
+/* ---------- giving cards (public/js/giving-cards.js) ---------- */
+.giver-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); margin-top: 14px; }
+.giver-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+.giver-head h3 { margin: 0; font-size: 1.05rem; }
+.giver-sub { margin: 2px 0 0; font-size: 0.82rem; color: var(--ink-faint); }
+.giver-total { margin: 10px 0 8px; }
+.giver-total strong { font-size: 1.25rem; color: var(--brand-deep); }
+.giver-waiting { color: var(--ink-faint); font-size: 0.85rem; }
+.giver-split { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px 12px; margin: 0 0 8px; }
+.giver-split dt { font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-faint); }
+.giver-split dd { margin: 0; font-weight: 700; }
+.giver-years { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 8px; font-size: 0.85rem; color: var(--ink-soft); }
+.giver-gifts summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; color: var(--brand); }
+.giver-gifts ul { list-style: none; margin: 0; padding: 0; }
+.giver-gifts li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 0.88rem; }
+.giver-amount { font-weight: 700; white-space: nowrap; }
+.giver-amount em { font-style: normal; font-weight: 600; font-size: 0.78rem; color: var(--warn-ink); }
+.giver-summary { font-weight: 700; margin: 0 0 6px; }
+.give-claims-head { margin: 26px 0 10px; font-size: 1rem; }
+.receipt-card .giver-card { margin-top: 10px; }

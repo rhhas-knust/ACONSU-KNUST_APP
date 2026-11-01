@@ -202,6 +202,7 @@ function renderQuickPills() {
   document.getElementById('quickPills').innerHTML = `
     <div class="quick-pills">
       <a href="/card.html" class="quick-pill">Membership Card</a>
+      <a href="/give.html#givingCard" class="quick-pill">Giving Card</a>
       <a href="/events.html" class="quick-pill">My Events</a>
       <a href="/prayer.html" class="quick-pill">Prayer Wall</a>
       <a href="/sermon-notes.html" class="quick-pill">Sermon Notes</a>
