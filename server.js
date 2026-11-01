@@ -7827,7 +7827,10 @@ app.post('/api/admin/chapter-settings/banner', requireChapterAdmin, upload.singl
     });
 
     if (chapter.homeHeaderImageFileId) gridfs.deleteFile(chapter.homeHeaderImageFileId).catch(() => {});
-    const updated = await repo.patchById('chapters', chapter.id, { homeHeaderImageFileId: String(fileId) });
+    const patch = { homeHeaderImageFileId: String(fileId) };
+    // The colour of the words over it, when the form sends one (the preview always does).
+    if (hasOwn(req.body, 'textColor') || hasOwn(req.body, 'veil')) patch.homeHeader = cleanHeaderLook(req.body);
+    const updated = await repo.patchById('chapters', chapter.id, patch);
     res.json({ success: true, fileId: String(fileId), item: chapterSettingsResponse(updated) });
   } catch (e) {
     res.status(500).json({ error: 'Could not upload the chapter banner' });
