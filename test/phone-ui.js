@@ -144,6 +144,20 @@ const check = (label, ok, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
       });
       check('a chapter\'s members are cards on a phone, each value beside its column\'s name', card.stacked && card.head === 'none' && card.label === 'Email' && card.shown === '"Email"', card);
       check('and the header names the chapter once', await p.textContent('#adminBrandName') === 'ACONSU-KNUST', await p.textContent('#adminBrandName'));
+      // A department's header, from a phone: the box that says "Add a header" opens it.
+      await p.evaluate(() => fetch('/api/admin/departments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Choir', description: 'We sing' }) }));
+      await p.evaluate(() => window.openAdminPanel('departments'));
+      await p.waitForTimeout(600);
+      const box = p.locator('#panel-departments .dept-thumb').first();
+      const at = await box.boundingBox();
+      check('a department\'s "Add a header" box is on screen and big enough to tap', !!at && at.x >= 0 && at.x + at.width <= 390 && at.height >= 44 && /Add a header/.test(await box.textContent()), at);
+      await box.tap();
+      await p.waitForSelector('#deptImageFile');
+      const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000020000000108020000007b40e85d0000000f49444154789c63f8cfc0f01f000502020065a9a1b70000000049454e44ae426082', 'hex');
+      await p.setInputFiles('#deptImageFile', { name: 'choir.png', mimeType: 'image/png', buffer: PNG });
+      await p.locator('#deptImageBtn').tap();
+      await p.waitForSelector('#panel-departments .dept-thumb img');
+      check('and a chapter admin can upload one there, which then shows in the list', !!fakeModels.Department._docs.find(d => d.name === 'Choir').headerImageFileId);
     }
     await ctx.close();
   }

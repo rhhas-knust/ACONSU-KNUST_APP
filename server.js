@@ -8051,6 +8051,18 @@ app.post('/api/admin/uploads', requireContentManager, upload.single('file'), asy
     }
     const filter = rolesLib.chapterFilter(req, { required: false });
     const chapterId = rolesLib.chapterIdForWrite(req);
+    // The department or event the image is for, found before anything is
+    // stored: one outside this chapter (or gone) is said plainly, rather than
+    // the file being kept and "set" on nothing.
+    let dept = null;
+    let event = null;
+    if (placement === 'department-header') {
+      dept = await repo.getById('departments', targetId, filter);
+      if (!dept) return res.status(404).json({ error: 'That department was not found in your chapter. Refresh the page and choose it again.' });
+    } else if (placement === 'event-flyer' && targetId) {
+      event = await repo.getById('events', targetId, filter);
+      if (!event) return res.status(404).json({ error: 'That event was not found in your chapter. Refresh the page and choose it again.' });
+    }
 
     const compressed = await compressIfImage(req.file.buffer, req.file.mimetype);
     // A gallery placement is really "photo on this page", which the public pages
@@ -8071,20 +8083,14 @@ app.post('/api/admin/uploads', requireContentManager, upload.single('file'), asy
     // points at it, so do that here rather than making the admin remember a
     // second step.
     let placedOn = '';
-    if (placement === 'department-header' && targetId) {
-      const dept = await repo.getById('departments', targetId, filter);
-      if (dept) {
-        if (dept.headerImageFileId) gridfs.deleteFile(dept.headerImageFileId).catch(() => {});
-        await repo.patchById('departments', targetId, { headerImageFileId: String(fileId) }, filter);
-        placedOn = dept.name;
-      }
-    } else if (placement === 'event-flyer' && targetId) {
-      const event = await repo.getById('events', targetId, filter);
-      if (event) {
-        if (event.flyerFileId) gridfs.deleteFile(event.flyerFileId).catch(() => {});
-        await repo.patchById('events', targetId, { flyerFileId: String(fileId) }, filter);
-        placedOn = event.title;
-      }
+    if (dept) {
+      if (dept.headerImageFileId) gridfs.deleteFile(dept.headerImageFileId).catch(() => {});
+      await repo.patchById('departments', dept.id, { headerImageFileId: String(fileId) }, filter);
+      placedOn = dept.name;
+    } else if (event) {
+      if (event.flyerFileId) gridfs.deleteFile(event.flyerFileId).catch(() => {});
+      await repo.patchById('events', event.id, { flyerFileId: String(fileId) }, filter);
+      placedOn = event.title;
     } else if (placement === 'page-hero') {
       if (!heroArt.isHeroPage(targetId)) return res.status(400).json({ error: 'Choose which page this artwork belongs to.' });
       const chapter = await heroArtChapter(req, req.body.chapterId || req.query.chapterId);
