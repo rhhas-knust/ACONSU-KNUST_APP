@@ -809,6 +809,7 @@ initPortal({
     { key: 'requests', label: 'Budget Requests', render: (el) => OfficeBudget.renderDesk(el) },
     { key: 'ledger', label: 'Ledger', render: renderLedger },
     { key: 'giving', label: 'Giving Claims', render: renderGivingQueue },
+    { key: 'givers', label: 'Giving Cards', render: (el) => GivingCards.renderPanel(el, { url: '/api/finance/giving-cards', title: 'Giving Cards', intro: 'One card for each person who gives to the chapter, with every gift of theirs. Offerings are not on a card: they are the congregation\'s. Tithe is on Welfare\'s cards.', file: 'giving-cards' }) },
     { key: 'reports', label: 'Reports', render: renderReports },
     { key: 'account', label: 'My Account', render: (el) => PortalAccount.render(el) }
   ]

@@ -1,7 +1,7 @@
 // ACONSU service worker - enables offline access and installability.
 // Cache versioning: bump CACHE_NAME whenever static assets change, so old
 // caches get cleaned up automatically instead of serving stale files forever.
-const CACHE_NAME = 'aconsu-v38';
+const CACHE_NAME = 'aconsu-v39';
 
 // The offline outbox's store and sender (outbox-core.js): what a page could
 // not send without signal is sent from here when the phone is back online,
@@ -78,6 +78,7 @@ const APP_SHELL = [
   '/js/pages/events.js',
   '/js/pages/forgot-password.js',
   '/js/pages/give.js',
+  '/js/giving-cards.js',
   '/js/pages/group.js',
   '/js/pages/groups.js',
   '/js/pages/how-to.js',

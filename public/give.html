@@ -85,7 +85,8 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     </form>
 
     <div class="section-head" style="margin-top:40px;" id="historyHead" hidden>
-      <h2>Your giving</h2>
+      <h2 id="givingCard" tabindex="-1">Your giving card</h2>
+      <p class="muted">Everything you have given, apart from offerings, which are the congregation's together.</p>
     </div>
     <div id="giveHistory"><div class="skeleton-stack" role="status" aria-label="Loading"><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div><div class="skeleton skeleton-row"></div></div></div>
   </div>
@@ -96,6 +97,7 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
 <footer class="site-footer" id="site-footer"></footer>
 
 <script src="/js/main.js"></script>
+<script src="/js/giving-cards.js"></script>
 <script src="/js/pages/give.js"></script>
 </body>
 </html>

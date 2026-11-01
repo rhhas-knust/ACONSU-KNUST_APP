@@ -35,6 +35,7 @@ const { registerGroupRoutes } = require('./routes/groups');
 const { registerChatRoutes } = require('./routes/chat');
 const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
+const { registerGivingCardRoutes } = require('./routes/giving-cards');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
@@ -4460,6 +4461,7 @@ registerShepherdListRoutes(app, { repo, models, rolesLib, requireShepherd, requi
 registerDoorCheckinRoutes(app, { repo, models, rolesLib, requireShepherd, requireAttendanceTaker, actorName });
 registerPhoneSigninRoutes(app, { models, rolesLib, freshSession, revokeMemberSessions, requireMember });
 registerGivingRoutes(app, { repo, requireChapterAdmin, givingGoesToWelfare });
+registerGivingCardRoutes(app, { rolesLib, requireMember, requireViewRole, requireWelfareOfficer });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
 registerShareRoutes(app);
 registerTodayRoutes(app, { models, currentStaff });

@@ -916,7 +916,7 @@ The browser runs scripts from this app's own files and nothing else (`lib/securi
 - **Every page's own script is a file**, `public/js/pages/<page>.js`, loaded at the foot of the page as before. A button that used to go somewhere with `onclick=` now carries `data-href="/page.html"` (handled in `main.js`); one that opened a panel carries `data-open-panel` (`portal.js`). Buttons drawn by a script get their listener from that script.
 - **Two exceptions, each allowed by its exact fingerprint (sha256) and nothing else:** the few lines at the top of every page that set light or dark before the page is drawn (they must run before anything loads), and the offline page's few lines (it is shown when nothing can load). If either is changed, the browser refuses it until the fingerprint in `lib/securityHeaders.js` is changed to match. To work out the new one: `node -e "const s=require('fs').readFileSync('public/index.html','utf8').match(/<script>([\s\S]*?)<\/script>/)[1]; console.log(require('crypto').createHash('sha256').update(s).digest('base64'))"` (use `offline.html` and its second script for the other). `test/csp.js` fails, and names the page, if any page carries an inline script that matches neither.
 - Styles still allow inline style: a style cannot run code, and the pages carry a lot of it.
-- The service worker keeps the page scripts of the pages it keeps for offline use (`sw.js`, cache `aconsu-v38`).
+- The service worker keeps the page scripts of the pages it keeps for offline use (`sw.js`, cache `aconsu-v39`).
 
 `test/csp.js` (in `npm test`: the policy, every inline script against the two fingerprints, no `on...=` in a page or in markup a script builds, no `javascript:` links, every page script present and loaded) and `test/csp-ui.js` (opens all 51 pages on a phone and the admin portal signed in, and checks the browser refused nothing and every page's script ran).
 
@@ -930,3 +930,18 @@ The leaders' portals and the admin are built for a desk, so a phone needs a few 
 - **The header names the chapter once:** "ACONSU-KNUST", not "ACONSU: ACONSU-KNUST".
 
 `test/phone-ui.js` signs in to the admin, the chapter admin and every office's portal at 390px, opens all 121 panels, and fails on anything that slides sideways, a wide table that is not cards, or a button or field under 44px; it also checks a laptop still gets its tables.
+
+## 43. Giving cards
+
+Every person who gives has a card of their own: each gift of theirs, the total received and anything still waiting, by purpose and by year (`lib/givingCards.js`, `routes/giving-cards.js`, drawn by `public/js/giving-cards.js`).
+
+- **Offerings are never on a card.** They are the congregation's, given together on a Sunday, not one person's. A claim Finance or Welfare turned down is not on one either.
+- **What counts:** a confirmed gift at what the account actually received; a claim still waiting for Finance or Welfare is on the card too, marked *waiting*, at what the giver said they sent, and kept out of the received total.
+- **Whose card:** a member's gifts are theirs by account. Someone without an account is known by the number they sent from (written any way: 024..., +233 24...), so every gift from that number is one card; with no usable number, by the name they gave.
+- **Who sees which:**
+  - **Finance**, *Giving Cards*: a card for everyone who gives to the treasury (harvest, general giving, other), with a search by name or a few digits of the number, and a download for the records (CSV).
+  - **Welfare**, *Tithe Cards*: a card for everyone who pays tithe, which goes to Welfare's own account.
+  - **A member**: their own card on the Give page (Profile, *Giving Card*), tithe included; their list of every gift they told us about, offerings too, stays underneath.
+  - **Someone without an account**: their receipt link shows their card, every gift sent from that number to that chapter, with their first name only and never the number.
+
+`test/giving-cards.js` (in `npm test`) and `test/give-ui.js` (the guest's card on their receipt, Finance's card and search, a member's own card).
