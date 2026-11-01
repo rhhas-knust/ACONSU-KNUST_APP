@@ -591,6 +591,15 @@ function readPublic(f) {
   check('deleting the file succeeds', r.status === 200, r.data);
   r = await call('anon', 'GET', `/api/departments/${deptId}`);
   check('department no longer points at a deleted image', !r.data.headerImageFileId, r.data);
+  const filesBefore = (await fakeGridfs.listFiles({})).length;
+  const stray = new FormData();
+  stray.append('file', new Blob([Buffer.from('fake-image-bytes')], { type: 'image/png' }), 'header.png');
+  stray.append('placement', 'department-header');
+  stray.append('targetId', 'depa_not_here');
+  const strayRes = await fetch(BASE + '/api/admin/uploads', { method: 'POST', headers: { cookie: jars.admin }, body: stray });
+  const strayData = await strayRes.json();
+  check('a header for a department that is not there is refused in words, not reported as set', strayRes.status === 404 && /department was not found/.test(strayData.error || ''), strayData);
+  check('and nothing is kept from it', (await fakeGridfs.listFiles({})).length === filesBefore);
 
   console.log('\n== coordinator dashboard ==');
   r = await call('coord', 'GET', '/api/coordinator/overview');

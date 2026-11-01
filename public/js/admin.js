@@ -822,9 +822,9 @@ async function renderResourcePanel(resource, fields, singular) {
         ${pageItems.map(item => `
           <tr>
             ${resource === 'departments' ? `<td>
-              <div style="width:74px; height:44px; border-radius:8px; overflow:hidden; background:var(--tint-light); display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:var(--ink-faint);">
-                ${item.headerImageFileId ? `<img src="/api/files/${item.headerImageFileId}" alt="" style="width:100%; height:100%; object-fit:cover;">` : 'none'}
-              </div>
+              <button type="button" class="dept-thumb" data-header-image="${item.id}" aria-label="${item.headerImageFileId ? 'Change' : 'Add'} the header for ${escapeHtml(item.name || '')}">
+                ${item.headerImageFileId ? `<img src="/api/files/${item.headerImageFileId}" alt="">` : 'Add a header'}
+              </button>
             </td>` : ''}
             ${fields.slice(0, 3).map((f, idx) => `<td>${idx === 0 && resource === 'events' && item.isNational ? '<span class="badge" style="margin-right:6px;">National</span>' : ''}${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
             ${resource === 'events' ? `<td>${item.registrationEnabled ? `<button data-view-regs="${item.id}" data-title="${escapeHtml(item.title)}">View (${item.capacity > 0 ? `cap ${item.capacity}` : 'unlimited'})</button>` : '-'}</td>` : ''}
