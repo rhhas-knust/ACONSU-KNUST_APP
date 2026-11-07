@@ -282,7 +282,10 @@ const peopleImport = require('../lib/peopleImport');
   check('a Sunday he was not checked in at counts as missed', kh.history.some(h => h.date === '2026-11-15' && h.status === 'absent' && h.notCheckedIn), kh.history);
   check('so his rate is honest, not 100%', kh.servicesRecorded >= 4 && kh.attended === 3 && kh.rate < 100, kh);
   r = await call('shep.k', 'GET', `/api/shepherd/attendance-history/${efua.id}`);
-  check('Sundays before someone was on the list are not held against them', !r.data.history.some(h => h.date < efua.createdAt.slice(0, 10)), r.data.history);
+  // Only a Sunday with no mark for her is inferred as missed, and only from the day she joined.
+  // A mark someone actually gave her on a register (here, excused) stands whatever the date,
+  // so this checks the inferred absences, not every entry: it must not depend on today's date.
+  check('Sundays before someone was on the list are not held against them', !r.data.history.some(h => h.notCheckedIn && h.date < efua.createdAt.slice(0, 10)), r.data.history);
   r = await call('shep.k', 'GET', '/api/shepherd/attendance-summary.pdf');
   check('the attendance % report still builds, with the list in it', r.status === 200 && String(r.headers.get('content-type')).includes('pdf'), r.status);
 
