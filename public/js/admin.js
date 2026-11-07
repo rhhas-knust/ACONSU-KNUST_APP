@@ -2934,7 +2934,34 @@ async function renderSettings() {
       <button type="submit" class="btn btn-primary btn-block">Save Settings</button>
       <div class="form-msg" id="settingsMsg"></div>
     </form>
+    ${ADMIN_SCOPE.isNational && !isOversightOnly() ? `
+    <form class="form-card" id="testEmailForm" style="max-width:640px; margin:18px 0 0;">
+      <h3 style="margin-top:0;">Email</h3>
+      <p class="hint">Password-reset links and other notices go out by email. Send yourself a test to check it works: if it does not, this says why.</p>
+      <div class="field"><label for="testEmailTo">Send a test to</label><input type="email" id="testEmailTo" autocomplete="email" placeholder="you@example.com" required></div>
+      <button type="submit" class="btn btn-outline" id="testEmailBtn">Send a test email</button>
+      <div class="form-msg" id="testEmailMsg" role="status"></div>
+    </form>` : ''}
   `;
+  const testForm = document.getElementById('testEmailForm');
+  if (testForm) testForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('testEmailMsg');
+    const btn = document.getElementById('testEmailBtn');
+    btn.disabled = true; btn.textContent = 'Sending...';
+    try {
+      const r = await fetchJSON('/api/admin/test-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: document.getElementById('testEmailTo').value }) });
+      msg.textContent = r.sent
+        ? `Sent${r.via === 'brevo' ? ' through Brevo' : ''} from ${r.from}. Check the inbox (and the spam folder).`
+        : (r.error || 'It was not sent.');
+      msg.className = `form-msg ${r.sent ? 'success' : 'error'}`;
+    } catch (err) {
+      msg.textContent = err.message || 'Could not send the test.';
+      msg.className = 'form-msg error';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send a test email';
+    }
+  });
   const brandPicker = BrandPicker.mount(document.getElementById('brandPickerMount'), { value: settings.brandColor || '', fallback: '#0B1A43' });
   document.getElementById('settingsForm').addEventListener('submit', async (e) => {
     e.preventDefault();

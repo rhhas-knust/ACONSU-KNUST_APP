@@ -957,3 +957,9 @@ When a member is made an executive (appointed to an office by the Coordinator, g
 `officeOf` in `routes/member-account.js`; `test/executive-profile.js` (in `npm test`).
 
 **Your office, from the profile.** A member who holds a leadership login (an executive office, the Finance Office, Shepherding, Publicity, Welfare, the Coordinator, the Chapter Admin, National) sees **Your office** on their profile, with a button into each portal their login opens (`portalsOf` in `routes/member-account.js`). The button opens that portal's sign-in with their office username already filled in and the cursor in the password; the password stays theirs to type, with the second step for leaders, so being signed in to the app never opens an office by itself. Only current logins are listed: once a term ends or an account is switched off, the button goes. The Publicity Head gets Publicity as well as the Executive Portal.
+
+## 45. Email on Render: Brevo's web API
+
+Since September 2025 Render's free web services cannot open the email ports (25, 465, 587), so email sent by SMTP from there times out, and a forgotten-password link never arrives (the page cannot say so: it gives the same answer whether or not an account exists). With **`BREVO_API_KEY`** set, the app sends through Brevo's web API over ordinary HTTPS instead (`lib/mailer.js`); SMTP is still used when only the SMTP settings are there. `MAIL_FROM` must be a sender verified in Brevo.
+
+To check it: admin, **Global Settings, Email, Send a test email**. It sends the same way a reset does, and when it fails it says why in words: email not set up, a blocked port, a refused key or login, an unverified sender. `test/mailer.js` (in `npm test`).

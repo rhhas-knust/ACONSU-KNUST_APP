@@ -111,7 +111,7 @@ normal: the app works without every one of them.
 |---|---|---|
 | `publicAddress`, `searchEngines` | `PUBLIC_BASE_URL` | Links use Render's own address; no sitemap |
 | `linksInMessages` | `PUBLIC_BASE_URL` or Render's own address | No password reset emails in production (they are never built from the request's address) |
-| `email` | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` (and `MAIL_FROM`) | No email |
+| `email` | `BREVO_API_KEY` and `MAIL_FROM` (on Render's free plan, which blocks the SMTP ports); or `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` on a paid plan | No email. Test it in the admin: Global Settings, Email, Send a test email |
 | `pushNotifications` | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | No push notifications |
 | `androidAppLinks` | `ANDROID_ASSET_LINKS` | Links do not open in the Android app |
 | `sharedCookieDomain` | `COOKIE_DOMAIN` | Off on purpose; leave it unset |
