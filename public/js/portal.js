@@ -373,6 +373,8 @@ async function showPortalOrLogin() {
   if (PORTAL.user && PORTAL.user.mustSetUpSecondStep) return showSecondStepSetup();
   document.getElementById('portalLoginWrap').style.display = allowed ? 'none' : 'flex';
   document.getElementById('portalShell').style.display = allowed ? 'block' : 'none';
+  // Come from "Your office" with the username filled in: the password is next.
+  if (!allowed && document.getElementById('portalUsername').value && !document.getElementById('portalPassword').value) document.getElementById('portalPassword').focus();
   if (allowed) {
     // A portal can narrow its own panels once it knows who is signed in - the
     // executive portal uses this to show only the panels the holder's position
@@ -456,6 +458,7 @@ async function initPortal(config) {
 // Replace lines 207-231 with this:
 
   // "Your chapter" above the username, when there is more than one to choose from.
+  prefillOfficeLogin('portalUsername', 'portalPassword');
   const chapterPick = window.LeaderChapter
     ? LeaderChapter.attach(document.getElementById('portalLoginForm'), 'portalUsername')
     : Promise.resolve({ value: () => undefined });

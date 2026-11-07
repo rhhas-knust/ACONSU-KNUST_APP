@@ -77,6 +77,9 @@ async function checkAuth() {
     }
   } catch (e) { /* not signed in either way */ }
   document.getElementById('loginWrap').style.display = 'flex';
+  // Come from "Your office" with the username filled in: the password is next.
+  const officeUser = document.getElementById('username');
+  if (officeUser && officeUser.value && !document.getElementById('password').value) document.getElementById('password').focus();
   document.getElementById('adminShell').style.display = 'none';
 }
 
@@ -3599,6 +3602,8 @@ function initCommandPalette() {
     }
   });
 }
+
+prefillOfficeLogin('username', 'password');
 
 // "Your chapter" above the username, when there is more than one to choose from.
 const chapterPick = window.LeaderChapter

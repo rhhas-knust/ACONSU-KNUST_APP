@@ -8,6 +8,7 @@ let CURRENT_MEMBER = null;
   CURRENT_MEMBER = authRes.member;
   await initLayout('/profile.html');
   renderProfileTopRow();
+  renderOfficePortals();
   renderMemberStanding();
   renderMyEvents();
   renderQuickPills();
@@ -63,6 +64,28 @@ function officeBadge(office) {
   if (!office || !office.title) return '';
   const where = office.department ? ` · ${escapeHtml(office.department)}` : office.national ? ' · National' : '';
   return `<p class="office-line"><span class="office-badge">${escapeHtml(office.title)}</span><span class="office-where">${office.confirmed ? `Executive${where}` : `Executive${where}, waiting for the Coordinator to confirm`}</span></p>`;
+}
+
+// "Your office": a way straight into each portal their own leadership login
+// opens (the Executive Portal, the Finance Office, the Coordinator Portal...),
+// with the username to sign in as. Nothing for a member with none.
+function renderOfficePortals() {
+  const el = document.getElementById('officePortals');
+  if (!el) return;
+  const portals = (CURRENT_MEMBER && CURRENT_MEMBER.portals) || [];
+  if (!portals.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <section class="form-card office-portals" aria-labelledby="officePortalsTitle">
+      <h2 id="officePortalsTitle">Your office</h2>
+      <p class="muted">Your work as a leader is in your office's portal. Sign in there with your office username and its own password.</p>
+      <ul class="office-portal-list">
+        ${portals.map(p => `
+          <li>
+            <a class="btn btn-primary" href="${escapeHtml(p.href)}">Open the ${escapeHtml(p.label)}</a>
+            <span class="tiny muted">Sign in as <strong>${escapeHtml(p.username)}</strong>${p.firstSignIn ? ', with the starting password you were given, then choose your own' : ''}</span>
+          </li>`).join('')}
+      </ul>
+    </section>`;
 }
 
 function renderProfileTopRow() {

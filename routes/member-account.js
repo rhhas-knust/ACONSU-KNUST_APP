@@ -35,6 +35,42 @@ async function officeOf(member) {
   return { title: member.executiveRole, department, confirmed: member.executiveStatus === 'verified', national: member.executiveScope === 'national' };
 }
 
+// The office portals a member's own leadership logins open, for the links on
+// their profile: the portal, and the username to sign in with (the password
+// stays theirs to type, with the second step for leaders). Only logins that
+// are theirs and still current: a term that has ended, or an account switched
+// off, opens nothing.
+const PORTALS = {
+  nationalCoordinator: { href: '/national.html', label: 'National Portal' },
+  coordinator: { href: '/coordinator.html', label: 'Coordinator Portal' },
+  chapterAdmin: { href: '/chapter.html', label: 'Chapter Admin' },
+  finance: { href: '/finance.html', label: 'Finance Office' },
+  shepherding: { href: '/shepherding.html', label: 'Shepherding' },
+  publicity: { href: '/publicity.html', label: 'Publicity' },
+  welfare: { href: '/welfare-portal.html', label: 'Welfare Office' },
+  executive: { href: '/executive.html', label: 'Executive Portal' }
+};
+// An office whose holder also works in another office's portal (see
+// POSITION_OPENS_OFFICE in server.js).
+const ALSO_OPENS = { publicity_head: 'publicity' };
+
+async function portalsOf(member) {
+  if (!member || !member.id) return [];
+  const accounts = await models.StaffUser.find({ memberId: member.id }).lean().catch(() => []);
+  const current = (a) => a.active !== false && !a.endedAt && !(a.termEndsAt && new Date(a.termEndsAt).getTime() <= Date.now());
+  const out = [];
+  const seen = new Set();
+  for (const a of accounts.filter(current)) {
+    for (const role of [a.role, ALSO_OPENS[a.positionKey]].filter(Boolean)) {
+      const portal = PORTALS[role];
+      if (!portal || seen.has(portal.href)) continue;
+      seen.add(portal.href);
+      out.push({ href: `${portal.href}?as=${encodeURIComponent(a.username)}`, label: portal.label, username: a.username, firstSignIn: !!a.mustChangePassword });
+    }
+  }
+  return out;
+}
+
 function registerMemberAccountRoutes(app, deps) {
   const {
     DUMMY_HASH, POLICY_VERSION, compressIfImage, currentAcademicYearLabel, endSession, escapeHtmlForEmail,
@@ -252,7 +288,7 @@ function registerMemberAccountRoutes(app, deps) {
       // reset token is credential material that should never leave the server.
       const { passwordHash, resetTokenHash, resetTokenExpires, qrToken, ...safe } = member;
       // Signed up without a photo: the app asks for it before anything else.
-      res.json({ member: { ...safe, needsPhoto: !member.profileImageFileId, hasPassword: !!passwordHash, office: await officeOf(member) } });
+      res.json({ member: { ...safe, needsPhoto: !member.profileImageFileId, hasPassword: !!passwordHash, office: await officeOf(member), portals: await portalsOf(member) } });
     } catch (e) {
       res.json({ member: null });
     }
@@ -412,4 +448,4 @@ function registerMemberAccountRoutes(app, deps) {
   });
 }
 
-module.exports = { registerMemberAccountRoutes, officeOf };
+module.exports = { registerMemberAccountRoutes, officeOf, portalsOf };
