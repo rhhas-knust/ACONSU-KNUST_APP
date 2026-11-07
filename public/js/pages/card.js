@@ -31,6 +31,7 @@
           ${photo}
           <div>
             <p class="name">${escapeHtml(data.name)}</p>
+            ${data.office && data.office.confirmed ? `<p class="card-office">${escapeHtml(data.office.title)}${data.office.department ? `, ${escapeHtml(data.office.department)}` : ''}</p>` : ''}
             <p class="chapter">${escapeHtml(data.chapterName || '')}</p>
           </div>
         </div>

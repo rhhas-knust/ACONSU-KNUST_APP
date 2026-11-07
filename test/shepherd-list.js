@@ -282,7 +282,9 @@ const peopleImport = require('../lib/peopleImport');
   check('a Sunday he was not checked in at counts as missed', kh.history.some(h => h.date === '2026-11-15' && h.status === 'absent' && h.notCheckedIn), kh.history);
   check('so his rate is honest, not 100%', kh.servicesRecorded >= 4 && kh.attended === 3 && kh.rate < 100, kh);
   r = await call('shep.k', 'GET', `/api/shepherd/attendance-history/${efua.id}`);
-  check('Sundays before someone was on the list are not held against them', !r.data.history.some(h => h.date < efua.createdAt.slice(0, 10)), r.data.history);
+  // Held against them = counted as missed. A Sunday they were actually marked
+  // at (checked in, or excused) is theirs whatever the day the record was made.
+  check('Sundays before someone was on the list are not held against them', !r.data.history.some(h => h.date < efua.createdAt.slice(0, 10) && h.notCheckedIn), r.data.history);
   r = await call('shep.k', 'GET', '/api/shepherd/attendance-summary.pdf');
   check('the attendance % report still builds, with the list in it', r.status === 200 && String(r.headers.get('content-type')).includes('pdf'), r.status);
 
