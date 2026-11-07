@@ -4637,6 +4637,27 @@ function readPublic(f) {
     r6 = await call('natOv', 'POST', '/api/admin/executives',
       { name: 'National Exec', chapterId: '__national__' });
     check('and so is a national executive', r6.status === 200, r6.data);
+    // The National portal sends a national executive as an upload (it can
+    // carry a photo), so its fields are read only after the rule first runs.
+    // Sent here as the portal sends it.
+    const natExecForm = (fields) => { const f = new FormData(); Object.entries(fields).forEach(([k, v]) => f.append(k, v)); return f; };
+    r6 = await call('natOv', 'POST', '/api/admin/executives', natExecForm({ name: 'National Patron', role: 'Patron', chapterId: '__national__' }), true);
+    check('a national executive sent with its photo, as the National portal sends it, is national work too', r6.status === 200 && !r6.data.item.chapterId, r6.data);
+    const natExecId = r6.data.item && r6.data.item.id;
+    r6 = await call('natOv', 'POST', '/api/admin/executives', natExecForm({ name: 'Slipped in', role: 'President', chapterId }), true, asChapter);
+    check('but one sent that way into a chapter is still refused', r6.status === 403, r6.data);
+    r6 = await call('natOv', 'PUT', `/api/admin/executives/${natExecId}`, natExecForm({ name: 'National Patron', role: 'Senior Patron', chapterId: '__national__' }), true);
+    check('national edits its own executive', r6.status === 200, r6.data);
+    r6 = await call('natOv', 'DELETE', `/api/admin/executives/${natExecId}`);
+    check('and can remove one (a delete names no chapter: the record says it is national)', r6.status === 200, r6.data);
+    const chapterExec = fakeModels.Executive._docs.find(e => e.chapterId === chapterId);
+    if (chapterExec) {
+      r6 = await call('natOv', 'DELETE', `/api/admin/executives/${chapterExec.id}`);
+      check('while a chapter\'s executive cannot be removed from National', r6.status === 403, r6.data);
+    }
+    const natEvent = fakeModels.Event._docs.find(e => e.isNational === true);
+    r6 = await call('natOv', 'DELETE', `/api/admin/events/${natEvent.id}`);
+    check('national removes its own event', r6.status === 200, r6.data);
 
     // ---- the chapter runs itself ----
     r6 = await call('ovAdmin', 'POST', '/api/portal/login', { username: 'ov.chapteradmin', password: 'password1234' });

@@ -527,7 +527,7 @@ async function initPortal(config) {
   // (A button that opens it, such as Today's "All tools", controls it too.)
   document.addEventListener('click', (e) => {
     const nav = document.getElementById('portalNav');
-    if (nav.classList.contains('open') && !nav.contains(e.target) && !e.target.closest('[aria-controls="portalNav"]')) setPortalMenu(false);
+    if (nav.classList.contains('open') && !nav.contains(e.target) && !menuToggle.contains(e.target) && !e.target.closest('[aria-controls="portalNav"]')) setPortalMenu(false);
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && document.getElementById('portalNav').classList.contains('open')) { setPortalMenu(false); menuToggle.focus(); }

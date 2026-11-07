@@ -102,6 +102,13 @@ const check = (label, ok, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
     await p.fill('#portalUsername', who.username); await p.fill('#portalPassword', who.password);
     await p.click('#portalLoginBtn');
     await p.waitForSelector('#portalShell', { state: 'visible' });
+    // The menu button opens the menu, tapped as a person would (the National
+    // portal's once closed on the very tap that opened it).
+    await p.waitForTimeout(300);
+    await p.tap('#portalMenuToggle');
+    await p.waitForTimeout(250);
+    if (!(await p.isVisible('#portalNav'))) problems.push(`${file}: the menu button does not open the menu`);
+    await p.keyboard.press('Escape');
     await p.waitForTimeout(500);
     for (const key of await p.evaluate(() => [...document.querySelectorAll('#portalNav button[data-panel]')].map(b => b.dataset.panel))) {
       await p.evaluate((k) => window.openPanel(k), key);

@@ -79,7 +79,7 @@ const rawUpload = multer({
 // once routes/chapter-requests.js is registered). Every route that takes an
 // upload goes through here, so none can forget to.
 let chapterGuardAfterUpload = (req, res, next) => next();
-const afterUpload = [rejectOperatorKeys, checkMapLink, (req, res, next) => chapterGuardAfterUpload(req, res, next)];
+const afterUpload = [rejectOperatorKeys, checkMapLink, (req, res, next) => nationalGuardAfterUpload(req, res, next), (req, res, next) => chapterGuardAfterUpload(req, res, next)];
 const upload = {
   single: (name) => [rawUpload.single(name), ...afterUpload],
   array: (name, max) => [rawUpload.array(name, max), ...afterUpload],
@@ -305,22 +305,55 @@ function writeIsExplicitlyNational(req) {
   return body.isNational === true;
 }
 
-app.use((req, res, next) => {
+// A national executive or national event that already exists: changing or
+// deleting it is National's own work. Looked up, never taken from the request,
+// so a chapter's executive cannot be passed off as national.
+const NATIONAL_RECORDS = /^\/api\/admin\/(executives|events)\/([^/]+)/;
+async function aimsAtNationalRecord(req) {
+  const m = NATIONAL_RECORDS.exec(req.path);
+  if (!m) return false;
+  const resource = m[1];
+  const record = await repo.getById(resource, decodeURIComponent(m[2]), repo.allChapters()).catch(() => null);
+  if (!record) return false;
+  return resource === 'executives' ? !record.chapterId : record.isNational === true;
+}
+const NATIONAL_REFUSAL = {
+  error: 'National oversees chapters, it does not run them. '
+       + "This change belongs to the chapter's own admin."
+};
+const isNationalCoordinatorSession = (req) => {
+  if (req.session && req.session.isAdmin) return false;
+  const staff = currentStaff(req);
+  return !!(staff && staff.role === 'nationalCoordinator');
+};
+const isMultipartWrite = (req) => /^multipart\/form-data/i.test(String(req.headers['content-type'] || ''));
+
+app.use(async (req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
   if (!req.path.startsWith('/api/')) return next();
   // The break-glass login (ADMIN_USERNAME / ADMIN_PASSWORD) is deliberately
   // untouched: it is how a locked-out deployment is recovered and how the
   // first chapter is created, before any chapter admin exists to do it.
-  if (req.session && req.session.isAdmin) return next();
-  const staff = currentStaff(req);
-  if (!staff || staff.role !== 'nationalCoordinator') return next();
+  if (!isNationalCoordinatorSession(req)) return next();
   if (NATIONAL_MAY_WRITE.some((re) => re.test(req.path))) return next();
+  try {
+    if (await aimsAtNationalRecord(req)) return next();
+  } catch (e) { /* refused below */ }
+  // A new national executive comes with its photo, so its fields are read only
+  // once the upload is: it is checked then (nationalGuardAfterUpload).
+  if (isMultipartWrite(req) && req.method === 'POST' && /^\/api\/admin\/executives$/.test(req.path)) {
+    req.nationalCheckAfterUpload = true;
+    return next();
+  }
   if (writeIsExplicitlyNational(req)) return next();
-  return res.status(403).json({
-    error: 'National oversees chapters, it does not run them. '
-         + "This change belongs to the chapter's own admin."
-  });
+  return res.status(403).json(NATIONAL_REFUSAL);
 });
+
+function nationalGuardAfterUpload(req, res, next) {
+  if (!req.nationalCheckAfterUpload) return next();
+  if (writeIsExplicitlyNational(req)) return next();
+  return res.status(403).json(NATIONAL_REFUSAL);
+}
 
 // A chapter is its own: its look, its events, its members and its accounts.
 // The main admin may change them only while the chapter has asked. See
