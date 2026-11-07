@@ -1412,3 +1412,9 @@ body {
 .giver-summary { font-weight: 700; margin: 0 0 6px; }
 .give-claims-head { margin: 26px 0 10px; font-size: 1rem; }
 .receipt-card .giver-card { margin-top: 10px; }
+
+/* ---------- the office a member holds (profile.js, card.js) ---------- */
+.office-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 4px 0 6px; }
+.office-badge { display: inline-block; padding: 3px 10px; border-radius: 6px; background: var(--action); color: var(--action-ink); font-weight: 800; font-size: 0.85rem; letter-spacing: 0.02em; }
+.office-where { font-size: 0.85rem; font-weight: 600; color: var(--ink-soft); }
+.membership-card .card-office { margin: 2px 0; font-weight: 800; font-size: 0.9rem; letter-spacing: 0.02em; }

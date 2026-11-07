@@ -945,3 +945,13 @@ Every person who gives has a card of their own: each gift of theirs, the total r
   - **Someone without an account**: their receipt link shows their card, every gift sent from that number to that chapter, with their first name only and never the number.
 
 `test/giving-cards.js` (in `npm test`) and `test/give-ui.js` (the guest's card on their receipt, Finance's card and search, a member's own card).
+
+## 44. An executive's office on their own profile
+
+When a member is made an executive (appointed to an office by the Coordinator, given an executive account, or their application approved), the app already fills their roster card from their profile: name, photo, phone and email. Now:
+
+- **Their profile says which office they hold**, under their name: a badge such as **President**, with the department they lead where there is one. Their **membership card** says it too. An office they claimed but the Coordinator has not confirmed says so.
+- **It follows the seat.** The office is shown only while the seat is current: once the term ends or the office is handed over, it goes from their pages, with nothing for anyone to remember to clear.
+- **Their roster card keeps up with their profile.** A new photo, name, phone or email on their profile reaches the card wherever the card still showed what the profile did. Before, a new profile photo deleted the old one and left the roster card pointing at a picture that was gone. Anything set on the card itself (a formal portrait, an office email) is kept.
+
+`officeOf` in `routes/member-account.js`; `test/executive-profile.js` (in `npm test`).

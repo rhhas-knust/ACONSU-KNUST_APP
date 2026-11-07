@@ -15,6 +15,26 @@ const mailer = require('../lib/mailer');
 const phoneLib = require('../lib/phone');
 const listLink = require('../lib/listLink');
 
+// The office a member holds, as their own pages show it: "President", or
+// "Head" of the department they lead. Null for anyone who holds none (and
+// for someone whose term has ended, which clears isExecutive). An office
+// claimed but not yet confirmed by the Coordinator says so.
+async function officeOf(member) {
+  if (!member || !member.isExecutive || !member.executiveRole || member.executiveStatus === 'rejected') return null;
+  // Someone given an office login holds the office only while that seat is
+  // current: a term that has ended (or an account switched off) is not an
+  // office any more, whatever the member record still says.
+  const seats = await repo.getAll('staffUsers', { chapterId: member.chapterId || '', memberId: member.id, role: 'executive' }).catch(() => []);
+  const current = (a) => a.active !== false && !a.endedAt && !(a.termEndsAt && new Date(a.termEndsAt).getTime() <= Date.now());
+  if (seats.length && !seats.some(current)) return null;
+  let department = '';
+  if (member.executiveDepartment) {
+    const dept = await repo.getById('departments', member.executiveDepartment, { chapterId: member.chapterId || '' }).catch(() => null);
+    department = (dept && dept.name) || '';
+  }
+  return { title: member.executiveRole, department, confirmed: member.executiveStatus === 'verified', national: member.executiveScope === 'national' };
+}
+
 function registerMemberAccountRoutes(app, deps) {
   const {
     DUMMY_HASH, POLICY_VERSION, compressIfImage, currentAcademicYearLabel, endSession, escapeHtmlForEmail,
@@ -232,12 +252,35 @@ function registerMemberAccountRoutes(app, deps) {
       // reset token is credential material that should never leave the server.
       const { passwordHash, resetTokenHash, resetTokenExpires, qrToken, ...safe } = member;
       // Signed up without a photo: the app asks for it before anything else.
-      res.json({ member: { ...safe, needsPhoto: !member.profileImageFileId, hasPassword: !!passwordHash } });
+      res.json({ member: { ...safe, needsPhoto: !member.profileImageFileId, hasPassword: !!passwordHash, office: await officeOf(member) } });
     } catch (e) {
       res.json({ member: null });
     }
   });
 
+
+  // A sitting executive's roster card was filled from their profile when they
+  // were appointed (routes/office-holders.js). When they change their photo,
+  // name, phone or email, the card follows wherever it still shows what the
+  // profile showed before, so a photo replaced here never leaves the card
+  // pointing at a deleted picture. Anything set on the card itself is kept.
+  async function followOnExecutiveCard(before, after) {
+    try {
+      const seats = await repo.getAll('staffUsers', { chapterId: before.chapterId, memberId: before.id, role: 'executive' });
+      for (const seat of seats) {
+        const card = (await repo.getAll('executives', { chapterId: before.chapterId, staffId: seat.id }))[0];
+        if (!card) continue;
+        const contact = card.contact || {};
+        const patch = {};
+        if (after.profileImageFileId !== before.profileImageFileId && (!card.imageFileId || card.imageFileId === before.profileImageFileId)) patch.imageFileId = after.profileImageFileId || '';
+        if (after.name && after.name !== before.name && (!card.name || card.name === before.name)) patch.name = after.name;
+        const phone = after.phone !== before.phone && (!contact.phone || contact.phone === before.phone) ? after.phone || '' : contact.phone || '';
+        const email = after.email !== before.email && (!contact.email || contact.email === before.email) ? after.email || '' : contact.email || '';
+        if (phone !== (contact.phone || '') || email !== (contact.email || '')) patch.contact = { phone, email };
+        if (Object.keys(patch).length) await repo.patchById('executives', card.id, patch, { chapterId: card.chapterId });
+      }
+    } catch (e) { /* the profile is saved either way; the card catches up on the next change */ }
+  }
 
   app.put('/api/member/profile', requireMember, upload.single('profileImage'), async (req, res) => {
     try {
@@ -315,6 +358,7 @@ function registerMemberAccountRoutes(app, deps) {
         birthdayDay: day
       };
       const updated = await repo.updateById('members', req.session.memberId, { ...existing, ...updates }, repo.ownRecord());
+      if (existing.isExecutive) await followOnExecutiveCard(existing, updated);
       const { passwordHash, ...safe } = updated;
       res.json({ success: true, member: safe });
     } catch (e) {
@@ -334,6 +378,7 @@ function registerMemberAccountRoutes(app, deps) {
         category: 'member-profile', contentType: compressed.contentType, title: existing.name, chapterId: existing.chapterId
       }));
       await repo.patchById('members', existing.id, { profileImageFileId }, repo.ownRecord());
+      if (existing.isExecutive) await followOnExecutiveCard(existing, { ...existing, profileImageFileId });
       if (existing.profileImageFileId) gridfs.deleteFile(existing.profileImageFileId).catch(() => {});
       res.json({ success: true, profileImageFileId });
     } catch (e) {
@@ -367,4 +412,4 @@ function registerMemberAccountRoutes(app, deps) {
   });
 }
 
-module.exports = { registerMemberAccountRoutes };
+module.exports = { registerMemberAccountRoutes, officeOf };

@@ -56,6 +56,15 @@ async function loadVolunteerAssignments() {
   } catch (e) { /* non-critical - profile page still works without this */ }
 }
 
+// The office they hold, under their name: "President", or the department they
+// lead. Filled in by the app when they are appointed, cleared when the term
+// ends; one claimed but not yet confirmed says so.
+function officeBadge(office) {
+  if (!office || !office.title) return '';
+  const where = office.department ? ` · ${escapeHtml(office.department)}` : office.national ? ' · National' : '';
+  return `<p class="office-line"><span class="office-badge">${escapeHtml(office.title)}</span><span class="office-where">${office.confirmed ? `Executive${where}` : `Executive${where}, waiting for the Coordinator to confirm`}</span></p>`;
+}
+
 function renderProfileTopRow() {
   const el = document.getElementById('profileTopRow');
   const m = CURRENT_MEMBER;
@@ -63,7 +72,8 @@ function renderProfileTopRow() {
     <div class="profile-top-row">
       <div class="profile-name">
         <h1>${escapeHtml(m.name)}</h1>
-        <p style="color:var(--ink-soft); margin:0;">${escapeHtml(m.email)}</p>
+        ${officeBadge(m.office)}
+        <p style="color:var(--ink-soft); margin:0;">${escapeHtml(m.email || m.phone || '')}</p>
       </div>
       <div class="profile-avatar-wrap">
         <div class="profile-avatar">

@@ -51,7 +51,7 @@ const { registerHealthRoutes } = require('./routes/health-panel');
 const { registerDoorCheckinRoutes } = require('./routes/door-checkin');
 const memberAccount = require('./lib/memberAccount');
 const { registerPhoneSigninRoutes } = require('./routes/phone-signin');
-const { registerMemberAccountRoutes } = require('./routes/member-account');
+const { registerMemberAccountRoutes, officeOf } = require('./routes/member-account');
 const { createNotification, registerNotificationFeed, registerPushRoutes } = require('./routes/notifications');
 const { registerGivingRoutes, registerPaymentWebhook, tellGuest, amountOf } = require('./routes/giving');
 const payments = require('./lib/payments');
@@ -4441,6 +4441,7 @@ app.get('/api/member/card', requireMember, async (req, res) => {
       chapterName: chapter ? chapter.name : '',
       membershipStatus: member.membershipStage,
       membershipNumber: member.membershipNumber,
+      office: await officeOf(member),
       qrDataUrl
     });
   } catch (e) {
