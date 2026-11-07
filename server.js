@@ -2112,6 +2112,22 @@ registerNotificationFeed(app, { contentChapterFilter, memberDepartmentIds });
 // uptime checker at - it also keeps a sleeping free-tier instance awake.
 //
 // It reveals nothing: no connection string, no host, no credentials.
+// The main admin's "Send a test email": the same sending a password reset
+// uses, to an address they choose, with the reason if it fails (the reset
+// page itself never says, so it cannot reveal who has an account). Never a
+// key or a password: only which way it went and what the provider said.
+app.post('/api/admin/test-email', requireAdmin, async (req, res) => {
+  const to = String((req.body && req.body.to) || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return res.status(400).json({ error: 'Type the email address to send the test to.' });
+  const way = mailer.via();
+  if (!way) return res.json({ sent: false, via: '', error: 'Email is not set up. On Render, add BREVO_API_KEY (and MAIL_FROM, a sender verified in Brevo) under Environment, then redeploy.' });
+  const out = await mailer.sendMail({
+    to, subject: 'ACONSU test email',
+    html: '<p>This is a test email from the ACONSU app. If you can read it, password-reset emails will reach your members too.</p>'
+  });
+  res.json({ sent: !!out.sent, via: way, from: mailer.sender().email, error: out.error || '' });
+});
+
 app.get('/api/health', async (req, res) => {
   let database;
   try {
