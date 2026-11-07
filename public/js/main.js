@@ -1554,3 +1554,17 @@ document.addEventListener('click', (e) => {
   new MutationObserver(queue).observe(document.documentElement, { childList: true, subtree: true });
   queue();
 })();
+
+// Opened from "Your office" on a member's profile (/finance.html?as=fin.knust):
+// the office username is filled in and the password asked for, which stays
+// theirs to type. Only a plain username is taken from the address.
+function prefillOfficeLogin(usernameId, passwordId) {
+  let as = '';
+  try { as = new URLSearchParams(location.search).get('as') || ''; } catch (e) { as = ''; }
+  if (!/^[A-Za-z0-9._@-]{2,80}$/.test(as)) return;
+  const user = document.getElementById(usernameId);
+  const pass = document.getElementById(passwordId);
+  if (!user || user.value) return;
+  user.value = as;
+  if (pass) pass.focus();
+}

@@ -1418,3 +1418,10 @@ body {
 .office-badge { display: inline-block; padding: 3px 10px; border-radius: 6px; background: var(--action); color: var(--action-ink); font-weight: 800; font-size: 0.85rem; letter-spacing: 0.02em; }
 .office-where { font-size: 0.85rem; font-weight: 600; color: var(--ink-soft); }
 .membership-card .card-office { margin: 2px 0; font-weight: 800; font-size: 0.9rem; letter-spacing: 0.02em; }
+
+/* ---------- "Your office" on the profile (profile.js) ---------- */
+.office-portals { margin: 18px 0; }
+.office-portals h2 { margin: 0 0 4px; font-size: 1.2rem; }
+.office-portal-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
+.office-portal-list li { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.office-portal-list .btn { min-height: 44px; }
