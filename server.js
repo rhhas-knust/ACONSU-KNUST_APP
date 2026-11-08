@@ -50,6 +50,7 @@ const { registerThemeCss, registerBrandApi, brandFor } = require('./routes/brand
 const { registerHealthRoutes } = require('./routes/health-panel');
 const { registerDoorCheckinRoutes } = require('./routes/door-checkin');
 const memberAccount = require('./lib/memberAccount');
+const themeIndex = require('./lib/themeIndex');
 const { registerPhoneSigninRoutes } = require('./routes/phone-signin');
 const { registerMemberAccountRoutes, officeOf } = require('./routes/member-account');
 const { createNotification, registerNotificationFeed, registerPushRoutes } = require('./routes/notifications');
@@ -8829,6 +8830,9 @@ connectDB()
   // Accounts without an email address, and sign-in by phone for older ones
   // (lib/memberAccount.js). In the background: it never holds the site up.
   .then(() => { memberAccount.prepare().catch((e) => console.error('Member account preparation failed:', e.message)); })
+  // The monthly theme's first version allowed one record per month, so a month
+  // with a chapter's proposal took no theme from National (lib/themeIndex.js).
+  .then(() => { themeIndex.oneLiveThemePerMonth().catch((e) => console.error('Monthly theme index repair failed:', e.message)); })
   .then(() => {
     const httpServer = app.listen(PORT, () => {
       console.log(`ACONSU app running on http://localhost:${PORT}`);

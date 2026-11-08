@@ -617,6 +617,15 @@ function registerChurchLifeRoutes(app, deps) {
       }
     };
   }
+  // A failed save says why in the server's log, where it can be found; the
+  // person is told, in words, what can be done about it.
+  const themeSaveFailed = (res, e, fallback) => {
+    console.error(`${fallback}:`, (e && e.message) || e);
+    if (e && e.code === 11000) {
+      return res.status(409).json({ error: 'The database refused a second theme record for that month. Restart the app once from Render (it repairs this on start), then save again.' });
+    }
+    return res.status(500).json({ error: fallback });
+  };
   const approvedFor = async (month) => (await repo.getAll('monthlyThemes', { month, status: 'approved' }))[0] || null;
   const dropTheme = async (theme) => {
     (theme.flyerFileIds || []).forEach(dropFile);
@@ -658,7 +667,7 @@ function registerChurchLifeRoutes(app, deps) {
         ? await repo.updateById('monthlyThemes', existing.id, { ...existing, ...data })
         : await repo.create('monthlyThemes', { ...data, proposedByChapterId: '', proposedByName: actorName(req) }, 'theme');
       res.json({ success: true, item });
-    } catch (e) { res.status(500).json({ error: 'Could not save the theme' }); }
+    } catch (e) { themeSaveFailed(res, e, 'Could not save the theme'); }
   });
 
   // Approve or decline a chapter's proposal.
@@ -738,7 +747,7 @@ function registerChurchLifeRoutes(app, deps) {
         `<p><strong>${escapeHtmlForEmail(names.get(chapterId) || chapterId)}</strong> proposed a theme for ${escapeHtmlForEmail(month)}: `
         + `<strong>${escapeHtmlForEmail(item.title)}</strong>.</p><p>Open the National portal, Monthly Theme, to approve or decline.</p>`
       );
-    } catch (e) { res.status(500).json({ error: 'Could not send the theme' }); }
+    } catch (e) { if (!res.headersSent) themeSaveFailed(res, e, 'Could not send the theme'); }
   });
 
   // Withdraw a proposal that has not gone live.

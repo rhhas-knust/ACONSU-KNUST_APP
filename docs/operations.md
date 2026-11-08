@@ -179,3 +179,5 @@ From Phase 5, members sign up with a phone number and the email address is optio
 
 If sign-ups without an email fail with "duplicate key" in the logs, the old index is still there: run the script with `--apply`.
 
+The monthly theme gets the same kind of repair on start (`lib/themeIndex.js`): the first version allowed one theme record per month, so a month with a chapter's proposal refused National's own theme. The app replaces that index with one that allows one live theme per month, logs `Monthly theme: ...`, and deletes no record. If a theme save still says "The database refused a second theme record", look for `Monthly theme index repair failed` in the logs.
+
