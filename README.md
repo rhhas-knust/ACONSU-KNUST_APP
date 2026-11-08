@@ -990,3 +990,16 @@ A leader is a member first, so the password they use in the app opens their offi
 - **The starting password goes**: an office still on its starting password (`president123`) that is opened with the app password takes the app password, so the guessable one stops working at once and there is nothing more to choose.
 
 `/api/portal/login` (server.js), `test/app-password.js` (in `npm test`).
+
+## 49. Fingerprint or face sign-in (passkeys)
+
+Members and leaders can sign in with their phone's fingerprint or face instead of typing a password: on the app's login page, on every portal's sign-in, and on the admin page for chapter admins and Coordinators ("Sign in with fingerprint or face"). They set it up once per phone, signed in, from **Fingerprint or face sign-in** on their profile, or from **My account** in their portal; the same card lists their devices and removes one.
+
+- **How it works**: passkeys (WebAuthn), built into Chrome, Safari, Edge and Firefox on Android, iPhone, Mac and Windows. The phone keeps the private key and asks for the fingerprint or face before using it; the server keeps only the public key (`Passkey` collection) and checks each sign-in with `@simplewebauthn/server`. The fingerprint and face never leave the phone. No outside service, no cost.
+- **One per person**: a passkey belongs to the member, so the same fingerprint opens the app and their office's portal, with the same office rules as the app password (`officeOpenedBy`: the portal must be one their office uses, an ended term opens nothing, the chapter must be theirs, a resting account stays resting).
+- **Counts as both steps**: user verification is required (a phone that only holds the key is not enough), so for a leader a passkey stands in for the password and the authenticator code together.
+- **The web address is part of it**: a passkey made on `aconsu-knust-app.onrender.com` works only there (and on `PUBLIC_BASE_URL` once set, for new ones). After moving to a new address, people set it up again; their password still works meanwhile. In production the allowed addresses are `PUBLIC_BASE_URL` and Render's own `RENDER_EXTERNAL_URL`, never the request's Host.
+- **The Android app**: shown only where the phone's browser engine supports it; otherwise the button does not appear and the password works as before.
+- **Privacy**: removed with the account ("Delete my account"), and listed by device in "Download my data".
+
+`routes/passkeys.js`, `public/js/passkey.js`; `test/passkey.js` (in `npm test`, with a software authenticator) and `test/passkey-ui.js` (Chromium's virtual authenticator).

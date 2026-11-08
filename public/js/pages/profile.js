@@ -9,6 +9,7 @@ let CURRENT_MEMBER = null;
   await initLayout('/profile.html');
   renderProfileTopRow();
   renderOfficePortals();
+  if (window.AconsuPasskey) AconsuPasskey.renderCard(document.getElementById('passkeyCard'));
   renderMemberStanding();
   renderMyEvents();
   renderQuickPills();

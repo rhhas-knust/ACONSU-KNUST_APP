@@ -60,6 +60,7 @@ window.PortalAccount = (function () {
         </dl>
         <p class="tiny muted">When your term ends the account stops working until your Chapter Coordinator renews it or hands the office to the next person.</p>
       </div>
+      <div id="passkeyCardSlot"></div>
       <div class="portal-card">
         <h3>Change your password</h3>
         <form id="pwForm" novalidate>
@@ -84,6 +85,7 @@ window.PortalAccount = (function () {
         <div class="form-msg" id="othersMsg" role="alert"></div>
       </div>`;
 
+    if (window.AconsuPasskey) AconsuPasskey.renderCard(el.querySelector('#passkeyCardSlot'));
     const form = el.querySelector('#pwForm');
     const val = (id) => form.querySelector(`#${id}`).value;
     const paint = () => {

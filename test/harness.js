@@ -211,6 +211,7 @@ const fakeModels = {
   }),
   Sermon: makeModel({ chapterId: '', videoId: '', thumbnailUrl: '', fromLiveId: '' }),
   ContentItem: makeModel({ chapterId: '', published: true, featured: false, sortOrder: 0, liveState: '', startsAt: null, wentLiveAt: null, endedAt: null, sermonId: '' }),
+  Passkey: makeModel({ counter: 0, transports: [], rpId: '', deviceName: '', lastUsedAt: null }, { unique: ['credentialId'] }),
   MediaDesk: makeModel({ youtubeChannelId: '', youtubeChannelUrl: '', serviceTitle: 'Sunday Service', checklistDate: '', checklistDone: [], updatedBy: '' }),
   JoinRequest: makeModel({ chapterId: '', status: 'new' }),
   PrayerRequest: makeModel({

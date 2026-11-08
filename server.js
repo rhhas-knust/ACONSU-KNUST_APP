@@ -37,6 +37,7 @@ const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerGivingCardRoutes } = require('./routes/giving-cards');
 const { registerMediaRoutes } = require('./routes/media');
+const { registerPasskeyRoutes } = require('./routes/passkeys');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
@@ -922,6 +923,15 @@ async function membersOpenedBy(identifier, password) {
   if (!candidates.length) await bcrypt.compare(String(password), DUMMY_HASH);
   return opened;
 }
+// The one office of these members that opens this portal, or why there is none.
+async function officeOpenedBy(memberIds, portal) {
+  const accounts = (await models.StaffUser.find({ memberId: { $in: memberIds } }).lean()).filter(officeIsCurrent);
+  const fits = accounts.filter((a) => opensPortal(a, portal));
+  if (!accounts.length) return { status: 403, error: 'Your app account does not hold an office. If you have just been appointed, ask your Chapter Coordinator.' };
+  if (!fits.length) return { status: 403, error: 'Your office does not use this portal. Open it from Your office on your profile in the app.' };
+  if (fits.length > 1) return { status: 409, error: 'You hold more than one office that uses this portal. Sign in with that office\'s username instead.' };
+  return { user: fits[0] };
+}
 const appPasswordOpens = async (member, password) => !!(member && member.passwordHash) && bcrypt.compare(String(password), member.passwordHash);
 const APP_PASSWORD_SHORT = `Your app password is right, but a leader's password needs at least ${LEADER_MIN} characters. Make it longer on your profile in the app (Change password), then sign in here with it. Your office username and its own password still work.`;
 
@@ -963,15 +973,10 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
     const members = await membersOpenedBy(username, password);
     if (members !== null) {
       // A phone number or an email: the office of the member it opens.
-      const accounts = members.length
-        ? (await models.StaffUser.find({ memberId: { $in: members.map((m) => m.id) } }).lean()).filter(officeIsCurrent)
-        : [];
-      const fits = accounts.filter((a) => opensPortal(a, portal));
       if (!members.length) return res.status(401).json({ error: 'That phone number (or email) and password do not match.' });
-      if (!accounts.length) return res.status(403).json({ error: 'Your app account does not hold an office. If you have just been appointed, ask your Chapter Coordinator.' });
-      if (!fits.length) return res.status(403).json({ error: 'Your office does not use this portal. Open it from Your office on your profile in the app.' });
-      if (fits.length > 1) return res.status(409).json({ error: 'You hold more than one office that uses this portal. Sign in with that office\'s username instead.' });
-      user = fits[0];
+      const found = await officeOpenedBy(members.map((m) => m.id), portal);
+      if (found.error) return res.status(found.status).json({ error: found.error });
+      user = found.user;
       viaApp = members.find((m) => m.id === user.memberId);
     } else {
       user = await models.StaffUser.findOne({ username: String(username).toLowerCase().trim() });
@@ -4600,6 +4605,8 @@ registerDoorCheckinRoutes(app, { repo, models, rolesLib, requireShepherd, requir
 registerPhoneSigninRoutes(app, { models, rolesLib, freshSession, revokeMemberSessions, requireMember });
 registerGivingRoutes(app, { repo, requireChapterAdmin, givingGoesToWelfare });
 registerGivingCardRoutes(app, { rolesLib, requireMember, requireViewRole, requireWelfareOfficer });
+// Fingerprint and face sign-in, for the app and the portals (routes/passkeys.js).
+registerPasskeyRoutes(app, { models, loginLimiter, freshSession, currentStaff, startStaffSession, officeOpenedBy, chosenChapter, fitsChosenChapter, WRONG_CHAPTER, secondStep, restingMessage });
 // The Media office: the live stream and the sermons (routes/media.js).
 registerMediaRoutes(app, { repo, hasRole, isChapterAdminOrAbove, resolveChapterIdForWrite, createNotification, actorName, contentChapterFilter, featureModules });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });

@@ -478,6 +478,27 @@ async function initPortal(config) {
     showPortalOrLogin();
   }
 
+  // Fingerprint or face, where this phone or computer can do it (passkey.js).
+  if (window.AconsuPasskey && AconsuPasskey.supported()) {
+    const loginBtn = document.getElementById('portalLoginBtn');
+    const pk = document.createElement('button');
+    pk.type = 'button';
+    pk.className = 'btn btn-outline btn-block passkey-signin';
+    pk.id = 'portalPasskeyBtn';
+    pk.textContent = 'Sign in with fingerprint or face';
+    loginBtn.insertAdjacentElement('afterend', pk);
+    pk.addEventListener('click', async () => {
+      pk.disabled = true;
+      setFormMsg('portalLoginMsg', '', '');
+      try {
+        const chapterId = (await chapterPick).value();
+        const out = await AconsuPasskey.signIn({ portal: PORTAL.role, chapterId });
+        if (out && out.success) await afterSignIn();
+      } catch (err) { setFormMsg('portalLoginMsg', err.message || 'That did not work. Use your password.', 'error'); }
+      pk.disabled = false;
+    });
+  }
+
   document.getElementById('portalLoginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = document.getElementById('portalLoginBtn');

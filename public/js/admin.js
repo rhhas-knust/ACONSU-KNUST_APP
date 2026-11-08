@@ -3638,6 +3638,28 @@ const chapterPick = window.LeaderChapter
   ? LeaderChapter.attach(document.getElementById('loginForm'), 'username')
   : Promise.resolve({ value: () => undefined });
 
+// Fingerprint or face for chapter admins and Coordinators (passkey.js).
+(function () {
+  const loginBtn = document.getElementById('loginBtn');
+  if (!loginBtn || !window.AconsuPasskey || !AconsuPasskey.supported()) return;
+  const pk = document.createElement('button');
+  pk.type = 'button';
+  pk.className = 'btn btn-outline btn-block passkey-signin';
+  pk.id = 'adminPasskeyBtn';
+  pk.textContent = 'Sign in with fingerprint or face';
+  loginBtn.insertAdjacentElement('afterend', pk);
+  pk.addEventListener('click', async () => {
+    const msg = document.getElementById('loginMsg');
+    pk.disabled = true;
+    try {
+      const chapterId = (await chapterPick).value();
+      await AconsuPasskey.signIn({ portal: 'admin', chapterId });
+      await checkAuth();
+    } catch (err) { if (msg) { msg.textContent = err.message || 'That did not work. Use your password.'; msg.className = 'form-msg error'; } }
+    pk.disabled = false;
+  });
+})();
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   // This file is shared by admin.html and chapter.html, so nothing here may
