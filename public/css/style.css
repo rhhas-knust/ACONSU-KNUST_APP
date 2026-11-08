@@ -1425,3 +1425,10 @@ body {
 .office-portal-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 12px; }
 .office-portal-list li { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .office-portal-list .btn { min-height: 44px; }
+
+/* Fingerprint or face sign-in (passkey.js) */
+.passkey-signin { margin-top: 10px; min-height: 44px; }
+.passkey-list { list-style: none; padding: 0; margin: 10px 0 14px; }
+.passkey-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.passkey-list li span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.passkey-list .btn { min-height: 44px; flex: none; }

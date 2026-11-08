@@ -70,3 +70,27 @@ $('loginForm').addEventListener('submit', async (e) => {
     btn.disabled = false; btn.textContent = 'Log In';
   }
 });
+
+// Fingerprint or face, where this phone can do it (passkey.js).
+(function () {
+  if (!window.AconsuPasskey || !AconsuPasskey.supported()) return;
+  const loginBtn = document.getElementById('loginBtn');
+  if (!loginBtn) return;
+  const pk = document.createElement('button');
+  pk.type = 'button';
+  pk.className = 'btn btn-outline btn-block passkey-signin';
+  pk.id = 'passkeyLoginBtn';
+  pk.textContent = 'Sign in with fingerprint or face';
+  loginBtn.insertAdjacentElement('afterend', pk);
+  pk.addEventListener('click', async () => {
+    const msg = document.getElementById('loginMsg');
+    pk.disabled = true;
+    try {
+      const out = await AconsuPasskey.signIn();
+      window.location.href = out && out.needsPhoto ? '/photo.html' : '/profile.html';
+    } catch (err) {
+      if (msg) { msg.textContent = err.message || 'That did not work. Use your password.'; msg.className = 'form-msg error'; }
+      pk.disabled = false;
+    }
+  });
+})();

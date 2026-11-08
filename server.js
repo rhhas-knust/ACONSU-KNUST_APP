@@ -37,6 +37,7 @@ const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerGivingCardRoutes } = require('./routes/giving-cards');
 const { registerMediaRoutes } = require('./routes/media');
+const { registerPasskeyRoutes } = require('./routes/passkeys');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
@@ -51,6 +52,7 @@ const { registerThemeCss, registerBrandApi, brandFor } = require('./routes/brand
 const { registerHealthRoutes } = require('./routes/health-panel');
 const { registerDoorCheckinRoutes } = require('./routes/door-checkin');
 const memberAccount = require('./lib/memberAccount');
+const phoneLib = require('./lib/phone');
 const themeIndex = require('./lib/themeIndex');
 const { registerPhoneSigninRoutes } = require('./routes/phone-signin');
 const { registerMemberAccountRoutes, officeOf } = require('./routes/member-account');
@@ -880,6 +882,59 @@ function fitsChosenChapter(chosen, { national, chapterId }) {
 }
 const WRONG_CHAPTER = 'That account is not part of the chapter you chose. Choose your own chapter, or National office if you are a national officer.';
 
+// ---------- signing in to a portal with the app password ----------
+// A leader is a member first. The phone number (or email) and password they use
+// in the app open their office's portal too, as does their office username with
+// that same password: one password to remember. The office's own password keeps
+// working. What a leader's sign-in asks for still holds: the app password must
+// be a leader's length (12), and a second step set up is still asked for.
+//
+// Which office: the portal being signed in to says which it wants (`portal`), so
+// someone who is both an executive and a Media volunteer lands in the right one.
+const PORTAL_ACCEPTS = {
+  admin: ['chapterAdmin', 'coordinator', 'nationalCoordinator'],
+  council: ['patron', 'executive', 'coordinator', 'nationalCoordinator', 'chapterAdmin']
+};
+const officeIsCurrent = (a) => a.active !== false && !a.endedAt && !isTermExpired(a);
+function opensPortal(account, portal) {
+  if (!portal) return true;
+  if (PORTAL_ACCEPTS[portal]) return PORTAL_ACCEPTS[portal].includes(account.role);
+  return account.role === portal || POSITION_OPENS_OFFICE[account.positionKey] === portal
+    || (account.role === 'coordinator' && OFFICE_PORTAL_ROLES.includes(portal));
+}
+// The members whose app password this is, for what was typed: a phone number
+// (older accounts can share one) or an email address.
+async function membersOpenedBy(identifier, password) {
+  const who = String(identifier || '').trim();
+  let candidates = [];
+  if (phoneLib.looksLikePhone(who)) {
+    const key = phoneLib.ghanaKey(who);
+    candidates = key ? await models.Member.find({ phoneKey: key }).lean() : [];
+  } else if (who.includes('@')) {
+    const m = await models.Member.findOne({ email: who.toLowerCase() }).lean();
+    candidates = m ? [m] : [];
+  } else {
+    return null; // not a phone or an email: an office username
+  }
+  const opened = [];
+  for (const m of candidates) {
+    if (await bcrypt.compare(String(password), m.passwordHash || DUMMY_HASH)) opened.push(m);
+  }
+  if (!candidates.length) await bcrypt.compare(String(password), DUMMY_HASH);
+  return opened;
+}
+// The one office of these members that opens this portal, or why there is none.
+async function officeOpenedBy(memberIds, portal) {
+  const accounts = (await models.StaffUser.find({ memberId: { $in: memberIds } }).lean()).filter(officeIsCurrent);
+  const fits = accounts.filter((a) => opensPortal(a, portal));
+  if (!accounts.length) return { status: 403, error: 'Your app account does not hold an office. If you have just been appointed, ask your Chapter Coordinator.' };
+  if (!fits.length) return { status: 403, error: 'Your office does not use this portal. Open it from Your office on your profile in the app.' };
+  if (fits.length > 1) return { status: 409, error: 'You hold more than one office that uses this portal. Sign in with that office\'s username instead.' };
+  return { user: fits[0] };
+}
+const appPasswordOpens = async (member, password) => !!(member && member.passwordHash) && bcrypt.compare(String(password), member.passwordHash);
+const APP_PASSWORD_SHORT = `Your app password is right, but a leader's password needs at least ${LEADER_MIN} characters. Make it longer on your profile in the app (Change password), then sign in here with it. Your office username and its own password still work.`;
+
 app.post('/api/portal/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
@@ -912,22 +967,43 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
       return res.json({ success: true, staff: req.session.staff });
     }
 
-    const user = await models.StaffUser.findOne({ username: String(username).toLowerCase().trim() });
+    const portal = typeof req.body.portal === 'string' ? req.body.portal.slice(0, 40) : '';
+    let user = null;
+    let viaApp = null; // the member whose app password opened it
+    const members = await membersOpenedBy(username, password);
+    if (members !== null) {
+      // A phone number or an email: the office of the member it opens.
+      if (!members.length) return res.status(401).json({ error: 'That phone number (or email) and password do not match.' });
+      const found = await officeOpenedBy(members.map((m) => m.id), portal);
+      if (found.error) return res.status(found.status).json({ error: found.error });
+      user = found.user;
+      viaApp = members.find((m) => m.id === user.memberId);
+    } else {
+      user = await models.StaffUser.findOne({ username: String(username).toLowerCase().trim() });
+    }
     // An account resting after too many wrong tries says so, rather than
     // letting its holder keep typing into a wall.
     const resting = user && user.active ? secondStep.lockedFor(user) : 0;
     if (resting) return res.status(429).json({ error: restingMessage(resting) });
-    // An unknown username used to answer measurably faster than a wrong
-    // password (no hash to check), which tells a stranger which usernames exist.
-    // A hash is always checked, so both take as long.
-    const ok = await bcrypt.compare(String(password), (user && user.passwordHash) || DUMMY_HASH);
-    if (!user || !user.active || !ok) {
-      if (user && user.active) {
-        const locked = await recordWrongTry(user, 'password');
-        if (locked) return res.status(429).json({ error: restingMessage(locked) });
+    if (!viaApp) {
+      // An unknown username used to answer measurably faster than a wrong
+      // password (no hash to check), which tells a stranger which usernames exist.
+      // A hash is always checked, so both take as long.
+      let ok = await bcrypt.compare(String(password), (user && user.passwordHash) || DUMMY_HASH);
+      // The office username with the holder's app password opens it too.
+      if (!ok && user && user.active && user.memberId) {
+        const member = await models.Member.findOne({ id: user.memberId }).lean();
+        if (await appPasswordOpens(member, password)) { ok = true; viaApp = member; }
       }
-      return res.status(401).json({ error: 'Invalid credentials' });
+      if (!user || !user.active || !ok) {
+        if (user && user.active) {
+          const locked = await recordWrongTry(user, 'password');
+          if (locked) return res.status(429).json({ error: restingMessage(locked) });
+        }
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
     }
+    if (viaApp && String(password).length < LEADER_MIN) return res.status(403).json({ error: APP_PASSWORD_SHORT });
     // A lapsed term is not a wrong password - say so, so the outgoing
     // executive knows to ask their Coordinator rather than retyping.
     if (isTermExpired(user)) {
@@ -938,6 +1014,14 @@ app.post('/api/portal/login', loginLimiter, async (req, res) => {
 
     if (!fitsChosenChapter(chosen, { national: user.role === 'nationalCoordinator', chapterId: user.chapterId })) {
       return res.status(403).json({ error: WRONG_CHAPTER });
+    }
+    // Signed in with their own app password while the office still has its
+    // guessable starting one: the office takes the app password, so the
+    // starting one stops working and there is nothing left to choose.
+    if (viaApp && user.mustChangePassword) {
+      await models.StaffUser.updateOne({ id: user.id }, { $set: { passwordHash: viaApp.passwordHash, mustChangePassword: false, startingPasswordExpiresAt: null, passwordChangedAt: new Date() } });
+      user = { ...(user.toObject ? user.toObject() : user), passwordHash: viaApp.passwordHash, mustChangePassword: false, startingPasswordExpiresAt: null };
+      await logSecurity(user.id, 'signed in with the app password; the starting password no longer works', user.name || user.username);
     }
     // A starting password is good for a short while only, so one nobody came
     // to collect does not stay guessable for the rest of the year.
@@ -4521,6 +4605,8 @@ registerDoorCheckinRoutes(app, { repo, models, rolesLib, requireShepherd, requir
 registerPhoneSigninRoutes(app, { models, rolesLib, freshSession, revokeMemberSessions, requireMember });
 registerGivingRoutes(app, { repo, requireChapterAdmin, givingGoesToWelfare });
 registerGivingCardRoutes(app, { rolesLib, requireMember, requireViewRole, requireWelfareOfficer });
+// Fingerprint and face sign-in, for the app and the portals (routes/passkeys.js).
+registerPasskeyRoutes(app, { models, loginLimiter, freshSession, currentStaff, startStaffSession, officeOpenedBy, chosenChapter, fitsChosenChapter, WRONG_CHAPTER, secondStep, restingMessage });
 // The Media office: the live stream and the sermons (routes/media.js).
 registerMediaRoutes(app, { repo, hasRole, isChapterAdminOrAbove, resolveChapterIdForWrite, createNotification, actorName, contentChapterFilter, featureModules });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
