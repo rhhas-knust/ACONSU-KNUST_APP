@@ -77,12 +77,12 @@ function renderOfficePortals() {
   el.innerHTML = `
     <section class="form-card office-portals" aria-labelledby="officePortalsTitle">
       <h2 id="officePortalsTitle">Your office</h2>
-      <p class="muted">Your work as a leader is in your office's portal. Sign in there with your office username and its own password.</p>
+      <p class="muted">Your work as a leader is in your office's portal. Sign in there with the password you use in the app (it needs at least 12 characters for a leader). Your office's own password still works too.</p>
       <ul class="office-portal-list">
         ${portals.map(p => `
           <li>
             <a class="btn btn-primary" href="${escapeHtml(p.href)}">Open the ${escapeHtml(p.label)}</a>
-            <span class="tiny muted">Sign in as <strong>${escapeHtml(p.username)}</strong>${p.firstSignIn ? ', with the starting password you were given, then choose your own' : ''}</span>
+            <span class="tiny muted">Your office username is <strong>${escapeHtml(p.username)}</strong>. Use it, or your phone number, with your app password.</span>
           </li>`).join('')}
       </ul>
     </section>`;

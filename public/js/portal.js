@@ -490,6 +490,8 @@ async function initPortal(config) {
         body: JSON.stringify({
           username: document.getElementById('portalUsername').value,
           password: document.getElementById('portalPassword').value,
+          // Which office this portal is for, when the app password opens more than one.
+          portal: PORTAL.role,
           ...(chapterId ? { chapterId } : {})
         })
       });

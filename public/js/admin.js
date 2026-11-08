@@ -3659,6 +3659,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       body: JSON.stringify({
         username: document.getElementById('username').value,
         password: document.getElementById('password').value,
+        portal: 'admin',
         ...(chapterId ? { chapterId } : {})
       })
     });

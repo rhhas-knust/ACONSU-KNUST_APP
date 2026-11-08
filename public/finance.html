@@ -30,12 +30,13 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
     <h1>Finance Office</h1>
     <p class="sub">Budgets, the ledger and financial reporting for ACONSU.</p>
     <div class="field">
-      <label for="portalUsername">Username</label>
+      <label for="portalUsername">Username, phone or email</label>
       <input type="text" id="portalUsername" autocomplete="username" required>
     </div>
     <div class="field">
       <label for="portalPassword">Password</label>
       <input type="password" id="portalPassword" autocomplete="current-password" required>
+      <small class="tiny muted">Your office username and its password, or the phone number (or email) and password you use in the app.</small>
     </div>
     <button type="submit" class="btn btn-primary btn-block" id="portalLoginBtn">Sign In</button>
     <div class="form-msg" id="portalLoginMsg"></div>
