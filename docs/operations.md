@@ -181,3 +181,9 @@ If sign-ups without an email fail with "duplicate key" in the logs, the old inde
 
 The monthly theme gets the same kind of repair on start (`lib/themeIndex.js`): the first version allowed one theme record per month, so a month with a chapter's proposal refused National's own theme. The app replaces that index with one that allows one live theme per month, logs `Monthly theme: ...`, and deletes no record. If a theme save still says "The database refused a second theme record", look for `Monthly theme index repair failed` in the logs.
 
+
+## 11. Media Tools and staying signed in
+
+The Media portal's **Media Tools** opens the Video Compressor at https://rhhas-knust.github.io/Video-Compressor/. If it moves, set `MEDIA_TOOLS_URL` (an https address) on Render; blank uses that default. Nothing from the app is sent to it: it runs in the visitor's own browser.
+
+Members stay signed in for 90 days, renewed each day they open the app; leaders' portals keep 8 hours. Sessions live in MongoDB, so a deploy or a sleeping free plan does not sign anyone out. If members report being signed out every time, check that the site is opened on one address (the cookie belongs to the address it was set on) and that `SESSION_SECRET` has not changed (changing it signs everybody out once).

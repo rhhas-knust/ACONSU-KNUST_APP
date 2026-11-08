@@ -13,6 +13,9 @@
 const youtube = require('../lib/youtube');
 
 const LIVE_KIND = 'live_service';
+// Media Tools: the Video Compressor, a browser app of its own (nothing is
+// uploaded). MEDIA_TOOLS_URL points elsewhere if it moves.
+const MEDIA_TOOLS_URL = () => String(process.env.MEDIA_TOOLS_URL || '').trim() || 'https://rhhas-knust.github.io/Video-Compressor/';
 // Forgotten to press End: after this long a stream no longer says "Live now".
 const LIVE_STALE_MS = 6 * 60 * 60 * 1000;
 const CHECKLIST_KEYS = [
@@ -71,6 +74,7 @@ function registerMediaRoutes(app, deps) {
       sermons.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || new Date(b.createdAt) - new Date(a.createdAt));
       res.json({
         chapterId,
+        toolsUrl: /^https:\/\//.test(MEDIA_TOOLS_URL()) ? MEDIA_TOOLS_URL() : '',
         setup: {
           youtubeChannelId: (desk && desk.youtubeChannelId) || '',
           serviceTitle: (desk && desk.serviceTitle) || 'Sunday Service'

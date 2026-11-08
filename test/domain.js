@@ -81,7 +81,9 @@ const appAddress = require('../site/tools/app-address');
     // routes/church-life.js names the public website's GitHub Pages address as
     // the default for SITE_ORIGINS; that is the website, not the app, and it
     // can be changed by setting SITE_ORIGINS.
-    check('the app\'s own code names no hostname (only SITE_ORIGINS\' default)', found.length === 1 && found[0] === 'routes/church-life.js', found);
+    // routes/media.js names the Video Compressor's address, the default for
+    // MEDIA_TOOLS_URL: another site the Media office opens, not the app.
+    check('the app\'s own code names no hostname (only SITE_ORIGINS\' and MEDIA_TOOLS_URL\'s defaults)', JSON.stringify(found.sort()) === JSON.stringify(['routes/church-life.js', 'routes/media.js']), found);
     const manifest = JSON.parse(fs.readFileSync(path.join(root, 'public/manifest.json'), 'utf8'));
     check('the installed app\'s identity stays relative, so it survives a move', manifest.id === '/index.html' && manifest.start_url === '/index.html' && manifest.scope === '/', manifest);
   }

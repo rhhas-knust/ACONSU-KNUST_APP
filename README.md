@@ -1003,3 +1003,11 @@ Members and leaders can sign in with their phone's fingerprint or face instead o
 - **Privacy**: removed with the account ("Delete my account"), and listed by device in "Download my data".
 
 `routes/passkeys.js`, `public/js/passkey.js`; `test/passkey.js` (in `npm test`, with a software authenticator) and `test/passkey-ui.js` (Chromium's virtual authenticator).
+
+## 50. Members stay signed in
+
+A member used to be signed out 8 hours after signing in, even in the installed app. Now a member stays signed in for 90 days, counted again from each day they open the app (the session is renewed once a day, so a member who opens it weekly never signs in again on that phone), the way X or WhatsApp behave. Signing out, changing the password (which ends their other sessions), "Delete my account" and an admin's revocation still end it at once. Leaders' portals keep 8 hours, since they hold other people's records; a fingerprint or face signs them back in with one tap. `server.js` (MEMBER_SESSION_MS), `test/stay-signed-in.js` (in `npm test`).
+
+## 51. Media Tools in the Media portal
+
+The Media portal has a **Media Tools** screen for the recordings: compress a video, extract the audio (an audio version of the sermon for members with little data), split a long video into upright clips for Shorts, TikTok, Reels and WhatsApp Status, and transcribe with subtitles and key points. They are the Video Compressor (`rhhas-knust/Video-Compressor`, https://rhhas-knust.github.io/Video-Compressor/), opened in its own tab: everything runs on the device and nothing is uploaded, so it is linked rather than copied in (copying would mean loosening this app's script policy for its page and keeping two copies in step). To point it elsewhere, set `MEDIA_TOOLS_URL` (an https address) on Render; blank uses the address above (`routes/media.js`).

@@ -242,6 +242,22 @@ app.use(session({
 }));
 // Straight after the session is read, before any route looks at who it is.
 app.use((req, res, next) => endRevokedMemberSession(req, res, next));
+// A member stays signed in, the way X or WhatsApp keep you signed in: 90 days,
+// counted again from each day they open the app, so someone who uses it weekly
+// never has to sign in again on that phone. Leaders' portals keep the 8 hours
+// above (they hold other people's records); a fingerprint signs them back in.
+// Signing out, changing the password, or "Sign out everywhere" still ends it.
+app.use((req, res, next) => {
+  const s = req.session;
+  if (s && s.memberId && !s.staff && !s.isAdmin) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (s.seenOn !== today) {
+      s.seenOn = today; // saved, so the cookie and the stored session both move on
+      s.cookie.maxAge = MEMBER_SESSION_MS;
+    }
+  }
+  next();
+});
 
 
 // ---------- rate limiting ----------
@@ -495,6 +511,7 @@ function isTermExpired(staff) {
 // rebuilds the map from the database before the server accepts a request.
 const STAFF_REVOCATIONS = new Map();
 const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 8;
+const MEMBER_SESSION_MS = 1000 * 60 * 60 * 24 * 90;
 
 function rememberRevocation(staffId, at) {
   const now = Date.now();
@@ -541,14 +558,14 @@ function revokeMemberSessions(memberId) {
   const at = Date.now();
   const now = at;
   MEMBER_REVOCATIONS.set(String(memberId), at);
-  MEMBER_REVOCATIONS.forEach((ts, id) => { if (now - ts > SESSION_MAX_AGE_MS) MEMBER_REVOCATIONS.delete(id); });
+  MEMBER_REVOCATIONS.forEach((ts, id) => { if (now - ts > MEMBER_SESSION_MS) MEMBER_REVOCATIONS.delete(id); });
   repo.patchById('members', String(memberId), { sessionsRevokedAt: new Date(at) }, repo.allChapters()).catch(() => { /* held in memory for this process */ });
   return at;
 }
 
 async function loadMemberRevocations() {
   try {
-    const cutoff = new Date(Date.now() - SESSION_MAX_AGE_MS);
+    const cutoff = new Date(Date.now() - MEMBER_SESSION_MS);
     const members = await models.Member.find({ sessionsRevokedAt: { $gte: cutoff } }).lean();
     members.forEach((m) => MEMBER_REVOCATIONS.set(String(m.id), new Date(m.sessionsRevokedAt).getTime()));
   } catch (e) {
