@@ -535,3 +535,7 @@ table.portal-table.hp-table th { white-space: normal; }
   .yt-pick { grid-template-columns: 1fr; }
   .media-actions .btn { flex: 1 1 100%; }
 }
+.tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.tool-card h3 { margin-bottom: 6px; }
+.tool-card p { margin: 0 0 8px; line-height: 1.5; }
+@media (max-width: 560px) { .tools-grid { grid-template-columns: 1fr; } }

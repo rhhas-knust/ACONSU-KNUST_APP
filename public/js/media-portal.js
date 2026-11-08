@@ -205,7 +205,7 @@ async function renderSermons(el) {
     el.innerHTML = `
       <div class="panel-head"><div>
         <h2>Sermons</h2>
-        <p class="sub">What members find on the Sermons page. A stream you kept is already here. Add a sermon from a YouTube video, or a link to an audio recording.</p>
+        <p class="sub">What members find on the Sermons page. A stream you kept is already here. Add a sermon from a YouTube video, or a link to an audio recording (Media Tools makes one from a video).</p>
       </div></div>
       ${readOnlyNote()}
       ${PORTAL.canEdit ? `<form class="portal-card" id="sermonForm">
@@ -396,6 +396,39 @@ function renderGuide(el) {
   el.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => openPanel(b.dataset.open)));
 }
 
+// ---------- Media Tools ----------
+// The Video Compressor (rhhas-knust/Video-Compressor), a browser app of its
+// own: everything runs on the phone or computer, nothing is uploaded. It opens
+// in its own tab, where it can also be installed as an app. Its address comes
+// from the server (MEDIA_TOOLS_URL).
+const MEDIA_TOOLS = [
+  { tab: 'Compress video', title: 'Make a recording smaller', what: 'Shrinks a video while keeping it looking the same, so it uploads faster and uses less data. Choose High, Balanced or Smallest.', when: 'Before uploading a recording of the service, a programme or an event.' },
+  { tab: 'Extract audio', title: 'An audio version of the sermon', what: 'Saves just the sound of a video as an audio file (.m4a). "Original" is instant; the smaller options suit members with little data.', when: 'After the service: put the audio file on Google Drive or Telegram, then add its link here as an Audio sermon.' },
+  { tab: 'Split for Shorts & TikTok', title: 'Short clips for social media', what: 'Cuts a long video into parts of 30 seconds to 10 minutes, upright (9:16) for Shorts, TikTok, Reels and WhatsApp Status, with an optional "Part 1/N" label.', when: 'For highlights of the preaching during the week.' },
+  { tab: 'Transcribe & notes', title: 'Words, subtitles and key points', what: 'Turns the speech into a written transcript on the device, picks out the important points, and saves subtitles (.srt) or notes.', when: 'Subtitles for YouTube, and a few lines for the sermon\'s description here.' }
+];
+
+async function renderTools(el) {
+  const o = await loadOverview();
+  el.innerHTML = `
+    <div class="panel-head"><div>
+      <h2>Media Tools</h2>
+      <p class="sub">Free tools for the recordings, in the Video Compressor. They run on your own phone or computer: nothing is uploaded anywhere, so they also work on slow internet once open. Best in Chrome on a laptop or an Android phone.</p>
+    </div></div>
+    <div class="tools-grid">
+      ${MEDIA_TOOLS.map(t => `<section class="portal-card tool-card">
+        <h3>${escapeHtml(t.title)}</h3>
+        <p>${escapeHtml(t.what)}</p>
+        <p class="tiny muted"><strong>When:</strong> ${escapeHtml(t.when)}</p>
+        <p class="tiny muted">In the tool, choose <strong>${escapeHtml(t.tab)}</strong>.</p>
+      </section>`).join('')}
+    </div>
+    <div class="media-actions">
+      ${o.toolsUrl ? `<a class="btn btn-primary" href="${escapeHtml(o.toolsUrl)}" target="_blank" rel="noopener">Open Media Tools</a>` : '<p class="muted">Media Tools has no address set (MEDIA_TOOLS_URL).</p>'}
+    </div>
+    <p class="tiny muted">It opens in a new tab. In Chrome you can install it (Install app) so it opens like any other app, even without internet for compressing and splitting. Transcribing downloads a speech model the first time (about 40 MB), then keeps it.</p>`;
+}
+
 // ---------- Setup ----------
 async function renderSetup(el) {
   const o = await loadOverview();
@@ -449,6 +482,7 @@ initPortal({
   panels: [
     { key: 'live', label: 'Go Live', render: renderLive },
     { key: 'sermons', label: 'Sermons', render: renderSermons },
+    { key: 'tools', label: 'Media Tools', render: renderTools },
     { key: 'checklist', label: 'Sunday Checklist', render: renderChecklist },
     { key: 'guide', label: 'How to stream', render: renderGuide },
     { key: 'setup', label: 'Media Setup', render: renderSetup },
