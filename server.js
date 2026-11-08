@@ -242,19 +242,31 @@ app.use(session({
 }));
 // Straight after the session is read, before any route looks at who it is.
 app.use((req, res, next) => endRevokedMemberSession(req, res, next));
-// A member stays signed in, the way X or WhatsApp keep you signed in: 90 days,
-// counted again from each day they open the app, so someone who uses it weekly
-// never has to sign in again on that phone. Leaders' portals keep the 8 hours
-// above (they hold other people's records); a fingerprint signs them back in.
-// Signing out, changing the password, or "Sign out everywhere" still ends it.
-app.use((req, res, next) => {
+// Staying signed in, the way X or WhatsApp keep you signed in, counted again
+// from each day the app or portal is opened: a member for 90 days, a leader in
+// their portal for 30. The main admin's own login (the master key in Render's
+// settings) keeps the 8 hours above. Signing out, changing the password, an
+// office handed over or switched off, and "Sign out everywhere" still end it.
+app.use(async (req, res, next) => {
   const s = req.session;
-  if (s && s.memberId && !s.staff && !s.isAdmin) {
-    const today = new Date().toISOString().slice(0, 10);
-    if (s.seenOn !== today) {
-      s.seenOn = today; // saved, so the cookie and the stored session both move on
-      s.cookie.maxAge = MEMBER_SESSION_MS;
-    }
+  if (!s) return next();
+  const today = new Date().toISOString().slice(0, 10);
+  if (s.memberId && !s.staff && !s.isAdmin && s.seenOn !== today) {
+    s.seenOn = today; // saved, so the cookie and the stored session both move on
+    s.cookie.maxAge = MEMBER_SESSION_MS;
+  } else if (s.staff && s.staff.id && !s.isAdmin && !s.isShepherd && s.seenOn !== today) {
+    // Once a day a leader's sign-in is checked against their account, so a
+    // longer sign-in never outlasts what it rests on: an account switched off
+    // ends it, and the deadline for an authenticator code still arrives.
+    try {
+      const user = await models.StaffUser.findOne({ id: s.staff.id }).lean();
+      if (!user || user.active === false || user.endedAt) { delete s.staff; return next(); }
+      if (!s.staff.viaPasskey) {
+        s.staff.mustSetUpSecondStep = secondStep.standing({ ...user, positionKey: s.staff.positionKey }, { since: await leaderSecondStepSince() }).mustSetUpNow;
+      }
+    } catch (e) { return next(); } // checked again on the next request
+    s.seenOn = today;
+    s.cookie.maxAge = LEADER_SESSION_MS;
   }
   next();
 });
@@ -510,8 +522,10 @@ function isTermExpired(staff) {
 // be forgotten while the session it revoked came back. loadStaffRevocations()
 // rebuilds the map from the database before the server accepts a request.
 const STAFF_REVOCATIONS = new Map();
-const SESSION_MAX_AGE_MS = 1000 * 60 * 60 * 8;
+// How long a sign-in can last, so a revocation is kept no longer than the
+// sessions it could still end (the main admin's 8 hours are shorter than both).
 const MEMBER_SESSION_MS = 1000 * 60 * 60 * 24 * 90;
+const LEADER_SESSION_MS = 1000 * 60 * 60 * 24 * 30;
 
 function rememberRevocation(staffId, at) {
   const now = Date.now();
@@ -519,7 +533,7 @@ function rememberRevocation(staffId, at) {
   // No session older than the cookie's own lifetime can still be valid, so
   // the entries guarding them have nothing left to do.
   STAFF_REVOCATIONS.forEach((ts, id) => {
-    if (now - ts > SESSION_MAX_AGE_MS) STAFF_REVOCATIONS.delete(id);
+    if (now - ts > LEADER_SESSION_MS) STAFF_REVOCATIONS.delete(id);
   });
 }
 
@@ -535,7 +549,7 @@ function revokeStaffSessions(staffId) {
 // pattern refreshSoleActiveChapter() uses for its own cached answer.
 async function loadStaffRevocations() {
   try {
-    const cutoff = Date.now() - SESSION_MAX_AGE_MS;
+    const cutoff = Date.now() - LEADER_SESSION_MS;
     const staff = await repo.getAll('staffUsers', repo.allChapters());
     staff.forEach((user) => {
       if (!user.sessionsRevokedAt) return;
@@ -836,6 +850,10 @@ async function startStaffSession(req, user) {
     mustSetUpSecondStep: standing.mustSetUpNow,
     issuedAt: Date.now() // what a later revocation is measured against
   };
+  // A leader stays signed in to their portal for 30 days, renewed each day
+  // they use it (see the daily check after the session middleware).
+  req.session.cookie.maxAge = LEADER_SESSION_MS;
+  req.session.seenOn = new Date().toISOString().slice(0, 10);
   models.StaffUser.updateOne({ id: user.id }, { $set: { lastLoginAt: new Date() } }).catch(() => {});
 }
 

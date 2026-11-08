@@ -1,6 +1,7 @@
-// Members stay signed in, as on X or WhatsApp: 90 days, counted again from each
-// day they open the app. Leaders' portals keep their 8 hours. Signing out, and a
-// password change elsewhere, still end it.
+// Staying signed in, as on X or WhatsApp, counted again from each day of use:
+// members 90 days, leaders in their portal 30. The main admin's own login keeps
+// 8 hours. Signing out, a password change elsewhere, and switching an account
+// off still end it.
 //
 //   node test/stay-signed-in.js     (also run by `npm test`)
 const { fakeModels } = require('./harness.js');
@@ -65,9 +66,34 @@ const { fakeModels } = require('./harness.js');
   await call('admin', 'POST', '/api/admin/staff', { username: 'fin.knust', name: 'Efua Stays', role: 'finance', password: 'Office-Pass-12345', memberId, chapterId: C });
   fakeModels.StaffUser._docs.forEach(a => { a.mustChangePassword = false; a.mustSetUpSecondStep = false; });
   r = await call('fin', 'POST', '/api/portal/login', { username: 'fin.knust', password: 'Office-Pass-12345', portal: 'finance' });
-  check('a leader\'s portal sign-in still lasts 8 hours', r.status === 200 && daysLeft(r.setCookie) > 0.3 && daysLeft(r.setCookie) < 0.34, r.setCookie);
+  check('a leader stays signed in to their portal for about 30 days', r.status === 200 && daysLeft(r.setCookie) > 29 && daysLeft(r.setCookie) <= 30.01, r.setCookie);
   r = await call('fin', 'GET', '/api/portal/me');
-  check('and is not stretched by using it', r.setCookie === '' || daysLeft(r.setCookie) < 0.34, r.setCookie);
+  check('(and is in)', r.data.access && r.data.access.finance && r.data.access.finance.view, r.data.access && r.data.access.finance);
+  const account = fakeModels.StaffUser._docs.find(a => a.username === 'fin.knust');
+  r = await call('admin', 'PUT', `/api/admin/staff/${account.id}`, { active: false });
+  check('(the account is switched off)', r.status === 200, r.data);
+  r = await call('fin', 'GET', '/api/portal/me');
+  check('switching the account off ends the long sign-in at once', !(r.data.access && r.data.access.finance && r.data.access.finance.view), r.data.access && r.data.access.finance);
+  // The daily check: an account switched off in the database by other means is
+  // noticed the next day it is used, even with no revocation recorded.
+  await call('admin', 'POST', '/api/admin/staff', { username: 'wel.knust', name: 'Efua Stays', role: 'welfare', password: 'Office-Pass-12345', memberId, chapterId: C });
+  fakeModels.StaffUser._docs.forEach(a => { a.mustChangePassword = false; a.mustSetUpSecondStep = false; });
+  await call('wel', 'POST', '/api/portal/login', { username: 'wel.knust', password: 'Office-Pass-12345', portal: 'welfare' });
+  fakeModels.StaffUser._docs.find(a => a.username === 'wel.knust').active = false;
+  r = await call('wel', 'GET', '/api/portal/me');
+  const sameDay = !!(r.data.access && r.data.access.welfare && r.data.access.welfare.view);
+  const RealDate = Date;
+  const shift = 26 * 60 * 60 * 1000;
+  global.Date = class extends RealDate {
+    constructor(...a) { if (a.length) super(...a); else super(RealDate.now() + shift); }
+    static now() { return RealDate.now() + shift; }
+  };
+  r = await call('wel', 'GET', '/api/portal/me');
+  global.Date = RealDate;
+  check('an account switched off is noticed the next day it is used, and its sign-in ends', sameDay && !(r.data.access && r.data.access.welfare && r.data.access.welfare.view), { sameDay, next: r.data.access && r.data.access.welfare });
+
+  r = await call('boss', 'POST', '/api/portal/login', { username: 'admin', password: 'admin123', portal: 'admin' });
+  check('the main admin\'s own login (the master key) keeps 8 hours', r.status === 200 && daysLeft(r.setCookie) > 0.3 && daysLeft(r.setCookie) < 0.34, r.setCookie);
 
   console.log(failures ? `\n${failures} FAILURES` : '\nall stay-signed-in checks passed');
   process.exit(failures ? 1 : 0);
