@@ -45,13 +45,13 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await staff('pres', 'executive', { positionKey: 'president' });
   // The main admin sets the chapter up while it has nobody of its own; once it
   // has a Coordinator or admin, its accounts are the chapter's to make.
-  for (const [u, role] of [['fin', 'finance'], ['shep', 'shepherding'], ['pub', 'publicity'], ['wel', 'welfare'], ['chadmin', 'chapterAdmin']]) await staff(u, role);
+  for (const [u, role] of [['fin', 'finance'], ['shep', 'shepherding'], ['pub', 'publicity'], ['wel', 'welfare'], ['med', 'media'], ['chadmin', 'chapterAdmin']]) await staff(u, role);
   fakeModels.StaffUser._docs.forEach(a => { a.mustChangePassword = false; });
   // A chapter with an admin of its own makes its own accounts, and only
   // National appoints a Coordinator: put one straight in, with the same password.
   const like = fakeModels.StaffUser._docs.find(a => a.username === 'wel');
   await fakeModels.StaffUser.create({ ...like, _id: undefined, id: 'coord-1', username: 'coord', name: 'Leader coord', role: 'coordinator', memberId: await member('coord') });
-  check(fakeModels.StaffUser._docs.length === 7, '(seven leaders, one in each portal)', fakeModels.StaffUser._docs.map(a => a.username));
+  check(fakeModels.StaffUser._docs.length === 8, '(eight leaders, one in each portal)', fakeModels.StaffUser._docs.map(a => a.username));
   // One giving claim for Finance to confirm (an offering: tithes go to Welfare's purse).
   await fakeModels.GivingIntent.create({ id: 'g1', chapterId: C, status: 'pending', purpose: 'offertory', amount: 50, name: 'Ama', createdAt: new Date() });
 
@@ -74,7 +74,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   }
 
   console.log('\n== every portal opens on Today ==');
-  const portals = [['coordinator', 'coord'], ['finance', 'fin'], ['shepherding', 'shep'], ['publicity', 'pub'], ['welfare-portal', 'wel'], ['executive', 'pres'], ['admin', 'chadmin']];
+  const portals = [['coordinator', 'coord'], ['finance', 'fin'], ['shepherding', 'shep'], ['publicity', 'pub'], ['welfare-portal', 'wel'], ['media-portal', 'med'], ['executive', 'pres'], ['admin', 'chadmin']];
   for (const [page, who] of portals) {
     const p = await signIn(page, who);
     const actions = await p.$$eval('.today-action', els => els.map(e => { const r = e.getBoundingClientRect(); return { text: e.textContent.replace(/\s+/g, ' ').trim(), h: Math.round(r.height), w: Math.round(r.width) }; }));

@@ -60,13 +60,27 @@
 
   // 1. Live stream broadcast alert
   try {
-    const liveItems = await fetchJSON('/api/content/live_service').catch(() => []);
-    const activeStream = liveItems.find(i => i.isLive || i.featured) || liveItems[0];
+    // "Live now" only while the Media office says the service is on
+    // (routes/media.js); otherwise when it starts, if it has been set up. A
+    // live service posted the old way (a link, no state) shows as before only
+    // if it was marked featured.
+    const now = await fetchJSON('/api/live').catch(() => ({}));
+    let activeStream = null;
+    let label = 'LIVE NOW';
+    if (now.live) activeStream = now.live;
+    else if (now.next && new Date(now.next.startsAt) - Date.now() < 36 * 60 * 60 * 1000) {
+      activeStream = now.next;
+      label = `LIVE ${new Date(now.next.startsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }).toUpperCase()}`;
+    } else {
+      const liveItems = await fetchJSON('/api/content/live_service').catch(() => []);
+      activeStream = liveItems.find(i => !i.liveState && (i.isLive || i.featured)) || null;
+      label = 'LIVE SERVICE';
+    }
     if (activeStream) {
       document.getElementById('liveBannerWrap').innerHTML = `
         <div class="live-stream-banner">
           <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-            <span class="live-pill"><span class="live-dot"></span>LIVE SERVICE</span>
+            <span class="live-pill"><span class="live-dot"></span>${escapeHtml(label)}</span>
             <strong style="font-size:0.96rem;">${escapeHtml(activeStream.title)}</strong>
           </div>
           <a href="/content.html?kind=live_service" class="btn btn-sm" style="background:#fff; color:#C0392B; font-weight:800; border:none; text-decoration:none; padding:6px 14px; border-radius:6px; white-space:nowrap;">Watch Stream &rarr;</a>

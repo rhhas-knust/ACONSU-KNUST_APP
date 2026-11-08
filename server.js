@@ -36,6 +36,7 @@ const { registerChatRoutes } = require('./routes/chat');
 const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerGivingCardRoutes } = require('./routes/giving-cards');
+const { registerMediaRoutes } = require('./routes/media');
 const { registerOfficeRoutes } = require('./routes/offices');
 const { registerOfficeHolderRoutes } = require('./routes/office-holders');
 const { registerAccountRoutes } = require('./routes/account');
@@ -461,7 +462,7 @@ app.get('/api/shepherd/check', (req, res) => {
 // data this session may touch" - these helpers only answer "which role".
 const PORTAL_ROLES = [
   'nationalCoordinator', 'coordinator', 'chapterAdmin', 'executive',
-  'finance', 'shepherding', 'publicity', 'welfare',
+  'finance', 'shepherding', 'publicity', 'welfare', 'media',
   // A Patron holds no office portal of their own - their seat is on the
   // national council, and that is the whole of what the account is for.
   'patron'
@@ -630,7 +631,7 @@ function actorName(req) {
 // person who sends the chapter's announcements, so they open the Publicity
 // portal directly rather than the chapter having to keep a second, separate
 // publicity staff login alongside the elected holder.
-const POSITION_OPENS_OFFICE = { publicity_head: 'publicity' };
+const POSITION_OPENS_OFFICE = { publicity_head: 'publicity', media_head: 'media', assistant_media_head: 'media' };
 
 function hasRole(req, role) {
   if (!req.session) return false;
@@ -665,7 +666,7 @@ function requireRole(role) {
 // oversight. National and Coordinator are deliberately absent: the admin IS
 // the national tier, and a Coordinator running their own chapter's portal is
 // the point of it. See the access map in /api/portal/me.
-const OFFICE_PORTAL_ROLES = ['finance', 'shepherding', 'publicity', 'welfare', 'executive'];
+const OFFICE_PORTAL_ROLES = ['finance', 'shepherding', 'publicity', 'welfare', 'media', 'executive'];
 
 function holdsOfficePortal(req, role) {
   const staff = currentStaff(req);
@@ -2478,6 +2479,13 @@ function cleanFormFields(fields) {
 function requireContentManager(req, res, next) {
   if (isChapterAdminOrAbove(req) || hasRole(req, 'publicity')) return next();
   return res.status(401).json({ error: 'Not authenticated' });
+}
+
+// Live services moved from Publicity to the Media office (routes/media.js).
+// The Chapter Admin keeps them as a backup; Publicity keeps every other kind.
+const LIVE_IS_MEDIA = { error: 'Live services are run by the Media office now, from the Media portal.' };
+function mayRunLive(req) {
+  return isChapterAdminOrAbove(req) || hasRole(req, 'media');
 }
 
 function requireBibleStudyManager(req, res, next) {
@@ -4513,6 +4521,8 @@ registerDoorCheckinRoutes(app, { repo, models, rolesLib, requireShepherd, requir
 registerPhoneSigninRoutes(app, { models, rolesLib, freshSession, revokeMemberSessions, requireMember });
 registerGivingRoutes(app, { repo, requireChapterAdmin, givingGoesToWelfare });
 registerGivingCardRoutes(app, { rolesLib, requireMember, requireViewRole, requireWelfareOfficer });
+// The Media office: the live stream and the sermons (routes/media.js).
+registerMediaRoutes(app, { repo, hasRole, isChapterAdminOrAbove, resolveChapterIdForWrite, createNotification, actorName, contentChapterFilter, featureModules });
 registerPrivacyRoutes(app, { models, requireMember, eraseHooks });
 registerShareRoutes(app);
 registerTodayRoutes(app, { models, currentStaff });
@@ -7221,7 +7231,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
   // stand, they carry a membership number, and an account cannot outlive the
   // person behind it unnoticed. National Coordinators and Patrons belong to
   // the union rather than to any one chapter, so they are the exception.
-  const MEMBER_BACKED_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'shepherding', 'publicity', 'welfare', 'executive'];
+  const MEMBER_BACKED_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'shepherding', 'publicity', 'welfare', 'media', 'executive'];
   // A National Patron belongs to the union rather than to any chapter, so they
   // are the one other account that legitimately has no chapterId. Saying so
   // takes the explicit NATIONAL_SCOPE token - the same deliberate statement a
@@ -8345,6 +8355,7 @@ app.post('/api/admin/content', requireContentManager, contentUpload, async (req,
   try {
     const { kind, title } = req.body;
     if (!CONTENT_KINDS.includes(kind) || !title) return res.status(400).json({ error: 'A content type and title are required' });
+    if (kind === 'live_service' && !mayRunLive(req)) return res.status(403).json(LIVE_IS_MEDIA);
     const national = (req.body.isNational === true || req.body.isNational === 'true') && rolesLib.getActingScope(req).isNational;
     const chapterId = national ? '' : await resolveChapterIdForWrite(req, req.body.chapterId);
     if (!national && !chapterId) return res.status(400).json({ error: 'A chapter is required.' });
@@ -8391,6 +8402,7 @@ app.put('/api/admin/content/:id', requireContentManager, contentUpload, async (r
     const filter = rolesLib.chapterFilter(req, { required: false });
     const existing = await repo.getById('contentItems', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (existing.kind === 'live_service' && !mayRunLive(req)) return res.status(403).json(LIVE_IS_MEDIA);
 
     let imageFileId = existing.imageFileId || '';
     let resourceFileId = existing.resourceFileId || '';
@@ -8443,6 +8455,7 @@ app.delete('/api/admin/content/:id', requireContentManager, async (req, res) => 
     const filter = rolesLib.chapterFilter(req, { required: false });
     const existing = await repo.getById('contentItems', req.params.id, filter);
     if (!existing) return res.status(404).json({ error: 'Not found' });
+    if (existing.kind === 'live_service' && !mayRunLive(req)) return res.status(403).json(LIVE_IS_MEDIA);
 
     if (existing.imageFileId) {
       gridfs.deleteFile(existing.imageFileId).catch(() => {});

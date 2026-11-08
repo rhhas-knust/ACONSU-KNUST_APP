@@ -6,7 +6,7 @@
 // It records nothing else and decides nothing: what each office can see and
 // do is lib/roles.js, untouched by any of this.
 
-const PORTALS = new Set(['coordinator', 'finance', 'shepherding', 'publicity', 'executive', 'welfare', 'admin']);
+const PORTALS = new Set(['coordinator', 'finance', 'shepherding', 'publicity', 'executive', 'welfare', 'media', 'admin']);
 const STEP = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
 const MAX_STEPS = 20;
 

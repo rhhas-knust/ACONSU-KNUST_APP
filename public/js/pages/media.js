@@ -29,7 +29,7 @@ const searchQuery = mediaParams.get('q') || '';
         <p style="font-size:0.88rem; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(s.speaker || '')} ${s.date ? '· ' + formatDate(s.date) : ''}</p>
         <p style="color:var(--ink-soft); margin-bottom:12px;">${escapeHtml(s.description || '')}</p>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-          ${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Listen / Watch</a>` : '<span style="font-size:0.85rem; color:var(--ink-faint);">Link coming soon</span>'}
+          ${/^https?:\/\//i.test(s.url || '') ? `<a href="${escapeHtml(s.url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">${s.type === 'video' ? 'Watch' : 'Listen'}</a>` : '<span style="font-size:0.85rem; color:var(--ink-faint);">Link coming soon</span>'}
           ${AconsuShare.button({ kind: 'sermon', title: s.title, text: `${s.title}${s.speaker ? `, ${s.speaker}` : ''}. Worth hearing.`, path: `/media.html?sermon=${encodeURIComponent(s.id)}` })}
         </div>
       </div>

@@ -43,7 +43,7 @@ const check = (label, ok, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   // The Coordinator first, by the main admin; from then the chapter runs
   // itself, and its Coordinator makes the other accounts.
   const logins = {};
-  for (const role of ['coordinator', 'finance', 'publicity', 'welfare', 'shepherding', 'executive', 'chapterAdmin']) {
+  for (const role of ['coordinator', 'finance', 'publicity', 'welfare', 'shepherding', 'media', 'executive', 'chapterAdmin']) {
     const r = await api('POST', '/api/admin/staff', { username: `ph${role.toLowerCase()}`, name: `Phone ${role}`, role, password: 'Start-Pass-123', memberId: await member(`Leader ${role}`), chapterId: C, ...(role === 'executive' ? { positionKey: 'president' } : {}) });
     logins[role] = r.issued || { username: `ph${role.toLowerCase()}`, password: 'Start-Pass-123' };
     if (role === 'coordinator') {
@@ -177,6 +177,7 @@ const check = (label, ok, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await portal('coordinator.html', logins.coordinator);
   await portal('finance.html', logins.finance);
   await portal('publicity.html', logins.publicity);
+  await portal('media-portal.html', logins.media);
   await portal('welfare-portal.html', logins.welfare);
   await portal('shepherding.html', logins.shepherding);
   await portal('executive.html', logins.executive);

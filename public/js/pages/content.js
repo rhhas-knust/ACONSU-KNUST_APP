@@ -132,7 +132,9 @@ function renderContent() {
   }).sort((a, b) => {
     if (a.id === selectedItemId) return -1;
     if (b.id === selectedItemId) return 1;
-    return 0;
+    // A service on now comes first, then the next one, then the recordings.
+    const rank = (x) => (x.liveState === 'live' ? 0 : x.liveState === 'upcoming' ? 1 : 2);
+    return rank(a) - rank(b);
   });
 
   const grid = document.getElementById('contentGrid');
@@ -150,7 +152,7 @@ function renderContent() {
       return `
         <article class="card ${focusClass}" data-content-id="${escapeHtml(item.id)}" style="grid-column: 1 / -1; max-width: 820px; margin: 0 auto; width:100%;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
-            <span class="live-badge"><span class="live-dot"></span> Live Service</span>
+            <span class="live-badge${item.liveState && item.liveState !== 'live' ? ' is-quiet' : ''}">${item.liveState === 'live' ? '<span class="live-dot"></span> Live now' : item.liveState === 'upcoming' ? `Starts ${escapeHtml(new Date(item.startsAt).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }))}` : item.liveState === 'ended' ? 'Recording' : '<span class="live-dot"></span> Live Service'}</span>
             ${item.eventDate ? `<span class="muted" style="font-size:0.9rem;">${formatDate(item.eventDate)}</span>` : ''}
           </div>
           ${videoEmbed || (item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="" style="width:100%; aspect-ratio:16/9; object-fit:cover; border-radius:12px; margin-bottom:16px;">` : '')}

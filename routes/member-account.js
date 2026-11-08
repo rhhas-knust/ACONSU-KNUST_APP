@@ -48,11 +48,12 @@ const PORTALS = {
   shepherding: { href: '/shepherding.html', label: 'Shepherding' },
   publicity: { href: '/publicity.html', label: 'Publicity' },
   welfare: { href: '/welfare-portal.html', label: 'Welfare Office' },
+  media: { href: '/media-portal.html', label: 'Media Office' },
   executive: { href: '/executive.html', label: 'Executive Portal' }
 };
 // An office whose holder also works in another office's portal (see
 // POSITION_OPENS_OFFICE in server.js).
-const ALSO_OPENS = { publicity_head: 'publicity' };
+const ALSO_OPENS = { publicity_head: 'publicity', media_head: 'media', assistant_media_head: 'media' };
 
 async function portalsOf(member) {
   if (!member || !member.id) return [];

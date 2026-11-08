@@ -11,7 +11,8 @@ const OFFICE_LINKS = [
   { role: 'finance', href: '/finance.html', label: 'Finance Office', blurb: 'Budgets, ledger and reports' },
   { role: 'shepherding', href: '/shepherding.html', label: 'Shepherding', blurb: 'Attendance, member care, messages' },
   { role: 'publicity', href: '/publicity.html', label: 'Publicity', blurb: 'Announcements, SMS, testimonies' },
-  { role: 'welfare', href: '/welfare-portal.html', label: 'Welfare Office', blurb: 'Welfare requests and case notes' }
+  { role: 'welfare', href: '/welfare-portal.html', label: 'Welfare Office', blurb: 'Welfare requests and case notes' },
+  { role: 'media', href: '/media-portal.html', label: 'Media Office', blurb: 'Live stream and sermons' }
 ];
 
 // The roles a Chapter Coordinator may appoint. Deliberately excludes
@@ -25,6 +26,7 @@ const APPOINTABLE_ROLES = [
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance registers, member care, contact inbox' },
   { value: 'publicity', label: 'Publicity Officer', blurb: 'Announcements, SMS, testimonies' },
   { value: 'welfare', label: 'Welfare Officer', blurb: 'Welfare requests and confidential case notes' },
+  { value: 'media', label: 'Media', blurb: 'Live stream and sermons (a media volunteer)' },
   { value: 'executive', label: 'Executive', blurb: 'An elected officer, promoted from a member, serving this academic year' }
 ];
 const ROLE_LABEL = APPOINTABLE_ROLES.reduce((acc, r) => { acc[r.value] = r.label; return acc; },
