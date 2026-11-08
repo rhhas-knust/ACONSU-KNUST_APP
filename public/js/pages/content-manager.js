@@ -23,6 +23,12 @@ async function init() {
       isNationalUser = true;
       q('nationalWrap').style.display = 'flex';
     }
+    // Live services are run from the Media portal now; Publicity keeps the rest.
+    const role = authRes && authRes.staff && authRes.staff.role;
+    if (authRes && !authRes.isAdmin && role === 'publicity') {
+      const opt = q('kind').querySelector('option[value="live_service"]');
+      if (opt) opt.remove();
+    }
   } catch (e) {}
 
   loadContent();

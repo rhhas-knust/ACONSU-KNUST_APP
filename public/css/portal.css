@@ -504,3 +504,34 @@ table.portal-table.hp-table th { white-space: normal; }
 
 /* A check-in kept on the phone with no signal (outbox.js). */
 .ci-waiting { color: var(--ink); font-weight: 700; border-left: 3px solid var(--flame-gold); padding-left: 6px; }
+
+/* ---------- Media portal (media-portal.js) ---------- */
+.field-check { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 4px 0 12px; }
+.field-check input { width: 22px; height: 22px; flex: none; margin: 0; }
+.field-check label { margin: 0; font-weight: 600; }
+.media-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.media-actions .btn { min-height: 44px; }
+.media-on-air { border-left: 4px solid var(--flame-red); }
+.media-state { display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--bad-ink); margin-bottom: 6px; }
+.media-state .live-dot, .media-on-air .live-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--flame-red); display: inline-block; }
+.yt-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 10px 0; }
+.yt-pick-item { display: flex; gap: 10px; align-items: flex-start; text-align: left; padding: 8px; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; }
+.yt-pick-item:hover, .yt-pick-item:focus-visible { border-color: var(--brand); }
+.yt-pick-item img { width: 112px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; flex: none; background: var(--tint-light); }
+.yt-pick-item span { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 0.88rem; }
+.yt-preview { display: flex; gap: 10px; align-items: center; margin-top: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; }
+.yt-preview img { width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; flex: none; }
+.yt-preview div { display: flex; flex-direction: column; gap: 3px; font-size: 0.88rem; min-width: 0; }
+.media-progress { font-weight: 800; color: var(--brand-strong); margin-bottom: 12px; }
+.media-checklist { list-style: none; padding: 0; margin: 0; }
+.media-checklist li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line); min-height: 44px; }
+.media-checklist li:last-child { border-bottom: 0; }
+.media-checklist input { width: 22px; height: 22px; flex: none; margin-top: 1px; }
+.media-checklist label { margin: 0; line-height: 1.45; }
+.media-guide ol, .media-guide ul { padding-left: 20px; margin: 8px 0 0; }
+.media-guide li { margin-bottom: 8px; line-height: 1.5; }
+.media-guide > .btn { margin-top: 12px; min-height: 44px; }
+@media (max-width: 560px) {
+  .yt-pick { grid-template-columns: 1fr; }
+  .media-actions .btn { flex: 1 1 100%; }
+}

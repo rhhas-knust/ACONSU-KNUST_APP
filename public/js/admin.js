@@ -958,14 +958,15 @@ const PORTAL_ROLES = [
   { value: 'finance', label: 'Finance', blurb: 'Budgets, ledger, financial reports.', href: '/finance.html' },
   { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance, member care, contact messages.', href: '/shepherding.html' },
   { value: 'publicity', label: 'Publicity', blurb: 'Announcements, SMS, events, testimonies.', href: '/publicity.html' },
-  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' }
+  { value: 'welfare', label: 'Welfare', blurb: 'Welfare requests and referrals.', href: '/welfare-portal.html' },
+  { value: 'media', label: 'Media', blurb: 'The live stream and the sermons. For media volunteers; the Media Head has their own sign-in.', href: '/media-portal.html' }
 ];
 // Only a National Coordinator may hand out these two - see /api/admin/staff.
 const NATIONAL_ONLY_STAFF_ROLES = ['nationalCoordinator', 'coordinator'];
 // Every chapter office is held by a member of that chapter, so the server asks
 // which one. A National Coordinator belongs to the union rather than to any
 // chapter, and is the one account here that doesn't.
-const MEMBER_BACKED_STAFF_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'shepherding', 'publicity', 'welfare'];
+const MEMBER_BACKED_STAFF_ROLES = ['coordinator', 'chapterAdmin', 'finance', 'shepherding', 'publicity', 'welfare', 'media'];
 
 async function renderStaffAccounts() {
   const el = document.getElementById('panel-staff');

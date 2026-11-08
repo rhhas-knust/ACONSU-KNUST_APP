@@ -58,7 +58,7 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
 
   // ------------------------------------------------ every page with a password box --
   console.log('\n== the eye on every page that asks for a password ==');
-  const pages = ['login', 'register', 'reset-password', 'profile', 'admin', 'chapter', 'national', 'council', 'coordinator', 'executive', 'finance', 'publicity', 'shepherding', 'welfare-portal'];
+  const pages = ['login', 'register', 'reset-password', 'profile', 'admin', 'chapter', 'national', 'council', 'coordinator', 'executive', 'finance', 'publicity', 'shepherding', 'welfare-portal', 'media-portal'];
   const ctx = await context();
   for (const name of pages) {
     const p = await pageOf(ctx, `/${name}.html${name === 'reset-password' ? '?token=t&email=a%40b.com' : ''}`); // without a link's token the page shows an error instead of the form

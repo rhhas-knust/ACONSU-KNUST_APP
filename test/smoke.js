@@ -210,15 +210,21 @@ function readPublic(f) {
   check('a non-national role cannot self-elevate a new account to coordinator', r.status === 403 || r.status === 401, r.data);
 
   console.log('\n== Phase 7–8 content and national management ==');
+  // Live services moved to the Media office (routes/media.js, test/media.js);
+  // the chapter admin keeps them as a backup.
   r = await call('pub', 'POST', '/api/admin/content', { kind: 'live_service', title: 'Sunday Service', previewUrl: 'https://youtube.com/example', featured: true });
-  check('publicity publishes chapter live-service content', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
+  check('publicity no longer publishes live services (the Media office does)', r.status === 403, r.data);
+  r = await call('admin', 'POST', '/api/admin/content', { kind: 'live_service', title: 'Sunday Service', previewUrl: 'https://youtube.com/example', featured: true, chapterId });
+  check('the chapter admin publishes chapter live-service content, as a backup', r.status === 200 && r.data.item.chapterId === chapterId, r.data);
   const liveContentId = r.data.item.id;
 
   r = await call('anon', 'GET', `/api/content/item/${liveContentId}`);
   check('single content item lookup works publicly', r.status === 200 && r.data.id === liveContentId && r.data.title === 'Sunday Service', r.data);
 
-  r = await call('pub', 'PUT', `/api/admin/content/${liveContentId}`, { title: 'Sunday Miracle Service', summary: 'Live stream of service' });
-  check('publicity edits content item', r.status === 200 && r.data.item.title === 'Sunday Miracle Service' && r.data.item.summary === 'Live stream of service', r.data);
+  r = await call('pub', 'PUT', `/api/admin/content/${liveContentId}`, { title: 'Changed by publicity' });
+  check('publicity cannot change a live service either', r.status === 403, r.data);
+  r = await call('admin', 'PUT', `/api/admin/content/${liveContentId}`, { title: 'Sunday Miracle Service', summary: 'Live stream of service' });
+  check('the chapter admin edits the content item', r.status === 200 && r.data.item.title === 'Sunday Miracle Service' && r.data.item.summary === 'Live stream of service', r.data);
 
   r = await call('admin', 'POST', '/api/admin/sermons', {
     chapterId,

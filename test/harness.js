@@ -209,8 +209,9 @@ const fakeModels = {
     status: 'published', submittedBy: '', submittedByStaffId: '', reviewedBy: '', reviewNotes: '',
     mapUrl: '', mapPlace: null
   }),
-  Sermon: makeModel({ chapterId: '' }),
-  ContentItem: makeModel({ chapterId: '', published: true, featured: false, sortOrder: 0 }),
+  Sermon: makeModel({ chapterId: '', videoId: '', thumbnailUrl: '', fromLiveId: '' }),
+  ContentItem: makeModel({ chapterId: '', published: true, featured: false, sortOrder: 0, liveState: '', startsAt: null, wentLiveAt: null, endedAt: null, sermonId: '' }),
+  MediaDesk: makeModel({ youtubeChannelId: '', youtubeChannelUrl: '', serviceTitle: 'Sunday Service', checklistDate: '', checklistDone: [], updatedBy: '' }),
   JoinRequest: makeModel({ chapterId: '', status: 'new' }),
   PrayerRequest: makeModel({
     chapterId: '', status: 'new', visibility: 'private', memberId: '',
@@ -348,6 +349,7 @@ function stub(relPath, exports) {
 // The member email index's name (lib/models.js), which lib/memberAccount.js
 // looks for. Not enumerable, so nothing that walks the models sees it.
 Object.defineProperty(fakeModels, 'MEMBER_EMAIL_INDEX', { value: 'email_unique_when_set' });
+Object.defineProperty(fakeModels, 'THEME_MONTH_INDEX', { value: 'month_one_approved' });
 stub('lib/models.js', fakeModels);
 stub('lib/gridfs.js', fakeGridfs);
 // The double stands in for a healthy database by default, and can be told to

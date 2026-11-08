@@ -879,7 +879,7 @@ async function renderContentManagerLink(el) {
     <div class="panel-head">
       <div>
         <h2>Media &amp; Content Hub</h2>
-        <p class="sub">Publish and manage livestreams, seminars, e-books, weekly highlights, founder profiles, and church history.</p>
+        <p class="sub">Publish and manage seminars, e-books, weekly highlights, founder profiles, and church history.</p>
       </div>
       <div class="panel-actions">
         <a href="/content-manager.html" class="btn btn-primary btn-sm">Open Content Manager &nearr;</a>
@@ -887,7 +887,7 @@ async function renderContentManagerLink(el) {
     </div>
     <div class="portal-card" style="text-align:center; padding:40px 20px;">
       <p style="font-size:1.1rem; font-weight:700; color:var(--brand-strong); margin-bottom:8px;">Manage Multimedia &amp; Chapter Resources</p>
-      <p class="muted" style="max-width:500px; margin:0 auto 20px;">Upload e-book PDFs, publish YouTube/Facebook livestreams, post seminar previews, and curate "This Week at ACONSU" photo highlights.</p>
+      <p class="muted" style="max-width:500px; margin:0 auto 20px;">Upload e-book PDFs, post seminar previews, and curate "This Week at ACONSU" photo highlights. The live stream of the service is run by the Media office now, from the Media portal.</p>
       <a href="/content-manager.html" class="btn btn-primary">Go to Content Manager</a>
     </div>
   `;
