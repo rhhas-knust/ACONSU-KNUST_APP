@@ -393,6 +393,91 @@ function staffForm(existing, preselect) {
   });
 }
 
+// Everyone waiting for an office, appointed from one table: an office (and a
+// department, for offices that run one) chosen on each row, then one button.
+// The same appointment as the full form (POST /api/admin/staff), one after the
+// other, and one sheet of logins at the end instead of one at a time.
+function wireAppointMany(el, waiting) {
+  const rows = () => [...el.querySelectorAll('[data-wait-row]')];
+  const picked = () => rows().filter(r => r.querySelector('.wait-pick').checked);
+  const sync = () => {
+    const n = picked().length;
+    document.getElementById('waitCount').textContent = n ? `${n} selected` : 'None selected';
+    document.getElementById('waitAppoint').disabled = !n;
+    const all = document.getElementById('waitAll');
+    all.checked = n === waiting.length;
+    all.indeterminate = n > 0 && n < waiting.length;
+  };
+  rows().forEach(r => {
+    const pos = r.querySelector('.wait-position');
+    const dept = r.querySelector('.wait-dept');
+    const box = r.querySelector('.wait-pick');
+    pos.addEventListener('change', () => {
+      const opt = pos.selectedOptions[0];
+      dept.hidden = !(opt && opt.dataset.requiresDepartment === 'true');
+      if (pos.value && !box.checked) { box.checked = true; sync(); }
+    });
+    box.addEventListener('change', sync);
+  });
+  document.getElementById('waitAll').addEventListener('change', (e) => { rows().forEach(r => { r.querySelector('.wait-pick').checked = e.target.checked; }); sync(); });
+  document.getElementById('waitAppoint').addEventListener('click', async () => {
+    const btn = document.getElementById('waitAppoint');
+    const chosen = picked();
+    let missing = 0;
+    chosen.forEach(r => {
+      const pos = r.querySelector('.wait-position');
+      const dept = r.querySelector('.wait-dept');
+      const msg = r.querySelector('.wait-msg');
+      msg.textContent = ''; msg.className = 'form-msg wait-msg';
+      if (!pos.value) { msg.textContent = 'Choose their office.'; msg.className = 'form-msg error wait-msg'; missing++; }
+      else if (!dept.hidden && !dept.value) { msg.textContent = 'Choose the department they run.'; msg.className = 'form-msg error wait-msg'; missing++; }
+    });
+    if (missing) { showToast(`Choose an office for ${missing === 1 ? 'one more person' : `${missing} more people`} first.`, 'error'); return; }
+    btn.disabled = true;
+    const issued = [];
+    const problems = [];
+    for (const r of chosen) {
+      const person = waiting.find(w => w.id === r.dataset.waitRow);
+      const pos = r.querySelector('.wait-position');
+      const dept = r.querySelector('.wait-dept');
+      btn.textContent = `Appointing ${issued.length + problems.length + 1} of ${chosen.length}...`;
+      try {
+        const out = await fetchJSON('/api/admin/staff', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: person.name, role: 'executive', memberId: person.id, positionKey: pos.value, department: dept.hidden ? '' : dept.value })
+        });
+        issued.push({ name: person.name, office: pos.selectedOptions[0].textContent, ...(out.issued || {}) });
+      } catch (err) {
+        problems.push({ name: person.name, error: err.message || 'Could not appoint' });
+      }
+    }
+    showAppointedSheet(issued, problems);
+  });
+}
+
+// One sheet for everyone just appointed: their office login, to pass on. They
+// can also sign in with their own app password (12 characters or more) or a
+// fingerprint, so the starting password is only a fallback.
+function showAppointedSheet(issued, problems) {
+  const lines = issued.map(i => `${i.name} (${i.office}): username ${i.username || '-'}, starting password ${i.password || '-'}`).join('\n');
+  showModal(`
+    <h3>${issued.length} appointed</h3>
+    ${issued.length ? `<p class="hint">Their offices are open. Each can sign in to the Executive Portal with their own app password (phone number or email), or with the login below, which asks them to choose their own password straight away. A starting password stops working after 14 days.</p>
+    <div class="table-wrap"><table class="portal-table"><thead><tr><th>Name</th><th>Office</th><th>Username</th><th>Starting password</th></tr></thead><tbody>
+      ${issued.map(i => `<tr><td>${escapeHtml(i.name)}</td><td>${escapeHtml(i.office)}</td><td><code>${escapeHtml(i.username || '-')}</code></td><td><code>${escapeHtml(i.password || '-')}</code></td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+    ${problems.length ? `<p class="hint">${problems.length} could not be appointed:</p><ul>${problems.map(p => `<li><strong>${escapeHtml(p.name)}</strong>: ${escapeHtml(p.error)}</li>`).join('')}</ul>` : ''}
+    <div class="of-actions">
+      ${issued.length ? '<button type="button" class="btn btn-outline" id="copyLogins">Copy all</button>' : ''}
+      <button type="button" class="btn btn-primary" id="appointedDone">Done</button>
+    </div>`, true);
+  const copy = document.getElementById('copyLogins');
+  if (copy) copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(lines); copy.textContent = 'Copied'; } catch (e) { copy.textContent = 'Copy did not work: write them down'; }
+  });
+  document.getElementById('appointedDone').addEventListener('click', () => { closeModal(); openPanel('accounts'); });
+}
+
 // The office login, shown once to be passed on. It opens only the screen where
 // its holder chooses their own password, and stops working after 14 days.
 function showIssuedLogin(name, issued, done) {
@@ -431,6 +516,12 @@ async function renderLeadershipAccounts(el) {
     fetchJSON('/api/admin/staff'),
     fetchJSON('/api/coordinator/pending-executives').catch(() => [])
   ]);
+  // To give everyone waiting an office from this one table.
+  const [positionList, deptList] = waiting.length
+    ? await Promise.all([fetchJSON('/api/executive-positions').catch(() => []), fetchJSON('/api/departments').catch(() => [])])
+    : [[], []];
+  const positionOptions = '<option value="">Choose their office</option>' + positionList.map(p => `<option value="${escapeHtml(p.key)}" data-requires-department="${p.requiresDepartment}">${escapeHtml(p.label)}</option>`).join('');
+  const deptOptions = '<option value="">Choose the department</option>' + deptList.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
   const appointable = staff.filter(s => s.role !== 'nationalCoordinator');
   const filled = new Set(appointable.filter(s => s.active).map(s => s.role));
   const unfilled = APPOINTABLE_ROLES.filter(r => !filled.has(r.value) && r.value !== 'executive');
@@ -450,18 +541,28 @@ async function renderLeadershipAccounts(el) {
         <p class="hint">
           Shepherding has marked ${waiting.length === 1 ? 'this member' : 'these members'} an Executive.
           That is a label on their record. It gives them no portal on its own.
-          Give them a position and an account here and their office opens.
+          Choose each one's office below, tick them, and appoint them all at once.
         </p>
+        <div class="bulk-bar">
+          <label class="bulk-all"><input type="checkbox" id="waitAll"> Select all ${waiting.length}</label>
+          <span class="bulk-count" id="waitCount" aria-live="polite">None selected</span>
+          <button type="button" class="btn btn-primary btn-sm" id="waitAppoint" disabled>Appoint selected</button>
+        </div>
         <div class="table-wrap" style="margin-top:12px;">
           <table class="portal-table">
-            <thead><tr><th>Name</th><th>Marked</th><th>Shepherd</th><th></th></tr></thead>
+            <thead><tr><th><span class="sr-only">Select</span></th><th>Name</th><th>Office</th><th>Shepherd</th><th></th></tr></thead>
             <tbody>
               ${waiting.map(w => `
-                <tr>
-                  <td><strong>${escapeHtml(w.name || 'Unnamed member')}</strong>${w.email ? `<br><small class="muted">${escapeHtml(w.email)}</small>` : ''}</td>
-                  <td class="tiny muted">${w.markedAt ? shortDate(String(w.markedAt).slice(0, 10)) : '-'}</td>
+                <tr data-wait-row="${escapeHtml(w.id)}">
+                  <td><label class="pick-wrap"><input type="checkbox" class="wait-pick" data-wait-pick="${escapeHtml(w.id)}" aria-label="Select ${escapeHtml(w.name || 'this member')}"></label></td>
+                  <td><strong>${escapeHtml(w.name || 'Unnamed member')}</strong>${w.email ? `<br><small class="muted">${escapeHtml(w.email)}</small>` : ''}${w.markedAt ? `<br><small class="muted">Marked ${shortDate(String(w.markedAt).slice(0, 10))}</small>` : ''}</td>
+                  <td>
+                    <select class="wait-position" aria-label="Office for ${escapeHtml(w.name || 'this member')}">${positionOptions}</select>
+                    <select class="wait-dept" aria-label="Department for ${escapeHtml(w.name || 'this member')}" hidden>${deptOptions}</select>
+                    <small class="form-msg wait-msg"></small>
+                  </td>
                   <td class="tiny muted">${escapeHtml(w.shepherdName || '-')}</td>
-                  <td><div class="row-actions"><button data-appoint-member="${escapeHtml(w.id)}">Appoint</button></div></td>
+                  <td><div class="row-actions"><button data-appoint-member="${escapeHtml(w.id)}">Appoint with the full form</button></div></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -512,6 +613,7 @@ async function renderLeadershipAccounts(el) {
   `;
 
   document.getElementById('newStaffBtn').addEventListener('click', () => staffForm(null));
+  if (waiting.length) wireAppointMany(el, waiting);
   el.querySelectorAll('[data-appoint-member]').forEach(btn => btn.addEventListener('click', () => {
     const person = waiting.find(w => w.id === btn.dataset.appointMember);
     if (!person) return;

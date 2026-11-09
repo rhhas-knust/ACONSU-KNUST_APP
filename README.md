@@ -1011,3 +1011,13 @@ A member used to be signed out 8 hours after signing in, even in the installed a
 ## 51. Media Tools in the Media portal
 
 The Media portal has a **Media Tools** screen for the recordings: compress a video, extract the audio (an audio version of the sermon for members with little data), split a long video into upright clips for Shorts, TikTok, Reels and WhatsApp Status, and transcribe with subtitles and key points. They are the Video Compressor (`rhhas-knust/Video-Compressor`, https://rhhas-knust.github.io/Video-Compressor/), opened in its own tab: everything runs on the device and nothing is uploaded, so it is linked rather than copied in (copying would mean loosening this app's script policy for its page and keeping two copies in step). To point it elsewhere, set `MEDIA_TOOLS_URL` (an https address) on Render; blank uses the address above (`routes/media.js`).
+
+## 52. Reviewing many members at once
+
+Shepherding's **Membership Workflow** used to take each newcomer through three steps, one person at a time (Begin Review, Accept, Assign Shepherd & Activate), and an executive through a fourth (Promote to Executive) before the Coordinator could appoint them in another portal.
+
+- **Tick and accept**: tick people (or Select all) and press **Accept & activate**. Each becomes an active member with a membership number and their digital card, and is given a shepherd: shared out among the check-up team, whoever looks after the fewest first (the Coordinator counts, by office), or all to one shepherd chosen from the list. Someone who already has a shepherd keeps them. **Begin review** works on many at once too. Each row also has its own **Accept & activate**. Up to 300 at a time; anyone who cannot be moved is listed with the reason, and the rest are done. `POST /api/shepherd/members/bulk-stage`.
+- **Membership numbers** now follow the highest number already given in the chapter, so a number is never given twice (counting active members could repeat one once someone moved on to Worker or Executive).
+- **Executives**: appointing someone to an office marks them Executive on their membership record (with a number if they had none), so Shepherding does not have to promote them first. The Coordinator's **Waiting for an account** list is one table: choose each person's office (and department, for offices that run one), tick, **Appoint selected**, and get one sheet of logins with **Copy all**. They can also sign in with their own app password or a fingerprint.
+
+`test/membership-review.js` (in `npm test`), `test/review-ui.js` (browser).

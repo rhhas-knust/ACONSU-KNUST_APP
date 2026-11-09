@@ -20,6 +20,7 @@ function matches(doc, query) {
       if ('$in' in cond) return (cond.$in || []).includes(value);
       if ('$nin' in cond) return !(cond.$nin || []).includes(value);
       if ('$exists' in cond) return cond.$exists ? value !== undefined : value === undefined;
+      if ('$regex' in cond) return typeof value === 'string' && new RegExp(cond.$regex, cond.$options || '').test(value);
       return true;
     }
     if (cond instanceof Date) return new Date(value).getTime() === cond.getTime();

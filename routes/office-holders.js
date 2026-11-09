@@ -24,7 +24,7 @@ function registerOfficeHolderRoutes(app, deps) {
   const {
     repo, models, rolesLib, positions, requireRole, requireCapability, actorName, bcrypt,
     academicYearEndsAt, currentAcademicYearLabel, revokeStaffSessions, logMilestone,
-    officeAppointmentProblem, issueOfficeLogin, officeAccounts
+    officeAppointmentProblem, issueOfficeLogin, officeAccounts, appointedMembershipFields
   } = deps;
   const CAP = positions.CAPABILITIES;
 
@@ -224,6 +224,7 @@ function registerOfficeHolderRoutes(app, deps) {
     // 4. The new holder is recorded on their member profile, and the appointment
     // is the milestone.
     await repo.patchById('members', member.id, {
+      ...(appointedMembershipFields ? await appointedMembershipFields(member) : {}),
       isExecutive: true, executiveStatus: 'verified', executiveRole: position.label,
       executiveDepartment: department, executiveVerifiedAt: new Date()
     }, { chapterId });

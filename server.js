@@ -4804,6 +4804,88 @@ app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
 // Shepherding can set and the journey a member is shown can never drift apart.
 const MEMBERSHIP_STAGES = MEMBERSHIP_JOURNEY.map(s => s.stage);
 
+// Moving one person to a stage, and (optionally) giving them a shepherd: the
+// one place it is done, for a single person or for many at once.
+// `shepherdMemberId`: undefined leaves it alone, '' clears it, an id assigns.
+// Returns { item } or { error, status }.
+async function applyMembershipStage(existing, stage, shepherdMemberId, filter, team) {
+  const updates = { membershipStage: stage };
+  if (!existing.qrToken) updates.qrToken = crypto.randomBytes(16).toString('hex');
+
+  // Assigning a shepherd is allowed alongside any stage change, or on its own.
+  // A shepherd is a member of this chapter who sits on the check-up team, so
+  // the name is never typed - it is read off the record the id points at and
+  // can never drift out of sync with it.
+  if (shepherdMemberId !== undefined) {
+    const id = String(shepherdMemberId || '').trim();
+    if (id) {
+      // Nobody shepherds themselves. The team shepherds the members -
+      // themselves excepted - and each of them is looked after by someone
+      // else on the team.
+      if (id === existing.id) return { status: 400, error: 'Nobody can be their own shepherd' };
+      // Through chapterFilter, so a shepherd can never be borrowed from
+      // another chapter.
+      const shepherd = await repo.getById('members', id, filter);
+      if (!shepherd) return { status: 400, error: 'Unknown shepherd' };
+      // Being on the check-up team is what makes someone assignable. The
+      // Coordinator is on it by virtue of the office, so this has to ask the
+      // same question the roster answers.
+      const byOffice = team ? team.byOffice : await coordinatorMemberIds(filter);
+      if (!shepherd.onShepherdTeam && !byOffice.has(shepherd.id)) {
+        return { status: 400, error: `${shepherd.name} is not on the check-up team` };
+      }
+      updates.shepherdMemberId = shepherd.id;
+      updates.shepherdName = shepherd.name;
+    } else {
+      updates.shepherdMemberId = '';
+      updates.shepherdName = '';
+    }
+  }
+
+  // First time reaching 'active' (or beyond) - issue the membership number the
+  // digital card (section 14) will show. Never reassigned once set.
+  if (['active', 'worker', 'executive'].includes(stage) && !existing.membershipNumber) {
+    updates.membershipNumber = await nextMembershipNumber(existing.chapterId);
+  }
+
+  const updated = await repo.updateById('members', existing.id, { ...existing, ...updates }, filter);
+
+  // Newly marked an Executive, and no account behind it: the Coordinator is
+  // the only one who can finish this, so they are told rather than left to
+  // notice. Only on the change itself - re-saving the same stage is not news.
+  if (stage === 'executive' && existing.membershipStage !== 'executive') {
+    const account = await models.StaffUser.findOne({ memberId: updated.id }).lean();
+    if (!account) tellCoordinatorSomeoneNeedsAnAccount(updated);
+  }
+  return { item: updated };
+}
+
+// Appointed to an office: the membership record says Executive too (unless
+// they are alumni, an Alumni President for instance), with a membership number
+// if they had none. Shepherding no longer has to mark someone an Executive
+// before the Coordinator can appoint them.
+async function appointedMembershipFields(member) {
+  const out = {};
+  if (!['executive', 'alumni'].includes(member.membershipStage)) out.membershipStage = 'executive';
+  if (!member.membershipNumber) out.membershipNumber = await nextMembershipNumber(member.chapterId);
+  if (!member.qrToken) out.qrToken = crypto.randomBytes(16).toString('hex');
+  return out;
+}
+
+// The next membership number in a chapter. Counted from the highest number
+// already given rather than from how many are active, so a member who moved
+// on, or was made an executive, never frees a number for someone else.
+async function nextMembershipNumber(chapterId) {
+  const prefix = `${String(chapterId).toUpperCase()}-`;
+  const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)$`);
+  const numbered = await models.Member.find({ chapterId, membershipNumber: { $regex: pattern.source } }).lean();
+  const highest = numbered.reduce((n, m) => {
+    const hit = pattern.exec(String(m.membershipNumber || ''));
+    return hit ? Math.max(n, Number(hit[1])) : n;
+  }, 0);
+  return `${prefix}${String(highest + 1).padStart(4, '0')}`;
+}
+
 app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
@@ -4811,65 +4893,64 @@ app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) =
     if (!existing) return res.status(404).json({ error: 'Member not found' });
     const stage = req.body.stage;
     if (!MEMBERSHIP_STAGES.includes(stage)) return res.status(400).json({ error: 'Unknown membership stage' });
-
-    const updates = { membershipStage: stage };
-    if (!existing.qrToken) updates.qrToken = crypto.randomBytes(16).toString('hex');
-
-    // Assigning a shepherd is allowed alongside any stage change, or on its own.
-    // A shepherd is a member of this chapter who sits on the check-up team, so
-    // the name is never typed - it is read off the record the id points at and
-    // can never drift out of sync with it.
-    if (req.body.shepherdMemberId !== undefined) {
-      const shepherdMemberId = String(req.body.shepherdMemberId || '').trim();
-      if (shepherdMemberId) {
-        // Nobody shepherds themselves. The team shepherds the members -
-        // themselves excepted - and each of them is looked after by someone
-        // else on the team.
-        if (shepherdMemberId === existing.id) {
-          return res.status(400).json({ error: 'Nobody can be their own shepherd' });
-        }
-        // Through chapterFilter, so a shepherd can never be borrowed from
-        // another chapter.
-        const shepherd = await repo.getById('members', shepherdMemberId, filter);
-        if (!shepherd) return res.status(400).json({ error: 'Unknown shepherd' });
-        // Being on the check-up team is what makes someone assignable. Without
-        // this the field would accept any member at all and the team would mean
-        // nothing. The Coordinator is on it by virtue of the office, so this
-        // has to ask the same question the roster answers.
-        const byOffice = await coordinatorMemberIds(filter);
-        if (!shepherd.onShepherdTeam && !byOffice.has(shepherd.id)) {
-          return res.status(400).json({ error: `${shepherd.name} is not on the check-up team` });
-        }
-        updates.shepherdMemberId = shepherd.id;
-        updates.shepherdName = shepherd.name;
-      } else {
-        // Explicitly clearing the assignment.
-        updates.shepherdMemberId = '';
-        updates.shepherdName = '';
-      }
-    }
-
-    // First time reaching 'active' - issue the membership number the digital
-    // card (section 14) will show. Never reassigned once set.
-    if (stage === 'active' && !existing.membershipNumber) {
-      const activeCount = await models.Member.countDocuments({ chapterId: existing.chapterId, membershipStage: 'active' });
-      updates.membershipNumber = `${String(existing.chapterId).toUpperCase()}-${String(activeCount + 1).padStart(4, '0')}`;
-    }
-
-    const updated = await repo.updateById('members', req.params.id, { ...existing, ...updates }, filter);
-
-    // Newly marked an Executive, and no account behind it: the Coordinator is
-    // the only one who can finish this, so they are told rather than left to
-    // notice. Only on the change itself - re-saving the same stage is not news.
-    if (stage === 'executive' && existing.membershipStage !== 'executive') {
-      const account = await models.StaffUser.findOne({ memberId: updated.id }).lean();
-      if (!account) tellCoordinatorSomeoneNeedsAnAccount(updated);
-    }
-
-    const { passwordHash, ...safe } = updated;
+    const out = await applyMembershipStage(existing, stage, req.body.shepherdMemberId, filter);
+    if (out.error) return res.status(out.status).json({ error: out.error });
+    const { passwordHash, ...safe } = out.item;
     res.json({ success: true, item: safe });
   } catch (e) {
     res.status(500).json({ error: 'Could not update membership status' });
+  }
+});
+
+// Many people at once: "Accept and activate these 40". With `shepherd:
+// 'share'`, each is given whoever on the check-up team is looking after the
+// fewest at that moment (never themselves), so the new members are spread
+// evenly instead of one shepherd being handed the whole intake.
+const BULK_STAGE_MAX = 300;
+app.post('/api/shepherd/members/bulk-stage', requireShepherd, async (req, res) => {
+  try {
+    const filter = rolesLib.chapterFilter(req);
+    const stage = req.body.stage;
+    if (!MEMBERSHIP_STAGES.includes(stage)) return res.status(400).json({ error: 'Unknown membership stage' });
+    const ids = [...new Set((Array.isArray(req.body.memberIds) ? req.body.memberIds : []).map(String))];
+    if (!ids.length) return res.status(400).json({ error: 'Choose at least one person.' });
+    if (ids.length > BULK_STAGE_MAX) return res.status(400).json({ error: `At most ${BULK_STAGE_MAX} at a time.` });
+    const shepherdChoice = req.body.shepherd === undefined ? undefined : String(req.body.shepherd || '');
+
+    // The team and how many each looks after, kept up to date as people are
+    // given out, so "share" stays even across the whole batch.
+    const members = await repo.getAll('members', filter);
+    const byOffice = await coordinatorMemberIds(filter);
+    const team = members.filter((m) => m.onShepherdTeam || byOffice.has(m.id));
+    const load = new Map(team.map((t) => [t.id, members.filter((m) => m.shepherdMemberId === t.id).length]));
+    if (shepherdChoice === 'share' && !team.length) {
+      return res.status(400).json({ error: 'Nobody is on the check-up team yet. Add people on the Check-up Team tab first.' });
+    }
+
+    const done = [];
+    const failed = [];
+    for (const id of ids) {
+      const existing = members.find((m) => m.id === id);
+      if (!existing) { failed.push({ id, error: 'Not found in this chapter' }); continue; }
+      let shepherdMemberId = shepherdChoice;
+      if (shepherdChoice === 'share') {
+        // Someone who already has a shepherd keeps them.
+        if (existing.shepherdMemberId) shepherdMemberId = undefined;
+        else {
+          const pick = team.filter((t) => t.id !== existing.id)
+            .sort((a, b) => (load.get(a.id) - load.get(b.id)) || String(a.name).localeCompare(String(b.name)))[0];
+          if (!pick) { failed.push({ id, name: existing.name, error: 'No one else on the check-up team to look after them' }); continue; }
+          shepherdMemberId = pick.id;
+        }
+      }
+      const out = await applyMembershipStage(existing, stage, shepherdMemberId, filter, { byOffice });
+      if (out.error) { failed.push({ id, name: existing.name, error: out.error }); continue; }
+      if (shepherdMemberId && load.has(shepherdMemberId)) load.set(shepherdMemberId, load.get(shepherdMemberId) + 1);
+      done.push({ id, name: out.item.name, shepherdName: out.item.shepherdName || '', membershipNumber: out.item.membershipNumber || '' });
+    }
+    res.json({ success: true, done, failed });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not update these people' });
   }
 });
 
@@ -5999,7 +6080,7 @@ registerOfficeRoutes(app, {
 registerOfficeHolderRoutes(app, {
   repo, models, rolesLib, positions, requireRole, requireCapability, actorName, bcrypt,
   academicYearEndsAt, currentAcademicYearLabel, revokeStaffSessions, logMilestone,
-  officeAppointmentProblem, issueOfficeLogin, officeAccounts
+  officeAppointmentProblem, issueOfficeLogin, officeAccounts, appointedMembershipFields
 });
 registerAccountRoutes(app, { repo, models, bcrypt, rolesLib, positions, currentStaff, rememberRevocation });
 registerSecondStepRoutes(app, { models, bcrypt, currentStaff, requireChapterAdmin, rolesLib, actorName, revokeStaffSessions, logSecurity, leaderSecondStepSince, passwordLimiter: loginLimiter });
@@ -7438,6 +7519,7 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
         history: []
       }, 'exec');
       await repo.patchById('members', memberId, {
+        ...(await appointedMembershipFields(promotedMember)),
         isExecutive: true,
         executiveStatus: 'verified',
         executiveRole: position.label,
