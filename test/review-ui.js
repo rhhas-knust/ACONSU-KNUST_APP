@@ -97,6 +97,44 @@ const { chromium } = require('playwright');
   check(sheet.length === 2 && sheet.some(t => /President/.test(t) && /president\./.test(t)) && sheet.some(t => /General Secretary/.test(t)), 'one sheet with both logins', sheet);
   await c.screenshot({ path: path.join(os.tmpdir(), 'review-appointed.png') });
   check(fakeModels.StaffUser._docs.filter(a => [waitingA, waitingB].includes(a.memberId)).length === 2, 'both have their office accounts');
+
+  console.log('\n== bringing back someone marked alumni by mistake ==');
+  const oops = intake[0];
+  doc(oops).membershipStage = 'alumni';
+  await s.evaluate(() => window.openPanel('visitors'));
+  await s.waitForSelector(`[data-restage="${oops}"]`);
+  check((await s.textContent(`[data-restage="${oops}"]`)).trim() === 'Bring back', 'alumni have a Bring back button');
+  await s.tap(`[data-restage="${oops}"]`);
+  await s.waitForSelector('#restageForm');
+  check(await s.$eval('#restagePick', el => el.value) === 'active', 'it offers Active Member first');
+  await s.click('#restageForm button[type="submit"]');
+  await s.waitForTimeout(1000);
+  check(doc(oops).membershipStage === 'active' && !!doc(oops).membershipNumber, 'and they are an active member again, number kept', { stage: doc(oops).membershipStage });
+
+  console.log('\n== the full appoint form takes the name from the member ==');
+  const third = await member('Efua Picked From The List');
+  await c.evaluate(() => { window.closeModal(); window.openPanel('accounts'); });
+  await c.waitForSelector('#newStaffBtn');
+  await c.tap('#newStaffBtn');
+  await c.waitForSelector('#staffForm');
+  check(!(await c.$('#sfName')), 'there is no Full Name box to fill in');
+  await c.selectOption('#sfRole', 'executive');
+  await c.waitForFunction(() => document.querySelectorAll('#sfMemberId option').length > 1 && document.querySelectorAll('#sfPosition option').length > 1);
+  await c.selectOption('#sfMemberId', third);
+  await c.selectOption('#sfPosition', 'organising_secretary');
+  await c.click('#staffForm button[type="submit"]');
+  await c.waitForTimeout(1200);
+  check(fakeModels.StaffUser._docs.some(a => a.memberId === third && a.name === 'Efua Picked From The List'), 'the account has the name on their member record', fakeModels.StaffUser._docs.filter(a => a.memberId === third).map(a => a.name));
+
+  console.log('\n== a sign-in that ended while the page was open ==');
+  await c.evaluate(() => { window.closeModal(); window.openPanel('accounts'); });
+  await c.waitForSelector('#newStaffBtn');
+  await c.context().clearCookies();
+  await c.tap('#newStaffBtn');
+  await c.waitForTimeout(1500);
+  const loginShown = await c.isVisible('#portalLoginWrap');
+  const said = await c.textContent('#portalLoginMsg').catch(() => '');
+  check(loginShown && /sign-in had ended/.test(said), 'the portal goes back to its sign-in screen and says why, instead of "Not authenticated"', { loginShown, said });
   check(errors.length === 0, 'no page errors', errors);
 
   await browser.close();

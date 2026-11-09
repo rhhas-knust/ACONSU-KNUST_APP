@@ -245,8 +245,8 @@ function staffForm(existing, preselect) {
           <input type="text" id="sfUsername" autocomplete="off" required>
           <small class="hint">They sign in with this. Lowercase, no spaces.</small>
         </div>`}
-      <div class="field"><label>Full Name</label>
-        <input type="text" id="sfName" value="${escapeHtml(existing?.name || preselect?.name || '')}" required></div>
+      ${isEdit ? `<div class="field"><label for="sfName">Full Name</label>
+        <input type="text" id="sfName" value="${escapeHtml(existing?.name || '')}" required></div>` : ''}
       <div class="field"><label>Role</label>
         <select id="sfRole">
           ${APPOINTABLE_ROLES.map(r => `<option value="${r.value}" ${(existing?.role || preselect?.role) === r.value ? 'selected' : ''}>${escapeHtml(r.label)}</option>`).join('')}
@@ -363,10 +363,10 @@ function staffForm(existing, preselect) {
   document.getElementById('staffForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const password = document.getElementById('sfPassword').value;
-    const payload = {
-      name: document.getElementById('sfName').value,
-      role: roleSelect.value
-    };
+    // A new account takes the name already on the member's record; there is
+    // nothing to type twice. Editing can still correct the account's name.
+    const payload = { role: roleSelect.value };
+    if (isEdit) payload.name = document.getElementById('sfName').value;
     const officeLogin = !isEdit && roleSelect.value === 'executive';
     if (password && !officeLogin) payload.password = password;
     if (!isEdit) {

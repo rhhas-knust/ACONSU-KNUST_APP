@@ -367,6 +367,22 @@ function askSecondStep(done) {
   };
 }
 
+// A sign-in that ended while the portal was open: back to the sign-in screen,
+// saying why, rather than leaving a portal on screen that can no longer save.
+// Checked with the server first, so one refused action is not mistaken for it.
+let signedOutShown = 0;
+window.AconsuSignedOut = async () => {
+  const shell = document.getElementById('portalShell');
+  if (!shell || shell.style.display === 'none') return; // the sign-in screen is up already
+  if (Date.now() - signedOutShown < 3000) return;
+  signedOutShown = Date.now();
+  const still = await refreshPortalSession().catch(() => false);
+  if (still && !(PORTAL.user && (PORTAL.user.mustChangePassword || PORTAL.user.mustSetUpSecondStep))) return;
+  closeModal();
+  await showPortalOrLogin();
+  setFormMsg('portalLoginMsg', 'Your sign-in had ended, so the last change was not saved. Sign in again and do it once more.', 'error');
+};
+
 async function showPortalOrLogin() {
   const allowed = await refreshPortalSession();
   if (PORTAL.user && PORTAL.user.mustChangePassword) return showFirstPassword();

@@ -98,10 +98,19 @@ const { fakeModels } = require('./harness.js');
   r = await call('shep', 'PATCH', `/api/shepherd/members/${visitors[1]}/stage`, { stage: 'active', shepherdMemberId: ama });
   check('one at a time still works as before', r.status === 200 && doc(visitors[1]).membershipStage === 'active' && doc(visitors[1]).shepherdMemberId === ama, r.data);
 
+  console.log('\n== undoing a promotion made by mistake ==');
+  const oops = intake[2];
+  const before = { no: doc(oops).membershipNumber, shepherd: doc(oops).shepherdMemberId };
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${oops}/stage`, { stage: 'alumni' });
+  check('(marked alumni by mistake)', r.status === 200 && doc(oops).membershipStage === 'alumni');
+  r = await call('shep', 'PATCH', `/api/shepherd/members/${oops}/stage`, { stage: 'active' });
+  check('brought back to active, with the same membership number and shepherd', r.status === 200 && doc(oops).membershipStage === 'active' && doc(oops).membershipNumber === before.no && doc(oops).shepherdMemberId === before.shepherd, { stage: doc(oops).membershipStage, before, after: { no: doc(oops).membershipNumber, shepherd: doc(oops).shepherdMemberId } });
+
   console.log('\n== appointing executives ==');
   const president = await member('Straight To President');
-  r = await call('admin', 'POST', '/api/admin/staff', { name: 'Straight To President', role: 'executive', positionKey: 'president', memberId: president, chapterId: C });
+  r = await call('admin', 'POST', '/api/admin/staff', { role: 'executive', positionKey: 'president', memberId: president, chapterId: C });
   check('a member can be appointed straight away, without Shepherding promoting them first', r.status === 200 && r.data.issued && r.data.issued.username, r.data);
+  check('with no name typed, the account takes the name on their member record', fakeModels.StaffUser._docs.some(a => a.memberId === president && a.name === 'Straight To President'));
   check('and their membership record now says Executive, with a membership number', doc(president).membershipStage === 'executive' && !!doc(president).membershipNumber, { stage: doc(president).membershipStage, no: doc(president).membershipNumber });
   const marked = await member('Marked By Shepherding');
   await call('shep', 'PATCH', `/api/shepherd/members/${marked}/stage`, { stage: 'executive' });

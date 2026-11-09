@@ -909,6 +909,34 @@ async function assignShepherdForm(person, stage) {
   });
 }
 
+// Putting someone on a different stage, forwards or back: a promotion made by
+// mistake (to Alumni, to Worker) is undone here. Their shepherd, membership
+// number and card are kept.
+function changeStageForm(person) {
+  if (!person) return;
+  const current = person.membershipStage;
+  showModal(`
+    <h3>${current === 'alumni' ? `Bring ${escapeHtml(person.name)} back` : `Change ${escapeHtml(person.name)}'s stage`}</h3>
+    <p class="hint">Now: <strong>${escapeHtml(STAGE_LABELS[current] || current)}</strong>. Their shepherd, membership number and card stay as they are.</p>
+    <form id="restageForm">
+      <div class="field"><label for="restagePick">Move them to</label>
+        <select id="restagePick">
+          ${Object.keys(STAGE_LABELS).filter(s => s !== current).map(s => `<option value="${s}"${s === (current === 'alumni' ? 'active' : '') ? ' selected' : ''}>${escapeHtml(STAGE_LABELS[s])}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+    </form>`);
+  document.getElementById('restageForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const to = document.getElementById('restagePick').value;
+    closeModal();
+    await moveStage(person.memberId, to, null, `${person.name} is now ${STAGE_LABELS[to]}.`);
+  });
+}
+
 // Accept and activate one person or many in one step: each becomes an active
 // member with a membership number and a shepherd. "Share out" gives each one
 // whoever on the check-up team is looking after the fewest, so a big intake is
@@ -1134,6 +1162,7 @@ async function renderVisitors(el) {
                 <td>
                   ${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}
                   ${PORTAL.canEdit ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-reshepherd="${escapeHtml(p.memberId)}">Change shepherd</button>` : ''}
+                  ${PORTAL.canEdit ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-restage="${escapeHtml(p.memberId)}">Change stage</button>` : ''}
                 </td>
               </tr>
             `).join('') || emptyRow(6, 'No active members yet.')}
@@ -1148,11 +1177,12 @@ async function renderVisitors(el) {
       <p class="hint">${alumni.length} member${alumni.length === 1 ? '' : 's'} transitioned to alumni stage.</p>
       <div class="table-wrap">
         <table class="portal-table">
-          <thead><tr><th>Name</th><th>Membership No.</th><th>Shepherd</th></tr></thead>
+          <thead><tr><th>Name</th><th>Membership No.</th><th>Shepherd</th>${PORTAL.canEdit ? '<th></th>' : ''}</tr></thead>
           <tbody>
-            ${alumni.slice(0, 20).map(p => `
-              <tr><td>${escapeHtml(p.name)}</td><td class="tiny muted">${escapeHtml(p.membershipNumber || '-')}</td><td class="tiny muted">${escapeHtml(p.shepherdName || '-')}</td></tr>
-            `).join('') || emptyRow(3, 'No alumni transitions yet.')}
+            ${alumni.map(p => `
+              <tr><td>${escapeHtml(p.name)}</td><td class="tiny muted">${escapeHtml(p.membershipNumber || '-')}</td><td class="tiny muted">${escapeHtml(p.shepherdName || '-')}</td>
+              ${PORTAL.canEdit ? `<td><button class="btn btn-outline btn-sm" data-restage="${escapeHtml(p.memberId)}">Bring back</button></td>` : ''}</tr>
+            `).join('') || emptyRow(PORTAL.canEdit ? 4 : 3, 'No alumni transitions yet.')}
           </tbody>
         </table>
       </div>
@@ -1160,7 +1190,17 @@ async function renderVisitors(el) {
   `;
 
   el.querySelectorAll('[data-advance]').forEach(btn => {
-    btn.addEventListener('click', () => moveStage(btn.dataset.advance, btn.dataset.stage));
+    btn.addEventListener('click', () => {
+      // Alumni is easy to press by mistake and was hard to undo: ask first.
+      if (btn.dataset.stage === 'alumni') {
+        const who = withAccount.find(p => p.memberId === btn.dataset.advance);
+        if (!confirm(`Mark ${who ? who.name : 'them'} as alumni? Do this when they have finished their studies. You can bring them back from the Alumni list if it was a mistake.`)) return;
+      }
+      moveStage(btn.dataset.advance, btn.dataset.stage);
+    });
+  });
+  el.querySelectorAll('[data-restage]').forEach(btn => {
+    btn.addEventListener('click', () => changeStageForm(withAccount.find(p => p.memberId === btn.dataset.restage)));
   });
   el.querySelectorAll('[data-accept-one]').forEach(btn => {
     btn.addEventListener('click', () => acceptAndActivate(pipeline.filter(p => p.memberId === btn.dataset.acceptOne)));

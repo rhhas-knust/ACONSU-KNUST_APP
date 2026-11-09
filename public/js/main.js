@@ -17,8 +17,17 @@ async function fetchJSON(url, options) {
     const res = await fetch(url, opts);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      const err = new Error(data.error || 'Request failed');
+      // A sign-in that ended while the page was open (it lasted its time, or
+      // was ended elsewhere) used to say only "Not authenticated" when Save was
+      // pressed. It says what happened, and a portal page that has said how to
+      // handle it (window.AconsuSignedOut) shows its sign-in screen.
+      const ended = res.status === 401 && /^not authenticated$/i.test(String(data.error || ''));
+      const err = new Error(ended ? 'Your sign-in has ended, so that was not saved. Sign in again, then try once more.' : (data.error || 'Request failed'));
+      err.status = res.status;
       if (data.field) err.field = data.field; // which box the problem is in, so a form can point at it
+      if (ended && typeof window.AconsuSignedOut === 'function') {
+        try { window.AconsuSignedOut(); } catch (e) { /* the message above still says it */ }
+      }
       throw err;
     }
     return data;
