@@ -83,6 +83,24 @@ async function checkAuth() {
   document.getElementById('adminShell').style.display = 'none';
 }
 
+// A sign-in that ended while the dashboard was open: back to the sign-in
+// screen, saying why. Only while the dashboard is showing, and checked with the
+// server first, so checkAuth's own look at who is signed in never loops here.
+let adminSignedOutShown = 0;
+window.AconsuSignedOut = async () => {
+  const shell = document.getElementById('adminShell');
+  if (!shell || shell.style.display === 'none') return;
+  if (Date.now() - adminSignedOutShown < 3000) return;
+  adminSignedOutShown = Date.now();
+  const still = await fetch('/api/portal/me').then(r => r.json()).catch(() => ({}));
+  const adminStill = await fetch('/api/admin/check').then(r => (r.ok ? r.json() : {})).catch(() => ({}));
+  if (adminStill.isAdmin || (still.staff && !still.staff.mustSetUpSecondStep)) return;
+  closeModal();
+  await checkAuth();
+  const msg = document.getElementById('loginMsg');
+  if (msg) { msg.textContent = 'Your sign-in had ended, so the last change was not saved. Sign in again and do it once more.'; msg.className = 'form-msg error'; }
+};
+
 // ---------- the card at the top of the side menu ----------
 function renderNavProfile() {
   const nav = document.getElementById('adminNav');
@@ -1060,8 +1078,9 @@ async function openStaffForm(user) {
   showModal(`
     <h3>${isEdit ? 'Edit' : 'New'} Leadership Account</h3>
     <form id="staffForm">
-      <div class="field"><label>Full Name</label>
-        <input type="text" id="stName" value="${escapeHtml(user?.name || '')}" placeholder="e.g. Ama Mensah" required></div>
+      <div class="field" id="stNameWrap"><label for="stName">Full Name</label>
+        <input type="text" id="stName" value="${escapeHtml(user?.name || '')}" placeholder="e.g. Ama Mensah" required>
+        ${isEdit ? '' : '<small class="hint">Only for an account with no member behind it. For everyone else the name on their member record is used.</small>'}</div>
       <div class="field"><label>Username</label>
         ${isEdit
           ? `<input type="text" value="${escapeHtml(user.username)}" disabled>`
@@ -1126,9 +1145,16 @@ async function openStaffForm(user) {
     }
   }
 
+  // A new account for a member takes the name on their record: no Full Name
+  // to type. Only an account with no member behind it (a National Coordinator,
+  // a National Patron) asks for one.
   function syncMemberField() {
     if (!memberWrap) return;
-    memberWrap.hidden = !MEMBER_BACKED_STAFF_ROLES.includes(roleSelect.value);
+    const memberBacked = MEMBER_BACKED_STAFF_ROLES.includes(roleSelect.value);
+    memberWrap.hidden = !memberBacked;
+    const nameWrap = document.getElementById('stNameWrap');
+    nameWrap.hidden = memberBacked;
+    document.getElementById('stName').required = !memberBacked;
   }
   if (memberWrap) {
     roleSelect.addEventListener('change', syncMemberField);
@@ -1139,10 +1165,8 @@ async function openStaffForm(user) {
 
   document.getElementById('staffForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const payload = {
-      name: document.getElementById('stName').value,
-      role: document.getElementById('stRole').value
-    };
+    const payload = { role: document.getElementById('stRole').value };
+    if (isEdit || !MEMBER_BACKED_STAFF_ROLES.includes(payload.role)) payload.name = document.getElementById('stName').value;
     if (ADMIN_SCOPE.isNational && document.getElementById('stChapter')) {
       payload.chapterId = document.getElementById('stChapter').value;
     }

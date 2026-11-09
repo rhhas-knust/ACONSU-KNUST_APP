@@ -909,6 +909,97 @@ async function assignShepherdForm(person, stage) {
   });
 }
 
+// Putting someone on a different stage, forwards or back: a promotion made by
+// mistake (to Alumni, to Worker) is undone here. Their shepherd, membership
+// number and card are kept.
+function changeStageForm(person) {
+  if (!person) return;
+  const current = person.membershipStage;
+  showModal(`
+    <h3>${current === 'alumni' ? `Bring ${escapeHtml(person.name)} back` : `Change ${escapeHtml(person.name)}'s stage`}</h3>
+    <p class="hint">Now: <strong>${escapeHtml(STAGE_LABELS[current] || current)}</strong>. Their shepherd, membership number and card stay as they are.</p>
+    <form id="restageForm">
+      <div class="field"><label for="restagePick">Move them to</label>
+        <select id="restagePick">
+          ${Object.keys(STAGE_LABELS).filter(s => s !== current).map(s => `<option value="${s}"${s === (current === 'alumni' ? 'active' : '') ? ' selected' : ''}>${escapeHtml(STAGE_LABELS[s])}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+    </form>`);
+  document.getElementById('restageForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const to = document.getElementById('restagePick').value;
+    closeModal();
+    await moveStage(person.memberId, to, null, `${person.name} is now ${STAGE_LABELS[to]}.`);
+  });
+}
+
+// Accept and activate one person or many in one step: each becomes an active
+// member with a membership number and a shepherd. "Share out" gives each one
+// whoever on the check-up team is looking after the fewest, so a big intake is
+// spread evenly; or one shepherd can take them all.
+async function acceptAndActivate(people) {
+  if (!people.length) return;
+  let team = [];
+  try { ({ team } = await fetchJSON('/api/shepherd/team')); }
+  catch (err) { showToast(err.message || 'Could not load the check-up team.', 'error'); return; }
+  if (!team.length) {
+    showModal(`
+      <h3>No one on the check-up team yet</h3>
+      <p class="hint">Each new member is given a shepherd from the check-up team. Put people on the team first (the Check-up Team tab), then accept.</p>
+      <div style="display:flex; gap:10px;"><button type="button" class="btn btn-outline" id="cancelModalBtn">Close</button></div>`);
+    return;
+  }
+  const one = people.length === 1;
+  const choices = team.filter(t => !(one && t.memberId === people[0].memberId));
+  showModal(`
+    <h3>Accept and activate ${one ? escapeHtml(people[0].name) : `${people.length} people`}</h3>
+    <p class="hint">${one ? 'They become' : 'They each become'} an active member, with a membership number and their digital card.</p>
+    ${one ? '' : `<p class="tiny muted">${people.slice(0, 8).map(p => escapeHtml(p.name)).join(', ')}${people.length > 8 ? ` and ${people.length - 8} more` : ''}</p>`}
+    <form id="acceptForm">
+      <div class="field"><label for="acceptShepherd">Shepherd</label>
+        <select id="acceptShepherd">
+          <option value="share">${one ? 'Whoever on the team has the fewest' : 'Share out among the check-up team (fewest first)'}</option>
+          ${choices.map(t => `<option value="${escapeHtml(t.memberId)}">${escapeHtml(t.name)}${t.isAlumni ? ' (alumni)' : ''}${t.byOffice ? ' (Coordinator)' : ''}, looking after ${t.flockSize}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button type="submit" class="btn btn-primary">Accept &amp; activate${one ? '' : ` ${people.length}`}</button>
+        <button type="button" class="btn btn-outline" id="cancelModalBtn">Cancel</button>
+      </div>
+      <div class="form-msg" id="acceptMsg"></div>
+    </form>`);
+  document.getElementById('acceptForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      const out = await fetchJSON('/api/shepherd/members/bulk-stage', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberIds: people.map(p => p.memberId), stage: 'active', shepherd: document.getElementById('acceptShepherd').value })
+      });
+      if (out.failed.length) {
+        document.getElementById('modalContent').innerHTML = `
+          <h3>${out.done.length} accepted</h3>
+          <p class="hint">${out.failed.length} could not be:</p>
+          <ul>${out.failed.map(f => `<li><strong>${escapeHtml(f.name || 'Someone')}</strong>: ${escapeHtml(f.error)}</li>`).join('')}</ul>
+          <div style="display:flex; gap:10px;"><button type="button" class="btn btn-primary" id="acceptDone">Done</button></div>`;
+        document.getElementById('acceptDone').addEventListener('click', () => { closeModal(); openPanel('visitors'); });
+        return;
+      }
+      closeModal();
+      showToast(out.done.length === 1 ? `${out.done[0].name} is an active member, looked after by ${out.done[0].shepherdName || 'their shepherd'}.` : `${out.done.length} people are active members now.`, 'success');
+      openPanel('visitors');
+    } catch (err) {
+      setFormMsg('acceptMsg', err.message || 'Could not accept them.', 'error');
+      btn.disabled = false;
+    }
+  });
+}
+
 // ---------- the check-up team ----------
 async function renderShepTeam(el) {
   const { team, candidates, unassignedCount } = await fetchJSON('/api/shepherd/team');
@@ -1010,7 +1101,7 @@ async function renderVisitors(el) {
     <div class="panel-head">
       <div>
         <h2>Membership Workflow</h2>
-        <p class="sub">Visitor &rarr; Shepherding Review &rarr; Accepted &rarr; Assigned Shepherd &rarr; Active Member.</p>
+        <p class="sub">Visitor &rarr; Shepherding Review &rarr; Accepted &rarr; Assigned Shepherd &rarr; Active Member. Tick as many as you like and accept them in one go: each gets a membership number, and a shepherd from the check-up team.</p>
       </div>
     </div>
 
@@ -1023,24 +1114,32 @@ async function renderVisitors(el) {
 
     <div class="portal-card">
       <h3>In Progress</h3>
+      ${PORTAL.canEdit && pipeline.length ? `
+        <div class="bulk-bar" id="pipelineBar">
+          <label class="bulk-all"><input type="checkbox" id="pipelineAll"> Select all ${pipeline.length}</label>
+          <span class="bulk-count" id="pipelineCount" aria-live="polite">None selected</span>
+          <button type="button" class="btn btn-primary btn-sm" id="pipelineAccept" disabled>Accept &amp; activate</button>
+          <button type="button" class="btn btn-outline btn-sm" id="pipelineReview" disabled>Begin review</button>
+        </div>` : ''}
       <div class="table-wrap">
         <table class="portal-table">
-          <thead><tr><th></th><th>Name</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+          <thead><tr>${PORTAL.canEdit ? '<th><span class="sr-only">Select</span></th>' : ''}<th></th><th>Name</th><th>Contact</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${pipeline.map(p => `
               <tr>
+                ${PORTAL.canEdit ? `<td><label class="pick-wrap"><input type="checkbox" class="pick" data-pick="${escapeHtml(p.memberId)}" aria-label="Select ${escapeHtml(p.name)}"></label></td>` : ''}
                 <td>${avatar(p)}</td>
                 <td><strong>${escapeHtml(p.name)}</strong></td>
                 <td class="tiny muted">${escapeHtml(p.email || p.phone || '-')}</td>
                 <td>${pill(STAGE_LABELS[p.membershipStage] || p.membershipStage)}</td>
                 <td>
                   <div class="row-actions">
-                    ${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}
-                    ${p.membershipStage === 'accepted' ? `<button data-assign="${p.memberId}">Assign Shepherd &amp; Activate</button>` : ''}
+                    ${PORTAL.canEdit ? `<button data-accept-one="${escapeHtml(p.memberId)}">Accept &amp; activate</button>` : ''}
+                    ${p.membershipStage === 'visitor' && PORTAL.canEdit ? `<button data-advance="${p.memberId}" data-stage="under_review">Begin Review</button>` : ''}
                   </div>
                 </td>
               </tr>
-            `).join('') || emptyRow(5, 'Nobody is in the visitor pipeline right now.')}
+            `).join('') || emptyRow(PORTAL.canEdit ? 6 : 5, 'Nobody is in the visitor pipeline right now.')}
           </tbody>
         </table>
       </div>
@@ -1063,6 +1162,7 @@ async function renderVisitors(el) {
                 <td>
                   ${NEXT_STAGE[p.membershipStage] ? `<button data-advance="${p.memberId}" data-stage="${NEXT_STAGE[p.membershipStage]}">${NEXT_ACTION_LABEL[p.membershipStage]}</button>` : ''}
                   ${PORTAL.canEdit ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-reshepherd="${escapeHtml(p.memberId)}">Change shepherd</button>` : ''}
+                  ${PORTAL.canEdit ? `<button class="btn btn-outline btn-sm" style="white-space:nowrap;" data-restage="${escapeHtml(p.memberId)}">Change stage</button>` : ''}
                 </td>
               </tr>
             `).join('') || emptyRow(6, 'No active members yet.')}
@@ -1077,11 +1177,12 @@ async function renderVisitors(el) {
       <p class="hint">${alumni.length} member${alumni.length === 1 ? '' : 's'} transitioned to alumni stage.</p>
       <div class="table-wrap">
         <table class="portal-table">
-          <thead><tr><th>Name</th><th>Membership No.</th><th>Shepherd</th></tr></thead>
+          <thead><tr><th>Name</th><th>Membership No.</th><th>Shepherd</th>${PORTAL.canEdit ? '<th></th>' : ''}</tr></thead>
           <tbody>
-            ${alumni.slice(0, 20).map(p => `
-              <tr><td>${escapeHtml(p.name)}</td><td class="tiny muted">${escapeHtml(p.membershipNumber || '-')}</td><td class="tiny muted">${escapeHtml(p.shepherdName || '-')}</td></tr>
-            `).join('') || emptyRow(3, 'No alumni transitions yet.')}
+            ${alumni.map(p => `
+              <tr><td>${escapeHtml(p.name)}</td><td class="tiny muted">${escapeHtml(p.membershipNumber || '-')}</td><td class="tiny muted">${escapeHtml(p.shepherdName || '-')}</td>
+              ${PORTAL.canEdit ? `<td><button class="btn btn-outline btn-sm" data-restage="${escapeHtml(p.memberId)}">Bring back</button></td>` : ''}</tr>
+            `).join('') || emptyRow(PORTAL.canEdit ? 4 : 3, 'No alumni transitions yet.')}
           </tbody>
         </table>
       </div>
@@ -1089,11 +1190,49 @@ async function renderVisitors(el) {
   `;
 
   el.querySelectorAll('[data-advance]').forEach(btn => {
-    btn.addEventListener('click', () => moveStage(btn.dataset.advance, btn.dataset.stage));
+    btn.addEventListener('click', () => {
+      // Alumni is easy to press by mistake and was hard to undo: ask first.
+      if (btn.dataset.stage === 'alumni') {
+        const who = withAccount.find(p => p.memberId === btn.dataset.advance);
+        if (!confirm(`Mark ${who ? who.name : 'them'} as alumni? Do this when they have finished their studies. You can bring them back from the Alumni list if it was a mistake.`)) return;
+      }
+      moveStage(btn.dataset.advance, btn.dataset.stage);
+    });
   });
-  el.querySelectorAll('[data-assign]').forEach(btn => {
-    btn.addEventListener('click', () => assignShepherdForm(pipeline.find(p => p.memberId === btn.dataset.assign)));
+  el.querySelectorAll('[data-restage]').forEach(btn => {
+    btn.addEventListener('click', () => changeStageForm(withAccount.find(p => p.memberId === btn.dataset.restage)));
   });
+  el.querySelectorAll('[data-accept-one]').forEach(btn => {
+    btn.addEventListener('click', () => acceptAndActivate(pipeline.filter(p => p.memberId === btn.dataset.acceptOne)));
+  });
+
+  // Ticking many, then one action for all of them.
+  const picks = () => [...el.querySelectorAll('.pick:checked')].map(c => c.dataset.pick);
+  const syncBar = () => {
+    const n = picks().length;
+    const count = document.getElementById('pipelineCount');
+    if (!count) return;
+    count.textContent = n ? `${n} selected` : 'None selected';
+    document.getElementById('pipelineAccept').disabled = !n;
+    document.getElementById('pipelineReview').disabled = !n;
+    const all = document.getElementById('pipelineAll');
+    all.checked = n === pipeline.length;
+    all.indeterminate = n > 0 && n < pipeline.length;
+  };
+  el.querySelectorAll('.pick').forEach(c => c.addEventListener('change', syncBar));
+  const allBox = document.getElementById('pipelineAll');
+  if (allBox) {
+    allBox.addEventListener('change', () => { el.querySelectorAll('.pick').forEach(c => { c.checked = allBox.checked; }); syncBar(); });
+    document.getElementById('pipelineAccept').addEventListener('click', () => acceptAndActivate(pipeline.filter(p => picks().includes(p.memberId))));
+    document.getElementById('pipelineReview').addEventListener('click', async () => {
+      const ids = picks();
+      try {
+        const out = await fetchJSON('/api/shepherd/members/bulk-stage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ memberIds: ids, stage: 'under_review' }) });
+        showToast(`${out.done.length} now under review.`, 'success');
+        openPanel('visitors');
+      } catch (err) { showToast(err.message || 'Could not update them.', 'error'); }
+    });
+  }
   // Reassigning leaves the member's stage alone - only who looks after them
   // changes. Without this there would be no way to move a flock, and standing
   // someone down would be blocked forever.
