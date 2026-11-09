@@ -16,6 +16,7 @@
       ]);
       const departments = (allDepartments || []).filter(d => d.chapterId === chapterId);
       const executives = (allExecs || []).filter(e => e.chapterId === chapterId);
+      const deptName = new Map(departments.map(d => [d.id, d.name]));
       document.title = `${chapter.name} | ACONSU`;
 
       if (chapter.headerImageFileId) {
@@ -70,7 +71,7 @@
                 </div>
                 <h3 style="margin:0; font-size:1rem;">${escapeHtml(e.name)}</h3>
                 <div class="exec-role">${escapeHtml(e.role || '')}</div>
-                ${e.department ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem; font-weight:700;">${escapeHtml(e.department)}</p>` : ''}
+                ${e.department && deptName.get(e.department) ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem; font-weight:700;">${escapeHtml(deptName.get(e.department))}</p>` : ''}
                 ${e.contact && e.contact.phone ? `<p style="margin:8px 0 0; color:var(--ink-soft); font-size:0.82rem;"><a href="tel:${escapeHtml(e.contact.phone)}">${escapeHtml(e.contact.phone)}</a></p>` : ''}
                 ${e.contact && e.contact.email ? `<p style="margin:6px 0 0; color:var(--ink-soft); font-size:0.82rem;"><a href="mailto:${escapeHtml(e.contact.email)}">${escapeHtml(e.contact.email)}</a></p>` : ''}
               </div>
@@ -105,8 +106,12 @@
           </div>
           ${dept.mapUrl ? mapBlockHtml({ url: dept.mapUrl, place: dept.mapPlace, label: dept.meetingLocation || dept.name }) : ''}
         </div>
-        <p style="color:var(--ink-soft);">${escapeHtml(dept.description)}</p>
+        <p style="color:var(--ink-soft);">${escapeHtml(dept.description || '')}</p>
+        <section class="card dchat" id="chat" aria-label="Department chat"></section>
       `;
+      AconsuDeptChat.mount(document.getElementById('chat'), dept.id).then(() => {
+        if (window.location.hash === '#chat') document.getElementById('chat').scrollIntoView();
+      });
     } else {
       detailEl.innerHTML = '<h1 class="sr-only">Department</h1><p class="empty-state">No chapter or department selected.</p>';
       return;

@@ -1041,3 +1041,11 @@ Your office, Where You Stand, Your Department and Fingerprint or face sign-in we
 - **Shorter descriptions.** Each screen's opening paragraph in the portals and the admin is cut to its first line, with "More" to read the rest (`public/js/main.js`, `shortenDescriptions`).
 
 `test/key-offices.js` (in `npm test`).
+
+## 56. Department chat; the About page's leaders from their profiles; the National Coordinator hidden
+
+- **Every department has its own chat**, on its page (`/department.html?id=...#chat`). Nobody sets it up and nobody keeps a list: on every request the server works out who is in, from the department's members (their profile's departments) and its head (the executive whose roster card carries it). Someone who joins the department is in; someone who leaves is out. Members post and reply; the head pins and removes messages; a writer removes their own; a member restricted from Community Chat reads but cannot post. A new message is pushed to everyone in the department, a reply to the people in that conversation, never to the writer. Members open it from the profile's Department row ("Choir chat"), a head from the same row ("You lead it") or from My Department in the Executive Portal. Messages are kept with the Small Groups' posts (group id `dept:<department id>`), so the same clear-out and account deletion cover them. `routes/department-chat.js`: `GET|POST /api/departments/:id/chat`, `POST /api/departments/:id/chat/:postId/pin`, `DELETE /api/departments/:id/chat/:postId`.
+- **The About page lists the chapter's leaders.** "Meet the Executives" shows the chapter's Coordinator and its executives, in order of office, with their names, photos, phone numbers and email addresses taken from their app profiles wherever the roster card has none. With no chapter chosen it lists every chapter's Coordinator, as before. The executives list (`/api/executives`) fills blank cards from profiles the same way.
+- **The National Coordinator is hidden from the public lists** (the About page and `/api/national/executives`) until Global Settings' "Show the National Coordinator on the public leadership lists" is ticked (`showNationalCoordinator`, off by default). The council, which is members only, still lists them.
+
+`test/department-chat.js` (in `npm test`).

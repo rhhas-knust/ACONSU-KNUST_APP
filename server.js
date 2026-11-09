@@ -33,6 +33,7 @@ const securityHeaders = require('./lib/securityHeaders');
 const { renderTableReport } = require('./lib/pdf');
 const { registerGroupRoutes } = require('./routes/groups');
 const { registerChatRoutes } = require('./routes/chat');
+const { registerDepartmentChatRoutes } = require('./routes/department-chat');
 const { registerChurchLifeRoutes } = require('./routes/church-life');
 const { registerMemberServiceRoutes } = require('./routes/member-services');
 const { registerGivingCardRoutes } = require('./routes/giving-cards');
@@ -1622,8 +1623,22 @@ app.get('/api/member/standing', requireMember, async (req, res) => {
         .map(n => ({ id: n.id, title: n.title, body: n.body, createdAt: n.createdAt }));
     }
 
+    // The department they lead, if any: its head is in its chat too, and the
+    // profile's Department row is the way in for them as for its members.
+    const ownAccounts = await models.StaffUser.find({ memberId: member.id, role: 'executive', active: { $ne: false } }).lean();
+    const ledCards = ownAccounts.length
+      ? await repo.getAll('executives', { chapterId: member.chapterId || '', staffId: { $in: ownAccounts.map(a => a.id) } })
+      : [];
+    const leads = [];
+    for (const card of ledCards) {
+      if (!card.department || departmentIds.includes(card.department) || leads.some(l => l.id === card.department)) continue;
+      const found = await repo.getById('departments', card.department, { chapterId: member.chapterId || '' });
+      if (found) leads.push({ id: found.id, name: found.name });
+    }
+
     res.json({
       departmentNotices,
+      leads,
       stage: { key: current.stage, label: current.label, blurb: current.blurb },
       next: next ? { key: next.stage, label: next.label } : null,
       journey: MEMBERSHIP_JOURNEY.map(s => ({ key: s.stage, label: s.label })),
@@ -2775,6 +2790,7 @@ const communityRouteDeps = {
 };
 registerGroupRoutes(app, communityRouteDeps);
 registerChatRoutes(app, communityRouteDeps);
+registerDepartmentChatRoutes(app, { ...communityRouteDeps, push });
 // The Alumni wall, the weekly spotlight and the monthly theme (see the header
 // of routes/church-life.js). Registered after the oversight chokepoint above,
 // so National's writes here are the national ones and only those.
@@ -3555,17 +3571,12 @@ app.get('/api/departments/:id', async (req, res) => {
 
 app.get('/api/executives', async (req, res) => {
   try {
-    const execs = await repo.getAll('executives', contentChapterFilter(req));
+    const execs = await fillCardsFromProfiles(await repo.getAll('executives', contentChapterFilter(req)));
     // Rank by the position itself, so the President heads the roster whatever
     // order the cards happened to be created in. A card whose `order` was set
     // by hand keeps it; anything else falls back to its position's rank, and
     // an unplaceable title sorts to the end rather than to the top.
-    const rank = (e) => {
-      if (e.order) return e.order;
-      const position = positions.resolvePosition(e.positionKey, e.role, !!e.department);
-      return position.order;
-    };
-    res.json(execs.sort((a, b) => rank(a) - rank(b) || String(a.name || '').localeCompare(String(b.name || ''))));
+    res.json(rankExecutives(execs));
   } catch (e) {
     res.status(500).json({ error: 'Could not load executives' });
   }
@@ -3836,48 +3847,98 @@ app.patch('/api/admin/executives/:id/position', requireChapterCoordinator, async
   }
 });
 
-// Public leadership roster: chapter coordinators and the National Coordinator,
-// enriched with their member profile image/contact details for the visitors page.
+// A roster card holds what was copied from the member when they were
+// appointed. What the card leaves blank is filled from their app profile (the
+// account on the card leads to the member), so a leader who never touched the
+// card still shows their name, face, phone and email.
+async function fillCardsFromProfiles(cards) {
+  const staffIds = [...new Set(cards.map(c => c.staffId).filter(Boolean))];
+  if (!staffIds.length) return cards;
+  const staff = await models.StaffUser.find({ id: { $in: staffIds } }).lean();
+  const memberIdOf = new Map(staff.map(s => [s.id, s.memberId]).filter(([, m]) => m));
+  const memberIds = [...new Set(memberIdOf.values())];
+  const members = memberIds.length ? await repo.getAll('members', repo.allChapters({ id: { $in: memberIds } })) : [];
+  const memberById = new Map(members.map(m => [m.id, m]));
+  return cards.map((card) => {
+    const member = memberById.get(memberIdOf.get(card.staffId));
+    if (!member) return card;
+    const contact = card.contact || {};
+    return {
+      ...card,
+      name: card.name || member.name || '',
+      imageFileId: card.imageFileId || member.profileImageFileId || '',
+      contact: { phone: contact.phone || member.phone || '', email: contact.email || member.email || '' }
+    };
+  });
+}
+
+function rankExecutives(cards) {
+  const rank = (e) => e.order || positions.resolvePosition(e.positionKey, e.role, !!e.department).order;
+  return cards.sort((a, b) => rank(a) - rank(b) || String(a.name || '').localeCompare(String(b.name || '')));
+}
+
+// The public leadership list on the About page. In a chapter: its Coordinator
+// and its executives, in order of office. With no chapter chosen: every
+// chapter's Coordinator. Names, faces and contacts come from each leader's app
+// profile. The National Coordinator is listed only once they have chosen to be
+// (Global Settings, showNationalCoordinator).
 app.get('/api/public/leadership', async (req, res) => {
   try {
-    // Union-wide on purpose: the public roster of every chapter's coordinators.
-    const staffUsers = await repo.getAll('staffUsers', repo.allChapters());
-    const members = await repo.getAll('members', repo.allChapters());
+    const chapterId = contentChapterFilter(req).chapterId || '';
+    const scope = chapterId ? { chapterId } : repo.allChapters();
+    const [staffUsers, settings, chapters] = await Promise.all([
+      repo.getAll('staffUsers', scope),
+      repo.getSettings(),
+      repo.getAll('chapters', {})
+    ]);
+    const chapterName = new Map(chapters.map(c => [c.id, c.name]));
+    const coordinators = staffUsers.filter(u => u.role === 'coordinator' && u.active !== false);
+    const national = settings.showNationalCoordinator === true
+      ? await models.StaffUser.findOne({ role: 'nationalCoordinator', active: { $ne: false } }).lean()
+      : null;
+    const memberIds = [...coordinators, ...(national ? [national] : [])].map(u => u.memberId).filter(Boolean);
+    const members = memberIds.length ? await repo.getAll('members', repo.allChapters({ id: { $in: memberIds } })) : [];
     const memberMap = new Map(members.map(m => [m.id, m]));
-    const leadership = [];
-
-    const national = staffUsers.find(u => u.role === 'nationalCoordinator' && u.active !== false);
-    if (national) {
-      const member = memberMap.get(national.memberId) || null;
-      leadership.push({
-        id: national.id,
-        name: national.name || member?.name || 'National Coordinator',
-        role: 'National Coordinator',
-        chapterId: '',
-        chapterName: 'National',
+    const person = (user, role, chapter) => {
+      const member = memberMap.get(user.memberId) || null;
+      return {
+        id: user.id,
+        name: member?.name || user.name || role,
+        role,
+        chapterId: user.chapterId || '',
+        chapterName: chapter,
         phone: member?.phone || '',
         email: member?.email || '',
         imageFileId: member?.profileImageFileId || ''
-      });
+      };
+    };
+
+    const leadership = [];
+    if (national) leadership.push(person(national, 'National Coordinator', 'National'));
+    const chapterLeads = coordinators.map(u => person(u, 'Chapter Coordinator', chapterName.get(u.chapterId) || u.chapterId || 'Chapter'));
+
+    if (!chapterId) {
+      leadership.push(...chapterLeads.sort((a, b) => a.chapterName.localeCompare(b.chapterName)));
+      return res.json(leadership);
     }
 
-    const coordinators = staffUsers.filter(u => u.role === 'coordinator' && u.active !== false);
-    for (const user of coordinators) {
-      const chapter = await repo.getById('chapters', user.chapterId || '');
-      const member = memberMap.get(user.memberId) || null;
+    // In a chapter, it is that chapter's own team, so the chapter's name is not
+    // repeated on every card.
+    leadership.push(...chapterLeads.map(p => ({ ...p, chapterName: '' })));
+    const cards = rankExecutives(await fillCardsFromProfiles(await repo.getAll('executives', { chapterId })));
+    cards.forEach((card) => {
       leadership.push({
-        id: user.id,
-        name: user.name || member?.name || chapter?.name || 'Chapter Coordinator',
-        role: 'Chapter Coordinator',
-        chapterId: user.chapterId || '',
-        chapterName: chapter?.name || user.chapterId || 'Chapter',
-        phone: member?.phone || '',
-        email: member?.email || chapter?.contact?.email || '',
-        imageFileId: member?.profileImageFileId || ''
+        id: card.id,
+        name: card.name || '',
+        role: card.role || '',
+        chapterId,
+        chapterName: '',
+        phone: (card.contact && card.contact.phone) || '',
+        email: (card.contact && card.contact.email) || '',
+        imageFileId: card.imageFileId || ''
       });
-    }
-
-    res.json(leadership.sort((a, b) => a.chapterName.localeCompare(b.chapterName)));
+    });
+    res.json(leadership.filter(p => p.name));
   } catch (e) {
     res.status(500).json({ error: 'Could not load leadership roster' });
   }
@@ -6861,7 +6922,8 @@ app.patch('/api/council/posts/:id/pin', requireCouncil, requireCouncilChair, asy
 // belong on the global app whether or not anyone is signed in.
 app.get('/api/national/executives', async (req, res) => {
   try {
-    res.json(await buildCouncilRoster());
+    const [roster, settings] = await Promise.all([buildCouncilRoster(), repo.getSettings()]);
+    res.json(settings.showNationalCoordinator === true ? roster : roster.filter(s => s.seat !== 'National Coordinator'));
   } catch (e) {
     res.status(500).json({ error: 'Could not load the national executives' });
   }
@@ -8182,6 +8244,7 @@ app.put('/api/admin/settings', rolesLib.requireNational, async (req, res) => {
     if (color && !brand.isHex(color)) return res.status(400).json({ error: 'Use a colour like #0B1A43 (a # and six letters or digits).' });
     next.brandColor = color ? brand.normalise(color) : '';
   }
+  if (hasOwn(req.body, 'showNationalCoordinator')) next.showNationalCoordinator = req.body.showNationalCoordinator === true;
   await repo.setSettings(next);
   res.json({ success: true });
 });
