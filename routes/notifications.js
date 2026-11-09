@@ -29,8 +29,18 @@ async function createNotification(title, body, url, source, chapterId, audience)
   return notif;
 }
 
+// How long a notification stays in members' feed and bell: 2 days, then it
+// is gone from their view (NOTIFICATIONS_SHOW_DAYS; 0 shows them for as long as
+// they are kept). It stays stored, for the admin's history, until the daily
+// clear-out removes it (lib/retention.js, RETAIN_NOTIFICATIONS_DAYS).
+const DAY = 24 * 60 * 60 * 1000;
+function showDays(env = process.env) {
+  const raw = String(env.NOTIFICATIONS_SHOW_DAYS == null ? '' : env.NOTIFICATIONS_SHOW_DAYS).trim();
+  return /^\d+$/.test(raw) ? Number(raw) : 2;
+}
+
 function registerNotificationFeed(app, deps) {
-  const { contentChapterFilter, memberDepartmentIds } = deps;
+  const { contentChapterFilter, memberDepartmentIds, isChapterAdminOrAbove } = deps;
 
   app.get('/api/notifications', async (req, res) => {
     try {
@@ -58,7 +68,12 @@ function registerNotificationFeed(app, deps) {
       // The database orders them and keeps the newest 40. This is asked for on
       // every page by everybody, so it must not read every notification there
       // has ever been in order to show forty.
-      const items = await repo.getAll('notifications', { $and: [filter, audience] }, { sort: { createdAt: -1 }, limit: 40 });
+      // Only the last few days: an old notice has done its job. The admin's
+      // own history asks for all of them (?all=1).
+      const days = showDays();
+      const wholeHistory = req.query.all === '1' && typeof isChapterAdminOrAbove === 'function' && isChapterAdminOrAbove(req);
+      const recent = days && !wholeHistory ? [{ createdAt: { $gte: new Date(Date.now() - days * DAY) } }] : [];
+      const items = await repo.getAll('notifications', { $and: [filter, audience, ...recent] }, { sort: { createdAt: -1 }, limit: 40 });
       res.json(items);
     } catch (e) {
       res.status(500).json({ error: 'Could not load notifications' });
@@ -121,4 +136,5 @@ function registerPushRoutes(app, deps) {
   });
 }
 
-module.exports = { createNotification, registerNotificationFeed, registerPushRoutes };
+module.exports = {
+  showDays, createNotification, registerNotificationFeed, registerPushRoutes };

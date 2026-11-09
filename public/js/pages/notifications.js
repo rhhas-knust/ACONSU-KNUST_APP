@@ -8,7 +8,7 @@
     const items = await fetchNotificationsShared();
     const wrap = document.getElementById('notifList');
     if (!items.length) {
-      wrap.innerHTML = '<p class="empty-state">No notifications yet. Check back soon.</p>';
+      wrap.innerHTML = '<p class="empty-state">Nothing new in the last two days. Notifications show here for two days, then clear away.</p>';
     } else {
       wrap.innerHTML = `<div class="card" style="padding:8px 20px;">${items.map(n => `
         <a href="${n.url || '/index.html'}" class="notif-item" style="text-decoration:none; color:inherit;">

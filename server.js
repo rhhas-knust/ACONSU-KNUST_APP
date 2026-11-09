@@ -2257,7 +2257,7 @@ app.get('/api/birthdays/today', async (req, res) => {
 
 // ---------- notifications & push ----------
 // The in-app feed: routes/notifications.js.
-registerNotificationFeed(app, { contentChapterFilter, memberDepartmentIds });
+registerNotificationFeed(app, { contentChapterFilter, memberDepartmentIds, isChapterAdminOrAbove });
 
 // Is this thing actually working? Deliberately public and deliberately
 // answering 503 when the database is away: the home page returns 200 whether

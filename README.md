@@ -1025,3 +1025,7 @@ Shepherding's **Membership Workflow** used to take each newcomer through three s
 **Undoing a promotion, and appointing without typing names.** In the Membership Workflow, everyone on the Alumni list has **Bring back**, and active members have **Change stage**: either puts them on any stage, forwards or back, keeping their shepherd, membership number and card. "Mark as Alumni" asks first. Both appoint forms (the Coordinator's Leadership Accounts and the admin's) take the account's name from the member chosen, so there is no Full Name to type; only an account with no member behind it (a National Coordinator or Patron) asks for one, and editing an account can still correct its name.
 
 **A sign-in that ended while a page was open** (it ran its time, or was ended elsewhere) used to show only "Not authenticated" when Save was pressed. Now every portal and the admin page go back to their sign-in screen and say the sign-in had ended and the last change was not saved (`window.AconsuSignedOut`, called by `fetchJSON` in `public/js/main.js` on that answer).
+
+## 53. Notifications clear after two days
+
+The notifications feed and bell show only the last 2 days (`NOTIFICATIONS_SHOW_DAYS`, default 2; 0 = no limit), so old notices clear away by themselves. They stay stored for the admin's history (the admin's Notifications panel asks for all of them with `?all=1`, which only a chapter admin or above gets) until the yearly clear-out. `routes/notifications.js`, `test/notifications-age.js` (in `npm test`).
