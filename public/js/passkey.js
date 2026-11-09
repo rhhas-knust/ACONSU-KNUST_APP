@@ -128,5 +128,41 @@
     }));
   }
 
-  window.AconsuPasskey = { supported, hasBuiltIn, setUp, signIn, renderCard };
+  // The same, as one row on the profile: "Fingerprint sign-in  On" that opens
+  // to the devices and the button. No paragraph to read first.
+  const CHEVRON = '<svg class="prow-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  async function renderRow(el) {
+    if (!el) return;
+    let keys = [];
+    try { keys = await fetchJSON('/api/passkeys'); } catch (e) { el.innerHTML = ''; return; }
+    const can = supported();
+    const built = can ? await hasBuiltIn() : false;
+    const value = !can ? 'Not in this browser' : keys.length ? `On, ${keys.length} device${keys.length === 1 ? '' : 's'}` : 'Not set up';
+    const wasOpen = !!el.querySelector('details[open]');
+    el.innerHTML = `
+      <details class="prow-box"${wasOpen ? ' open' : ''}>
+        <summary class="prow"><span class="prow-label">Fingerprint sign-in</span><span class="prow-value">${escapeHtml(value)}</span>${CHEVRON}</summary>
+        <div class="prow-body">
+          ${!can ? '<p class="muted">Open the app in Chrome, Safari or Edge on your phone to set it up.</p>' : `
+          ${keys.length ? `<ul class="passkey-list">${keys.map((k) => `<li><span><strong>${escapeHtml(k.deviceName || 'Device')}</strong><small class="muted">Set up ${escapeHtml(formatDate(k.createdAt))}${k.lastUsedAt ? `, last used ${escapeHtml(formatDate(k.lastUsedAt))}` : ''}</small></span><button type="button" class="btn btn-outline btn-sm" data-remove-passkey="${escapeHtml(k.id)}">Remove</button></li>`).join('')}</ul>` : ''}
+          <button type="button" class="btn btn-primary" id="addPasskeyBtn">${keys.length ? 'Set up on this device too' : 'Set up on this phone'}</button>
+          ${built ? '' : '<p class="tiny muted">This device may not have a fingerprint reader or face unlock.</p>'}
+          <p class="form-msg" id="passkeyMsg" role="status"></p>`}
+        </div>
+      </details>`;
+    if (!can) return;
+    const msg = el.querySelector('#passkeyMsg');
+    el.querySelector('#addPasskeyBtn').addEventListener('click', async () => {
+      msg.textContent = ''; msg.className = 'form-msg';
+      try { await setUp(); showToast('Done. Next time, sign in with your fingerprint or face.', 'success'); renderRow(el); }
+      catch (err) { msg.textContent = err.message; msg.className = 'form-msg error'; }
+    });
+    el.querySelectorAll('[data-remove-passkey]').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('Remove fingerprint or face sign-in for this device? You can set it up again.')) return;
+      try { await fetchJSON(`/api/passkeys/${encodeURIComponent(b.dataset.removePasskey)}`, { method: 'DELETE' }); renderRow(el); }
+      catch (err) { msg.textContent = err.message; msg.className = 'form-msg error'; }
+    }));
+  }
+
+  window.AconsuPasskey = { supported, hasBuiltIn, setUp, signIn, renderCard, renderRow };
 })();

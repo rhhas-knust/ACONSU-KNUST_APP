@@ -9,7 +9,7 @@ let CURRENT_MEMBER = null;
   await initLayout('/profile.html');
   renderProfileTopRow();
   renderOfficePortals();
-  if (window.AconsuPasskey) AconsuPasskey.renderCard(document.getElementById('passkeyCard'));
+  if (window.AconsuPasskey) AconsuPasskey.renderRow(document.getElementById('passkeyCard'));
   renderMemberStanding();
   renderMyEvents();
   renderQuickPills();
@@ -70,23 +70,17 @@ function officeBadge(office) {
 // "Your office": a way straight into each portal their own leadership login
 // opens (the Executive Portal, the Finance Office, the Coordinator Portal...),
 // with the username to sign in as. Nothing for a member with none.
+const PROW_CHEVRON = '<svg class="prow-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 function renderOfficePortals() {
   const el = document.getElementById('officePortals');
   if (!el) return;
   const portals = (CURRENT_MEMBER && CURRENT_MEMBER.portals) || [];
   if (!portals.length) { el.innerHTML = ''; return; }
-  el.innerHTML = `
-    <section class="form-card office-portals" aria-labelledby="officePortalsTitle">
-      <h2 id="officePortalsTitle">Your office</h2>
-      <p class="muted">Your work as a leader is in your office's portal. Sign in there with the password you use in the app (it needs at least 12 characters for a leader). Your office's own password still works too.</p>
-      <ul class="office-portal-list">
-        ${portals.map(p => `
-          <li>
-            <a class="btn btn-primary" href="${escapeHtml(p.href)}">Open the ${escapeHtml(p.label)}</a>
-            <span class="tiny muted">Your office username is <strong>${escapeHtml(p.username)}</strong>. Use it, or your phone number, with your app password.</span>
-          </li>`).join('')}
-      </ul>
-    </section>`;
+  // One row per portal their office opens, straight into it. They sign in
+  // there with their app password or a fingerprint.
+  el.innerHTML = portals.map(p => `
+    <a class="prow" href="${escapeHtml(p.href)}"><span class="prow-label">Your office</span><span class="prow-value">${escapeHtml(p.label)}</span>${PROW_CHEVRON}</a>`).join('');
 }
 
 function renderProfileTopRow() {
@@ -124,70 +118,37 @@ async function renderMemberStanding() {
     return;
   }
 
-  // A member wants to know what they are right now, not to be shown the whole
-  // ladder with their rung highlighted. The journey is still what Shepherding
-  // works through; this just says where the person reading it stands today.
+  // Two rows, a label and a value each. What used to be explained in
+  // paragraphs is one tap away: the number and shepherd under Membership, the
+  // department's details and notices under Department.
+  const deps = d.departments || [];
+  const pending = (d.pendingRequests || []).length;
+  const notices = d.departmentNotices || [];
+  const depValue = deps.length ? deps.map(x => x.name).join(', ') : (pending ? 'Request waiting' : 'None yet');
   el.innerHTML = `
-    <div class="form-card" style="margin-bottom:18px;">
-      <h2 style="margin:0 0 10px;">Where You Stand</h2>
-      <div style="display:flex; align-items:center; gap:11px; margin-bottom:10px;">
-        <span style="width:11px; height:11px; border-radius:50%; background:var(--flame-gold); flex:none;
-          box-shadow:0 0 0 4px rgba(232,151,30,0.18);"></span>
-        <strong style="font-size:1.12rem; color:var(--brand); font-family:var(--font-display);">
-          ${escapeHtml(d.stage.label)}
-        </strong>
+    <details class="prow-box">
+      <summary class="prow"><span class="prow-label">Membership</span><span class="prow-value">${escapeHtml(d.stage.label)}</span>${PROW_CHEVRON}</summary>
+      <div class="prow-body">
+        <dl class="prow-facts">
+          ${d.membershipNumber ? `<dt>Membership no.</dt><dd>${escapeHtml(d.membershipNumber)}</dd>` : ''}
+          ${d.shepherdName ? `<dt>Your shepherd</dt><dd>${escapeHtml(d.shepherdName)}</dd>` : ''}
+          ${!d.membershipNumber && !d.shepherdName ? `<dt>Stage</dt><dd>${escapeHtml(d.stage.label)}</dd>` : ''}
+        </dl>
+        ${d.membershipNumber ? '<a class="btn btn-outline btn-sm" href="/card.html">Membership card</a>' : ''}
       </div>
-      <p style="margin:0 0 ${d.membershipNumber || d.shepherdName ? '14px' : '0'}; color:var(--ink-soft); font-size:0.9rem; line-height:1.55;">${escapeHtml(d.stage.blurb)}</p>
-      ${(d.membershipNumber || d.shepherdName) ? `
-        <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:var(--ink-soft);">
-          ${d.membershipNumber ? `<div><strong>Membership no.</strong><br>${escapeHtml(d.membershipNumber)}</div>` : ''}
-          ${d.shepherdName ? `<div><strong>Your shepherd</strong><br>${escapeHtml(d.shepherdName)}</div>` : ''}
-        </div>` : ''}
-    </div>
-
-    <div class="form-card" style="margin-bottom:18px;">
-      <h2 style="margin:0 0 10px;">${(d.departments || []).length > 1 ? 'Where You Serve' : 'Your Department'}</h2>
-      ${(d.departments || []).length ? `
-        ${d.departments.map(dep => `
-          <div style="padding:14px 0; border-bottom:1px solid var(--line);">
-            <p style="margin:0 0 6px; font-size:1.05rem; font-weight:700; color:var(--brand);">
-              ${escapeHtml(dep.name)}
-            </p>
-            ${dep.tagline ? `<p style="margin:0 0 10px; color:var(--ink-soft); font-size:0.88rem;">${escapeHtml(dep.tagline)}</p>` : ''}
-            <div style="display:flex; flex-wrap:wrap; gap:18px; font-size:0.85rem; color:var(--ink-soft);">
-              ${(dep.meetingDay || dep.meetingTime) ? `
-                <div><strong>Meets</strong><br>${escapeHtml([dep.meetingDay, dep.meetingTime].filter(Boolean).join(', '))}</div>` : ''}
-              ${dep.meetingLocation ? `<div><strong>Where</strong><br>${escapeHtml(dep.meetingLocation)}</div>` : ''}
-              ${dep.headName ? `<div><strong>Led by</strong><br>${escapeHtml(dep.headName)}${dep.headRole ? `<br><span style="font-size:0.78rem; color:var(--ink-faint);">${escapeHtml(dep.headRole)}</span>` : ''}</div>` : ''}
-            </div>
-            <a href="/department.html?id=${encodeURIComponent(dep.id)}" class="btn btn-outline btn-sm" style="margin-top:14px;">Open ${escapeHtml(dep.name)}</a>
-          </div>
-        `).join('')}
-
-        ${(d.pendingRequests || []).length ? `
-          <p style="margin:14px 0 0; color:#8A5A12; font-size:0.85rem; font-weight:600;">
-            ${d.pendingRequests.length === 1 ? 'One request is' : `${d.pendingRequests.length} requests are`} waiting on a department head.
-          </p>` : ''}
-
-        <a href="/departments.html" class="btn btn-outline btn-sm" style="margin-top:14px;">Serve somewhere else too</a>
-
-        ${(d.departmentNotices || []).length ? `
-          <div style="margin-top:20px; border-top:1px solid var(--line); padding-top:16px;">
-            <h4 style="margin:0 0 12px; font-size:0.95rem;">From your ${(d.departments || []).length > 1 ? 'departments' : 'department'}</h4>
-            ${d.departmentNotices.map(n => `
-              <div style="margin-bottom:14px;">
-                <div style="font-weight:700; color:var(--brand); font-size:0.9rem;">${escapeHtml(n.title)}</div>
-                <p style="margin:4px 0 2px; color:var(--ink-soft); font-size:0.87rem; white-space:pre-wrap;">${escapeHtml(n.body)}</p>
-                <span style="font-size:0.75rem; color:var(--ink-faint);">${escapeHtml(formatDate(String(n.createdAt).slice(0, 10)))}</span>
-              </div>`).join('')}
-          </div>` : ''}
-      ` : `
-        <p style="margin:0 0 12px; color:var(--ink-soft); font-size:0.9rem;">
-          You are not in a department yet. It is where most of the friendships and the serving happen ${(d.pendingRequests || []).length ? '\u2014 and you have already asked to join one, so its head just needs to say yes.' : '\u2014 have a look and ask to join the one you want.'}
-        </p>
-        <a href="/departments.html" class="btn btn-primary btn-sm">${(d.pendingRequests || []).length ? 'See your request' : 'Find Your Department'}</a>
-      `}
-    </div>
+    </details>
+    ${deps.length || notices.length ? `
+    <details class="prow-box">
+      <summary class="prow"><span class="prow-label">Department</span><span class="prow-value">${escapeHtml(depValue)}</span>${PROW_CHEVRON}</summary>
+      <div class="prow-body">
+        ${deps.map(dep => `<a class="prow-link" href="/department.html?id=${encodeURIComponent(dep.id)}">${escapeHtml(dep.name)}${(dep.meetingDay || dep.meetingTime) ? `<small class="muted">${escapeHtml([dep.meetingDay, dep.meetingTime].filter(Boolean).join(', '))}</small>` : ''}</a>`).join('')}
+        ${pending ? `<p class="tiny muted">${pending === 1 ? 'One request is' : `${pending} requests are`} waiting on a department head.</p>` : ''}
+        ${notices.length ? `<h3 class="prow-sub">From your ${deps.length > 1 ? 'departments' : 'department'}</h3>
+          ${notices.map(n => `<div class="prow-notice"><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.body)}</p><small class="muted">${escapeHtml(formatDate(String(n.createdAt).slice(0, 10)))}</small></div>`).join('')}` : ''}
+        <a class="btn btn-outline btn-sm" href="/departments.html">Serve somewhere else too</a>
+      </div>
+    </details>` : `
+    <a class="prow" href="/departments.html"><span class="prow-label">Department</span><span class="prow-value">${escapeHtml(depValue)}</span>${PROW_CHEVRON}</a>`}
   `;
 }
 

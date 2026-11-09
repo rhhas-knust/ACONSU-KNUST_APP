@@ -1029,3 +1029,7 @@ Shepherding's **Membership Workflow** used to take each newcomer through three s
 ## 53. Notifications clear after two days
 
 The notifications feed and bell show only the last 2 days (`NOTIFICATIONS_SHOW_DAYS`, default 2; 0 = no limit), so old notices clear away by themselves. They stay stored for the admin's history (the admin's Notifications panel asks for all of them with `?all=1`, which only a chapter admin or above gets) until the yearly clear-out. `routes/notifications.js`, `test/notifications-age.js` (in `npm test`).
+
+## 54. The profile's four cards are four rows
+
+Your office, Where You Stand, Your Department and Fingerprint or face sign-in were four cards of explanation at the top of the profile. They are now four rows, each a label and a value ("Your office · Executive Portal", "Membership · Member", "Department · None yet", "Fingerprint sign-in · Not set up"). Your office opens the portal; Membership opens to the membership number, shepherd and card; Department opens to the departments, their notices and "Serve somewhere else too" (or goes to the list when there is none); Fingerprint sign-in opens to the devices and the set-up button (`AconsuPasskey.renderRow`). Portals' My account keeps the full fingerprint card.
