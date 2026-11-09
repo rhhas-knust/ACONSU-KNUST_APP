@@ -49,12 +49,18 @@ const CHROME = process.env.PLAYWRIGHT_CHROMIUM;
   await page.fill('#password', 'a-good-long-password');
   await page.click('#loginBtn');
   await page.waitForURL(/profile\.html/);
-  await page.waitForSelector('#addPasskeyBtn');
+  // On the profile it is one row, "Fingerprint sign-in  Not set up"; tapping
+  // it opens the button.
+  await page.waitForSelector('#passkeyCard summary');
+  check((await page.textContent('#passkeyCard summary')).includes('Not set up'), 'the profile shows one row for it, saying it is not set up yet');
+  await page.tap('#passkeyCard summary');
+  await page.waitForSelector('#addPasskeyBtn', { state: 'visible' });
   await page.click('#addPasskeyBtn');
   await page.waitForSelector('.passkey-list li', { timeout: 8000 }).catch(() => {});
   const listed = await page.$$eval('.passkey-list li', els => els.map(e => e.textContent.replace(/\s+/g, ' ').trim()));
   check(listed.length === 1 && /Android phone|Device|Chrome/.test(listed[0]), 'the profile sets it up and lists this phone', listed);
   check(fakeModels.Passkey._docs.length === 1 && fakeModels.Passkey._docs[0].memberId === memberId, '(saved for the member)');
+  check(/On, 1 device/.test(await page.textContent('#passkeyCard summary')), 'and the row now says it is on', await page.textContent('#passkeyCard summary'));
 
   console.log('\n== sign in to the app with it ==');
   await ctx.clearCookies();

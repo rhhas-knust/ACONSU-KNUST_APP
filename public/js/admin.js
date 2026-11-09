@@ -966,6 +966,7 @@ function openResourceForm(resource, fields, singular, item) {
 // ---------- leadership accounts ----------
 // One portal account per leader, so access follows the person holding the office
 // rather than a password everybody knows.
+const OFFICES_RUN_BY_EXECUTIVES = ['finance', 'shepherding', 'publicity', 'welfare', 'media'];
 const PORTAL_ROLES = [
   { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter. Dashboard, chapters, announcements.', href: '/national.html' },
   { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority. Oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
@@ -1068,8 +1069,13 @@ async function openStaffForm(user) {
   // since the server always scopes their accounts to their own chapter.
   // Until the chapter asks, the main admin may open only a National
   // Coordinator's account (see chapterLocked).
+  // Finance, Shepherding, Publicity, Welfare and Media are run by the executive
+  // in that office (the Financial Secretary, the Shepherding Head...), appointed
+  // by the Chapter Coordinator for their year. They are not separate accounts to
+  // give out any more; one made before keeps its role when edited.
   const roleOptions = PORTAL_ROLES.filter(r => ADMIN_SCOPE.isNational || !NATIONAL_ONLY_STAFF_ROLES.includes(r.value))
-    .filter(r => !chapterLocked('staff') || r.value === 'nationalCoordinator');
+    .filter(r => !chapterLocked('staff') || r.value === 'nationalCoordinator')
+    .filter(r => !OFFICES_RUN_BY_EXECUTIVES.includes(r.value) || (isEdit && user.role === r.value));
   let chapters = [];
   if (ADMIN_SCOPE.isNational) {
     chapters = await fetchJSON('/api/national/chapters').catch(() => []);
@@ -1091,6 +1097,7 @@ async function openStaffForm(user) {
         <select id="stRole" ${isEdit ? '' : 'required'}>
           ${roleOptions.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label}, ${r.blurb}</option>`).join('')}
         </select>
+        ${isEdit ? '' : '<small class="hint">Finance, Shepherding, Publicity, Welfare and Media are run by their executives (Financial Secretary, Shepherding, Publicity, Welfare and Media Heads), appointed in the Coordinator portal under Leadership Accounts.</small>'}
       </div>
       ${isEdit ? '' : `
         <div class="field" id="stMemberWrap">
@@ -1451,13 +1458,14 @@ let notifHistoryPage = 1;
 async function renderNotifications() {
   const el = document.getElementById('panel-notifications');
   el.innerHTML = skeletonHtml();
-  const items = await fetchJSON('/api/notifications');
+  // The whole history: members see each one for two days only.
+  const items = await fetchJSON('/api/notifications?all=1');
 
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Notifications</h2>
     <div class="upload-form">
       <h3 style="margin-bottom:14px;">Send an Announcement</h3>
-      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:14px;">This posts to everyone's in-app notification feed and sends a real push alert to anyone who has enabled push notifications.</p>
+      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:14px;">This posts to everyone's in-app notification feed and sends a real push alert to anyone who has enabled push notifications. Members see it for 2 days, then it leaves their feed; it stays in the history below.</p>
       <form id="notifForm">
         <div class="field"><label>Title</label><input type="text" id="notifTitle" required placeholder="e.g. Service moved to 9AM"></div>
         <div class="field"><label>Message</label><textarea id="notifBody" required placeholder="Short, clear message..."></textarea></div>

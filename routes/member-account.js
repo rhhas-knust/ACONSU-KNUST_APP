@@ -53,7 +53,7 @@ const PORTALS = {
 };
 // An office whose holder also works in another office's portal (see
 // POSITION_OPENS_OFFICE in server.js).
-const ALSO_OPENS = { publicity_head: 'publicity', media_head: 'media', assistant_media_head: 'media' };
+const ALSO_OPENS = require('../lib/positions').OFFICE_PORTAL_OF_POSITION;
 
 async function portalsOf(member) {
   if (!member || !member.id) return [];

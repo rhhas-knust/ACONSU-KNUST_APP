@@ -37,6 +37,59 @@ function can(capability) {
   return !!EXEC_POSITION && (EXEC_POSITION.capabilities || []).includes(capability);
 }
 
+// A department head appointed before their department existed sets it up
+// themselves: a new one, or one of the chapter's departments nobody leads.
+async function setUpDepartmentForm(box, position) {
+  if (!box) return;
+  const choices = await fetchJSON('/api/executive/my-department/choices').catch(() => []);
+  const suggested = String(position.label || '').replace(/^Assistant\s+/i, '').replace(/\s+Head\b/i, '').replace(/\s+Director$/i, '').trim();
+  box.innerHTML = `
+    <form class="portal-card set-up-dept" id="deptSetUpForm">
+      <h3>Set up your department</h3>
+      ${choices.length ? `<div class="field"><label for="dsExisting">Your department</label>
+        <select id="dsExisting">
+          <option value="">A new department</option>
+          ${choices.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)} (already listed, no head yet)</option>`).join('')}
+        </select></div>` : ''}
+      <div id="dsNew">
+        <div class="field"><label for="dsName">Name</label><input type="text" id="dsName" maxlength="60" value="${escapeHtml(suggested)}" required></div>
+        <div class="field"><label for="dsTagline">One line about it (optional)</label><input type="text" id="dsTagline" maxlength="120" placeholder="Telling the chapter's story"></div>
+        <div class="field"><label for="dsDescription">Description (optional)</label><textarea id="dsDescription" rows="4" maxlength="1500"></textarea></div>
+        <div class="field-row">
+          <div class="field"><label for="dsDay">Meets on (optional)</label><input type="text" id="dsDay" maxlength="40" placeholder="Saturdays"></div>
+          <div class="field"><label for="dsTime">At (optional)</label><input type="text" id="dsTime" maxlength="40" placeholder="4:00pm"></div>
+        </div>
+        <div class="field"><label for="dsPlace">Where (optional)</label><input type="text" id="dsPlace" maxlength="120"></div>
+      </div>
+      <button class="btn btn-primary">Save my department</button>
+      <div class="form-msg" id="dsMsg"></div>
+    </form>`;
+  const existing = document.getElementById('dsExisting');
+  const sync = () => {
+    const usingExisting = !!(existing && existing.value);
+    document.getElementById('dsNew').hidden = usingExisting;
+    document.getElementById('dsName').required = !usingExisting;
+  };
+  if (existing) existing.addEventListener('change', sync);
+  document.getElementById('deptSetUpForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = existing && existing.value ? { departmentId: existing.value } : {
+      name: document.getElementById('dsName').value,
+      tagline: document.getElementById('dsTagline').value,
+      description: document.getElementById('dsDescription').value,
+      meetingDay: document.getElementById('dsDay').value,
+      meetingTime: document.getElementById('dsTime').value,
+      meetingLocation: document.getElementById('dsPlace').value
+    };
+    try {
+      const out = await fetchJSON('/api/executive/my-department', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      showToast(`${out.department.name} is yours now.`, 'success');
+      // The portal's panels depend on the department, so the whole portal reloads.
+      location.reload();
+    } catch (err) { setFormMsg('dsMsg', err.message || 'Could not save.', 'error'); }
+  });
+}
+
 async function renderExecProfile(el) {
   const me = await fetchJSON('/api/executive/me');
   const item = me.item;
@@ -64,11 +117,7 @@ async function renderExecProfile(el) {
             ? `You run the ${escapeHtml(departmentName || 'department attached to your office')}.`
             : 'Set by your Chapter Coordinator.'}</small>
       </div>
-      ${me.needsDepartment ? `
-        <div class="portal-card" style="border-color: var(--flame-gold); background:#FFF8EC;">
-          <strong>No department attached yet.</strong>
-          <span class="muted"> Your office runs a department, but none has been attached. Ask your Chapter Coordinator.</span>
-        </div>` : ''}
+      ${me.needsDepartment ? '<div id="setUpDepartment"></div>' : ''}
       <form id="execForm">
         <div class="field" style="text-align:center;">
           ${item && item.imageFileId ? `<img src="/api/files/${item.imageFileId}" alt="" style="width:96px; height:96px; border-radius:50%; object-fit:cover; margin-bottom:10px;">` : ''}
@@ -99,6 +148,7 @@ async function renderExecProfile(el) {
 
   // Still on the starting password? Say so, with a way straight to changing it.
   PortalAccount.nudge(el);
+  if (me.needsDepartment) setUpDepartmentForm(document.getElementById('setUpDepartment'), position);
 
   document.getElementById('execForm').addEventListener('submit', async (e) => {
     e.preventDefault();

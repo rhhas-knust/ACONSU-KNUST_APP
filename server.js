@@ -664,7 +664,8 @@ function actorName(req) {
 // person who sends the chapter's announcements, so they open the Publicity
 // portal directly rather than the chapter having to keep a second, separate
 // publicity staff login alongside the elected holder.
-const POSITION_OPENS_OFFICE = { publicity_head: 'publicity', media_head: 'media', assistant_media_head: 'media' };
+// The executive offices that run an office portal (lib/positions.js).
+const POSITION_OPENS_OFFICE = positions.OFFICE_PORTAL_OF_POSITION;
 
 function hasRole(req, role) {
   if (!req.session) return false;
@@ -2257,7 +2258,7 @@ app.get('/api/birthdays/today', async (req, res) => {
 
 // ---------- notifications & push ----------
 // The in-app feed: routes/notifications.js.
-registerNotificationFeed(app, { contentChapterFilter, memberDepartmentIds });
+registerNotificationFeed(app, { contentChapterFilter, memberDepartmentIds, isChapterAdminOrAbove });
 
 // Is this thing actually working? Deliberately public and deliberately
 // answering 503 when the database is away: the home page returns 200 whether
@@ -3652,10 +3653,9 @@ app.patch('/api/admin/executive-applications/:memberId', requireChapterCoordinat
       }
       const wantsDepartment = String(department || '').trim();
       if (positions.requiresDepartment(position)) {
-        if (!wantsDepartment) {
-          return res.status(400).json({ error: `A ${position.label} runs a department, choose which one.` });
-        }
-        if (!await repo.getById('departments', wantsDepartment, { chapterId: member.chapterId })) {
+        // No department yet is fine: the new head sets theirs up from their
+        // portal (POST /api/executive/my-department).
+        if (wantsDepartment && !await repo.getById('departments', wantsDepartment, { chapterId: member.chapterId })) {
           return res.status(400).json({ error: 'That department is not in this chapter, pick one from the list.' });
         }
       } else if (wantsDepartment) {
@@ -5684,6 +5684,68 @@ app.get('/api/executive/me', requireRole('executive'), async (req, res) => {
   }
 });
 
+// A department head appointed before their department existed sets it up
+// here: a new one with its name and description, or one of the chapter's
+// departments that has nobody leading it. It becomes theirs: on their roster
+// card and their member record, so its page names them as its head. Only
+// their own office, only while it has none, and only for an office that runs
+// a department.
+const DEPT_LIMITS = { name: 60, tagline: 120, description: 1500, meetingDay: 40, meetingTime: 40, meetingLocation: 120 };
+const deptText = (v, max) => String(v == null ? '' : v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim().slice(0, max);
+app.get('/api/executive/my-department/choices', requireRole('executive'), async (req, res) => {
+  try {
+    const staff = currentStaff(req);
+    const [departments, cards] = await Promise.all([
+      repo.getAll('departments', { chapterId: staff.chapterId }),
+      repo.getAll('executives', { chapterId: staff.chapterId })
+    ]);
+    const led = new Set(cards.filter((c) => c.department && c.staffId).map((c) => c.department));
+    res.json(departments.filter((d) => !led.has(d.id)).map((d) => ({ id: d.id, name: d.name }))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name))));
+  } catch (e) { res.status(500).json({ error: 'Could not load the departments' }); }
+});
+
+app.post('/api/executive/my-department', requireRole('executive'), async (req, res) => {
+  try {
+    const staff = currentStaff(req);
+    if (!staff || staff.role !== 'executive') return res.status(403).json({ error: 'Only an executive can set up their department here.' });
+    const { record, position } = await resolveOwnPosition(req);
+    if (!record) return res.status(404).json({ error: 'Your executive profile was not found. Ask your Chapter Coordinator.' });
+    if (!positions.requiresDepartment(position)) return res.status(400).json({ error: `A ${position.label || 'chapter officer'} answers for the whole chapter, so has no department.` });
+    if (record.department && await repo.getById('departments', record.department, { chapterId: staff.chapterId })) {
+      return res.status(409).json({ error: 'Your office already has a department.' });
+    }
+    const chapterId = staff.chapterId;
+    let department;
+    const existingId = String(req.body.departmentId || '').trim();
+    if (existingId) {
+      department = await repo.getById('departments', existingId, { chapterId });
+      if (!department) return res.status(400).json({ error: 'That department is not in your chapter.' });
+      const taken = await models.Executive.findOne({ chapterId, department: existingId, staffId: { $ne: '' } }).lean();
+      if (taken && taken.id !== record.id) return res.status(409).json({ error: `${department.name} already has a head (${taken.name}).` });
+    } else {
+      const name = deptText(req.body.name, DEPT_LIMITS.name);
+      if (!name) return res.status(400).json({ error: 'Give your department a name.' });
+      const all = await repo.getAll('departments', { chapterId });
+      const twin = all.find((d) => String(d.name || '').trim().toLowerCase() === name.toLowerCase());
+      if (twin) return res.status(409).json({ error: `${twin.name} is already a department in your chapter. Choose it from the list instead.` });
+      department = await repo.create('departments', {
+        chapterId, name,
+        tagline: deptText(req.body.tagline, DEPT_LIMITS.tagline),
+        description: deptText(req.body.description, DEPT_LIMITS.description),
+        meetingDay: deptText(req.body.meetingDay, DEPT_LIMITS.meetingDay),
+        meetingTime: deptText(req.body.meetingTime, DEPT_LIMITS.meetingTime),
+        meetingLocation: deptText(req.body.meetingLocation, DEPT_LIMITS.meetingLocation)
+      }, 'dept');
+    }
+    await repo.patchById('executives', record.id, { department: department.id }, { chapterId });
+    if (staff.memberId) await repo.patchById('members', staff.memberId, { executiveDepartment: department.id }, { chapterId });
+    res.json({ success: true, department: { id: department.id, name: department.name } });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not set up your department' });
+  }
+});
+
 // The catalogue itself, so the Coordinator's promotion screen offers real
 // positions instead of an empty text box.
 app.get('/api/executive-positions', (req, res) => {
@@ -7123,7 +7185,9 @@ app.get('/api/national/dashboard', rolesLib.requireNational, async (req, res) =>
       // signal that never opens the chapter's own records: who's appointed
       // and what's configured, not what anyone in the chapter is doing.
       const chStaff = staffUsers.filter(s => s.chapterId === c.id && s.active);
-      const officesStaffed = Object.fromEntries(READINESS_OFFICE_ROLES.map(role => [role, chStaff.some(s => s.role === role)]));
+      // Staffed by its own account (older chapters) or by the executive whose
+      // office it is (the Financial Secretary runs Finance, and so on).
+      const officesStaffed = Object.fromEntries(READINESS_OFFICE_ROLES.map(role => [role, chStaff.some(s => s.role === role || positions.officePortalOf(s.positionKey) === role)]));
       const lastStaffLoginAt = chStaff.reduce((latest, s) =>
         (s.lastLoginAt && (!latest || new Date(s.lastLoginAt) > new Date(latest))) ? s.lastLoginAt : latest, null);
       const lastActivityAt = [recent && recent.createdAt, lastStaffLoginAt]
@@ -7477,8 +7541,9 @@ app.post('/api/admin/staff', requireChapterAdmin, async (req, res) => {
     if (!position) return res.status(400).json({ error: 'Choose the position this executive is being given.' });
     executiveDepartment = String(req.body.department || '').trim();
     if (positions.requiresDepartment(position)) {
-      if (!executiveDepartment) return res.status(400).json({ error: `A ${position.label} runs a department, choose which one.` });
-      if (!await repo.getById('departments', executiveDepartment, { chapterId })) {
+      // No department yet is fine: the new head sets theirs up from their
+      // portal (POST /api/executive/my-department).
+      if (executiveDepartment && !await repo.getById('departments', executiveDepartment, { chapterId })) {
         return res.status(400).json({ error: 'That department is not in this chapter, pick one from the list.' });
       }
     } else if (executiveDepartment) {

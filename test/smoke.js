@@ -671,10 +671,11 @@ function readPublic(f) {
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nopos', name: 'No Position', role: 'executive', password: 'password1234', memberId: amaMemberId });
   check('an executive cannot be created without a position', r.status === 400, r.data);
 
-  // A portfolio holder runs a department; an officer never does. Both halves
-  // of that rule are enforced, not just the first.
-  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nodept', name: 'No Dept', role: 'executive', password: 'password1234', memberId: amaMemberId, positionKey: 'music_director' });
-  check('a portfolio holder must be given a department', r.status === 400, r.data);
+  // A portfolio holder runs a department; an officer never does. A head may be
+  // appointed before their department exists and set it up themselves
+  // (test/key-offices.js), but a department that is named must be a real one.
+  r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.nodept', name: 'No Dept', role: 'executive', password: 'password1234', memberId: amaMemberId, positionKey: 'music_director', department: 'not-a-department' });
+  check('a portfolio holder cannot be given a department that does not exist', r.status === 400, r.data);
   r = await call('admin', 'POST', '/api/admin/staff', { username: 'exec.baddept', name: 'Officer With Dept', role: 'executive', password: 'password1234', memberId: amaMemberId, positionKey: 'president', department: deptId });
   check('an officer is refused a department, since they answer for the whole chapter', r.status === 400, r.data);
 
