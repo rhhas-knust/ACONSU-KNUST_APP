@@ -966,6 +966,7 @@ function openResourceForm(resource, fields, singular, item) {
 // ---------- leadership accounts ----------
 // One portal account per leader, so access follows the person holding the office
 // rather than a password everybody knows.
+const OFFICES_RUN_BY_EXECUTIVES = ['finance', 'shepherding', 'publicity', 'welfare', 'media'];
 const PORTAL_ROLES = [
   { value: 'nationalCoordinator', label: 'National Coordinator', blurb: 'Oversight across every ACONSU chapter. Dashboard, chapters, announcements.', href: '/national.html' },
   { value: 'coordinator', label: 'Chapter Coordinator', blurb: 'Highest chapter authority. Oversight, approvals, chapter-wide announcements.', href: '/coordinator.html' },
@@ -1068,8 +1069,13 @@ async function openStaffForm(user) {
   // since the server always scopes their accounts to their own chapter.
   // Until the chapter asks, the main admin may open only a National
   // Coordinator's account (see chapterLocked).
+  // Finance, Shepherding, Publicity, Welfare and Media are run by the executive
+  // in that office (the Financial Secretary, the Shepherding Head...), appointed
+  // by the Chapter Coordinator for their year. They are not separate accounts to
+  // give out any more; one made before keeps its role when edited.
   const roleOptions = PORTAL_ROLES.filter(r => ADMIN_SCOPE.isNational || !NATIONAL_ONLY_STAFF_ROLES.includes(r.value))
-    .filter(r => !chapterLocked('staff') || r.value === 'nationalCoordinator');
+    .filter(r => !chapterLocked('staff') || r.value === 'nationalCoordinator')
+    .filter(r => !OFFICES_RUN_BY_EXECUTIVES.includes(r.value) || (isEdit && user.role === r.value));
   let chapters = [];
   if (ADMIN_SCOPE.isNational) {
     chapters = await fetchJSON('/api/national/chapters').catch(() => []);
@@ -1091,6 +1097,7 @@ async function openStaffForm(user) {
         <select id="stRole" ${isEdit ? '' : 'required'}>
           ${roleOptions.map(r => `<option value="${r.value}" ${user?.role === r.value ? 'selected' : ''}>${r.label}, ${r.blurb}</option>`).join('')}
         </select>
+        ${isEdit ? '' : '<small class="hint">Finance, Shepherding, Publicity, Welfare and Media are run by their executives (Financial Secretary, Shepherding, Publicity, Welfare and Media Heads), appointed in the Coordinator portal under Leadership Accounts.</small>'}
       </div>
       ${isEdit ? '' : `
         <div class="field" id="stMemberWrap">

@@ -151,8 +151,9 @@ function registerOfficeHolderRoutes(app, deps) {
     let department = '';
     if (positions.requiresDepartment(position)) {
       department = String(body.department || (card && card.department) || '').trim();
-      if (!department) return res.status(400).json({ error: `A ${position.label} runs a department, choose which one.` });
-      if (!await repo.getById('departments', department, { chapterId })) {
+      // No department yet is fine: the new head sets theirs up from their
+      // portal (POST /api/executive/my-department).
+      if (department && !await repo.getById('departments', department, { chapterId })) {
         return res.status(400).json({ error: 'That department is not in this chapter, pick one from the list.' });
       }
     }

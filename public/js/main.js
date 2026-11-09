@@ -1577,3 +1577,36 @@ function prefillOfficeLogin(usernameId, passwordId) {
   user.value = as;
   if (pass) pass.focus();
 }
+
+// ---------- shorter page descriptions ----------
+// Each screen of the portals and the admin opens with a paragraph saying what
+// it is for. Read once, it is in the way every time after. Anything longer
+// than a line is cut to its first line, with "More" to read the rest.
+(function shortenDescriptions() {
+  const SELECTOR = '.portal-main .panel-head .sub, .admin-main .panel-head p, .modal > .hint:first-of-type';
+  let n = 0;
+  const shorten = (p) => {
+    if (p.dataset.desc) return;
+    p.dataset.desc = '1';
+    if (p.textContent.trim().length <= 90 || p.querySelector('a, button, input, select')) return;
+    p.id = p.id || `desc-${++n}`;
+    p.classList.add('desc-short');
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'desc-more';
+    more.textContent = 'More';
+    more.setAttribute('aria-expanded', 'false');
+    more.setAttribute('aria-controls', p.id);
+    more.addEventListener('click', () => {
+      const open = p.classList.toggle('desc-open');
+      more.textContent = open ? 'Less' : 'More';
+      more.setAttribute('aria-expanded', String(open));
+    });
+    p.insertAdjacentElement('afterend', more);
+  };
+  let queued = false;
+  const run = () => { queued = false; document.querySelectorAll(SELECTOR).forEach(shorten); };
+  const queue = () => { if (!queued) { queued = true; requestAnimationFrame(run); } };
+  new MutationObserver(queue).observe(document.documentElement, { childList: true, subtree: true });
+  queue();
+})();

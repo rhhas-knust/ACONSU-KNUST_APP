@@ -1457,3 +1457,9 @@ body {
 .prow-sub { font-size: 0.95rem; margin: 6px 0 0; }
 .prow-notice p { margin: 2px 0; color: var(--ink-soft); font-size: 0.88rem; white-space: pre-wrap; }
 @media (prefers-reduced-motion: reduce) { .prow-chev { transition: none; } }
+
+/* Page descriptions cut to one line, "More" for the rest (main.js) */
+.desc-short:not(.desc-open) { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 0; }
+.desc-more { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0; margin: -4px 0 0; background: none; border: 0; font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--brand); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.desc-more:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+@media print { .desc-short { display: block !important; -webkit-line-clamp: unset; } .desc-more { display: none; } }

@@ -20,17 +20,27 @@ const OFFICE_LINKS = [
 // server enforces it regardless of what this list says (NATIONAL_ONLY_ROLES
 // in server.js). Every account created here is stamped with this
 // coordinator's own chapter by the server, never by the browser.
+// Finance, Shepherding, Publicity, Welfare and Media are run by the executive
+// in that office (KEY_OFFICES), for their year: appointing the Media Head is
+// appointing Media. They are no longer separate accounts to give out.
 const APPOINTABLE_ROLES = [
   { value: 'chapterAdmin', label: 'Chapter Admin', blurb: 'Runs the chapter day to day. Members, events, content, reports' },
-  { value: 'finance', label: 'Finance Officer', blurb: 'Budgets, ledger, giving reconciliation' },
-  { value: 'shepherding', label: 'Shepherding', blurb: 'Attendance registers, member care, contact inbox' },
-  { value: 'publicity', label: 'Publicity Officer', blurb: 'Announcements, SMS, testimonies' },
-  { value: 'welfare', label: 'Welfare Officer', blurb: 'Welfare requests and confidential case notes' },
-  { value: 'media', label: 'Media', blurb: 'Live stream and sermons (a media volunteer)' },
-  { value: 'executive', label: 'Executive', blurb: 'An elected officer, promoted from a member, serving this academic year' }
+  { value: 'executive', label: 'Executive', blurb: 'An elected officer, serving this academic year. The Financial Secretary, Shepherding, Publicity, Welfare and Media Heads also run those offices\' portals' }
+];
+const KEY_OFFICES = [
+  { position: 'financial_secretary', office: 'finance', label: 'Financial Secretary (Finance)' },
+  { position: 'shepherding_head', office: 'shepherding', label: 'Shepherding Head' },
+  { position: 'publicity_head', office: 'publicity', label: 'Publicity Head' },
+  { position: 'welfare_head', office: 'welfare', label: 'Welfare Head' },
+  { position: 'media_head', office: 'media', label: 'Media Head' }
 ];
 const ROLE_LABEL = APPOINTABLE_ROLES.reduce((acc, r) => { acc[r.value] = r.label; return acc; },
-  { coordinator: 'Chapter Coordinator', nationalCoordinator: 'National Coordinator' });
+  {
+    coordinator: 'Chapter Coordinator', nationalCoordinator: 'National Coordinator',
+    // Accounts made before the offices became the executives' own.
+    finance: 'Finance (own account)', shepherding: 'Shepherding (own account)', publicity: 'Publicity (own account)',
+    welfare: 'Welfare (own account)', media: 'Media (own account)'
+  });
 
 // ---------- dashboard ----------
 // What the executive offices are waiting on the Coordinator for. Each lookup is
@@ -333,6 +343,8 @@ function staffForm(existing, preselect) {
       .then(list => {
         positionSelect.innerHTML = '<option value="">Choose the position they are being given</option>'
           + list.map(p => `<option value="${escapeHtml(p.key)}" data-requires-department="${p.requiresDepartment}">${escapeHtml(p.label)}</option>`).join('');
+        // Opened from "Offices still to fill": that office is already chosen.
+        if (preselect && preselect.positionKey) positionSelect.value = preselect.positionKey;
         syncDepartment();
       })
       .catch(() => { positionSelect.innerHTML = '<option value="">Could not load positions</option>'; });
@@ -340,7 +352,7 @@ function staffForm(existing, preselect) {
   if (deptSelect) {
     fetchJSON('/api/departments')
       .then(list => {
-        deptSelect.innerHTML = '<option value="">Choose the department they will run</option>'
+        deptSelect.innerHTML = '<option value="">None yet: they set it up themselves</option>'
           + list.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
       })
       .catch(() => { deptSelect.innerHTML = '<option value="">Could not load departments</option>'; });
@@ -426,11 +438,9 @@ function wireAppointMany(el, waiting) {
     let missing = 0;
     chosen.forEach(r => {
       const pos = r.querySelector('.wait-position');
-      const dept = r.querySelector('.wait-dept');
       const msg = r.querySelector('.wait-msg');
       msg.textContent = ''; msg.className = 'form-msg wait-msg';
       if (!pos.value) { msg.textContent = 'Choose their office.'; msg.className = 'form-msg error wait-msg'; missing++; }
-      else if (!dept.hidden && !dept.value) { msg.textContent = 'Choose the department they run.'; msg.className = 'form-msg error wait-msg'; missing++; }
     });
     if (missing) { showToast(`Choose an office for ${missing === 1 ? 'one more person' : `${missing} more people`} first.`, 'error'); return; }
     btn.disabled = true;
@@ -521,10 +531,16 @@ async function renderLeadershipAccounts(el) {
     ? await Promise.all([fetchJSON('/api/executive-positions').catch(() => []), fetchJSON('/api/departments').catch(() => [])])
     : [[], []];
   const positionOptions = '<option value="">Choose their office</option>' + positionList.map(p => `<option value="${escapeHtml(p.key)}" data-requires-department="${p.requiresDepartment}">${escapeHtml(p.label)}</option>`).join('');
-  const deptOptions = '<option value="">Choose the department</option>' + deptList.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
+  const deptOptions = '<option value="">None yet: they set it up</option>' + deptList.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)}</option>`).join('');
   const appointable = staff.filter(s => s.role !== 'nationalCoordinator');
-  const filled = new Set(appointable.filter(s => s.active).map(s => s.role));
-  const unfilled = APPOINTABLE_ROLES.filter(r => !filled.has(r.value) && r.value !== 'executive');
+  const current = appointable.filter(s => s.active && !s.endedAt && !(s.termEndsAt && new Date(s.termEndsAt) <= new Date()));
+  const filled = new Set(current.map(s => s.role));
+  // An office is filled by its executive, or (in older chapters) by the
+  // separate account it used to have.
+  const unfilled = [
+    ...APPOINTABLE_ROLES.filter(r => !filled.has(r.value) && r.value !== 'executive').map(r => ({ role: r.value, label: r.label })),
+    ...KEY_OFFICES.filter(k => !current.some(s => s.positionKey === k.position || s.role === k.office)).map(k => ({ role: 'executive', position: k.position, label: k.label }))
+  ];
 
   el.innerHTML = `
     <div class="panel-head">
@@ -576,7 +592,7 @@ async function renderLeadershipAccounts(el) {
         <h3>Offices still to fill</h3>
         <p class="hint">Your chapter runs on these. Appoint someone to each and they take the work from there.</p>
         <div class="row-actions" style="flex-wrap:wrap; gap:8px; margin-top:10px;">
-          ${unfilled.map(r => `<button data-quick-role="${r.value}">+ ${escapeHtml(r.label)}</button>`).join('')}
+          ${unfilled.map(r => `<button data-quick-role="${r.role}" data-quick-position="${escapeHtml(r.position || '')}">+ ${escapeHtml(r.label)}</button>`).join('')}
         </div>
       </div>
     ` : ''}
@@ -622,7 +638,7 @@ async function renderLeadershipAccounts(el) {
     if (select) select.dispatchEvent(new Event('change'));
   }));
   el.querySelectorAll('[data-quick-role]').forEach(btn => btn.addEventListener('click', () => {
-    staffForm(null);
+    staffForm(null, { role: btn.dataset.quickRole, positionKey: btn.dataset.quickPosition || '' });
     const select = document.getElementById('sfRole');
     if (select) { select.value = btn.dataset.quickRole; select.dispatchEvent(new Event('change')); }
   }));
