@@ -2964,6 +2964,11 @@ async function renderSettings() {
         <p class="hint">The colour of buttons, headers and links across the national app. Chapters that have not chosen their own use this one.</p>
         <div id="brandPickerMount" role="group" aria-labelledby="brandColorLabel"></div>
       </div>
+      <div class="field checkbox-field" style="min-height:44px;">
+        <input type="checkbox" id="showNationalCoordinator" ${settings.showNationalCoordinator ? 'checked' : ''}>
+        <label for="showNationalCoordinator" style="margin:0;">Show the National Coordinator on the public leadership lists</label>
+      </div>
+      <p class="hint" style="margin-top:-8px;">Off: the About page and the national executives list leave the National Coordinator out. The council still lists them.</p>
       <button type="submit" class="btn btn-primary btn-block">Save Settings</button>
       <div class="form-msg" id="settingsMsg"></div>
     </form>
@@ -3007,6 +3012,7 @@ async function renderSettings() {
       return;
     }
     payload.brandColor = brandPicker.value();
+    payload.showNationalCoordinator = document.getElementById('showNationalCoordinator').checked;
     try {
       await fetchJSON('/api/admin/settings', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)

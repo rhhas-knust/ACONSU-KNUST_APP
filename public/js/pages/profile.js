@@ -124,7 +124,10 @@ async function renderMemberStanding() {
   const deps = d.departments || [];
   const pending = (d.pendingRequests || []).length;
   const notices = d.departmentNotices || [];
-  const depValue = deps.length ? deps.map(x => x.name).join(', ') : (pending ? 'Request waiting' : 'None yet');
+  const leads = d.leads || [];
+  const named = [...deps, ...leads];
+  const depValue = named.length ? named.map(x => x.name).join(', ') : (pending ? 'Request waiting' : 'None yet');
+  const chatLink = dep => `<a class="prow-link" href="/department.html?id=${encodeURIComponent(dep.id)}#chat">${escapeHtml(dep.name)} chat</a>`;
   el.innerHTML = `
     <details class="prow-box">
       <summary class="prow"><span class="prow-label">Membership</span><span class="prow-value">${escapeHtml(d.stage.label)}</span>${PROW_CHEVRON}</summary>
@@ -137,11 +140,12 @@ async function renderMemberStanding() {
         ${d.membershipNumber ? '<a class="btn btn-outline btn-sm" href="/card.html">Membership card</a>' : ''}
       </div>
     </details>
-    ${deps.length || notices.length ? `
+    ${named.length || notices.length ? `
     <details class="prow-box">
       <summary class="prow"><span class="prow-label">Department</span><span class="prow-value">${escapeHtml(depValue)}</span>${PROW_CHEVRON}</summary>
       <div class="prow-body">
-        ${deps.map(dep => `<a class="prow-link" href="/department.html?id=${encodeURIComponent(dep.id)}">${escapeHtml(dep.name)}${(dep.meetingDay || dep.meetingTime) ? `<small class="muted">${escapeHtml([dep.meetingDay, dep.meetingTime].filter(Boolean).join(', '))}</small>` : ''}</a>`).join('')}
+        ${deps.map(dep => `<a class="prow-link" href="/department.html?id=${encodeURIComponent(dep.id)}">${escapeHtml(dep.name)}${(dep.meetingDay || dep.meetingTime) ? `<small class="muted">${escapeHtml([dep.meetingDay, dep.meetingTime].filter(Boolean).join(', '))}</small>` : ''}</a>${chatLink(dep)}`).join('')}
+        ${leads.map(dep => `<a class="prow-link" href="/department.html?id=${encodeURIComponent(dep.id)}">${escapeHtml(dep.name)}<small class="muted">You lead it</small></a>${chatLink(dep)}`).join('')}
         ${pending ? `<p class="tiny muted">${pending === 1 ? 'One request is' : `${pending} requests are`} waiting on a department head.</p>` : ''}
         ${notices.length ? `<h3 class="prow-sub">From your ${deps.length > 1 ? 'departments' : 'department'}</h3>
           ${notices.map(n => `<div class="prow-notice"><strong>${escapeHtml(n.title)}</strong><p>${escapeHtml(n.body)}</p><small class="muted">${escapeHtml(formatDate(String(n.createdAt).slice(0, 10)))}</small></div>`).join('')}` : ''}

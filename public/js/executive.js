@@ -285,6 +285,8 @@ async function renderExecDepartment(el) {
         { tone: data.lastMeeting ? 'good' : '' })}
     </div>
 
+    <p style="margin:0 0 16px;"><a class="btn btn-outline" href="/department.html?id=${encodeURIComponent(d.id)}#chat" target="_blank" rel="noopener">Open the department chat</a></p>
+
     <div class="portal-card" style="max-width:620px;">
       <form id="deptForm">
         <div class="field"><label>Tagline</label>

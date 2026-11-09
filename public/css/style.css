@@ -1463,3 +1463,23 @@ body {
 .desc-more { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0; margin: -4px 0 0; background: none; border: 0; font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--brand); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .desc-more:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
 @media print { .desc-short { display: block !important; -webkit-line-clamp: unset; } .desc-more { display: none; } }
+
+/* ---------- department chat (department.html#chat) ---------- */
+.dchat { margin: 28px 0; }
+.dchat h2 { font-size: 1.17rem; margin: 0 0 4px; }
+.dchat-who { margin: 0 0 14px; font-size: 0.9rem; }
+.dchat-compose { display: flex; gap: 8px; align-items: flex-end; margin: 0 0 8px; }
+.dchat-compose textarea { flex: 1; min-height: 44px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: var(--surface); color: inherit; resize: vertical; }
+.dchat-list, .dchat-replies { list-style: none; margin: 0; padding: 0; }
+.dchat-post { padding: 12px 0; border-top: 1px solid var(--line); }
+.dchat-list > .dchat-post:first-child { border-top: 0; }
+.dchat-post.is-pinned { background: var(--surface-2); padding: 12px; border-radius: 6px; border-top: 0; margin-bottom: 8px; }
+.dchat-meta { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; font-size: 0.9rem; }
+.dchat-when { color: var(--ink-soft); font-size: 0.82rem; }
+.dchat-body { margin: 6px 0 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dchat-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-left: -10px; }
+.dchat-act { min-height: 44px; min-width: 44px; padding: 0 10px; background: none; border: 0; color: var(--brand); font: inherit; font-weight: 700; font-size: 0.9rem; cursor: pointer; }
+.dchat-act.is-bad { color: var(--bad-ink); }
+.dchat-replies { margin: 4px 0 0 14px; padding-left: 12px; border-left: 2px solid var(--line); }
+.dchat-replies .dchat-post { padding: 8px 0; }
+.dchat-reply { margin-top: 8px; }
