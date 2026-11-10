@@ -1049,3 +1049,14 @@ Your office, Where You Stand, Your Department and Fingerprint or face sign-in we
 - **The National Coordinator is hidden from the public lists** (the About page and `/api/national/executives`) until Global Settings' "Show the National Coordinator on the public leadership lists" is ticked (`showNationalCoordinator`, off by default). The council, which is members only, still lists them.
 
 `test/department-chat.js` (in `npm test`).
+
+## 57. Photos and PDFs in the department chat; events that really repeat
+
+- **Photos and PDFs in the department chat.** Everyone in a department can send up to four with a message (or on their own), each up to 10 MB; photos are made smaller before they are kept. A file is checked by what it is, not what it is called: only JPEG, PNG, GIF, WebP and PDF get through. The files are private (category `department-chat`): only the department's members and its head, signed in to the app, can open them, through the same `/api/files/:id` as everything else. Removing a message deletes its files (and its replies' files), and deleting an account deletes the files that person sent. Photos show as thumbnails that open full size; a PDF shows as a tap-to-open row with its name and size.
+- **Events that repeat.** An event's form has "Repeats": every week, every other week, or every month (on the same date, such as the 15th, or the same weekday, such as the first Saturday or the last Friday), with an optional end date. The words ("Every Wednesday") are written for you. The event keeps one date, the next time it happens, and moves itself on once that day has gone, whenever events are read and once an hour, so the home page, the Events page, the dashboards' counts and shared links all show the next one (`lib/recurrence.js`).
+  - **Registrations start afresh each time.** Each registration records the date it is for (`occurrenceDate`), the count and capacity are for the next one only, and the admin's registrations list shows which date each is for. A repeating event takes registrations until its day; the deadline is for one-off events.
+  - **One time can be called off or moved** ("This one" in the events table of the admin, Chapter Admin, National and Publicity portals): call it off and the event moves to the one after; move it to another day or time before the next one and the people already registered keep their places. The chapter is told either way. `POST /api/admin/events/:id/skip-next|move-next`, `POST /api/publicity/events/:id/skip-next|move-next`.
+  - **The Events page** lists what is coming up first, soonest first, with "Then 17 Nov, 24 Nov, 1 Dec" under a repeating event and "Moved this time" when it is; past events are under "Past events" below.
+  - Events made before this keep their hand-typed "recurring" label and their one date.
+
+`test/recurring-events.js` and `test/department-chat.js` (in `npm test`).

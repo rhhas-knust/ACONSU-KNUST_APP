@@ -510,6 +510,7 @@ function nationalEventForm(event) {
       ${mapLinkFieldHtml('neMapUrl', event?.mapUrl)}
       <div class="field"><label>Description</label>
         <textarea id="neDescription" rows="3">${escapeHtml(event?.description || '')}</textarea></div>
+      ${AconsuRepeat.fieldsHtml(event)}
       <div class="field checkbox-field">
         <input type="checkbox" id="neRegEnabled" ${event?.registrationEnabled ? 'checked' : ''}>
         <label for="neRegEnabled" style="margin:0;">Enable registration for this event</label>
@@ -526,6 +527,7 @@ function nationalEventForm(event) {
     </form>
   `);
 
+  AconsuRepeat.wire(document.getElementById('nationalEventForm'), '#neDate');
   document.getElementById('nationalEventForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -539,6 +541,7 @@ function nationalEventForm(event) {
           location: document.getElementById('neLocation').value,
           mapUrl: document.getElementById('neMapUrl').value,
           description: document.getElementById('neDescription').value,
+          repeat: AconsuRepeat.read(document.getElementById('nationalEventForm')),
           registrationEnabled: document.getElementById('neRegEnabled').checked,
           capacity: Number(document.getElementById('neCapacity').value || 0),
           isNational: true

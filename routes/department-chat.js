@@ -10,9 +10,14 @@
 // and one erasure (lib/eraseMember.js) cover both.
 const MAX_LENGTH = 2000;
 const PAGE = 200;
+// What may be sent with a message: photos and PDFs, up to four at a time,
+// each up to 10 MB as sent (photos are made smaller before they are kept).
+const MAX_FILES = 4;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const ATTACHABLE = /^(image\/(jpeg|png|gif|webp)|application\/pdf)$/;
 
 function registerDepartmentChatRoutes(app, deps) {
-  const { repo, models, requireMember, push } = deps;
+  const { repo, models, requireMember, push, gridfs, upload, compressIfImage, fileTypes } = deps;
   const chatIdOf = departmentId => `dept:${departmentId}`;
 
   // The members who hold the department (its head, and an assistant whose card
@@ -54,13 +59,46 @@ function registerDepartmentChatRoutes(app, deps) {
     return [...new Set([...members.map(m => m.id), ...heads])];
   }
 
+  // Whether a member may open a file sent in this department's chat: the
+  // same people who may read the chat (canOpenPrivateFile in server.js).
+  async function mayOpenFile(memberId, chapterId, departmentId) {
+    if (!memberId || !departmentId) return false;
+    const member = await repo.getById('members', memberId, repo.ownRecord());
+    if (!member || (member.chapterId || '') !== (chapterId || '')) return false;
+    if (servesIn(member, departmentId)) return true;
+    return (await headMemberIds(chapterId, departmentId)).has(memberId);
+  }
+
+  // The files sent with a message, checked by what they are rather than what
+  // they were called, and stored before the message is.
+  async function keepFiles(files, department, member) {
+    const kept = [];
+    for (const f of files) {
+      if (f.size > MAX_FILE_BYTES) throw Object.assign(new Error(`"${f.originalname}" is over 10 MB. Send a smaller one.`), { status: 400 });
+      const type = fileTypes.sniff(f.buffer);
+      if (!ATTACHABLE.test(type)) throw Object.assign(new Error(`"${f.originalname}" is not a photo or a PDF.`), { status: 400 });
+    }
+    for (const f of files) {
+      const { buffer, contentType } = await compressIfImage(f.buffer, fileTypes.sniff(f.buffer));
+      const name = String(f.originalname || 'file').replace(/[\\/\r\n]+/g, ' ').slice(0, 120);
+      const fileId = String(await gridfs.uploadBuffer(buffer, name, {
+        category: 'department-chat', chapterId: department.chapterId, targetId: department.id,
+        uploadedBy: member.id, contentType
+      }));
+      kept.push({ fileId, name, contentType: fileTypes.sniff(buffer) || contentType, size: buffer.length });
+    }
+    return kept;
+  }
+  const dropFiles = (attachments) => Promise.all((attachments || []).map(a => gridfs.deleteFile(a.fileId).catch(() => {})));
+
   const shape = (post, viewer, isHead) => ({
     id: post.id,
     parentId: post.parentId || '',
     authorMemberId: post.authorMemberId,
     authorName: post.authorName || 'A member',
     authorRole: post.authorRole || '',
-    body: post.body,
+    body: post.body || '',
+    attachments: (post.attachments || []).map(a => ({ fileId: a.fileId, name: a.name, contentType: a.contentType, size: a.size })),
     pinned: !!post.pinned,
     createdAt: post.createdAt,
     canRemove: isHead || post.authorMemberId === viewer.id
@@ -94,14 +132,16 @@ function registerDepartmentChatRoutes(app, deps) {
     }
   });
 
-  app.post('/api/departments/:id/chat', requireMember, async (req, res) => {
+  app.post('/api/departments/:id/chat', requireMember, ...upload.array('files', MAX_FILES), async (req, res) => {
+    let attachments = [];
     try {
       const who = await standing(req, res);
       if (!who) return;
       const { member, department, isHead, heads } = who;
       if (member.chatRestricted) return res.status(403).json({ error: 'Your posting privileges have been restricted. Contact your Chapter Admin.' });
       const body = String((req.body && req.body.body) || '').trim();
-      if (!body) return res.status(400).json({ error: 'Write a message first.' });
+      const files = req.files || [];
+      if (!body && !files.length) return res.status(400).json({ error: 'Write a message or add a photo or PDF first.' });
       if (body.length > MAX_LENGTH) return res.status(400).json({ error: `Keep it under ${MAX_LENGTH} characters.` });
       const parentId = String((req.body && req.body.parentId) || '');
       let parent = null;
@@ -109,6 +149,7 @@ function registerDepartmentChatRoutes(app, deps) {
         parent = await repo.getById('groupPosts', parentId, { chapterId: department.chapterId, groupId: chatIdOf(department.id) });
         if (!parent || parent.parentId) return res.status(404).json({ error: 'That message is no longer here.' });
       }
+      attachments = await keepFiles(files, department, member);
       const post = await repo.create('groupPosts', {
         chapterId: department.chapterId,
         groupId: chatIdOf(department.id),
@@ -117,6 +158,7 @@ function registerDepartmentChatRoutes(app, deps) {
         authorName: member.name || '',
         authorRole: isHead ? 'Head' : '',
         body,
+        attachments,
         pinned: false
       }, 'gpost');
 
@@ -131,14 +173,20 @@ function registerDepartmentChatRoutes(app, deps) {
       }
       audience = [...new Set(audience)].filter(id => id && id !== member.id);
       if (audience.length) {
+        const sent = attachments.length
+          ? `Sent ${attachments.length === 1 ? (attachments[0].contentType === 'application/pdf' ? 'a PDF' : 'a photo') : `${attachments.length} files`}`
+          : '';
+        const text = body || sent;
         push.sendPushToAll({
           title: `${department.name}: ${member.name || 'New message'}`,
-          body: body.length > 140 ? `${body.slice(0, 137)}...` : body,
+          body: text.length > 140 ? `${text.slice(0, 137)}...` : text,
           url: `/department.html?id=${encodeURIComponent(department.id)}#chat`
         }, department.chapterId, audience).catch(() => {});
       }
       res.json({ success: true, item: shape(post, member, isHead), reached: audience.length });
     } catch (e) {
+      await dropFiles(attachments);
+      if (e && e.status === 400) return res.status(400).json({ error: e.message });
       res.status(500).json({ error: 'Could not send that' });
     }
   });
@@ -169,17 +217,23 @@ function registerDepartmentChatRoutes(app, deps) {
       if (!who.isHead && post.authorMemberId !== who.member.id) {
         return res.status(403).json({ error: 'Only the person who wrote it, or the department head, can remove it.' });
       }
-      // A conversation goes with its replies.
+      // A conversation goes with its replies, and a message with its files.
       if (!post.parentId) {
         const replies = await repo.getAll('groupPosts', { ...scope, parentId: post.id });
-        for (const r of replies) await repo.removeById('groupPosts', r.id, scope);
+        for (const r of replies) {
+          await repo.removeById('groupPosts', r.id, scope);
+          await dropFiles(r.attachments);
+        }
       }
       await repo.removeById('groupPosts', post.id, scope);
+      await dropFiles(post.attachments);
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: 'Could not remove that' });
     }
   });
+
+  return { mayOpenFile };
 }
 
-module.exports = { registerDepartmentChatRoutes, MAX_LENGTH };
+module.exports = { registerDepartmentChatRoutes, MAX_LENGTH, MAX_FILES, MAX_FILE_BYTES };

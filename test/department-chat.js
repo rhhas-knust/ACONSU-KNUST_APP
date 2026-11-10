@@ -100,6 +100,45 @@ const push = require('../lib/push');
   check('conversations come newest first, each with its replies', r.data.threads.length === 2 && r.data.threads[0].body === 'Who has the hymn list?'
     && r.data.threads[1].replies.length === 1 && r.data.threads[1].replies[0].body === 'Yes, 5pm.', r.data.threads);
 
+  console.log('\n== photos and PDFs ==');
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+  const PDF = Buffer.from('%PDF-1.4\n% the hymn list\n%%EOF\n');
+  async function send(jar, form) {
+    const res = await fetch(BASE + chat, { method: 'POST', headers: { cookie: jars[jar] }, body: form });
+    return { status: res.status, data: await res.json().catch(() => ({})) };
+  }
+  const withFiles = (body, files) => {
+    const f = new FormData();
+    f.append('body', body);
+    files.forEach(([buf, name, type]) => f.append('files', new Blob([buf], { type }), name));
+    return f;
+  };
+  pushed.length = 0;
+  r = await send('esi', withFiles('Hymn list and the choir photo', [[PDF, 'Hymns.pdf', 'application/pdf'], [PNG, 'choir.png', 'image/png']]));
+  check('a member sends a PDF and a photo with a message', r.status === 200 && r.data.item.attachments.length === 2
+    && r.data.item.attachments[0].name === 'Hymns.pdf' && r.data.item.attachments[0].contentType === 'application/pdf', r.data);
+  const withAttachments = r.data.item;
+  const pdfId = withAttachments.attachments[0].fileId;
+  r = await send('kofi', withFiles('', [[PNG, 'only-a-photo.png', 'image/png']]));
+  check('a photo can be sent on its own, with no words', r.status === 200 && r.data.item.body === '' && r.data.item.attachments.length === 1, r.data);
+  check('the notification says what was sent', pushed.some(p => /Sent a photo/.test(p.payload.body)), pushed.map(p => p.payload.body));
+  r = await send('kofi', withFiles('', [[Buffer.from('<html><script>alert(1)</script></html>'), 'page.png', 'image/png']]));
+  check('a file that is not really a photo or a PDF is refused, whatever it is called', r.status === 400 && /not a photo or a PDF/.test(r.data.error), r.data);
+  r = await send('kofi', withFiles('', [[Buffer.alloc(11 * 1024 * 1024, 0x25).fill('%PDF-', 0, 5), 'big.pdf', 'application/pdf']]));
+  check('a file over 10 MB is refused', r.status === 400 && /over 10 MB/.test(r.data.error), r.data);
+  const replyForm = withFiles('Got it', [[PNG, 'reply.png', 'image/png']]);
+  replyForm.append('parentId', withAttachments.id);
+  r = await send('head', replyForm);
+  check('a reply can carry a photo too', r.status === 200 && r.data.item.parentId === withAttachments.id && r.data.item.attachments.length === 1, r.data);
+  const replyFile = r.data.item.attachments[0].fileId;
+  const stored = await require('../lib/gridfs').findFile(pdfId);
+  check('the files are kept as private department chat files', stored && stored.metadata.category === 'department-chat' && stored.metadata.targetId === choir.id && stored.metadata.chapterId === C, stored && stored.metadata);
+  const open = async (jar, id) => (await fetch(`${BASE}/api/files/${id}`, { headers: jars[jar] ? { cookie: jars[jar] } : {} })).status;
+  check('the department\'s members and head open them', await open('kofi', pdfId) === 200 && await open('head', pdfId) === 200);
+  check('nobody else does: another department, another chapter, or a visitor', await open('yaw', pdfId) === 404 && await open('away', pdfId) === 404 && await open(null, pdfId) === 404);
+  r = await call('esi', 'DELETE', `${chat}/${withAttachments.id}`);
+  check('removing a message deletes its files, and its replies\' files', r.status === 200 && !(await require('../lib/gridfs').findFile(pdfId)) && !(await require('../lib/gridfs').findFile(replyFile)));
+
   console.log('\n== the head keeps it in order ==');
   r = await call('kofi', 'POST', `${chat}/${first}/pin`, {});
   check('a member cannot pin', r.status === 403);

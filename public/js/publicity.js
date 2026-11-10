@@ -338,11 +338,11 @@ async function renderPublicityEvents(el) {
             const statusTone = e.status === 'published' ? (upcoming ? 'green' : 'grey') : e.status === 'rejected' ? 'red' : 'amber';
             return `
               <tr>
-                <td><strong>${escapeHtml(e.title)}</strong>${e.recurring ? `<br><small class="muted">${escapeHtml(e.recurring)}</small>` : ''}${e.flyerFileId ? ' ' : ''}</td>
+                <td><strong>${escapeHtml(e.title)}</strong>${e.recurring ? `<br><small class="muted">${escapeHtml(e.recurring)}${e.moved ? ', moved this time' : ''}</small>` : ''}${e.flyerFileId ? ' ' : ''}</td>
                 <td>${shortDate(e.date)}<br><small class="muted">${escapeHtml(e.time || '')}</small></td>
                 <td>${escapeHtml(e.location || '-')}</td>
                 <td>${pill(e.status === 'published' ? (upcoming ? 'upcoming' : 'past') : e.status, statusTone)}</td>
-                ${PORTAL.canEdit ? `<td class="row-actions"><button data-edit-event="${e.id}">Edit &amp; Announce</button><button data-volunteers="${e.id}">Volunteers</button></td>` : ''}
+                ${PORTAL.canEdit ? `<td class="row-actions">${e.repeats ? `<button data-next-one="${e.id}">This one</button>` : ''}<button data-edit-event="${e.id}">Edit &amp; Announce</button><button data-volunteers="${e.id}">Volunteers</button></td>` : ''}
               </tr>
             `;
           }).join('') || emptyRow(PORTAL.canEdit ? 5 : 4, 'No events on the calendar.')}
@@ -358,6 +358,9 @@ async function renderPublicityEvents(el) {
   });
   el.querySelectorAll('[data-volunteers]').forEach(btn => {
     btn.addEventListener('click', () => openVolunteersModal(events.find(e => e.id === btn.dataset.volunteers)));
+  });
+  el.querySelectorAll('[data-next-one]').forEach(btn => {
+    btn.addEventListener('click', () => AconsuRepeat.openNextOne(events.find(e => e.id === btn.dataset.nextOne), '/api/publicity/events', () => openPanel('events')));
   });
 }
 
@@ -513,7 +516,7 @@ function openEventForm(event) {
       <div class="field"><label>Location</label><input type="text" id="evLocation" value="${escapeHtml(event?.location || '')}"></div>
       ${mapLinkFieldHtml('evMapUrl', event?.mapUrl)}
       <div class="field"><label>Description</label><textarea id="evDescription">${escapeHtml(event?.description || '')}</textarea></div>
-      <div class="field"><label>Recurring label (optional)</label><input type="text" id="evRecurring" value="${escapeHtml(event?.recurring || '')}" placeholder="e.g. Every Wednesday"></div>
+      ${AconsuRepeat.fieldsHtml(event)}
       ${isEdit ? `
         <div class="field">
           <label>Flyer</label>
@@ -535,6 +538,7 @@ function openEventForm(event) {
     </form>
   `);
 
+  AconsuRepeat.wire(document.getElementById('eventForm'), '#evDate');
   document.getElementById('eventForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {
@@ -544,7 +548,7 @@ function openEventForm(event) {
       location: document.getElementById('evLocation').value,
       mapUrl: document.getElementById('evMapUrl').value,
       description: document.getElementById('evDescription').value,
-      recurring: document.getElementById('evRecurring').value
+      repeat: AconsuRepeat.read(document.getElementById('eventForm'))
     };
     if (isEdit) {
       // Keep the registration settings the admin configured - publicity edits

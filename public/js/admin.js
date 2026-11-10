@@ -795,7 +795,7 @@ const EVENT_FIELDS = [
   { key: 'location', label: 'Location', type: 'text' },
   { key: 'mapUrl', label: 'Map link for the location (optional)', type: 'maplink' },
   { key: 'description', label: 'Description', type: 'textarea' },
-  { key: 'recurring', label: 'Recurring Label (optional)', type: 'text' },
+  { key: 'repeat', label: 'Repeats', type: 'repeat' },
   { key: 'registrationEnabled', label: 'Enable registration for this event', type: 'checkbox' },
   { key: 'capacity', label: 'Capacity (0 = unlimited)', type: 'number' },
   { key: 'registrationDeadline', label: 'Registration Deadline', type: 'datetime-local' }
@@ -847,11 +847,12 @@ async function renderResourcePanel(resource, fields, singular) {
                 ${item.headerImageFileId ? `<img src="/api/files/${item.headerImageFileId}" alt="">` : 'Add a header'}
               </button>
             </td>` : ''}
-            ${fields.slice(0, 3).map((f, idx) => `<td>${idx === 0 && resource === 'events' && item.isNational ? '<span class="badge" style="margin-right:6px;">National</span>' : ''}${escapeHtml(String(item[f.key] || ''))}</td>`).join('')}
+            ${fields.slice(0, 3).map((f, idx) => `<td>${idx === 0 && resource === 'events' && item.isNational ? '<span class="badge" style="margin-right:6px;">National</span>' : ''}${escapeHtml(String(item[f.key] || ''))}${idx === 0 && resource === 'events' && item.repeats ? `<br><small class="muted">${escapeHtml(item.recurring || 'Repeats')}${item.moved ? ', moved this time' : ''}</small>` : ''}</td>`).join('')}
             ${resource === 'events' ? `<td>${item.registrationEnabled ? `<button data-view-regs="${item.id}" data-title="${escapeHtml(item.title)}">View (${item.capacity > 0 ? `cap ${item.capacity}` : 'unlimited'})</button>` : '-'}</td>` : ''}
             <td class="row-actions">
               ${resource === 'events' && item.isNational ? `<span class="tiny muted">Managed from the National Portal</span>` : `
                 ${resource === 'departments' ? `<button data-header-image="${item.id}">Header Image</button>` : ''}
+                ${resource === 'events' && item.repeats ? `<button data-next-one="${item.id}">This one</button>` : ''}
                 <button data-edit="${item.id}">Edit</button>
                 <button class="danger" data-delete="${item.id}">Delete</button>
               `}
@@ -871,6 +872,9 @@ async function renderResourcePanel(resource, fields, singular) {
   if (resource === 'events') {
     el.querySelectorAll('[data-view-regs]').forEach(btn => {
       btn.addEventListener('click', () => openRegistrationsModal(btn.dataset.viewRegs, btn.dataset.title));
+    });
+    el.querySelectorAll('[data-next-one]').forEach(btn => {
+      btn.addEventListener('click', () => AconsuRepeat.openNextOne(items.find(i => i.id === btn.dataset.nextOne), '/api/admin/events', () => renderResourcePanel(resource, fields, singular)));
     });
   }
   if (resource === 'departments') {
@@ -917,6 +921,7 @@ function openResourceForm(resource, fields, singular, item) {
             <label for="field-${f.key}" style="margin:0;">${f.label}</label></div>`;
         }
         if (f.type === 'maplink') return mapLinkFieldHtml(`field-${f.key}`, val, f.label);
+        if (f.type === 'repeat') return AconsuRepeat.fieldsHtml(item);
         return `<div class="field"><label>${f.label}</label>
           <input type="${f.type}" data-key="${f.key}" value="${escapeHtml(val !== undefined ? val : '')}" ${f.required ? 'required' : ''}></div>`;
       }).join('')}
@@ -929,10 +934,12 @@ function openResourceForm(resource, fields, singular, item) {
   `;
   showModal(formHtml);
   document.getElementById('cancelModalBtn').addEventListener('click', closeModal);
+  if (fields.some(f => f.type === 'repeat')) AconsuRepeat.wire(document.getElementById('resourceForm'), '[data-key="date"]');
   document.getElementById('resourceForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const payload = {};
     fields.forEach(f => {
+      if (f.type === 'repeat') { payload[f.key] = AconsuRepeat.read(document.getElementById('resourceForm')); return; }
       const el = document.querySelector(`[data-key="${f.key}"]`) || document.getElementById(`field-${f.key}`);
       if (f.type === 'checkbox') {
         payload[f.key] = el.checked;
@@ -2284,13 +2291,18 @@ async function openRegistrationsModal(eventId, title) {
   showModal(`<h3>Registrations, ${escapeHtml(title)}</h3><p class="empty-state">Loading...</p>`);
   try {
     const regs = await fetchJSON(`/api/admin/events/${eventId}/registrations`);
+    // A repeating event's registrations are for one date each: newest first,
+    // with the date they are for.
+    const dates = new Set(regs.map(r => r.occurrenceDate || ''));
+    const byDate = dates.size > 1 || [...dates].some(Boolean);
+    if (byDate) regs.sort((a, b) => String(b.occurrenceDate || '').localeCompare(String(a.occurrenceDate || '')));
     document.getElementById('modalContent').innerHTML = `
       <h3>Registrations: ${escapeHtml(title)}</h3>
       <p style="color:var(--ink-faint); font-size:0.85rem; margin-bottom:14px;">${regs.length} ${regs.length === 1 ? 'person' : 'people'} registered</p>
       <table>
-        <thead><tr><th>Name</th><th>Email</th><th>Phone</th></tr></thead>
+        <thead><tr>${byDate ? '<th>For</th>' : ''}<th>Name</th><th>Email</th><th>Phone</th></tr></thead>
         <tbody>
-          ${regs.map(r => `<tr><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.phone || '-')}</td></tr>`).join('') || '<tr><td colspan="3">No registrations yet.</td></tr>'}
+          ${regs.map(r => `<tr>${byDate ? `<td>${escapeHtml(r.occurrenceDate ? formatDate(r.occurrenceDate) : '-')}</td>` : ''}<td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.email)}</td><td>${escapeHtml(r.phone || '-')}</td></tr>`).join('') || `<tr><td colspan="${byDate ? 4 : 3}">No registrations yet.</td></tr>`}
         </tbody>
       </table>
       <button type="button" class="btn btn-outline" id="cancelModalBtn" style="margin-top:16px;">Close</button>

@@ -1468,8 +1468,22 @@ body {
 .dchat { margin: 28px 0; }
 .dchat h2 { font-size: 1.17rem; margin: 0 0 4px; }
 .dchat-who { margin: 0 0 14px; font-size: 0.9rem; }
-.dchat-compose { display: flex; gap: 8px; align-items: flex-end; margin: 0 0 8px; }
-.dchat-compose textarea { flex: 1; min-height: 44px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: var(--surface); color: inherit; resize: vertical; }
+.dchat-compose { display: flex; flex-direction: column; gap: 8px; margin: 0 0 8px; }
+.dchat-compose[hidden] { display: none; }
+.dchat-compose textarea { width: 100%; min-height: 44px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background: var(--surface); color: inherit; resize: vertical; }
+.dchat-tools { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dchat-attach { gap: 6px; }
+.dchat-attach:focus-within { outline: 2px solid var(--brand); outline-offset: 2px; }
+.dchat-picked { list-style: none; margin: 0; padding: 0; }
+.dchat-picked:empty { display: none; }
+.dchat-picked li { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.9rem; overflow-wrap: anywhere; }
+.dchat-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin: 8px 0 4px; max-width: 360px; }
+.dchat-photos a { display: block; aspect-ratio: 1; border-radius: 6px; overflow: hidden; background: var(--surface-2); }
+.dchat-photos img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dchat-file { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 8px 0 4px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); text-decoration: none; max-width: 360px; }
+.dchat-file-kind { flex: none; font-size: 0.72rem; font-weight: 700; padding: 3px 6px; border-radius: 4px; background: var(--bad-bg); color: var(--bad-ink); }
+.dchat-file-name { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+.dchat-file small { color: var(--ink-soft); flex: none; }
 .dchat-list, .dchat-replies { list-style: none; margin: 0; padding: 0; }
 .dchat-post { padding: 12px 0; border-top: 1px solid var(--line); }
 .dchat-list > .dchat-post:first-child { border-top: 0; }
@@ -1483,3 +1497,18 @@ body {
 .dchat-replies { margin: 4px 0 0 14px; padding-left: 12px; border-left: 2px solid var(--line); }
 .dchat-replies .dchat-post { padding: 8px 0; }
 .dchat-reply { margin-top: 8px; }
+
+/* ---------- "Repeats" on an event form (public/js/event-repeat.js) ---------- */
+.repeat-box { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+.repeat-box legend { font-weight: 600; margin: 0 0 6px; padding: 0; }
+.repeat-box select, .repeat-box input[type="date"] { width: 100%; }
+.repeat-box [data-repeat-more] { margin-top: 10px; }
+.repeat-box [hidden] { display: none; }
+.choice-line { display: flex; align-items: center; gap: 8px; min-height: 44px; font-weight: 500; cursor: pointer; }
+.choice-line input { width: 22px; height: 22px; flex: none; margin: 0; }
+
+/* ---------- Events page: the next dates of a repeating event, and the past ---------- */
+.event-next { font-size: 0.85rem; color: var(--ink-soft); margin: 0 0 6px; }
+.events-past { margin-top: 24px; }
+.events-past > summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; color: var(--brand); cursor: pointer; }
+.events-past > .grid { margin-top: 12px; }
