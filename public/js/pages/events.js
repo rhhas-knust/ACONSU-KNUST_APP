@@ -29,11 +29,14 @@ function canRegister(e) {
   try {
     const events = await fetchJSON('/api/events');
     CURRENT_EVENTS = events;
-    const sorted = [...events].sort((a, b) => {
-      if (a.id === selectedEventId) return -1;
-      if (b.id === selectedEventId) return 1;
-      return new Date(`${a.date}T${a.time || '00:00'}`) - new Date(`${b.date}T${b.time || '00:00'}`);
-    });
+    // Coming up, soonest first; then what has been, most recent first. A
+    // repeating event is always coming up: the app moves it to its next date.
+    const at = (e) => new Date(`${e.date}T${e.time || '00:00'}`);
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const isPast = (e) => !e.date || e.date < todayKey;
+    const upcomingEvents = events.filter(e => !isPast(e)).sort((a, b) => at(a) - at(b));
+    const pastEvents = events.filter(isPast).sort((a, b) => at(b) - at(a));
+    const first = (list) => [...list].sort((a, b) => (a.id === selectedEventId ? -1 : b.id === selectedEventId ? 1 : 0));
     if (selectedEventId || searchQuery) {
       document.getElementById('searchContext').innerHTML = `
         <div class="search-context">
@@ -44,7 +47,7 @@ function canRegister(e) {
     }
 
     const wrap = document.getElementById('eventList');
-    wrap.innerHTML = sorted.map(e => {
+    const cardHtml = (e) => {
       const d = new Date(`${e.date}T00:00:00`);
       return `
       <div class="card event-card ${e.id === selectedEventId ? 'search-focus-card' : ''}" data-event-id="${escapeHtml(e.id)}">
@@ -56,11 +59,13 @@ function canRegister(e) {
         <div style="flex:1;">
           <h2 style="margin-bottom:6px; font-size:1.2rem;">${escapeHtml(e.title)}</h2>
           <p style="font-size:0.9rem; color:var(--ink-soft); margin-bottom:6px;">${formatDate(e.date)} · ${e.time}, ${escapeHtml(e.location)}</p>
+          ${e.repeats && e.nextDates && e.nextDates.length > 1 ? `<p class="event-next">Then ${e.nextDates.slice(1).map(d => escapeHtml(new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }))).join(', ')}</p>` : ''}
           <p style="font-size:0.92rem; color:var(--ink-soft); margin-bottom:8px;">${escapeHtml(e.description || '')}</p>
           ${e.mapUrl ? mapBlockHtml({ url: e.mapUrl, place: e.mapPlace, label: e.location || e.title }) : ''}
           <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
             ${e.category ? `<span class="badge">${escapeHtml(e.category)}</span>` : ''}
             ${e.recurring ? `<span class="badge">${escapeHtml(e.recurring)}</span>` : ''}
+            ${e.moved ? '<span class="badge">Moved this time</span>' : ''}
             ${e.isNational ? `<span class="badge">National</span>` : ''}
             ${spotsBadge(e)}
           </div>
@@ -77,7 +82,15 @@ function canRegister(e) {
           ` : ''}
         </div>
       </div>`;
-    }).join('') || '<p class="empty-state">No events scheduled yet.</p>';
+    };
+    const selectedIsPast = pastEvents.some(e => e.id === selectedEventId);
+    wrap.innerHTML = `
+      ${first(upcomingEvents).map(cardHtml).join('') || '<p class="empty-state">Nothing coming up yet. Check back soon.</p>'}
+      ${pastEvents.length ? `
+        <details class="events-past"${selectedIsPast ? ' open' : ''}>
+          <summary>Past events (${pastEvents.length})</summary>
+          <div class="grid" style="grid-template-columns:1fr;">${first(pastEvents).map(cardHtml).join('')}</div>
+        </details>` : ''}`;
 
     wrap.querySelectorAll('[data-register]').forEach(btn => {
       btn.addEventListener('click', () => openRegModal(btn.dataset.register));

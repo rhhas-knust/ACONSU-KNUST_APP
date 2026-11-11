@@ -66,6 +66,7 @@ const attendanceLib = require('./lib/attendance');
 const listLink = require('./lib/listLink');
 const officeAccounts = require('./lib/officeAccounts');
 const maps = require('./lib/maps');
+const recurrence = require('./lib/recurrence');
 const { moveGlobalSetupToChapter } = require('./lib/globalMove');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
@@ -2790,7 +2791,7 @@ const communityRouteDeps = {
 };
 registerGroupRoutes(app, communityRouteDeps);
 registerChatRoutes(app, communityRouteDeps);
-registerDepartmentChatRoutes(app, { ...communityRouteDeps, push });
+const departmentChat = registerDepartmentChatRoutes(app, { ...communityRouteDeps, push, gridfs, upload, compressIfImage, fileTypes });
 // The Alumni wall, the weekly spotlight and the monthly theme (see the header
 // of routes/church-life.js). Registered after the oversight chokepoint above,
 // so National's writes here are the national ones and only those.
@@ -2842,6 +2843,47 @@ async function attachDepartmentLeaders(departments) {
 
 // events need per-event registration counts attached, so they get their own route.
 // A chapter sees its own events plus any national event, never another chapter's.
+// ---------- events that repeat (lib/recurrence.js) ----------
+// An event keeps one date, the next time it happens. Once that day has gone a
+// repeating event moves on to the one after: here, whenever events are read,
+// and once an hour for the rest (the dashboards' counts read the stored date).
+async function rollEvents(events) {
+  return Promise.all(events.map(async (e) => {
+    const patch = recurrence.rollForward(e);
+    if (!patch) return e;
+    await repo.patchById('events', e.id, patch, { chapterId: e.chapterId || '' }).catch(() => {});
+    return { ...e, ...patch };
+  }));
+}
+async function rollAllRepeatingEvents() {
+  const events = await repo.getAll('events', {});
+  await rollEvents(events.filter(e => recurrence.isRepeating(e)));
+}
+
+// The registrations that count for an event's next time: all of them for a
+// one-off, only the ones for this date for a repeating one.
+// Counted by the series date rather than the date shown, so moving this one to
+// Thursday keeps the people who already signed up for it.
+const occurrenceKey = (event) => (recurrence.isRepeating(event) ? (event.occurrence || event.date || '') : '');
+function registrationsFor(event) {
+  return recurrence.isRepeating(event) ? { eventId: event.id, occurrenceDate: occurrenceKey(event) } : { eventId: event.id };
+}
+// A repeating event takes registrations for its next time until that day has
+// gone; a one-off closes at its deadline, if it has one.
+function registrationClosed(event) {
+  if (recurrence.isRepeating(event)) return event.date < recurrence.today();
+  return !!(event.registrationDeadline && new Date(event.registrationDeadline) < new Date());
+}
+
+// Saving an event: what the form sent, with its series worked out. Where the
+// series stands (which date it is on, what was called off) is the app's to
+// keep and is never taken from the request.
+function withSeries(body, existing) {
+  const { skipped, occurrence, seriesStart, seriesTime, ...rest } = body || {};
+  if (existing && !['repeat', 'date', 'time'].some(k => hasOwn(rest, k))) return rest;
+  return { ...rest, ...recurrence.seriesFields(rest, existing) };
+}
+
 app.get('/api/events', async (req, res) => {
   try {
     const base = contentChapterFilter(req);
@@ -2851,18 +2893,19 @@ app.get('/api/events', async (req, res) => {
     // their own chapter's dashboard see everything, drafts included.
     const scope = rolesLib.getActingScope(req);
     const filter = scope.kind === 'anonymous' ? { ...chapterPart, status: 'published' } : chapterPart;
-    const events = await repo.getAll('events', filter);
+    const events = await rollEvents(await repo.getAll('events', filter));
     const withCounts = await Promise.all(events.map(async (e) => {
       const registrationCount = e.registrationEnabled
-        ? await models.EventRegistration.countDocuments({ eventId: e.id })
+        ? await models.EventRegistration.countDocuments(registrationsFor(e))
         : 0;
       const spotsLeft = e.registrationEnabled && e.capacity > 0
         ? Math.max(0, e.capacity - registrationCount)
         : null; // null = unlimited or registration not enabled
-      const deadlinePassed = e.registrationEnabled && e.registrationDeadline
-        ? new Date(e.registrationDeadline) < new Date()
-        : false;
-      return { ...e, registrationCount, spotsLeft, deadlinePassed };
+      const deadlinePassed = e.registrationEnabled ? registrationClosed(e) : false;
+      const series = recurrence.isRepeating(e)
+        ? { repeats: true, nextDates: recurrence.upcoming(e, 4), moved: !!(e.occurrence && e.occurrence !== e.date) }
+        : { repeats: false };
+      return { ...e, ...series, registrationCount, spotsLeft, deadlinePassed };
     }));
     res.json(withCounts);
   } catch (e) {
@@ -3040,6 +3083,11 @@ async function canOpenPrivateFile(req, meta, fileId) {
   const staff = currentStaff(req);
   const signedIn = !!(req.session && (req.session.memberId || req.session.isAdmin || req.session.isShepherd)) || !!staff;
   if (category === 'member-profile') return signedIn;       // a member's own photo: members and staff
+  // A photo or PDF sent in a department's chat: the department's members and
+  // its head, signed in to the app (routes/department-chat.js).
+  if (category === 'department-chat') {
+    return departmentChat.mayOpenFile(req.session && req.session.memberId, meta.chapterId, meta.targetId);
+  }
   if (req.session && req.session.isAdmin) return true;      // the recovery login, as everywhere
   const role = staff && staff.role;
   if (category === 'minutes') {
@@ -4171,16 +4219,18 @@ app.post('/api/events/:id/register', formLimiter, async (req, res) => {
     const event = await repo.getById('events', req.params.id);
     if (!event) return res.status(404).json({ error: 'Event not found' });
     if (!event.registrationEnabled) return res.status(400).json({ error: 'Registration is not open for this event' });
-    if (event.registrationDeadline && new Date(event.registrationDeadline) < new Date()) {
+    const [current] = await rollEvents([event]);
+    if (registrationClosed(current)) {
       return res.status(400).json({ error: 'Registration for this event has closed' });
     }
     const placed = await inEventQueue(event.id, async () => {
-      if (event.capacity > 0) {
-        const count = await models.EventRegistration.countDocuments({ eventId: event.id });
-        if (count >= event.capacity) return false;
+      if (current.capacity > 0) {
+        const count = await models.EventRegistration.countDocuments(registrationsFor(current));
+        if (count >= current.capacity) return false;
       }
       await repo.create('eventRegistrations', {
         chapterId: event.chapterId || '', eventId: event.id, name, email, phone: phone || '',
+        occurrenceDate: occurrenceKey(current) || current.date || '',
         // Only when they are signed in - the form stays open to anyone.
         memberId: (req.session && req.session.memberId) || ''
       }, 'reg');
@@ -5589,7 +5639,7 @@ app.delete('/api/publicity/testimonies/:id', requirePublicity, async (req, res) 
 app.post('/api/publicity/events', requirePublicity, async (req, res) => {
   try {
     const chapterId = await resolveChapterIdForWrite(req, req.body.chapterId);
-    const item = await repo.create('events', { ...req.body, chapterId }, 'even');
+    const item = await repo.create('events', { ...withSeries(req.body, null), chapterId }, 'even');
     res.json({ success: true, item });
     createNotification(
       'New Event: ' + (item.title || 'Untitled'),
@@ -5605,7 +5655,9 @@ app.put('/api/publicity/events/:id', requirePublicity, async (req, res) => {
   try {
     const filter = rolesLib.chapterFilter(req);
     const { announceUpdate, chapterId, ...fields } = req.body;
-    const item = await repo.updateById('events', req.params.id, fields, filter);
+    const existing = await repo.getById('events', req.params.id, filter);
+    if (!existing) return res.status(404).json({ error: 'Event not found' });
+    const item = await repo.updateById('events', req.params.id, withSeries(fields, existing), filter);
     if (!item) return res.status(404).json({ error: 'Event not found' });
     res.json({ success: true, item });
     if (announceUpdate) {
@@ -5619,6 +5671,56 @@ app.put('/api/publicity/events/:id', requirePublicity, async (req, res) => {
     res.status(500).json({ error: 'Could not update this event' });
   }
 });
+
+// ---------- one time of a repeating event ----------
+// Calling off the next one ("no fellowship this Wednesday") or moving it
+// ("Thursday at 5pm this week"), leaving the rest of the series as it is. The
+// chapter is told, because people plan around these.
+const dayLabel = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+function registerSeriesActions(base, guard, filterOf) {
+  app.post(`${base}/:id/skip-next`, guard, async (req, res) => {
+    try {
+      const filter = filterOf(req);
+      const found = await repo.getById('events', req.params.id, filter);
+      if (!found) return res.status(404).json({ error: 'Event not found' });
+      const [event] = await rollEvents([found]);
+      if (!recurrence.isRepeating(event)) return res.status(400).json({ error: 'This event does not repeat. Delete it instead.' });
+      const patch = recurrence.skipCurrent(event);
+      if (!patch) return res.status(400).json({ error: 'This is the last one in the series. Delete the event, or change its end date, instead.' });
+      const item = await repo.patchById('events', event.id, patch, filter);
+      res.json({ success: true, item, calledOff: event.date });
+      createNotification(
+        `${event.title || 'Event'}: not on ${dayLabel(event.date)}`,
+        `${event.title || 'This event'} is not happening on ${dayLabel(event.date)}. The next one is ${dayLabel(patch.date)}${patch.time ? ' at ' + patch.time : ''}.`,
+        '/events.html', 'system', event.isNational ? '' : event.chapterId
+      ).catch(() => {});
+    } catch (e) {
+      res.status(500).json({ error: 'Could not call that one off' });
+    }
+  });
+
+  app.post(`${base}/:id/move-next`, guard, async (req, res) => {
+    try {
+      const filter = filterOf(req);
+      const found = await repo.getById('events', req.params.id, filter);
+      if (!found) return res.status(404).json({ error: 'Event not found' });
+      const [event] = await rollEvents([found]);
+      const out = recurrence.moveCurrent(event, String(req.body.date || ''), req.body.time === undefined ? undefined : String(req.body.time || ''));
+      if (out.error) return res.status(400).json({ error: out.error });
+      const item = await repo.patchById('events', event.id, out.patch, filter);
+      res.json({ success: true, item });
+      createNotification(
+        `${event.title || 'Event'}: moved to ${dayLabel(out.patch.date)}`,
+        `${event.title || 'This event'} is on ${dayLabel(out.patch.date)}${out.patch.time ? ' at ' + out.patch.time : ''} this time, instead of ${dayLabel(event.date)}.`,
+        '/events.html', 'system', event.isNational ? '' : event.chapterId
+      ).catch(() => {});
+    } catch (e) {
+      res.status(500).json({ error: 'Could not move that one' });
+    }
+  });
+}
+registerSeriesActions('/api/publicity/events', requirePublicity, req => rolesLib.chapterFilter(req));
+registerSeriesActions('/api/admin/events', requireChapterAdmin, req => rolesLib.chapterFilter(req, { required: false }));
 
 // ---------- Executive Portal (section 9) ----------
 // Self-service: an executive can only ever read/edit the one Executive
@@ -5911,6 +6013,7 @@ app.post('/api/executive/events', requireRole('executive'), requireCapability(CA
       title, date, time: time || '', location: location || '', description: description || '',
       mapUrl: req.body.mapUrl || '', mapPlace: req.body.mapPlace || null,
       category: category || '', videoUrl: videoUrl || '',
+      ...recurrence.seriesFields({ date, time: time || '', repeat: req.body.repeat }, null),
       status: 'submitted', submittedBy: staff.name, submittedByStaffId: staff.id
     }, 'even');
     res.json({ success: true, item });
@@ -8811,7 +8914,8 @@ app.delete('/api/admin/content/:id', requireContentManager, async (req, res) => 
       if (!chapterId && !(resource === 'events' && req.body.isNational)) {
         return res.status(400).json({ error: 'A chapter is required, this deployment now has more than one, please specify which.' });
       }
-      const item = await repo.create(resource, { ...req.body, chapterId }, prefix);
+      const fields = resource === 'events' ? withSeries(req.body, null) : req.body;
+      const item = await repo.create(resource, { ...fields, chapterId }, prefix);
       res.json({ success: true, item });
       // Automatic announcement - fires after responding, so it never slows down or breaks the save itself.
       if (resource === 'events') {
@@ -8838,7 +8942,13 @@ app.delete('/api/admin/content/:id', requireContentManager, async (req, res) => 
     // chapters isn't a supported operation, and silently allowing it here
     // would be exactly the kind of body-tampering section 43 rules out.
     const { chapterId, ...body } = req.body;
-    const item = await repo.updateById(resource, req.params.id, body, filter);
+    let fields = body;
+    if (resource === 'events') {
+      const existing = await repo.getById('events', req.params.id, filter);
+      if (!existing) return res.status(404).json({ error: 'Not found' });
+      fields = withSeries(body, existing);
+    }
+    const item = await repo.updateById(resource, req.params.id, fields, filter);
     if (!item) return res.status(404).json({ error: 'Not found' });
     res.json({ success: true, item });
   });
@@ -9215,6 +9325,8 @@ connectDB()
     setInterval(() => resolvePendingMapLinks().catch(() => {}), 60 * 60 * 1000);
     checkBirthdaysAndNotify();
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
+    rollAllRepeatingEvents().catch(() => {});
+    setInterval(() => rollAllRepeatingEvents().catch(() => {}), 60 * 60 * 1000); // repeating events move on to their next date
     sendDueAnnouncements();
     setInterval(sendDueAnnouncements, 60 * 1000); // a minute's precision is plenty for announcements
     // Old notifications, SMS records, chat and contact messages (lib/retention.js).
