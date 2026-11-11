@@ -1077,3 +1077,10 @@ Your office, Where You Stand, Your Department and Fingerprint or face sign-in we
 - `GET|PUT /api/executive/service-timer`. The timer's PIN stays in the timer app (`CONTROLLER_PIN`); nothing about it is kept here.
 
 `test/service-timer.js` (in `npm test`).
+
+## 60. Tips: the explanations out of the way
+
+- Every screen in the portals, the admin and their pop-up forms now shows its title and what can be done, without paragraphs. The explanations are still there behind **Tips**, a small button next to each screen's title: one tap shows them on every screen, and the choice is remembered on that device (`public/js/main.js`, `tipsToggle`; it replaces the one-line "More" clamp).
+- Hidden until Tips: a screen's opening line (`.panel-head .sub` / `p`), field hints (`.hint`), and anything marked `data-tip`. A rule someone has to follow (a password's length, a sender name's 11 characters, a ledger category) is marked `data-keep` and always shows; so do error and success messages.
+- The Service Timer is three buttons (Controller, TV screen, Customise), with the link behind "Change the timer link".
+- Printing a screen prints its explanations too.

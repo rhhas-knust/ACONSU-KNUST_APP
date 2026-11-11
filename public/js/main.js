@@ -1582,31 +1582,66 @@ function prefillOfficeLogin(usernameId, passwordId) {
 // Each screen of the portals and the admin opens with a paragraph saying what
 // it is for. Read once, it is in the way every time after. Anything longer
 // than a line is cut to its first line, with "More" to read the rest.
-(function shortenDescriptions() {
-  const SELECTOR = '.portal-main .panel-head .sub, .admin-main .panel-head p, .modal > .hint:first-of-type';
-  let n = 0;
-  const shorten = (p) => {
-    if (p.dataset.desc) return;
-    p.dataset.desc = '1';
-    if (p.textContent.trim().length <= 90 || p.querySelector('a, button, input, select')) return;
-    p.id = p.id || `desc-${++n}`;
-    p.classList.add('desc-short');
-    const more = document.createElement('button');
-    more.type = 'button';
-    more.className = 'desc-more';
-    more.textContent = 'More';
-    more.setAttribute('aria-expanded', 'false');
-    more.setAttribute('aria-controls', p.id);
-    more.addEventListener('click', () => {
-      const open = p.classList.toggle('desc-open');
-      more.textContent = open ? 'Less' : 'More';
-      more.setAttribute('aria-expanded', String(open));
+// ---------- tips: the explanations, hidden until asked for ----------
+// The portals and the admin explained every screen in paragraphs, and the
+// paragraphs got in the way of the buttons. Now the screen shows its title and
+// what can be done; the explanations (a panel's opening line, a field's hint,
+// anything marked data-tip) stay out of sight until "Tips" next to the title
+// is pressed, and that choice is remembered on this device. A rule someone has
+// to follow, such as a password's length, is marked data-keep and always shows.
+(function tipsToggle() {
+  const KEY = 'aconsu.tips';
+  const root = document.documentElement;
+  let on = false;
+  try { on = localStorage.getItem(KEY) === 'on'; } catch (e) { /* stays off */ }
+  const apply = () => {
+    root.classList.toggle('show-tips', on);
+    document.querySelectorAll('.tips-toggle').forEach((b) => {
+      b.setAttribute('aria-pressed', String(on));
+      b.textContent = on ? 'Hide tips' : 'Tips';
     });
-    p.insertAdjacentElement('afterend', more);
+  };
+  const HEADS = '.portal-main .panel-head, .admin-main .panel-head';
+  const add = (head) => {
+    if (head.dataset.tips) return;
+    head.dataset.tips = '1';
+    // Only where there is something to show: the panel's own words or hints.
+    const panel = head.parentElement || head;
+    if (!head.querySelector('.sub, p') && !panel.querySelector('.hint:not([data-keep]), [data-tip]')) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'tips-toggle';
+    b.addEventListener('click', () => {
+      on = !on;
+      try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (e) { /* this visit only */ }
+      apply();
+    });
+    const title = head.querySelector('h1, h2, h3');
+    (title || head).insertAdjacentElement(title ? 'afterend' : 'beforeend', b);
+    apply();
   };
   let queued = false;
-  const run = () => { queued = false; document.querySelectorAll(SELECTOR).forEach(shorten); };
+  // A screen with tips but no header strip gets the button by its first title.
+  const SCREENS = '.portal-panel, .admin-panel, .modal';
+  const addByTitle = (tip) => {
+    const screen = tip.closest(SCREENS);
+    if (!screen || screen.querySelector('.tips-toggle') || screen.dataset.tips) return;
+    const title = screen.querySelector('h2, h3');
+    if (!title) return;
+    screen.dataset.tips = '1';
+    const holder = document.createElement('div');
+    holder.className = 'panel-head tips-head';
+    title.insertAdjacentElement('beforebegin', holder);
+    holder.appendChild(title);
+    add(holder);
+  };
+  const run = () => {
+    queued = false;
+    document.querySelectorAll(HEADS).forEach(add);
+    document.querySelectorAll('.portal-main [data-tip], .admin-main [data-tip], .modal [data-tip], .modal .hint:not([data-keep])').forEach(addByTitle);
+  };
   const queue = () => { if (!queued) { queued = true; requestAnimationFrame(run); } };
   new MutationObserver(queue).observe(document.documentElement, { childList: true, subtree: true });
+  apply();
   queue();
 })();

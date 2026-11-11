@@ -244,7 +244,7 @@ async function showFirstPassword() {
     <div class="field">
       <label for="fpNew">Your new password</label>
       <input type="password" id="fpNew" autocomplete="new-password" required aria-describedby="fpNewHint">
-      <small class="hint" id="fpNewHint">At least 12 characters. A short phrase you will remember works well. Very common passwords are turned away.</small>
+      <small class="hint" data-keep id="fpNewHint">At least 12 characters. A short phrase you will remember works well. Very common passwords are turned away.</small>
     </div>
     <div class="field">
       <label for="fpAgain">Type it again</label>

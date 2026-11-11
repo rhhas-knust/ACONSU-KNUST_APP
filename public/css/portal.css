@@ -548,3 +548,9 @@ table.portal-table.hp-table th { white-space: normal; }
 .bulk-count { color: var(--ink-soft); font-weight: 600; margin-right: auto; }
 @media (max-width: 560px) { .bulk-bar .btn { flex: 1 1 100%; } }
 .pick-wrap { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; cursor: pointer; }
+
+/* Service Timer: three buttons, the link behind "Change the timer link". */
+.timer-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; max-width: 620px; margin-bottom: 12px; }
+.timer-link { max-width: 620px; margin-top: 18px; }
+.timer-link > summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; color: var(--brand); cursor: pointer; }
+.timer-link > .portal-card { margin-top: 8px; }

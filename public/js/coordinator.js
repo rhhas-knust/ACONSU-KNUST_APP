@@ -228,7 +228,7 @@ async function renderOffices(el) {
           </tbody>
         </table>
       </div>
-      <p class="tiny muted" style="margin-top:12px;">Coordinator accounts are assigned by the National Coordinator. Everyone else in your chapter, you appoint yourself under Leadership Accounts.</p>
+      <p data-tip class="tiny muted" style="margin-top:12px;">Coordinator accounts are assigned by the National Coordinator. Everyone else in your chapter, you appoint yourself under Leadership Accounts.</p>
     </div>
   `;
 }
@@ -280,7 +280,7 @@ function staffForm(existing, preselect) {
         </div>`}
       <div class="field" id="sfPasswordWrap"><label for="sfPassword">${isEdit ? 'New Password (optional)' : 'Password'}</label>
         <input type="password" id="sfPassword" minlength="12" autocomplete="new-password" ${isEdit ? '' : 'required'}>
-        <small class="hint">At least 12 characters. A short phrase works well.</small>
+        <small class="hint" data-keep>At least 12 characters. A short phrase works well.</small>
       </div>
       <div style="display:flex; gap:10px; margin-top:22px;">
         <button type="submit" class="btn btn-primary">${isEdit ? 'Save Changes' : 'Create Account'}</button>
@@ -855,7 +855,7 @@ async function renderWelfarePurseReport(el) {
           `).join('') || emptyRow(6, 'Welfare has not recorded anything yet.')}
         </tbody>
       </table>
-      <p class="tiny muted" style="margin-top:10px;">
+      <p data-tip class="tiny muted" style="margin-top:10px;">
         Who paid dues and who was helped stays with the welfare desk. You are shown the money and the evidence behind it.
       </p>
     </div>

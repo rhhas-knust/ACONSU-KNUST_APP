@@ -1459,10 +1459,21 @@ body {
 @media (prefers-reduced-motion: reduce) { .prow-chev { transition: none; } }
 
 /* Page descriptions cut to one line, "More" for the rest (main.js) */
-.desc-short:not(.desc-open) { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 0; }
-.desc-more { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0; margin: -4px 0 0; background: none; border: 0; font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--brand); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.desc-more:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
-@media print { .desc-short { display: block !important; -webkit-line-clamp: unset; } .desc-more { display: none; } }
+/* Tips (main.js, tipsToggle): explanations hidden until asked for. */
+html:not(.show-tips) .portal-main .panel-head .sub,
+html:not(.show-tips) .portal-main .panel-head p,
+html:not(.show-tips) .admin-main .panel-head p,
+html:not(.show-tips) .portal-main .hint:not([data-keep]),
+html:not(.show-tips) .admin-main .hint:not([data-keep]),
+html:not(.show-tips) .modal .hint:not([data-keep]),
+html:not(.show-tips) .portal-main [data-tip],
+html:not(.show-tips) .admin-main [data-tip],
+html:not(.show-tips) .modal [data-tip] { display: none !important; }
+.tips-toggle { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; padding: 0 10px; margin: 0; background: none; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 0.85rem; font-weight: 700; color: var(--brand); cursor: pointer; }
+.tips-toggle:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
+.panel-head > div:first-child:has(> .tips-toggle) { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.panel-head > div:first-child:has(> .tips-toggle) > .sub, .panel-head > div:first-child:has(> .tips-toggle) > p { flex-basis: 100%; }
+@media print { html:not(.show-tips) [data-tip], html:not(.show-tips) .hint, html:not(.show-tips) .panel-head p { display: block !important; } .tips-toggle { display: none; } }
 
 /* ---------- department chat (department.html#chat) ---------- */
 .dchat { margin: 28px 0; }

@@ -1009,7 +1009,7 @@ async function renderStaffAccounts() {
       <h2 style="margin:0;">Leadership Accounts (${users.length})</h2>
       <button class="btn btn-primary btn-sm" id="addStaffBtn">${locked ? '+ Add National Coordinator' : '+ Add Account'}</button>
     </div>
-    <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">
+    <p data-tip style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">
       Each account opens one portal. Give the leader their username and password, then send them the portal link below,
       they sign in there, not here.
     </p>
@@ -1098,7 +1098,7 @@ async function openStaffForm(user) {
         ${isEdit
           ? `<input type="text" value="${escapeHtml(user.username)}" disabled>`
           : '<input type="text" id="stUsername" placeholder="e.g. finance.ama" required>'}
-        ${isEdit ? '<small class="hint">Usernames cannot be changed. Delete and recreate the account if it must change.</small>' : ''}
+        ${isEdit ? '<small class="hint" data-keep>Usernames cannot be changed. Delete and recreate the account if it must change.</small>' : ''}
       </div>
       <div class="field"><label>Which portal does this account open?</label>
         <select id="stRole" ${isEdit ? '' : 'required'}>
@@ -1472,7 +1472,7 @@ async function renderNotifications() {
     <h2 style="margin-bottom:20px;">Notifications</h2>
     <div class="upload-form">
       <h3 style="margin-bottom:14px;">Send an Announcement</h3>
-      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:14px;">This posts to everyone's in-app notification feed and sends a real push alert to anyone who has enabled push notifications. Members see it for 2 days, then it leaves their feed; it stays in the history below.</p>
+      <p data-tip style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:14px;">This posts to everyone's in-app notification feed and sends a real push alert to anyone who has enabled push notifications. Members see it for 2 days, then it leaves their feed; it stays in the history below.</p>
       <form id="notifForm">
         <div class="field"><label>Title</label><input type="text" id="notifTitle" required placeholder="e.g. Service moved to 9AM"></div>
         <div class="field"><label>Message</label><textarea id="notifBody" required placeholder="Short, clear message..."></textarea></div>
@@ -1629,7 +1629,7 @@ async function renderGroupsAdmin() {
       <h2 style="margin:0;">Groups (${groups.length})</h2>
       <button class="btn btn-primary btn-sm" id="newGroupBtn">+ New Group</button>
     </div>
-    <p style="font-size:0.85rem; color:var(--ink-faint); margin:8px 0 18px;">The group's own leader can update meeting details and resources from the group's page. This is for creating groups and reassigning leadership.</p>
+    <p data-tip style="font-size:0.85rem; color:var(--ink-faint); margin:8px 0 18px;">The group's own leader can update meeting details and resources from the group's page. This is for creating groups and reassigning leadership.</p>
     <table>
       <thead><tr><th>Name</th><th>Type</th><th>Leader</th><th>Members</th><th>Actions</th></tr></thead>
       <tbody>
@@ -1794,7 +1794,7 @@ async function renderChatModeration() {
   }
   el.innerHTML = `
     <h2 style="margin-bottom:8px;">Community Chat Moderation</h2>
-    <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">Lock a discussion, hide a message (never destroyed, just stops showing), or restrict a member from posting further from the Members tab.</p>
+    <p data-tip style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:18px;">Lock a discussion, hide a message (never destroyed, just stops showing), or restrict a member from posting further from the Members tab.</p>
     <table>
       <thead><tr><th>Discussion</th><th>Started By</th><th>Messages</th><th>Actions</th></tr></thead>
       <tbody>
@@ -1860,7 +1860,7 @@ async function renderMembers() {
 
   el.innerHTML = `
     <h2 style="margin-bottom:20px;">Members (${members.length})</h2>
-    <p style="font-size:0.85rem; color:var(--ink-faint); margin:-12px 0 18px;">Membership status (visitor → active) is moved forward by Shepherding, not from here.</p>
+    <p data-tip style="font-size:0.85rem; color:var(--ink-faint); margin:-12px 0 18px;">Membership status (visitor → active) is moved forward by Shepherding, not from here.</p>
     <table>
       <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Level</th><th>Status</th><th>Birthday</th><th>Joined</th><th>Actions</th></tr></thead>
       <tbody>
@@ -2381,7 +2381,7 @@ async function renderMediaLibrary() {
     <h2 style="margin-bottom:20px;">Media Library</h2>
     <div class="upload-form">
       <h3 style="margin-bottom:6px;">Upload a File</h3>
-      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:16px;">
+      <p data-tip style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:16px;">
         Say where the image is going and the app puts it there for you. No second step, and no guessing later about
         which picture is doing what.
       </p>
@@ -2448,7 +2448,7 @@ async function renderMediaLibrary() {
 
     <div class="upload-form" id="heroLookEditCard">
       <h3 style="margin-bottom:6px;">Header look</h3>
-      <p style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:16px;">
+      <p data-tip style="font-size:0.85rem; color:var(--ink-faint); margin-bottom:16px;">
         Change the colour of the words over a header picture, or how much the picture is darkened, without uploading it again.
       </p>
       <div id="heroLookEditBody"></div>
@@ -3305,7 +3305,7 @@ async function renderChapterSettings() {
       ${smsSetup ? `
       <form class="form-card" id="chapterSmsForm" style="max-width:780px; margin:22px 0 0;">
         <h3 style="margin:0 0 4px;">SMS Setup</h3>
-        <p style="color:var(--ink-faint); font-size:0.88rem; margin:0 0 16px;">
+        <p data-tip style="color:var(--ink-faint); font-size:0.88rem; margin:0 0 16px;">
           Your chapter's own mNotify account. The credit is yours and the sender name is yours,
           so no other chapter can send on it or spend it. Get an API key at
           <a href="https://mnotify.com" target="_blank" rel="noopener">mnotify.com</a> and register your sender ID there first.
@@ -3318,7 +3318,7 @@ async function renderChapterSettings() {
         <div class="field">
           <label for="smsSenderId">Sender ID</label>
           <input type="text" id="smsSenderId" maxlength="11" value="${escapeHtml(smsSetup.senderId || '')}" placeholder="e.g. ACONSUKN">
-          <small class="hint">What members see as the sender. Maximum 11 characters, and it must be registered with mNotify.</small>
+          <small class="hint" data-keep>What members see as the sender. Maximum 11 characters, and it must be registered with mNotify.</small>
         </div>
         <div class="field">
           <label for="smsApiKey">API Key</label>
