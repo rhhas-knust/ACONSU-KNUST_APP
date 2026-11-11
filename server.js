@@ -67,6 +67,7 @@ const listLink = require('./lib/listLink');
 const officeAccounts = require('./lib/officeAccounts');
 const maps = require('./lib/maps');
 const recurrence = require('./lib/recurrence');
+const serviceTimer = require('./lib/serviceTimer');
 const membershipNumbers = require('./lib/membershipNumbers').create({ models });
 const { moveGlobalSetupToChapter } = require('./lib/globalMove');
 const QRCode = require('qrcode');
@@ -6013,6 +6014,32 @@ app.post('/api/executive/events', requireRole('executive'), requireCapability(CA
     res.json({ success: true, item });
   } catch (e) {
     res.status(500).json({ error: 'Could not submit this event' });
+  }
+}));
+
+// ---------- the service timer (the Church Timer app) ----------
+// The Technical Head keeps the chapter's timer link here and opens its phone
+// controller and TV screen from the portal (lib/serviceTimer.js).
+app.get('/api/executive/service-timer', requireRole('executive'), requireCapability(CAP.SERVICE_TIMER, async (req, res, { staff }) => {
+  try {
+    const chapter = await repo.getById('chapters', staff.chapterId || '');
+    const url = (chapter && chapter.serviceTimerUrl) || '';
+    res.json({ url, screens: serviceTimer.screensOf(url) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not load the timer' });
+  }
+}));
+
+app.put('/api/executive/service-timer', requireRole('executive'), requireCapability(CAP.SERVICE_TIMER, async (req, res, { staff }) => {
+  try {
+    const url = serviceTimer.cleanTimerUrl(req.body && req.body.url);
+    if (url === null) return res.status(400).json({ error: 'That is not the timer\'s web address. Copy it from the browser on the timer\'s phone screen.', field: 'url' });
+    const chapter = await repo.getById('chapters', staff.chapterId || '');
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+    await repo.patchById('chapters', chapter.id, { serviceTimerUrl: url });
+    res.json({ success: true, url, screens: serviceTimer.screensOf(url) });
+  } catch (e) {
+    res.status(500).json({ error: 'Could not save the timer link' });
   }
 }));
 
