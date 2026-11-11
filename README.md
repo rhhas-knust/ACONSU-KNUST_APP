@@ -1060,3 +1060,11 @@ Your office, Where You Stand, Your Department and Fingerprint or face sign-in we
   - Events made before this keep their hand-typed "recurring" label and their one date.
 
 `test/recurring-events.js` and `test/department-chat.js` (in `npm test`).
+
+## 58. Membership numbers are never given twice
+
+- **The cause.** A membership number was worked out as "the highest given so far, plus one": read, then written. Two acceptances at the same moment (two shepherds, or a batch being accepted while the Coordinator appointed someone) read the same highest number and both gave out the next one.
+- **The fix.** Each chapter has a counter in the database (`Counter`, key `membershipNumber:<chapter>`) that is moved on and read in one step, so no two requests can get the same number. It starts from the highest number already given, so no number on an existing card is reused (`lib/membershipNumbers.js`).
+- **Numbers already given twice are mended** when the server starts: the member who has been a member longest keeps the number, each other one gets the next free number, and the number they had is kept on their record (`previousMembershipNumbers`). The server log names each change. It changes nothing once there are no duplicates.
+
+`test/membership-numbers.js` (in `npm test`), which reproduces the old double-numbering with overlapping requests.

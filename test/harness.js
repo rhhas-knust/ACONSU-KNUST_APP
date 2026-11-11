@@ -36,6 +36,9 @@ function matches(doc, query) {
 
 function applyUpdate(doc, update) {
   if (update.$set) Object.assign(doc, update.$set);
+  if (update.$max) {
+    Object.entries(update.$max).forEach(([k, v]) => { if (doc[k] === undefined || doc[k] < v) doc[k] = v; });
+  }
   if (update.$inc) {
     Object.entries(update.$inc).forEach(([k, v]) => { doc[k] = (doc[k] || 0) + v; });
   }
@@ -169,8 +172,12 @@ function makeModel(defaults, { unique = [] } = {}) {
       applyUpdate(doc, update);
       return result(clone(doc));
     },
-    updateOne(query, update) {
-      const doc = docs.find(x => matches(x, query));
+    updateOne(query, update, opts) {
+      let doc = docs.find(x => matches(x, query));
+      if (!doc && opts && opts.upsert) {
+        doc = { _id: `oid${++counter}`, ...defaults, ...query, createdAt: createdStamp() };
+        docs.push(doc);
+      }
       if (doc) applyUpdate(doc, update);
       return Promise.resolve({ modifiedCount: doc ? 1 : 0 });
     },
@@ -194,6 +201,7 @@ function makeModel(defaults, { unique = [] } = {}) {
 }
 
 const fakeModels = {
+  Counter: makeModel({ seq: 0 }, { unique: ['key'] }),
   Chapter: makeModel({
     status: 'active', fullName: '', institution: '', location: '', address: '',
     contact: {}, payment: {}, about: {}, coordinatorStaffId: '', coordinatorName: '', createdBy: '',

@@ -67,6 +67,7 @@ const listLink = require('./lib/listLink');
 const officeAccounts = require('./lib/officeAccounts');
 const maps = require('./lib/maps');
 const recurrence = require('./lib/recurrence');
+const membershipNumbers = require('./lib/membershipNumbers').create({ models });
 const { moveGlobalSetupToChapter } = require('./lib/globalMove');
 const QRCode = require('qrcode');
 const crypto = require('crypto');
@@ -4987,14 +4988,7 @@ async function appointedMembershipFields(member) {
 // already given rather than from how many are active, so a member who moved
 // on, or was made an executive, never frees a number for someone else.
 async function nextMembershipNumber(chapterId) {
-  const prefix = `${String(chapterId).toUpperCase()}-`;
-  const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)$`);
-  const numbered = await models.Member.find({ chapterId, membershipNumber: { $regex: pattern.source } }).lean();
-  const highest = numbered.reduce((n, m) => {
-    const hit = pattern.exec(String(m.membershipNumber || ''));
-    return hit ? Math.max(n, Number(hit[1])) : n;
-  }, 0);
-  return `${prefix}${String(highest + 1).padStart(4, '0')}`;
+  return membershipNumbers.next(chapterId);
 }
 
 app.patch('/api/shepherd/members/:id/stage', requireShepherd, async (req, res) => {
@@ -9325,6 +9319,11 @@ connectDB()
     setInterval(() => resolvePendingMapLinks().catch(() => {}), 60 * 60 * 1000);
     checkBirthdaysAndNotify();
     setInterval(checkBirthdaysAndNotify, 60 * 60 * 1000); // re-check hourly in case the server started mid-day
+    // Numbers given twice before they came from one counter: mended once, the
+    // first holder keeping theirs (lib/membershipNumbers.js).
+    membershipNumbers.repairDuplicates({ log: (line) => console.log(line) })
+      .then((changed) => { if (changed.length) console.log(`Gave ${changed.length} member(s) a new membership number, as theirs was shared.`); })
+      .catch((e) => console.warn('Could not check membership numbers:', e.message));
     rollAllRepeatingEvents().catch(() => {});
     setInterval(() => rollAllRepeatingEvents().catch(() => {}), 60 * 60 * 1000); // repeating events move on to their next date
     sendDueAnnouncements();
