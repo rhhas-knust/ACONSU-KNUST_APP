@@ -176,6 +176,67 @@ async function renderExecProfile(el) {
   });
 }
 
+// ---------- the service timer ----------
+// The Church Timer is its own app: the countdown on the TV, run from a phone.
+// Here the Technical Head keeps its link and opens the right screen in one tap.
+async function renderExecServiceTimer(el) {
+  const data = await fetchJSON('/api/executive/service-timer');
+  const s = data.screens;
+  el.innerHTML = `
+    <div class="panel-head">
+      <div>
+        <h2>Service Timer</h2>
+        <p class="sub">The countdown on the TV that keeps worship, the sermon, announcements and offering on time. Run it from your phone; the TV follows at once.</p>
+      </div>
+    </div>
+    ${s ? `
+    <div class="tools-grid">
+      <section class="portal-card tool-card">
+        <h3>Run the timer</h3>
+        <p>Start, pause, add a minute or move to the next part of the service. It asks for the timer's PIN the first time.</p>
+        <a class="btn btn-primary" href="${escapeHtml(s.controller)}" target="_blank" rel="noopener">Open the controller</a>
+      </section>
+      <section class="portal-card tool-card">
+        <h3>The TV screen</h3>
+        <p>Open this on the TV, or on the laptop plugged into it, and press full screen. It needs no PIN.</p>
+        <a class="btn btn-outline" href="${escapeHtml(s.tv)}" target="_blank" rel="noopener">Open the TV screen</a>
+        <p class="tiny muted">On a smart TV, type <strong>${escapeHtml(s.tv.replace(/^https:\/\//, ''))}</strong> into its browser. On an Android TV, install the Timer TV app: open Downloader and type <strong>${escapeHtml(s.apk)}</strong>.</p>
+      </section>
+      <section class="portal-card tool-card">
+        <h3>Logo, colours and sessions</h3>
+        <p>The chapter's logo and colours on the TV, the verse at the bottom, and the parts of the service with their times.</p>
+        <a class="btn btn-outline" href="${escapeHtml(s.settings)}" target="_blank" rel="noopener">Customise the timer</a>
+      </section>
+    </div>
+    <p class="tiny muted">Before service, open the TV screen a few minutes early: the timer may take up to a minute to wake if nobody has used it for a while.</p>` : `
+    <p class="muted">The timer's link has not been added yet.</p>`}
+    <form class="portal-card" id="timerLinkForm" style="max-width:620px; margin-top:18px;">
+      <div class="field">
+        <label for="timerUrl">${s ? 'The timer\'s link' : 'Add the timer\'s link'}</label>
+        <input type="text" id="timerUrl" inputmode="url" autocomplete="off" value="${escapeHtml(data.url || '')}" placeholder="https://" required>
+        <p class="hint">The address of the timer's phone screen, as it shows in the browser. For one church among several on the same timer, it ends in /c/ and the church's code.</p>
+      </div>
+      <button type="submit" class="btn btn-primary">${s ? 'Save the link' : 'Add the link'}</button>
+      <div class="form-msg" id="timerLinkMsg" role="status"></div>
+    </form>
+  `;
+  document.getElementById('timerLinkForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById('timerLinkMsg');
+    try {
+      await fetchJSON('/api/executive/service-timer', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: document.getElementById('timerUrl').value })
+      });
+      renderExecServiceTimer(el);
+    } catch (err) {
+      msg.textContent = err.message || 'Could not save the link.';
+      msg.className = 'form-msg error';
+      document.getElementById('timerUrl').focus();
+    }
+  });
+}
+
 async function renderExecEvents(el) {
   const items = await fetchJSON('/api/executive/events');
   el.innerHTML = `
@@ -1139,7 +1200,8 @@ const EXEC_PANELS = [
   { key: 'attendance',       label: 'Attendance',          capability: 'department.attendance', render: renderExecDeptAttendance },
   { key: 'announce',         label: 'Message Department',  capability: 'announce.department',  render: renderExecAnnounce },
   { key: 'bibleStudies',     label: 'Bible Studies',       capability: 'bibleStudies',         render: renderExecBibleStudies },
-  { key: 'events',           label: 'My Events',           capability: 'events',               render: renderExecEvents }
+  { key: 'events',           label: 'My Events',           capability: 'events',               render: renderExecEvents },
+  { key: 'serviceTimer',     label: 'Service Timer',       capability: 'serviceTimer',         render: renderExecServiceTimer }
 ];
 
 // executive.html#treasury and #ledger open these straight away (portal.js).
@@ -1172,6 +1234,7 @@ initPortal({
       { panel: 'attendance', label: 'Take attendance' },
       { panel: 'chapterAttend', label: 'Service attendance' },
       { panel: 'announce', label: 'Message your department' },
+      { panel: 'serviceTimer', label: 'Run the service timer' },
       { panel: 'events', label: 'My events' },
       { panel: 'pulse', label: 'Chapter overview' },
       { panel: 'profile', label: 'My profile' }

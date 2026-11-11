@@ -1068,3 +1068,12 @@ Your office, Where You Stand, Your Department and Fingerprint or face sign-in we
 - **Numbers already given twice are mended** when the server starts: the member who has been a member longest keeps the number, each other one gets the next free number, and the number they had is kept on their record (`previousMembershipNumbers`). The server log names each change. It changes nothing once there are no duplicates.
 
 `test/membership-numbers.js` (in `npm test`), which reproduces the old double-numbering with overlapping requests.
+
+## 59. The service timer in the Technical Head's portal
+
+- **The Church Timer** (its own app and repository, `rhhas-knust/Church-Timer`) runs the countdown on the TV during services, controlled from a phone. The Technical Head now has a **Service Timer** section in the Executive Portal (capability `serviceTimer`, granted to `technical_head`).
+- They paste the timer's link once (the address of its phone screen; for one church among several on the same timer, the `/c/<code>` link). It is kept on the chapter (`serviceTimerUrl`, https only; a link to one of its screens is taken back to the timer itself, `lib/serviceTimer.js`).
+- From then on the section has one tap each for **the controller** (asks for the timer's PIN), **the TV screen** (`/tv`, no PIN; with what to type on a smart TV and how to install the Android TV app from `/apk`) and **customising** the logo, colours and sessions (`/settings`).
+- `GET|PUT /api/executive/service-timer`. The timer's PIN stays in the timer app (`CONTROLLER_PIN`); nothing about it is kept here.
+
+`test/service-timer.js` (in `npm test`).
