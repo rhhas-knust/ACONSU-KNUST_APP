@@ -35,7 +35,7 @@ const { fakeModels } = require('./harness.js');
     n += 1;
     const f = new FormData();
     f.append('profileImage', new Blob([Buffer.from(name)], { type: 'image/png' }), 'me.png');
-    Object.entries({ name, email: `n${n}@example.com`, phone: `02448000${String(n).padStart(2, '0')}`, password: 'secret123', chapterId: chapterId || C, consent: 'true' }).forEach(([k, v]) => f.append(k, v));
+    Object.entries({ name, email: `n${n}@example.com`, phone: `02448000${String(n).padStart(2, '0')}`, password: 'secret123', chapterId: chapterId || C, consent: 'true', joiningAs: 'visitor' }).forEach(([k, v]) => f.append(k, v));
     return (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: f })).json()).member.id;
   }
   const doc = (id) => fakeModels.Member._docs.find(m => m.id === id);
