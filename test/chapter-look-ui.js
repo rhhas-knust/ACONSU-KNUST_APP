@@ -145,6 +145,9 @@ const check = (ok, label, detail) => { console.log((ok ? '  ok   ' : '  FAIL ') 
   await ch.waitForSelector('[data-withdraw]');
   await adm.reload({ waitUntil: 'domcontentloaded' });
   await adm.waitForSelector('#adminShell', { state: 'visible' });
+  // The menu is drawn first and the chapter panels hidden once the page has
+  // asked how many chapters there are; wait for that, then look.
+  await adm.waitForSelector('[data-panel="chapterSettings"]', { state: 'hidden', timeout: 8000 }).catch(() => {});
   check(!(await adm.isVisible('[data-panel="chapterSettings"]')), 'with several chapters, the main admin\'s dashboard shows no chapter panels by default');
   await adm.click('[data-panel="chapterRequests"]');
   await adm.waitForSelector('[data-work]');
