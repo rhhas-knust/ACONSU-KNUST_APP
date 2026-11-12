@@ -54,6 +54,21 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <input type="tel" id="phone" maxlength="30" autocomplete="tel" inputmode="tel" required aria-describedby="phoneHint">
         <small class="hint" id="phoneHint" style="color:var(--ink-faint);">You sign in with this, like 024 412 3456.</small>
       </div>
+      <fieldset class="field join-as">
+        <legend>I am joining as</legend>
+        <label class="choice-line"><input type="radio" name="joiningAs" value="member" checked> <span>A member</span></label>
+        <label class="choice-line"><input type="radio" name="joiningAs" value="visitor"> <span>A visitor</span></label>
+        <label class="choice-line"><input type="radio" name="joiningAs" value="alumni"> <span>Alumni (I have finished my studies)</span></label>
+      </fieldset>
+      <div class="field" id="levelWrap">
+        <label for="level">Level (optional)</label>
+        <input type="text" id="level" maxlength="30" inputmode="numeric" placeholder="e.g. 200" aria-describedby="levelHint">
+        <small class="hint" id="levelHint" style="color:var(--ink-faint);">It moves up by itself every 1 August.</small>
+      </div>
+      <div class="field" id="gradWrap" hidden>
+        <label for="graduationYear">Year you finished (optional)</label>
+        <input type="text" id="graduationYear" inputmode="numeric" maxlength="4" placeholder="e.g. 2021">
+      </div>
       <div class="field">
         <label for="chapterId">ACONSU chapter</label>
         <select id="chapterId" required>
@@ -82,7 +97,6 @@ document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
         <small class="hint" id="emailHint" style="color:var(--ink-faint);">Only if you want to sign in with it too, or get a password reset by email.</small>
       </div>
       <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 12px;">Next you will add a photo of yourself. What you study, your hall and your birthday can wait for your profile.</p>
-      <p style="font-size:0.82rem; color:var(--ink-faint); margin:4px 0 18px;">Creating an account makes you a <strong>visitor</strong>. The Shepherding team will follow up and accept you as an official member.</p>
       <label class="consent-line"><input type="checkbox" id="agree" required>
         <span>I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms of use</a> and have read the <a href="/privacy.html" target="_blank" rel="noopener">Privacy policy</a>. I understand that holding an account shows a religious affiliation, and I agree to it being recorded. If I am under 18, a parent or guardian agrees.</span></label>
       <button type="submit" class="btn btn-primary btn-block" id="registerBtn">Create Account</button>

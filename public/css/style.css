@@ -1523,3 +1523,7 @@ html:not(.show-tips) .modal [data-tip] { display: none !important; }
 .events-past { margin-top: 24px; }
 .events-past > summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; color: var(--brand); cursor: pointer; }
 .events-past > .grid { margin-top: 12px; }
+
+/* Sign-up: joining as a member, a visitor or one of the alumni. */
+.join-as { border: 0; padding: 0; margin: 0 0 16px; min-width: 0; }
+.join-as legend { font-weight: 600; margin: 0 0 4px; padding: 0; }

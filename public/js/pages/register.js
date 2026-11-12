@@ -43,6 +43,14 @@ function toggleCode() {
   document.getElementById('codeSignupSwitch').textContent = withCode ? 'Choose a password instead' : 'No password? Get a code by text instead';
 }
 document.getElementById('codeSignupSwitch').addEventListener('click', toggleCode);
+
+// Alumni give the year they finished instead of a level.
+const joiningAs = () => (document.querySelector('input[name="joiningAs"]:checked') || {}).value || 'member';
+document.querySelectorAll('input[name="joiningAs"]').forEach((r) => r.addEventListener('change', () => {
+  const alumni = joiningAs() === 'alumni';
+  document.getElementById('levelWrap').hidden = alumni;
+  document.getElementById('gradWrap').hidden = !alumni;
+}));
 document.getElementById('sendSignupCode').addEventListener('click', async () => {
   const msg = document.getElementById('registerMsg');
   try {
@@ -88,6 +96,9 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     formData.append('password', withCode ? '' : document.getElementById('password').value);
     if (withCode) formData.append('smsCode', v('signupCode'));
     formData.append('consent', 'true');
+    formData.append('joiningAs', joiningAs());
+    if (joiningAs() === 'alumni') formData.append('graduationYear', v('graduationYear'));
+    else formData.append('level', v('level'));
     // fetchJSON attaches an X-Chapter-Id header automatically; multipart
     // bodies must not get a manual Content-Type (the browser sets the
     // multipart boundary itself), so this call intentionally passes none.

@@ -1084,3 +1084,16 @@ Your office, Where You Stand, Your Department and Fingerprint or face sign-in we
 - Hidden until Tips: a screen's opening line (`.panel-head .sub` / `p`), field hints (`.hint`), and anything marked `data-tip`. A rule someone has to follow (a password's length, a sender name's 11 characters, a ledger category) is marked `data-keep` and always shows; so do error and success messages.
 - The Service Timer is three buttons (Controller, TV screen, Customise), with the link behind "Change the timer link".
 - Printing a screen prints its explanations too.
+
+## 61. Joining as a member, a visitor or one of the alumni; the level moves up each August
+
+- **Sign-up asks "I am joining as": a member (chosen already), a visitor, or alumni** (finished my studies).
+  - **A member** is in at once: stage `active`, with their membership number.
+  - **A visitor** starts as a visitor, as everyone used to, for Shepherding to receive.
+  - **Alumni** are alumni at once (`alumni`, `registeredAsAlumni`), give the year they finished, and get a number; no review to go through.
+  - A sign-up that says nothing (an older app) is a member. Nothing else can be chosen.
+  - Shepherding can still move anyone later (Members, Change stage), for instance a member who is really a visitor.
+- **The level moves up by itself every 1 August** (`lib/studyYear.js`). Each member records the academic year their level was true for (`levelAcademicYear`, set at sign-up and whenever the level is edited). Twice a day the server moves levels on by the years since: "200", "Level 200" and "L200" become 300, "Year 2" becomes "Year 3", up to 600 or Year 6. The old level is kept in the academic history. A level it cannot read ("Final year") is left alone, alumni are not moved, and a level from before this was added starts counting from now rather than jumping.
+- Sign-up also asks for the level (optional), so it can start counting.
+
+`test/signup-kinds.js` (in `npm test`); `test/smoke.js` follows visitors through being received.
