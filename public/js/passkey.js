@@ -109,10 +109,10 @@
     el.innerHTML = `
       <section class="form-card passkey-card" aria-labelledby="passkeyTitle">
         <h2 id="passkeyTitle">Fingerprint or face sign-in</h2>
-        <p class="muted">Sign in to the app, and to your office's portal if you hold one, with this phone's fingerprint or face instead of typing your password. Your fingerprint and face stay on your phone; ACONSU never sees them.</p>
+        <p data-tip class="muted">Sign in to the app, and to your office's portal if you hold one, with this phone's fingerprint or face instead of typing your password. Your fingerprint and face stay on your phone; ACONSU never sees them.</p>
         ${keys.length ? `<ul class="passkey-list">${keys.map((k) => `<li><span><strong>${escapeHtml(k.deviceName || 'Device')}</strong><small class="muted">Set up ${escapeHtml(formatDate(k.createdAt))}${k.lastUsedAt ? `, last used ${escapeHtml(formatDate(k.lastUsedAt))}` : ''}</small></span><button type="button" class="btn btn-outline btn-sm" data-remove-passkey="${escapeHtml(k.id)}">Remove</button></li>`).join('')}</ul>` : ''}
         <button type="button" class="btn btn-primary" id="addPasskeyBtn">${keys.length ? 'Set up on this device too' : 'Set up on this phone'}</button>
-        ${built ? '' : '<p class="tiny muted">This device may not have a fingerprint reader or face unlock. It can still use a phone nearby or a security key.</p>'}
+        ${built ? '' : '<p data-tip class="tiny muted">This device may not have a fingerprint reader or face unlock. It can still use a phone nearby or a security key.</p>'}
         <p class="form-msg" id="passkeyMsg" role="status"></p>
       </section>`;
     const msg = el.querySelector('#passkeyMsg');

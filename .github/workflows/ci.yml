@@ -83,9 +83,20 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      # --with-deps also fetches system fonts from Ubuntu's package mirror. When
+      # that mirror is down (it was, for hours, on 11 Nov 2026) the job used to
+      # fail before running a single check. GitHub's ubuntu-24.04 image already
+      # carries Chromium's libraries, so after two tries this installs Chromium
+      # alone and says so, rather than turning the build red over fonts.
       - name: Install Playwright and its Chromium
         run: |
           npm install --no-save playwright@1.56.1
-          npx playwright install --with-deps chromium
+          for attempt in 1 2; do
+            if npx playwright install --with-deps chromium; then exit 0; fi
+            echo "Installing Chromium's system packages failed (attempt $attempt); refreshing the package lists."
+            sudo apt-get update || true
+          done
+          echo "::warning::Ubuntu's package mirror could not be reached; installing Chromium without its extra system packages."
+          npx playwright install chromium
       - name: Run the browser suite
         run: node test/ux.js

@@ -86,7 +86,6 @@ window.AconsuDeptChat = (function () {
     const { isHead, threads } = data;
     el.innerHTML = `
       <h2>Department chat</h2>
-      <p class="muted dchat-who">Only ${escapeHtml(data.department.name)}'s members and its head see this.</p>
       ${data.canPost
         ? composeHtml('dchatBody', 'Message to the department', 'Write to the department', 'Send', 'id="dchatNew"')
         : '<p class="muted">Your posting has been restricted, so you can read but not post.</p>'}

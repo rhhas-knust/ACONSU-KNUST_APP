@@ -58,7 +58,7 @@ window.PortalAccount = (function () {
           <dt>Term</dt><dd>${esc(termLine(a))}</dd>
           <dt>Password</dt><dd>${a.passwordChangedAt ? `Last changed ${esc(day(a.passwordChangedAt))}` : 'Still the starting password'}</dd>
         </dl>
-        <p class="tiny muted">When your term ends the account stops working until your Chapter Coordinator renews it or hands the office to the next person.</p>
+        <p data-tip class="tiny muted">When your term ends the account stops working until your Chapter Coordinator renews it or hands the office to the next person.</p>
       </div>
       <div id="passkeyCardSlot"></div>
       <div class="portal-card">
@@ -68,14 +68,14 @@ window.PortalAccount = (function () {
             <input type="password" id="pwCurrent" autocomplete="current-password" required></div>
           <div class="field"><label for="pwNew">Your new password</label>
             <input type="password" id="pwNew" autocomplete="new-password" required aria-describedby="pwRules">
-            <small class="hint">Use a phrase you can remember, with a few words. Anything of ${MIN} characters or more can work; very common passwords are turned away.</small></div>
+            <small class="hint" data-keep>Use a phrase you can remember, with a few words. Anything of ${MIN} characters or more can work; very common passwords are turned away.</small></div>
           <div class="field"><label for="pwAgain">Type the new password again</label>
             <input type="password" id="pwAgain" autocomplete="new-password" required></div>
           <ul class="of-check" id="pwRules" aria-live="polite"></ul>
           <div class="of-actions"><button class="btn btn-primary" type="submit">Change my password</button></div>
           <div class="form-msg" id="pwMsg" role="alert"></div>
         </form>
-        <p class="tiny muted">Changing it signs you out of every other phone or computer, so anyone else who had your password loses their way in.</p>
+        <p data-tip class="tiny muted">Changing it signs you out of every other phone or computer, so anyone else who had your password loses their way in.</p>
       </div>
       <div class="portal-card" id="secondStepCard" aria-live="polite"></div>
       <div class="portal-card">
