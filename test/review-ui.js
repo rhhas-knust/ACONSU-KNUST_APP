@@ -29,7 +29,7 @@ const { chromium } = require('playwright');
     n += 1;
     const f = new FormData();
     f.append('profileImage', new Blob([Buffer.from(name)], { type: 'image/png' }), 'p.png');
-    Object.entries({ name, email: `u${n}@example.com`, phone: `02448000${String(n).padStart(2, '0')}`, password: 'secret123', chapterId: C, consent: 'true' }).forEach(([k, v]) => f.append(k, v));
+    Object.entries({ name, email: `u${n}@example.com`, phone: `02448000${String(n).padStart(2, '0')}`, password: 'secret123', chapterId: C, consent: 'true', joiningAs: 'visitor' }).forEach(([k, v]) => f.append(k, v));
     return (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: f })).json()).member.id;
   };
   const shepId = await member('Shepherd Lead');

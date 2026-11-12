@@ -44,11 +44,10 @@ function toggleCode() {
 }
 document.getElementById('codeSignupSwitch').addEventListener('click', toggleCode);
 
-// Alumni give the year they finished instead of a level.
+// Alumni can give the year they finished.
 const joiningAs = () => (document.querySelector('input[name="joiningAs"]:checked') || {}).value || 'member';
 document.querySelectorAll('input[name="joiningAs"]').forEach((r) => r.addEventListener('change', () => {
   const alumni = joiningAs() === 'alumni';
-  document.getElementById('levelWrap').hidden = alumni;
   document.getElementById('gradWrap').hidden = !alumni;
 }));
 document.getElementById('sendSignupCode').addEventListener('click', async () => {
@@ -98,7 +97,6 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
     formData.append('consent', 'true');
     formData.append('joiningAs', joiningAs());
     if (joiningAs() === 'alumni') formData.append('graduationYear', v('graduationYear'));
-    else formData.append('level', v('level'));
     // fetchJSON attaches an X-Chapter-Id header automatically; multipart
     // bodies must not get a manual Content-Type (the browser sets the
     // multipart boundary itself), so this call intentionally passes none.

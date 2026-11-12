@@ -1094,6 +1094,6 @@ Your office, Where You Stand, Your Department and Fingerprint or face sign-in we
   - A sign-up that says nothing (an older app) is a member. Nothing else can be chosen.
   - Shepherding can still move anyone later (Members, Change stage), for instance a member who is really a visitor.
 - **The level moves up by itself every 1 August** (`lib/studyYear.js`). Each member records the academic year their level was true for (`levelAcademicYear`, set at sign-up and whenever the level is edited). Twice a day the server moves levels on by the years since: "200", "Level 200" and "L200" become 300, "Year 2" becomes "Year 3", up to 600 or Year 6. The old level is kept in the academic history. A level it cannot read ("Final year") is left alone, alumni are not moved, and a level from before this was added starts counting from now rather than jumping.
-- Sign-up also asks for the level (optional), so it can start counting.
+- Sign-up stays short: the level is asked for on the profile, as before, and dated when it is saved.
 
 `test/signup-kinds.js` (in `npm test`); `test/smoke.js` follows visitors through being received.

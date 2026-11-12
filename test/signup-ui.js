@@ -42,8 +42,10 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 
   console.log('\n== signing up ==');
   await p.goto(`${BASE}/register.html`, { waitUntil: 'networkidle' });
-  const fields = await p.$$eval('#registerForm input:not([type=hidden]), #registerForm select', els => els.filter(e => e.offsetParent).map(e => e.id));
+  const fields = await p.$$eval('#registerForm input:not([type=hidden]):not([type=radio]), #registerForm select', els => els.filter(e => e.offsetParent).map(e => e.id));
   check('five things to fill in, and the box to agree', JSON.stringify(fields) === JSON.stringify(['name', 'phone', 'chapterId', 'password', 'email', 'agree']), fields);
+  const kinds = await p.$$eval('input[name="joiningAs"]', els => els.map(e => `${e.value}${e.checked ? '*' : ''}`));
+  check('and one choice: joining as a member (chosen already), a visitor or alumni', JSON.stringify(kinds) === JSON.stringify(['member*', 'visitor', 'alumni']), kinds);
   check('the email address says it is optional', /optional/i.test(await p.textContent('label[for="email"]')));
   check('no photo, programme, level, hall or birthday on the form', await p.locator('#profileImage, #programme, #level, #hostel, #birthdayMonth').count() === 0);
   check('the only chapter is chosen already', await p.inputValue('#chapterId') === 'aconsu-knust');

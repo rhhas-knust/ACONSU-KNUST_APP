@@ -190,7 +190,7 @@ const phone = require('../lib/phone');
   r = await call('ama', 'PUT', '/api/member/profile', { name: 'Ama Owusu', phone: '0201234500', email: 'Ama@Example.com', programme: 'BSc Nursing', hostel: 'Unity Hall', memberKind: 'alumni', graduationYear: '2021 ' });
   const now = amaNow();
   check('a new number, an email address, what they study and their hall are saved', r.status === 200 && now.phoneKey === '233201234500' && now.email === 'ama@example.com' && now.programme === 'BSc Nursing' && now.hostel === 'Unity Hall', now);
-  check('"finished" is recorded as a claim; the stage stays Shepherding\'s to set', now.registeredAsAlumni === true && now.graduationYear === '2021' && now.membershipStage === 'visitor', now);
+  check('"finished" on the profile is recorded as a claim; the stage stays Shepherding\'s to set', now.registeredAsAlumni === true && now.graduationYear === '2021' && now.membershipStage === 'active', now);
   r = await call('ama', 'PUT', '/api/member/profile', { name: 'Ama Owusu', email: 'abroad@example.com' });
   check('an email address another account has is refused', r.status === 400);
   r = await call('in-0244123456', 'POST', '/api/auth/login', { identifier: '020 123 4500', password: 'secret123' });
