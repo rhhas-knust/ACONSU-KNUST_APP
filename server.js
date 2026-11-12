@@ -68,6 +68,7 @@ const officeAccounts = require('./lib/officeAccounts');
 const maps = require('./lib/maps');
 const recurrence = require('./lib/recurrence');
 const serviceTimer = require('./lib/serviceTimer');
+const studyYear = require('./lib/studyYear');
 const membershipNumbers = require('./lib/membershipNumbers').create({ models });
 const { moveGlobalSetupToChapter } = require('./lib/globalMove');
 const QRCode = require('qrcode');
@@ -4895,6 +4896,7 @@ app.put('/api/shepherd/members/:id', requireShepherd, async (req, res) => {
       name: name !== undefined ? name : existing.name,
       phone: phone !== undefined ? phone : existing.phone,
       level: level !== undefined ? level : existing.level,
+      ...(level !== undefined && level !== existing.level ? { levelAcademicYear: level ? currentAcademicYearLabel() : '' } : {}),
       programme: programme !== undefined ? programme : existing.programme,
       hostel: hostel !== undefined ? hostel : existing.hostel,
       department: department !== undefined ? department : existing.department,
@@ -7905,6 +7907,7 @@ app.put('/api/admin/members/:id', requireChapterAdmin, async (req, res) => {
       name: name !== undefined ? name : existing.name,
       phone: phone !== undefined ? phone : existing.phone,
       level: level !== undefined ? level : existing.level,
+      ...(level !== undefined && level !== existing.level ? { levelAcademicYear: level ? currentAcademicYearLabel() : '' } : {}),
       programme: programme !== undefined ? programme : existing.programme,
       hostel: hostel !== undefined ? hostel : existing.hostel,
       department: department !== undefined ? department : existing.department,
@@ -9351,6 +9354,10 @@ connectDB()
     membershipNumbers.repairDuplicates({ log: (line) => console.log(line) })
       .then((changed) => { if (changed.length) console.log(`Gave ${changed.length} member(s) a new membership number, as theirs was shared.`); })
       .catch((e) => console.warn('Could not check membership numbers:', e.message));
+    // Each 1 August, every student's level moves up a year (lib/studyYear.js).
+    const rollStudyYears = () => studyYear.rollLevels({ models, log: (line) => console.log(line) }).catch((e) => console.warn('Could not move levels on:', e.message));
+    rollStudyYears();
+    setInterval(rollStudyYears, 6 * 60 * 60 * 1000);
     rollAllRepeatingEvents().catch(() => {});
     setInterval(() => rollAllRepeatingEvents().catch(() => {}), 60 * 60 * 1000); // repeating events move on to their next date
     sendDueAnnouncements();

@@ -109,6 +109,8 @@ function readPublic(f) {
     fd.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
     fd.append('name', name); fd.append('email', email);
     fd.append('password', 'secret123'); fd.append('chapterId', chapterId);
+    // As a visitor, so the suite can follow people through being received.
+    fd.append('joiningAs', 'visitor');
     const res = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: fd })).json();
     return res.member.id;
   }
@@ -392,6 +394,9 @@ function readPublic(f) {
   regForm.append('chapterId', chapterId);
   regForm.append('programme', 'BSc. Computer Science');
   regForm.append('hostel', 'Hostel A');
+  // Chooses "a visitor", so the rest of this suite can follow someone through
+  // being received; a plain sign-up is a member at once (below).
+  regForm.append('joiningAs', 'visitor');
   const regRes = await fetch(BASE + '/api/auth/register', { method: 'POST', body: regForm });
   const regData = await regRes.json();
   jars.member = (regRes.headers.getSetCookie ? regRes.headers.getSetCookie() : []).map(c => c.split(';')[0]).join('; ');
@@ -408,7 +413,14 @@ function readPublic(f) {
   const memberId = regData.member.id;
   const meRow = r.data.find(m => m.memberId === memberId);
   check('member appears in the shepherding list', !!meRow, r.data.map(m => m.name));
-  check('new registration starts as a visitor', meRow && meRow.membershipStage === 'visitor', meRow);
+  check('someone who joins as a visitor starts as a visitor', meRow && meRow.membershipStage === 'visitor' && !meRow.membershipNumber, meRow);
+  const plainForm = new FormData();
+  plainForm.append('profileImage', new Blob([Buffer.from('p')], { type: 'image/png' }), 'p.png');
+  Object.entries({ name: 'Kwesi Member', email: 'kwesi.member@test.com', password: 'secret123', phone: '0244123499', chapterId, level: 'Level 200' }).forEach(([k, v]) => plainForm.append(k, v));
+  const plain = await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: plainForm })).json();
+  const plainDoc = fakeModels.Member._docs.find(m => m.id === plain.member.id);
+  check('a sign-up that says nothing else is a member at once, with a membership number', plainDoc && plainDoc.membershipStage === 'active' && /-\d{4}$/.test(plainDoc.membershipNumber || ''), plainDoc && { stage: plainDoc.membershipStage, number: plainDoc.membershipNumber });
+  check('and the level they gave is dated to this academic year', plainDoc && plainDoc.level === 'Level 200' && /^\d{4}\/\d{4}$/.test(plainDoc.levelAcademicYear || ''), plainDoc && plainDoc.levelAcademicYear);
 
   r = await call('shep', 'POST', '/api/shepherd/attendance', {
     date: '2026-08-09', serviceType: 'sunday', visitorCount: 4,
@@ -2485,27 +2497,24 @@ function readPublic(f) {
     alForm.append('email', 'grace.returned@test.com');
     alForm.append('password', 'secret123');
     alForm.append('chapterId', chapterId);
-    alForm.append('memberKind', 'alumni');
+    alForm.append('joiningAs', 'alumni');
     alForm.append('graduationYear', '2019');
     const alRes = await fetch(BASE + '/api/auth/register', { method: 'POST', body: alForm });
     const alData = await alRes.json();
     check('someone can register as an alumnus', alRes.status === 200, alData);
     const graceId = alData.member.id;
 
-    // The claim is recorded. The stage is NOT granted by saying it — otherwise
-    // Alumni Connect, which spans the union, is a directory anyone can write
-    // themselves into.
+    // Alumni are alumni from the moment they sign up, with no review to wait
+    // through; Shepherding can still move someone who was not.
     r = await call('shep', 'GET', '/api/shepherd/members');
     const grace = r.data.find(m => m.memberId === graceId);
     check('shepherding can see they said they had graduated', grace && grace.registeredAsAlumni === true, grace);
     check('and the year they gave', grace && grace.graduationYear === '2019', grace);
-    check('but the stage is still theirs to confirm, not self-granted',
-      grace && grace.membershipStage === 'visitor', grace && grace.membershipStage);
+    check('and they are alumni at once, without going through the review',
+      grace && grace.membershipStage === 'alumni', grace && grace.membershipStage);
 
     r = await call('grace', 'POST', '/api/auth/login', { email: 'grace.returned@test.com', password: 'secret123' });
     check('the alumnus can sign in', r.status === 200, r.data);
-    r = await call('grace', 'PUT', '/api/member/alumni-profile', { listed: true, profession: 'Architect' });
-    check('and cannot list themselves until shepherding confirms it', r.status === 403, r.data);
 
     r = await call('shep', 'PATCH', `/api/shepherd/members/${graceId}/stage`, { stage: 'alumni' });
     check('shepherding confirms them as alumni', r.status === 200, r.data);
@@ -2589,6 +2598,7 @@ function readPublic(f) {
     newbieForm.append('email', 'kojo.newcomer@test.com');
     newbieForm.append('password', 'secret123');
     newbieForm.append('chapterId', chapterId);
+    newbieForm.append('joiningAs', 'visitor');
     await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: newbieForm })).json();
     r = await call('newbie', 'POST', '/api/auth/login', { email: 'kojo.newcomer@test.com', password: 'secret123' });
     check('a brand-new visitor can sign in', r.status === 200, r.data);

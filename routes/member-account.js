@@ -72,6 +72,8 @@ async function portalsOf(member) {
   return out;
 }
 
+const membershipNumbers = require('../lib/membershipNumbers').create({ models });
+
 function registerMemberAccountRoutes(app, deps) {
   const {
     DUMMY_HASH, POLICY_VERSION, compressIfImage, currentAcademicYearLabel, endSession, escapeHtmlForEmail,
@@ -153,21 +155,30 @@ function registerMemberAccountRoutes(app, deps) {
       // No password at all when they proved the number with a code instead; they
       // sign in with a code, and can choose a password on their profile later.
       const passwordHash = byCode ? '' : await bcrypt.hash(password, 10);
+      // Joining as a member (the default), a visitor, or one of the alumni.
+      // Members and alumni are in at once, with their membership number;
+      // Shepherding can move anyone later. The old way had everyone start as a
+      // visitor and wait to be accepted and activated.
+      const joiningAs = ['member', 'visitor', 'alumni'].includes(String(req.body.joiningAs || '')) ? String(req.body.joiningAs)
+        : String(memberKind || '') === 'alumni' ? 'alumni' : 'member';
+      const stage = joiningAs === 'member' ? 'active' : joiningAs;
+      const membershipNumber = joiningAs === 'visitor' ? '' : await membershipNumbers.next(chapter.id);
+      const levelText = String(level || '').trim().slice(0, 30);
       const member = await repo.create('members', {
         chapterId: chapter.id,
         name, ...(email ? { email } : {}), passwordHash,
-        phone: String(phone).trim().slice(0, 40), phoneKey, level: level || '', programme: programme || '', hostel: hostel || '',
+        phone: String(phone).trim().slice(0, 40), phoneKey, level: joiningAs === 'alumni' ? '' : levelText,
+        levelAcademicYear: levelText && joiningAs !== 'alumni' ? currentAcademicYearLabel() : '',
+        programme: programme || '', hostel: hostel || '',
         department: department || '',
-        // Someone who has finished their studies says so when they sign up, and
-        // the form asks them for a graduation year instead of a hostel. The
-        // CLAIM is recorded; the stage is not granted here. Stage is
-        // Shepherding's to set everywhere else in this system, and letting it be
-        // self-declared would make Alumni Connect - which is union-wide - a
-        // directory anyone could write themselves into.
-        registeredAsAlumni: String(memberKind || '') === 'alumni',
+        // Someone who has finished their studies says so when they sign up and
+        // is one of the alumni from then on. Shepherding can move them if they
+        // were not (the Members list, Change stage).
+        registeredAsAlumni: joiningAs === 'alumni',
         graduationYear: String(graduationYear || '').replace(/[^0-9]/g, '').slice(0, 4),
         profileImageFileId,
-        membershipStage: 'visitor',
+        membershipStage: stage,
+        ...(membershipNumber ? { membershipNumber } : {}),
         qrToken: crypto.randomBytes(16).toString('hex'),
         birthdayMonth: month, birthdayDay: day,
         consentedAt: new Date(), consentVersion: POLICY_VERSION
@@ -380,6 +391,7 @@ function registerMemberAccountRoutes(app, deps) {
         ...(req.body.memberKind !== undefined ? { registeredAsAlumni: String(req.body.memberKind) === 'alumni' } : {}),
         ...(req.body.graduationYear !== undefined ? { graduationYear: String(req.body.graduationYear).replace(/[^0-9]/g, '').slice(0, 4) } : {}),
         level,
+        ...(level !== existing.level ? { levelAcademicYear: level ? currentAcademicYearLabel() : '' } : {}),
         programme: req.body.programme !== undefined ? req.body.programme : existing.programme,
         hostel,
         academicHistory,
