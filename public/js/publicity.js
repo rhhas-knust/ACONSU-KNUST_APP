@@ -373,7 +373,7 @@ async function openVolunteersModal(event) {
     fetchJSON('/api/admin/members')
   ]);
   showModal(`
-    <h3>Volunteers: ${escapeHtml(event.title)}</h3>
+    <h3>Volunteers: ${escapeHtml(event.title)}${event.repeats ? `, ${escapeHtml(shortDate(event.date))}` : ''}</h3>
     <form id="assignForm" class="inline-form">
       <div class="field"><label>Member</label>
         <select id="volMember">${members.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}</select>

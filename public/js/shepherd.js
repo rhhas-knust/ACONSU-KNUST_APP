@@ -160,7 +160,7 @@ async function renderAttendance(el) {
 
     ${PORTAL.canEdit ? `
       <div class="portal-card">
-        <p style="margin:0;">On Sunday, use <button type="button" class="link-btn" id="toCheckinBtn">Sunday Check-In</button> at the door: one tap per person, on as many phones as you like. This register is for corrections afterwards, and for marking people excused.</p>
+        <p style="margin:0;">On Sunday, use <button type="button" class="link-btn" id="toCheckinBtn">Sunday Check-In</button> at the door. This register is for corrections and excused.</p>
       </div>
     ` : ''}
 
