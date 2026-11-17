@@ -1,4 +1,10 @@
 const { tellGuest, amountOf, NETWORKS } = require('./giving');
+const recurrence = require('../lib/recurrence');
+
+// A repeating event's volunteers belong to one time of it: the series date it
+// is on now. A one-off event's belong to it, as they always have.
+const occurrenceOf = (event) => (event && recurrence.isRepeating(event) ? (event.occurrence || event.date || '') : '');
+const forThisTime = (event) => (a) => !occurrenceOf(event) || a.occurrenceDate === occurrenceOf(event);
 
 // Scheduling, milestones, welfare and giving are grouped here because they
 // share the same member/staff chapter boundary.
@@ -30,7 +36,7 @@ function registerMemberServiceRoutes(app, deps) {
       const event = await repo.getById('events', req.params.id);
       const chapterId = await resolveViewerChapterId(req);
       if (!event || !chapterId || event.chapterId !== chapterId) return res.status(404).json({ error: 'Event not found' });
-      res.json(await repo.getAll('volunteerAssignments', { eventId: event.id, chapterId }));
+      res.json((await repo.getAll('volunteerAssignments', { eventId: event.id, chapterId })).filter(forThisTime(event)));
     } catch (e) { res.status(500).json({ error: 'Could not load volunteer assignments' }); }
   });
   app.post('/api/events/:id/volunteers', requireContentManager, async (req, res) => {
@@ -42,12 +48,15 @@ function registerMemberServiceRoutes(app, deps) {
       if (!VOLUNTEER_ROLES.includes(role) || !memberId) return res.status(400).json({ error: 'A role and a member are required' });
       const member = await repo.getById('members', memberId, filter);
       if (!member) return res.status(400).json({ error: 'That member is not in this chapter' });
-      const assignments = await repo.getAll('volunteerAssignments', { chapterId: event.chapterId, memberId });
+      const allAssignments = await repo.getAll('volunteerAssignments', { chapterId: event.chapterId, memberId });
       const events = await repo.getAll('events', {
         chapterId: event.chapterId,
-        id: { $in: assignments.map((a) => a.eventId).concat(event.id) }
+        id: { $in: allAssignments.map((a) => a.eventId).concat(event.id) }
       });
       const byId = Object.fromEntries(events.map((e) => [e.id, e]));
+      // Only what they are down for now: another week of a repeating event is
+      // not a clash.
+      const assignments = allAssignments.filter((a) => byId[a.eventId] && forThisTime(byId[a.eventId])(a));
       const currentAt = eventDateTime(event);
       const sameSlot = assignments.find((a) => {
         const other = byId[a.eventId];
@@ -63,7 +72,7 @@ function registerMemberServiceRoutes(app, deps) {
       if (sameDayLoad >= 2 && req.body.force !== true && req.body.force !== 'true') {
         return res.status(409).json({ error: 'This member already has multiple assignments on this date (fatigue prevention).', sameDayAssignments: sameDayLoad });
       }
-      const assignment = await repo.create('volunteerAssignments', { chapterId: event.chapterId, eventId: event.id, role, memberId, memberName: member.name, status: 'assigned', assignedBy: actorName(req) }, 'vol');
+      const assignment = await repo.create('volunteerAssignments', { chapterId: event.chapterId, eventId: event.id, role, memberId, memberName: member.name, status: 'assigned', assignedBy: actorName(req), occurrenceDate: occurrenceOf(event) || event.date || '' }, 'vol');
       res.json({ success: true, item: assignment });
     } catch (e) { res.status(500).json({ error: 'Could not create this assignment' }); }
   });
@@ -76,7 +85,11 @@ function registerMemberServiceRoutes(app, deps) {
       const chapterId = await resolveViewerChapterId(req);
       const items = await repo.getAll('volunteerAssignments', { memberId: req.session.memberId, chapterId });
       const events = await repo.getAll('events', { id: { $in: items.map((i) => i.eventId) }, chapterId });
-      res.json(items.map((i) => ({ ...i, event: events.find((e) => e.id === i.eventId) || null })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+      // A repeating event's past weeks are not asked again.
+      res.json(items
+        .map((i) => ({ ...i, event: events.find((e) => e.id === i.eventId) || null }))
+        .filter((i) => !i.event || forThisTime(i.event)(i))
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
     } catch (e) { res.status(500).json({ error: 'Could not load your assignments' }); }
   });
   app.patch('/api/member/volunteer-assignments/:id', requireMember, async (req, res) => {

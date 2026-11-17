@@ -3051,7 +3051,7 @@ async function loadPaymentsSetup() {
   try {
     const s = await fetchJSON('/api/admin/payments-setup');
     box.innerHTML = s.provider === 'manual'
-      ? `<p><strong>Manual.</strong> People, with or without an account, send money with their own MoMo or bank app to the details below and say what they sent on the Give page. Finance (or Welfare, for tithe) checks the account and confirms what arrived. No payment provider is used, so there is nothing to connect.</p>${s.problem ? `<p class="hint">${escapeHtml(s.problem)}</p>` : ''}`
+      ? `<p><strong>Manual.</strong></p><p data-tip>People, with or without an account, send money with their own MoMo or bank app to the details below and say what they sent on the Give page. Finance (or Welfare, for tithe) checks the account and confirms what arrived. No payment provider is used, so there is nothing to connect.</p>${s.problem ? `<p class="hint">${escapeHtml(s.problem)}</p>` : ''}`
       : `<p><strong>${escapeHtml(s.provider)}</strong>, ${s.mode === 'live' ? 'live: real money' : `sandbox: test payments only (live needs ${escapeHtml(s.liveNeeds)} on the server)`}.</p>
          ${s.webhookUrl ? `<p>Paste this address into the provider's dashboard, for its payment notifications:</p><p class="payments-url"><code>${escapeHtml(s.webhookUrl)}</code></p>` : '<p class="hint">The app has no web address set yet, so there is no notification address to give the provider.</p>'}`;
   } catch (e) {

@@ -149,7 +149,7 @@ window.PortalAccount = (function () {
   function setupFlow(host, after) {
     host.innerHTML = `
       <h3>Set up your second step</h3>
-      <p>${stepIntro}</p>
+      <p data-tip>${stepIntro}</p>
       <ol class="ss-steps">
         <li>Install an authenticator app on your phone if you do not have one.</li>
         <li>Type your password here, then scan the picture that appears with the app.</li>
@@ -213,7 +213,7 @@ window.PortalAccount = (function () {
           ? '<strong>Your account needs a second step before it can be used.</strong>'
           : s.daysLeft !== null ? `<strong>Your account needs a second step: ${s.daysLeft} day${s.daysLeft === 1 ? '' : 's'} left to set it up.</strong> After that, signing in opens only this screen until you do.`
             : '<strong>Your account can reach records that need protecting.</strong> Set up a second step now; it will soon be required.'}</div>` : ''}
-        <p>${stepIntro}</p>
+        <p data-tip>${stepIntro}</p>
         <div class="of-actions"><button type="button" class="btn btn-primary" id="ssStart">Set it up</button></div>${log}`;
       host.querySelector('#ssStart').addEventListener('click', () => setupFlow(host, () => secondStepCard(host)));
       return;

@@ -1097,3 +1097,8 @@ Your office, Where You Stand, Your Department and Fingerprint or face sign-in we
 - Sign-up stays short: the level is asked for on the profile, as before, and dated when it is saved.
 
 `test/signup-kinds.js` (in `npm test`); `test/smoke.js` follows visitors through being received.
+
+## 62. Volunteers for each time of a repeating event; the last long notes behind Tips
+
+- A repeating event's volunteers are asked for one time of it (`occurrenceDate` on the assignment, its series date): next week starts with nobody, a volunteer is not asked again for a week that has gone or was called off, and serving the same event in another week is not a clash. A one-off event's volunteers are as they were. The Publicity volunteers window names the date.
+- The giving setup note (admin), the two-step sign-in note (Account) and the Sunday register note (Shepherding) are behind Tips or cut to one line.

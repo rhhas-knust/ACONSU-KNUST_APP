@@ -77,6 +77,19 @@ const rec = require('../lib/recurrence');
   check('this time fills up', r.status === 400 && /fully booked/.test(r.data.error), r.data);
   check('each registration says which date it is for', fakeModels.EventRegistration._docs.every(g => g.occurrenceDate === today));
 
+  console.log('\n== volunteers, each time afresh ==');
+  const vf = new FormData();
+  vf.append('profileImage', new Blob([Buffer.from('v')], { type: 'image/png' }), 'v.png');
+  Object.entries({ name: 'Kojo Usher', email: 'kojo.usher@example.com', phone: '0244700099', password: 'a-good-long-password', chapterId: C, consent: 'true' }).forEach(([k, v]) => vf.append(k, v));
+  const usher = (await (await fetch(BASE + '/api/auth/register', { method: 'POST', body: vf })).json()).member.id;
+  await call('usher', 'POST', '/api/auth/login', { email: 'kojo.usher@example.com', password: 'a-good-long-password' });
+  r = await call('admin', 'POST', `/api/events/${id}/volunteers`, { memberId: usher, role: 'usher' });
+  check('a volunteer is asked for this time', r.status === 200 && r.data.item.occurrenceDate === today, r.data);
+  r = await call('usher', 'GET', `/api/events/${id}/volunteers`);
+  check('and listed for it', Array.isArray(r.data) && r.data.length === 1, r.data);
+  r = await call('usher', 'GET', '/api/member/volunteer-assignments');
+  check('and asked on their profile', Array.isArray(r.data) && r.data.some(a => a.eventId === id), r.data);
+
   console.log('\n== calling one off, and moving one ==');
   r = await call('admin', 'POST', `/api/admin/events/${id}/move-next`, { date: day(1), time: '17:00' });
   check('this one moves to tomorrow at 5pm', r.status === 200 && doc(id).date === day(1) && doc(id).time === '17:00' && doc(id).occurrence === today, r.data);
@@ -92,6 +105,12 @@ const rec = require('../lib/recurrence');
   check('(with a notice saying so)', fakeModels.Notification._docs.some(n => /Midweek Fellowship: not on/.test(n.title)));
   ev = await listed(id);
   check('next week\'s registrations start from nothing', ev.registrationCount === 0 && ev.spotsLeft === 2 && ev.moved === false, ev);
+  r = await call('usher', 'GET', `/api/events/${id}/volunteers`);
+  check('next week has no volunteers yet', Array.isArray(r.data) && r.data.length === 0, r.data);
+  r = await call('usher', 'GET', '/api/member/volunteer-assignments');
+  check('and the volunteer is not asked again for a week that was called off', Array.isArray(r.data) && !r.data.some(a => a.eventId === id), r.data);
+  r = await call('admin', 'POST', `/api/events/${id}/volunteers`, { memberId: usher, role: 'usher' });
+  check('they can be asked for next week, with no clash with the week before', r.status === 200 && r.data.item.occurrenceDate === day(7), r.data);
   r = await call(null, 'POST', `/api/events/${id}/register`, { name: 'Esi', email: 'esi@example.com' });
   check('and are open', r.status === 200 && fakeModels.EventRegistration._docs.some(g => g.name === 'Esi' && g.occurrenceDate === day(7)), r.data);
 
